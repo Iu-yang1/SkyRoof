@@ -205,15 +205,29 @@ namespace SkyRoof
     private bool UsingSkyCatScopeSource =>
       ctx.Settings.IcomLanSpectrum.Source == IcomLanSpectrumSource.SkyCat;
 
+    private bool UsingDirectLanSource =>
+      ctx.Settings.IcomLanSpectrum.Source == IcomLanSpectrumSource.DirectLan;
+
     private void UpdateSourceButton()
     {
-      SourceBtn.Text = UsingSkyCatScopeSource
-        ? "Source: SkyCAT"
-        : "Source: RS-BA1";
+      IcomLanSpectrumSettings settings = ctx.Settings.IcomLanSpectrum;
 
-      TransportLabel.Text = UsingSkyCatScopeSource
-        ? $"SkyCAT control · native LAN UDP/{ctx.Settings.IcomLanSpectrum.SerialPort} preferred · TCP/{ctx.Settings.IcomLanSpectrum.SkyCatScopePort} fallback"
-        : "Passive RS-BA1 LAN sniff · WinDivert RECV_ONLY";
+      SourceBtn.Text = settings.Source switch
+      {
+        IcomLanSpectrumSource.DirectLan => "Source: Direct LAN",
+        IcomLanSpectrumSource.RsBa1 => "Source: RS-BA1",
+        _ => "Source: SkyCAT"
+      };
+
+      TransportLabel.Text = settings.Source switch
+      {
+        IcomLanSpectrumSource.DirectLan =>
+          $"Authenticated native Icom LAN · control UDP/{settings.DirectLanControlPort} · combined 475-bin waveform",
+        IcomLanSpectrumSource.RsBa1 =>
+          "Passive RS-BA1 LAN sniff · WinDivert RECV_ONLY",
+        _ =>
+          $"SkyCAT control · native LAN assist · TCP/{settings.SkyCatScopePort} fallback"
+      };
     }
 
     private void ToggleScopeSource()
@@ -224,9 +238,12 @@ namespace SkyRoof
         StopCapture();
 
       IcomLanSpectrumSettings settings = ctx.Settings.IcomLanSpectrum;
-      settings.Source = settings.Source == IcomLanSpectrumSource.SkyCat
-        ? IcomLanSpectrumSource.RsBa1
-        : IcomLanSpectrumSource.SkyCat;
+      settings.Source = settings.Source switch
+      {
+        IcomLanSpectrumSource.SkyCat => IcomLanSpectrumSource.DirectLan,
+        IcomLanSpectrumSource.DirectLan => IcomLanSpectrumSource.RsBa1,
+        _ => IcomLanSpectrumSource.SkyCat
+      };
 
       ctx.Settings.SaveToFile();
       UpdateSourceButton();
@@ -241,9 +258,15 @@ namespace SkyRoof
         return;
       }
 
-      StatusLabel.Text = UsingSkyCatScopeSource
-        ? $"SkyCAT source selected. Start capture to use native scope TCP/{settings.SkyCatScopePort}."
-        : "RS-BA1 source selected. Open/enable the RS-BA1 Spectrum Scope, then start passive LAN capture.";
+      StatusLabel.Text = settings.Source switch
+      {
+        IcomLanSpectrumSource.DirectLan =>
+          "Direct LAN selected. Configure radio IP and LAN credentials in Settings, then start capture.",
+        IcomLanSpectrumSource.RsBa1 =>
+          "RS-BA1 selected. Open/enable the RS-BA1 Spectrum Scope, then start passive LAN capture.",
+        _ =>
+          $"SkyCAT selected. Start capture to use scope TCP/{settings.SkyCatScopePort}."
+      };
     }
 
     private void StartCapture()
@@ -255,11 +278,27 @@ namespace SkyRoof
       IcomLanSpectrumSettings settings = ctx.Settings.IcomLanSpectrum;
       SpectrumView.SetHistoryRows(settings.WaterfallRows);
 
+      if (UsingDirectLanSource &&
+          (string.IsNullOrWhiteSpace(settings.RadioAddress) ||
+           string.IsNullOrWhiteSpace(settings.DirectLanUsername) ||
+           string.IsNullOrEmpty(settings.DirectLanPassword)))
+      {
+        StatusLabel.Text =
+          "Direct LAN requires Radio IPv4 address, Direct LAN username and Direct LAN password in Settings.";
+        return;
+      }
+
       var capture = new IcomLanSpectrumCapture(
         settings.RadioAddress,
         settings.SerialPort,
-        UsingSkyCatScopeSource,
-        settings.SkyCatScopePort);
+        useSkyCatStream: UsingSkyCatScopeSource,
+        skyCatScopePort: settings.SkyCatScopePort,
+        autoDiscoverCivPort: false,
+        useDirectLan: UsingDirectLanSource,
+        directLanControlPort: settings.DirectLanControlPort,
+        directLanUsername: settings.DirectLanUsername,
+        directLanPassword: settings.DirectLanPassword,
+        directLanClientName: settings.DirectLanClientName);
 
       capture.ScopeFrameReceived += Capture_ScopeFrameReceived;
       capture.StatusChanged += Capture_StatusChanged;
@@ -293,13 +332,21 @@ namespace SkyRoof
 
       SetCaptureInputsEnabled(false);
       StartStopBtn.Text = "Stop";
-      StatusLabel.Text = UsingSkyCatScopeSource
-        ? $"Starting SkyCAT scope control with native LAN UDP/{settings.SerialPort} high-rate capture..."
-        : "Starting WinDivert passive RS-BA1 LAN capture...";
+      StatusLabel.Text = settings.Source switch
+      {
+        IcomLanSpectrumSource.DirectLan =>
+          $"Authenticating direct Icom LAN session to {settings.RadioAddress}:{settings.DirectLanControlPort}...",
+        IcomLanSpectrumSource.RsBa1 =>
+          "Starting WinDivert passive RS-BA1 LAN capture...",
+        _ =>
+          $"Starting SkyCAT scope control with native LAN assist and TCP/{settings.SkyCatScopePort} fallback..."
+      };
 
       NativeLanAssistCapture?.Start();
       capture.Start();
-      RequestScopeOutputIfDue(force: true);
+
+      if (UsingSkyCatScopeSource)
+        RequestScopeOutputIfDue(force: true);
     }
 
     private void StopCapture()
@@ -456,15 +503,18 @@ namespace SkyRoof
       }
 
       string radio =
-        nativeLanActive
-          ? $"LAN {nativeLan!.DetectedRadioAddress ?? "auto"}:" +
-            $"{nativeLan.DetectedCivPort?.ToString() ?? "auto"}"
-          : capture.IsSkyCatStream
-            ? "SkyCAT TCP fallback"
-            : capture.DetectedRadioAddress ??
-              (string.IsNullOrWhiteSpace(ctx.Settings.IcomLanSpectrum.RadioAddress)
-                ? "auto"
-                : ctx.Settings.IcomLanSpectrum.RadioAddress);
+        capture.IsDirectLan
+          ? $"Direct LAN {capture.DetectedRadioAddress ?? ctx.Settings.IcomLanSpectrum.RadioAddress}:" +
+            $"{capture.DetectedCivPort?.ToString() ?? "negotiating"}"
+          : nativeLanActive
+            ? $"LAN {nativeLan!.DetectedRadioAddress ?? "auto"}:" +
+              $"{nativeLan.DetectedCivPort?.ToString() ?? "auto"}"
+            : capture.IsSkyCatStream
+              ? "SkyCAT TCP fallback"
+              : capture.DetectedRadioAddress ??
+                (string.IsNullOrWhiteSpace(ctx.Settings.IcomLanSpectrum.RadioAddress)
+                  ? "auto"
+                  : ctx.Settings.IcomLanSpectrum.RadioAddress);
 
       StatsLabel.Text =
         $"Source {radio} · Frames {effectiveCapture.PacketCount:N0} · " +
@@ -490,24 +540,30 @@ namespace SkyRoof
                (last == null || (now - last.Value).TotalSeconds > 3))
       {
         StatusLabel.Text =
-          capture.IsSkyCatStream
+          capture.IsDirectLan
             ? capture.PacketCount == 0
-              ? $"Connected/waiting for SkyCAT scope TCP/{ctx.Settings.IcomLanSpectrum.SkyCatScopePort}; " +
-                "CI-V 27 10 / 27 11 are being reasserted."
-              : "SkyCAT scope stream is connected, but no complete CI-V 27 00 sweep has been assembled yet."
-            : capture.PacketCount == 0
-              ? $"Listening for IC-9700 UDP/{ctx.Settings.IcomLanSpectrum.SerialPort} traffic..."
-              : "RS-BA1 LAN traffic detected, but no CI-V 27 00 waveform yet. " +
-                "Open/enable the RS-BA1 Spectrum Scope.";
+              ? "Direct LAN authenticated/connecting, but no native CI-V waveform has arrived yet."
+              : "Direct LAN CI-V is active, but no complete native 27 00 sweep has been decoded yet."
+            : capture.IsSkyCatStream
+              ? capture.PacketCount == 0
+                ? $"Connected/waiting for SkyCAT scope TCP/{ctx.Settings.IcomLanSpectrum.SkyCatScopePort}; " +
+                  "CI-V 27 10 / 27 11 are being reasserted."
+                : "SkyCAT scope stream is connected, but no complete CI-V 27 00 sweep has been assembled yet."
+              : capture.PacketCount == 0
+                ? $"Listening for IC-9700 UDP/{ctx.Settings.IcomLanSpectrum.SerialPort} traffic..."
+                : "RS-BA1 LAN traffic detected, but no CI-V 27 00 waveform yet. " +
+                  "Open/enable the RS-BA1 Spectrum Scope.";
       }
       else if (capture.IsRunning && last != null)
       {
         StatusLabel.Text =
-          nativeLanActive
-            ? $"Receiving high-rate native IC-9700 LAN 27 00 waveform · " +
-              $"{nativeLan!.DetectedRadioAddress ?? "radio"}:" +
-              $"{nativeLan.DetectedCivPort?.ToString() ?? "auto"} · SkyCAT controls scope."
-            : $"Receiving IC-9700 CI-V 27 00 spectrum data · {capture.TransportName}.";
+          capture.IsDirectLan
+            ? $"Receiving native combined IC-9700 475-bin LAN waveform · {capture.TransportName}."
+            : nativeLanActive
+              ? $"Receiving high-rate native IC-9700 LAN 27 00 waveform · " +
+                $"{nativeLan!.DetectedRadioAddress ?? "radio"}:" +
+                $"{nativeLan.DetectedCivPort?.ToString() ?? "auto"} · SkyCAT controls scope."
+              : $"Receiving IC-9700 CI-V 27 00 spectrum data · {capture.TransportName}.";
       }
     }
 
