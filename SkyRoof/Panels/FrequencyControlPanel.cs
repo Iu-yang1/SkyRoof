@@ -134,7 +134,9 @@ namespace SkyRoof
       };
       layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));
       layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58));
-      layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+      // Keep the primary Base frequency display from being squeezed to a 1-pixel strip when
+      // the caption/button rows request their AutoSize height.
+      layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
       layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
       layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
       layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
