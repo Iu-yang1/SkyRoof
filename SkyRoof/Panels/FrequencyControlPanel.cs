@@ -219,10 +219,9 @@ namespace SkyRoof
         RowCount = 4
       };
       layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-      // The first row contains a caption plus a large frequency label. Keep it fixed-height:
-      // nested percentage sizing here was being rounded too aggressively at some DPI/font scales,
-      // clipping the bottom half of the frequency text.
-      layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
+      // Compact tuning readouts: these are reference values for the ruler rather than
+      // primary radio-frequency displays, so keep them visually close to the ruler scale.
+      layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
       layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
       layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
       layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 27));
@@ -293,8 +292,8 @@ namespace SkyRoof
         Margin = new Padding(3, 0, 3, 0)
       };
       panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-      panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
-      panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+      panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 18));
+      panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
 
       var label = new Label
       {
@@ -302,20 +301,19 @@ namespace SkyRoof
         Text = caption,
         TextAlign = ContentAlignment.MiddleLeft,
         ForeColor = SystemColors.GrayText,
-        Margin = new Padding(1, 0, 1, 1)
+        Font = new Font("Segoe UI", 9F),
+        Margin = new Padding(1, 0, 1, 0)
       };
       panel.Controls.Add(label, 0, 0);
 
-      // Use exactly the same WinForms text layout as the Base frequency display above.
-      // The previous custom-drawn control was consistently vertically offset on high-DPI systems.
       value.Dock = DockStyle.Fill;
       value.BackColor = Color.Black;
       value.ForeColor = Color.Aqua;
-      value.Font = new Font("Microsoft Sans Serif", 16F);
+      value.Font = new Font("Segoe UI", 10F);
       value.Text = "000,000,000 Hz";
       value.TextAlign = ContentAlignment.MiddleCenter;
       value.AutoEllipsis = false;
-      value.Margin = new Padding(0, 0, 0, 7);
+      value.Margin = new Padding(0);
       panel.Controls.Add(value, 0, 1);
 
       return panel;
