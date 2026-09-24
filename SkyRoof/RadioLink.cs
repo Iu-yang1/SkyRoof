@@ -94,6 +94,20 @@ namespace SkyRoof
     // computed
     public double DownlinkFrequency, CorrectedDownlinkFrequency;
     public double UplinkFrequency, CorrectedUplinkFrequency;
+
+    // What the radio frequency would be if Doppler correction alone were disabled.
+    // Base/transponder position and operator corrections remain included.
+    public double DownlinkFrequencyWithoutDoppler =>
+      DownlinkFrequency +
+      (RitEnabled ? RitOffset : 0) +
+      (DownlinkManualCorrectionEnabled ? DownlinkManualCorrection : 0);
+
+    public double UplinkFrequencyWithoutDoppler =>
+      UplinkFrequency <= 0 ? 0 :
+      UplinkFrequency +
+      (UplinkManualCorrectionEnabled ? UplinkManualCorrection : 0) +
+      XitOffset;
+
     public double DopplerFactor = 0;
     public bool IsAboveHorizon;
     // true when the propagator returned a valid observation this tick (independent of elevation);
