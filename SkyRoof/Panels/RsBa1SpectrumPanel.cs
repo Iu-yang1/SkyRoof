@@ -26,6 +26,8 @@ namespace SkyRoof
     private IntPtr PreviewThumbnail;
     private IntPtr PreviewSource;
     private IntPtr PreviewDestinationRoot;
+    private Rectangle PreviewContentRect = Rectangle.Empty;
+    private Size PreviewSourceClientSize = Size.Empty;
     private readonly List<RsBa1WindowInspector.WindowInfo> Windows = new();
 
     public RsBa1SpectrumPanel()
@@ -154,6 +156,8 @@ namespace SkyRoof
       PreviewHost.Resize += (_, _) => UpdatePreviewDestination();
       PreviewHost.LocationChanged += (_, _) => UpdatePreviewDestination();
       PreviewHost.VisibleChanged += (_, _) => UpdatePreviewDestination();
+      PreviewHost.MouseDown += PreviewHost_MouseDown;
+      PreviewHost.MouseUp += PreviewHost_MouseUp;
 
       PreviewMessage.Dock = DockStyle.Fill;
       PreviewMessage.TextAlign = ContentAlignment.MiddleCenter;
@@ -411,6 +415,8 @@ namespace SkyRoof
 
       PreviewSource = IntPtr.Zero;
       PreviewDestinationRoot = IntPtr.Zero;
+      PreviewContentRect = Rectangle.Empty;
+      PreviewSourceClientSize = Size.Empty;
       PreviewMessage.Visible = true;
     }
 
@@ -447,6 +453,9 @@ namespace SkyRoof
         Bottom = bottomRight.Y
       };
 
+      PreviewContentRect = Rectangle.Empty;
+      PreviewSourceClientSize = Size.Empty;
+
       if (availableWidth > 0 && availableHeight > 0 &&
           GetClientRect(PreviewSource, out RECT sourceClient))
       {
@@ -459,8 +468,13 @@ namespace SkyRoof
 
         int drawWidth = Math.Max(1, (int)Math.Round(sourceWidth * scale));
         int drawHeight = Math.Max(1, (int)Math.Round(sourceHeight * scale));
-        int x = topLeft.X + (availableWidth - drawWidth) / 2;
-        int y = topLeft.Y + (availableHeight - drawHeight) / 2;
+        int localX = (availableWidth - drawWidth) / 2;
+        int localY = (availableHeight - drawHeight) / 2;
+        int x = topLeft.X + localX;
+        int y = topLeft.Y + localY;
+
+        PreviewContentRect = new Rectangle(localX, localY, drawWidth, drawHeight);
+        PreviewSourceClientSize = new Size(sourceWidth, sourceHeight);
 
         destination = new RECT
         {
@@ -491,6 +505,53 @@ namespace SkyRoof
           "Failed to update RS-BA1 DWM thumbnail {Thumbnail}: HRESULT 0x{Hr:X8}",
           RsBa1WindowInspector.FormatHandle(PreviewThumbnail),
           hr);
+      }
+    }
+
+    private void PreviewHost_MouseDown(object? sender, MouseEventArgs e)
+    {
+      if (e.Button != MouseButtons.Left) return;
+      ForwardPreviewLeftButton(e.Location, down: true);
+    }
+
+    private void PreviewHost_MouseUp(object? sender, MouseEventArgs e)
+    {
+      if (e.Button != MouseButtons.Left) return;
+      ForwardPreviewLeftButton(e.Location, down: false);
+    }
+
+    private void ForwardPreviewLeftButton(Point previewPoint, bool down)
+    {
+      if (PreviewSource == IntPtr.Zero ||
+          PreviewContentRect.IsEmpty ||
+          PreviewSourceClientSize.Width <= 0 ||
+          PreviewSourceClientSize.Height <= 0 ||
+          !PreviewContentRect.Contains(previewPoint))
+        return;
+
+      int x = (int)Math.Round(
+        (previewPoint.X - PreviewContentRect.Left) *
+        PreviewSourceClientSize.Width /
+        (double)PreviewContentRect.Width);
+      int y = (int)Math.Round(
+        (previewPoint.Y - PreviewContentRect.Top) *
+        PreviewSourceClientSize.Height /
+        (double)PreviewContentRect.Height);
+
+      x = Math.Clamp(x, 0, PreviewSourceClientSize.Width - 1);
+      y = Math.Clamp(y, 0, PreviewSourceClientSize.Height - 1);
+
+      nint lParam = (nint)((y << 16) | (x & 0xFFFF));
+      uint message = down ? WM_LBUTTONDOWN : WM_LBUTTONUP;
+      nuint wParam = down ? MK_LBUTTON : 0;
+
+      if (!PostMessage(PreviewSource, message, wParam, lParam))
+      {
+        Log.Warning(
+          "Failed to forward RS-BA1 preview click to {Hwnd} at {X},{Y}",
+          RsBa1WindowInspector.FormatHandle(PreviewSource),
+          x,
+          y);
       }
     }
 
@@ -572,6 +633,9 @@ namespace SkyRoof
       ctx.MainForm.RsBa1SpectrumMNU.Checked = false;
     }
     private const uint GA_ROOT = 2;
+    private const uint WM_LBUTTONDOWN = 0x0201;
+    private const uint WM_LBUTTONUP = 0x0202;
+    private const nuint MK_LBUTTON = 0x0001;
     private const uint DWM_TNP_RECTDESTINATION = 0x00000001;
     private const uint DWM_TNP_OPACITY = 0x00000004;
     private const uint DWM_TNP_VISIBLE = 0x00000008;
@@ -642,5 +706,13 @@ namespace SkyRoof
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetClientRect(IntPtr hwnd, out RECT rect);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool PostMessage(
+      IntPtr hwnd,
+      uint message,
+      nuint wParam,
+      nint lParam);
   }
 }
