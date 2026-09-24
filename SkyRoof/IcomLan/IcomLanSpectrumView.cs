@@ -44,7 +44,11 @@ namespace SkyRoof
         LatestFrame = frame;
         Buffer.BlockCopy(frame.Samples, 0, LatestSamples, 0, ScopePoints);
 
-        if (WaterfallRows.Length > 0)
+        // Partial USB/virtual-COM divisions update the live spectrum trace
+        // immediately, but the waterfall advances only when all 475 bins for the
+        // sweep have arrived. Otherwise one serial sweep would create 10-11
+        // misleading waterfall rows containing a mixture of old and new bins.
+        if (frame.SweepComplete && WaterfallRows.Length > 0)
         {
           WaterfallHead = (WaterfallHead + 1) % WaterfallRows.Length;
           Buffer.BlockCopy(
@@ -162,7 +166,10 @@ namespace SkyRoof
       }
       else
       {
-        left = $"{frame.ScopeName} · {frame.ModeName}";
+        left =
+          frame.SweepComplete || frame.DivisionMaximum <= 1
+            ? $"{frame.ScopeName} · {frame.ModeName}"
+            : $"{frame.ScopeName} · {frame.ModeName} · LIVE {frame.DivisionCurrent}/{frame.DivisionMaximum}";
 
         if (frame.Mode == 0)
         {
