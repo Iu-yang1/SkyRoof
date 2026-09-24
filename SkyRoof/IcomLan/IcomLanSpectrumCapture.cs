@@ -24,8 +24,8 @@ namespace SkyRoof
     private IntPtr Handle = IntPtr.Zero;
     private readonly object HandleSync = new();
 
-    private bool HaveSerialSequence;
-    private ushort LastSerialSequence;
+    private bool HaveTransportSequence;
+    private ushort LastTransportSequence;
 
     private long PacketCountValue;
     private long CapturedBytesValue;
@@ -247,27 +247,40 @@ namespace SkyRoof
 
     private void ProcessLanPayload(ReadOnlySpan<byte> payload)
     {
-      // Icom LAN serial stream packet:
-      // [16] = 0xC1, [17] = byte count for THIS serial chunk,
-      // [19..20] = CI-V serial-stream sequence, [21..] = chunk bytes.
+      // RS-BA1 tracked serial packets use the OUTER transport sequence at [6..7]
+      // (little-endian).  The [19..20] field is a separate inner serial sequence and
+      // must not be used to deduplicate receive packets: a long 27 00 CI-V frame can
+      // be fragmented across multiple C1 datagrams while that inner value is not a
+      // reliable packet-order key.
       //
-      // A 27 00 scope waveform is a ~497-byte CI-V frame, but the RS-BA1 LAN
-      // transport fragments that serial frame across multiple C1 datagrams.  The
-      // one-byte count is therefore the chunk length, not the complete CI-V frame
-      // length.  Feeding bytes beyond the declared chunk length injects transport
-      // padding/trailer data into the CI-V stream and prevents fragmented scope frames
-      // from ever being reassembled.
+      // Track type-0 serial packets, including idle/open-close packets, so gaps caused
+      // by non-C1 traffic are not mistaken for lost scope fragments.  Pings use a
+      // different counter and are intentionally excluded.
+      if (payload.Length >= 16 &&
+          payload[4] == 0x00 &&
+          payload[5] == 0x00)
+      {
+        ushort transportSequence =
+          (ushort)(payload[6] | (payload[7] << 8));
+
+        if (!AcceptTransportSequence(transportSequence))
+          return;
+      }
+
+      // Icom LAN serial data packet:
+      // [16] = 0xC1, [17] = byte count for THIS serial chunk,
+      // [21..] = bytes from the continuous CI-V serial stream.
+      //
+      // A 27 00 scope waveform is ~497 bytes and the normal RS-BA1 transport
+      // fragments it into bounded C1 chunks.  Reassemble those chunks before looking
+      // for the terminating FD.  Retain compatibility with the bulk >255-byte scope
+      // datagrams observed when the RS-BA1 spectrum window itself is active.
       if (payload.Length >= 22 && payload[16] == 0xC1)
       {
         int available = payload.Length - 21;
         int declared = payload[17];
         if (available <= 0 || declared <= 0) return;
 
-        // Normal RS-BA1 serial packets carry one bounded chunk and [17] is its
-        // exact length.  Some RS-BA1 scope paths observed in the field can instead
-        // place an entire >255-byte CI-V frame in one datagram and expose only the
-        // low byte of that length.  Support both encodings so opening the RS-BA1
-        // scope and enabling 27 11 directly through SkyCAT use the same decoder.
         bool wrappedBulkLength =
           available > 255 &&
           declared == (byte)(available & 0xFF);
@@ -279,9 +292,8 @@ namespace SkyRoof
         if (wrappedBulkLength)
           Interlocked.Increment(ref LanLengthOverflowPacketCountValue);
 
-        ushort sequence = (ushort)((payload[19] << 8) | payload[20]);
         Interlocked.Increment(ref SerialChunkCountValue);
-        PushSerialChunk(sequence, payload.Slice(21, count));
+        StreamAssembler.Feed(payload.Slice(21, count));
         return;
       }
 
@@ -292,49 +304,51 @@ namespace SkyRoof
         StreamAssembler.Feed(payload.Slice(preamble));
     }
 
-    private void PushSerialChunk(ushort sequence, ReadOnlySpan<byte> bytes)
+    private bool AcceptTransportSequence(ushort sequence)
     {
-      if (!HaveSerialSequence)
+      if (!HaveTransportSequence)
       {
-        HaveSerialSequence = true;
-        LastSerialSequence = sequence;
-        StreamAssembler.Feed(bytes);
-        return;
+        HaveTransportSequence = true;
+        LastTransportSequence = sequence;
+        return true;
       }
 
-      ushort expected = unchecked((ushort)(LastSerialSequence + 1));
-      if (sequence == LastSerialSequence)
+      ushort expected = unchecked((ushort)(LastTransportSequence + 1));
+      if (sequence == LastTransportSequence)
       {
         Interlocked.Increment(ref DuplicateChunkCountValue);
-        return;
+        return false;
       }
 
       if (sequence != expected)
       {
         ushort forward = unchecked((ushort)(sequence - expected));
 
-        if (forward < 1024)
+        if (forward < 0x8000)
         {
+          // A missing tracked packet may only have been an idle packet.  Do not reset
+          // CI-V assembly here; if actual serial data was lost, the CI-V frame parser
+          // will reject the incomplete frame and resynchronize at the next FE FE.
           Interlocked.Add(ref SequenceGapCountValue, Math.Max(1, (int)forward));
-          StreamAssembler.Reset();
         }
         else
         {
           ushort backward = unchecked((ushort)(expected - sequence));
-          if (backward <= 32)
+          if (backward <= 128)
           {
+            // Late retransmission / duplicate packet.
             Interlocked.Increment(ref DuplicateChunkCountValue);
-            return;
+            return false;
           }
 
-          // The serial-side sequence commonly restarts when RS-BA1 reconnects.
+          // The tracked transport sequence can restart when RS-BA1 reconnects.
           Interlocked.Increment(ref SequenceResetCountValue);
           StreamAssembler.Reset();
         }
       }
 
-      LastSerialSequence = sequence;
-      StreamAssembler.Feed(bytes);
+      LastTransportSequence = sequence;
+      return true;
     }
 
     private void OnCivFrame(byte[] frame)
