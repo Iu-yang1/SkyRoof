@@ -60,6 +60,7 @@
       EarthViewMNU = new ToolStripMenuItem();
       FrequencyControlMNU = new ToolStripMenuItem();
       RsBa1SpectrumMNU = new ToolStripMenuItem();
+      IcomLanSpectrumMNU = new ToolStripMenuItem();
       QsoEntryMNU = new ToolStripMenuItem();
       Ft4ConsoleMNU = new ToolStripMenuItem();
       RecorderMNU = new ToolStripMenuItem();
@@ -310,7 +311,7 @@
       // 
       // GroupViewPanelMNU
       // 
-      GroupViewPanelMNU.DropDownItems.AddRange(new ToolStripItem[] { GroupViewMNU, SatelliteDetailsMNU, TransmittersMNU, SatellitePassesMNU, WaterfallMNU, FrequencyControlMNU, RsBa1SpectrumMNU, TimelineMNU, SkyViewMNU, EarthViewMNU, QsoEntryMNU, Ft4ConsoleMNU, RecorderMNU, QsoSchedulerMNU, TelemetryMNU, AutoSelectionMNU, toolStripMenuItem4, ResetWindowLayoutMNU });
+      GroupViewPanelMNU.DropDownItems.AddRange(new ToolStripItem[] { GroupViewMNU, SatelliteDetailsMNU, TransmittersMNU, SatellitePassesMNU, WaterfallMNU, FrequencyControlMNU, RsBa1SpectrumMNU, IcomLanSpectrumMNU, TimelineMNU, SkyViewMNU, EarthViewMNU, QsoEntryMNU, Ft4ConsoleMNU, RecorderMNU, QsoSchedulerMNU, TelemetryMNU, AutoSelectionMNU, toolStripMenuItem4, ResetWindowLayoutMNU });
       GroupViewPanelMNU.Name = "GroupViewPanelMNU";
       GroupViewPanelMNU.Size = new Size(44, 20);
       GroupViewPanelMNU.Text = "&View";
@@ -384,6 +385,13 @@
       RsBa1SpectrumMNU.Size = new Size(188, 22);
       RsBa1SpectrumMNU.Text = "RS-BA1 &Spectrum";
       RsBa1SpectrumMNU.Click += RsBa1SpectrumMNU_Click;
+      // 
+      // IcomLanSpectrumMNU
+      // 
+      IcomLanSpectrumMNU.Name = "IcomLanSpectrumMNU";
+      IcomLanSpectrumMNU.Size = new Size(188, 22);
+      IcomLanSpectrumMNU.Text = "Icom LAN S&pectrum";
+      IcomLanSpectrumMNU.Click += IcomLanSpectrumMNU_Click;
       // 
       // QsoEntryMNU
       // 
@@ -902,6 +910,7 @@
     public ToolStripMenuItem EarthViewMNU;
     public ToolStripMenuItem FrequencyControlMNU;
     public ToolStripMenuItem RsBa1SpectrumMNU;
+    public ToolStripMenuItem IcomLanSpectrumMNU;
     private ToolStripMenuItem SupportGroupMNU;
     private StatusStrip StatusStrip;
     private ToolStripStatusLabel toolStripStatusLabel2;
