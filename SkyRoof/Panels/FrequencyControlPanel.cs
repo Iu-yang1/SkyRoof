@@ -259,7 +259,7 @@ namespace SkyRoof
       TuningModeLabel.Margin = new Padding(2, 3, 6, 3);
       tuningStatusLayout.Controls.Add(TuningModeLabel, 0, 0);
 
-      BackToBaseBtn.Text = "Back to Base";
+      BackToBaseBtn.Text = "Reset to Base";
       BackToBaseBtn.AutoSize = true;
       BackToBaseBtn.Margin = new Padding(4, 0, 0, 0);
       BackToBaseBtn.Click += (_, _) => ReturnToBase();
