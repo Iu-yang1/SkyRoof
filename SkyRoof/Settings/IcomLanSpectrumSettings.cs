@@ -31,13 +31,18 @@ namespace SkyRoof
     [DefaultValue(IcomLanScopeBand.Auto)]
     public IcomLanScopeBand ScopeBand { get; set; } = IcomLanScopeBand.Auto;
 
-    [DisplayName("Scope control")]
-    [Description("Select who controls IC-9700 scope waveform output. SkyCAT actively reasserts CI-V 27 10 / 27 11; RS-BA1 leaves those commands to the RS-BA1 Spectrum Scope window. In both cases SkyRoof receives the waveform by passively sniffing the RS-BA1 LAN CI-V transport.")]
+    [DisplayName("Scope source")]
+    [Description("SkyCAT receives CI-V 27 00 frames from skycatd's loopback scope stream and actively reasserts 27 10 / 27 11. RS-BA1 passively sniffs the IC-9700 LAN CI-V UDP stream and leaves scope enable/disable control to the RS-BA1 Spectrum Scope window.")]
     [DefaultValue(IcomLanSpectrumSource.SkyCat)]
     public IcomLanSpectrumSource Source { get; set; } = IcomLanSpectrumSource.SkyCat;
 
+    [DisplayName("SkyCAT scope TCP port")]
+    [Description("Loopback TCP port exported by skycatd for native IC-9700 scope frames.")]
+    [DefaultValue(4535)]
+    public int SkyCatScopePort { get; set; } = 4535;
+
     [DisplayName("Auto start")]
-    [Description("Start passive WinDivert capture automatically when the Icom LAN Spectrum panel is opened.")]
+    [Description("Start the selected spectrum source automatically when the Icom LAN Spectrum panel is opened.")]
     [DefaultValue(true)]
     public bool AutoStart { get; set; } = true;
 
