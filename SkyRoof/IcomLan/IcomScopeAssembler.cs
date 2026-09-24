@@ -81,7 +81,8 @@ namespace SkyRoof
         }
 
         completed = BuildFrame(
-          receiver, 1, 1, mode, frequencyA, frequencyB, false, samples);
+          receiver, 1, 1, mode, frequencyA, frequencyB, false, samples,
+          sweepComplete: true);
         return true;
       }
 
@@ -106,7 +107,8 @@ namespace SkyRoof
         {
           completed = BuildFrame(
             receiver, 1, (byte)sequenceMaximum, mode, frequencyA, frequencyB,
-            true, new byte[ScopePointCount]);
+            true, new byte[ScopePointCount],
+            sweepComplete: true);
           state.Reset();
         }
 
@@ -132,6 +134,7 @@ namespace SkyRoof
 
       int room = ScopePointCount - state.Samples.Count;
       int take = Math.Min(room, chunkLength);
+      int startIndex = state.Samples.Count;
 
       for (int i = 0; i < take; i++)
       {
@@ -143,35 +146,41 @@ namespace SkyRoof
         }
 
         state.Samples.Add(sample);
+        state.DisplaySamples[startIndex + i] = sample;
       }
 
-      if (sequence < sequenceMaximum)
+      bool sweepComplete = sequence == sequenceMaximum;
+
+      if (!sweepComplete)
       {
         state.ExpectedSequence++;
-        return true;
       }
-
-      if (state.Samples.Count < ScopePointCount)
+      else if (state.Samples.Count < ScopePointCount)
       {
         state.Reset();
         return false;
       }
 
-      byte[] completeSamples = state.Samples
-        .Take(ScopePointCount)
-        .ToArray();
-
+      // USB/virtual-COM scope data arrives as 11 CI-V divisions. Rendering only
+      // after division 11 limits the UI to the complete-sweep rate (typically
+      // 2-4 Hz through RS-BA1). Emit a display frame after every waveform chunk,
+      // reusing bins from the previous sweep until their new chunk arrives. This
+      // gives the spectrum trace the native serial chunk cadence while the
+      // waterfall still advances only on a complete sweep.
       completed = BuildFrame(
         receiver,
-        (byte)sequenceMaximum,
+        (byte)sequence,
         (byte)sequenceMaximum,
         state.Mode,
         state.FrequencyAHz,
         state.FrequencyBHz,
         state.OutOfRange,
-        completeSamples);
+        state.DisplaySamples.ToArray(),
+        sweepComplete);
 
-      state.Reset();
+      if (sweepComplete)
+        state.Reset(preserveDisplaySamples: true);
+
       return true;
     }
 
@@ -227,7 +236,8 @@ namespace SkyRoof
       long frequencyA,
       long frequencyB,
       bool outOfRange,
-      byte[] samples) =>
+      byte[] samples,
+      bool sweepComplete) =>
       new()
       {
         TimestampUtc = DateTime.UtcNow,
@@ -238,6 +248,7 @@ namespace SkyRoof
         FrequencyAHz = frequencyA,
         FrequencyBHz = frequencyB,
         OutOfRange = outOfRange,
+        SweepComplete = sweepComplete,
         Samples = samples
       };
 
@@ -292,8 +303,9 @@ namespace SkyRoof
       internal bool OutOfRange;
       internal DateTime StartedUtc;
       internal readonly List<byte> Samples = new(ScopePointCount);
+      internal readonly byte[] DisplaySamples = new byte[ScopePointCount];
 
-      internal void Reset()
+      internal void Reset(bool preserveDisplaySamples = false)
       {
         Active = false;
         SequenceMaximum = 0;
@@ -304,6 +316,9 @@ namespace SkyRoof
         OutOfRange = false;
         StartedUtc = default;
         Samples.Clear();
+
+        if (!preserveDisplaySamples)
+          Array.Clear(DisplaySamples);
       }
     }
   }
