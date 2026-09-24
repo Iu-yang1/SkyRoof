@@ -108,7 +108,6 @@ namespace SkyRoof
     {
       // set the offset first
       var transponderCust = ctx.Settings.Satellites.GetOrCreateTransmitterCustomization(transponder);
-      Debug.Assert(offset >= 0 && offset <= transponder.uplink_high - transponder.uplink_low);
       transponderCust.TransponderOffset = offset;
 
       // if same TX, just force its settings in case we were in terrestrial mode and changed them
@@ -211,8 +210,6 @@ namespace SkyRoof
       var currentFrequency = RadioLink.CorrectedDownlinkFrequency;
       if (RadioLink.RitEnabled) currentFrequency -= RadioLink.RitOffset;
       var delta = frequency - currentFrequency;
-
-      if (Math.Abs(delta) > 25000) return;
 
       RadioLink.RitEnabled = true;
       RadioLink.RitOffset = delta;
