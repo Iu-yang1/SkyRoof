@@ -292,7 +292,7 @@ namespace SkyRoof
 
         if (forward < 1024)
         {
-          Interlocked.Add(ref SequenceGapCountValue, Math.Max(1, forward));
+          Interlocked.Add(ref SequenceGapCountValue, Math.Max(1, (int)forward));
           StreamAssembler.Reset();
         }
         else
