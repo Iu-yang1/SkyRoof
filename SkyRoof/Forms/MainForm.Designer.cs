@@ -138,7 +138,7 @@
       Toolbar.Dock = DockStyle.Top;
       Toolbar.Location = new Point(0, 24);
       Toolbar.Name = "Toolbar";
-      Toolbar.Size = new Size(1834, 132);
+      Toolbar.Size = new Size(1834, 78);
       Toolbar.TabIndex = 0;
       Toolbar.Resize += Toolbar_Resize;
       // 
@@ -191,7 +191,7 @@
       FrequencyWidget.Dock = DockStyle.Left;
       FrequencyWidget.Location = new Point(442, 0);
       FrequencyWidget.Name = "FrequencyWidget";
-      FrequencyWidget.Size = new Size(682, 132);
+      FrequencyWidget.Size = new Size(682, 78);
       FrequencyWidget.TabIndex = 3;
       // 
       // panel1
