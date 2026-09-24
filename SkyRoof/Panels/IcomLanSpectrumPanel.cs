@@ -25,6 +25,7 @@ namespace SkyRoof
     private bool LastScopeRequestRouted;
     private double ScopeFps;
     private int SelectedScopeBand;
+    private long LastRenderedScopeFrameTicks;
 
     public IcomLanSpectrumPanel(Context ctx)
     {
@@ -264,6 +265,7 @@ namespace SkyRoof
       LastScopeFrames = 0;
       LastRateTime = DateTime.UtcNow;
       ScopeFps = 0;
+      LastRenderedScopeFrameTicks = 0;
 
       SetCaptureInputsEnabled(false);
       StartStopBtn.Text = "Stop";
@@ -297,12 +299,6 @@ namespace SkyRoof
 
     private void Capture_ScopeFrameReceived(IcomScopeFrame frame)
     {
-      IcomLanScopeBand selected =
-        (IcomLanScopeBand)Volatile.Read(ref SelectedScopeBand);
-
-      if (selected == IcomLanScopeBand.Main && frame.Scope != 0) return;
-      if (selected == IcomLanScopeBand.Sub && frame.Scope != 1) return;
-
       if (IsDisposed || !IsHandleCreated) return;
 
       try
@@ -310,13 +306,29 @@ namespace SkyRoof
         BeginInvoke((Action)(() =>
         {
           if (!IsDisposed)
-            SpectrumView.PushFrame(frame);
+            RenderScopeFrame(frame);
         }));
       }
       catch (InvalidOperationException)
       {
         // The panel is closing.
       }
+    }
+
+    private void RenderScopeFrame(IcomScopeFrame frame)
+    {
+      long ticks = frame.TimestampUtc.Ticks;
+      if (ticks <= LastRenderedScopeFrameTicks)
+        return;
+
+      IcomLanScopeBand selected =
+        (IcomLanScopeBand)Volatile.Read(ref SelectedScopeBand);
+
+      if (selected == IcomLanScopeBand.Main && frame.Scope != 0) return;
+      if (selected == IcomLanScopeBand.Sub && frame.Scope != 1) return;
+
+      SpectrumView.PushFrame(frame);
+      LastRenderedScopeFrameTicks = ticks;
     }
 
     private void Capture_StatusChanged(string message)
@@ -344,6 +356,15 @@ namespace SkyRoof
 
       long scopeFrames = capture.ScopeFrameCount;
       DateTime now = DateTime.UtcNow;
+
+      // Event delivery is the normal ~30 FPS path. This pull fallback guarantees
+      // that a completed capture frame still reaches the view if WinForms drops or
+      // delays a BeginInvoke during docking/layout churn.
+      IcomScopeFrame? latestFrame = capture.LatestScopeFrame;
+      if (latestFrame != null &&
+          latestFrame.TimestampUtc.Ticks > LastRenderedScopeFrameTicks)
+        RenderScopeFrame(latestFrame);
+
       double elapsed = (now - LastRateTime).TotalSeconds;
 
       if (elapsed >= 0.4)
