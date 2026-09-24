@@ -151,6 +151,9 @@ namespace SkyRoof
       RequestedArmingTone = toneHz;
     }
 
+    internal bool SupportsIcomScopeOutput =>
+      ReferenceEquals(commands, RigCtldCommands.SkyCat);
+
     public void RequestIcomScopeOutput()
     {
       LogInfo("IC-9700 scope output reassert requested");
