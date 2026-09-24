@@ -670,6 +670,14 @@ namespace SkyRoof
         ctx.FrequencyControlPanel.Close();
     }
 
+    private void RsBa1SpectrumMNU_Click(object sender, EventArgs e)
+    {
+      if (ctx.RsBa1SpectrumPanel == null)
+        ShowFloatingPanel(new RsBa1SpectrumPanel(ctx));
+      else
+        ctx.RsBa1SpectrumPanel.Close();
+    }
+
     private void WaterfallMNU_Click(object sender, EventArgs e)
     {
       if (ctx.WaterfallPanel == null)
@@ -1043,6 +1051,7 @@ namespace SkyRoof
         case "SkyRoof.SkyViewPanel": return new SkyViewPanel(ctx);
         case "SkyRoof.EarthViewPanel": return new EarthViewPanel(ctx);
         case "SkyRoof.FrequencyControlPanel": return new FrequencyControlPanel(ctx);
+        case "SkyRoof.RsBa1SpectrumPanel": return new RsBa1SpectrumPanel(ctx);
         case "SkyRoof.WaterfallPanel": return new WaterfallPanel(ctx);
         case "SkyRoof.QsoEntryPanel": return new QsoEntryPanel(ctx);
         case "SkyRoof.Ft4ConsolePanel": return new Ft4ConsolePanel(ctx);
