@@ -32,6 +32,10 @@ namespace SkyRoof
     private double CtcssTone = CtcssTones.DEFAULT_TONE;
     private bool? CtcssEnabled;
     private bool CtcssPending;
+    // One-shot guard for transmitter changes. IC-9700/SkyCAT may swap Main/Sub while
+    // applying a new cross-band frequency pair; reassert CTCSS only after those tune
+    // writes have settled so the encoder ends up on the final TX/Sub side.
+    private bool CtcssReassertAfterTune;
     private double? RequestedArmingTone;
 
     public event EventHandler? RxTuned;
@@ -125,6 +129,16 @@ namespace SkyRoof
       CtcssPending = true;
     }
 
+    // Request a one-shot CTCSS write after all currently pending RX/TX frequency and
+    // mode changes are complete. This is intentionally separate from CtcssPending:
+    // the desired tone may be unchanged while an IC-9700 Main/Sub swap moves the
+    // previously configured encoder state to the wrong side.
+    public void RequestCtcssReassertAfterTune()
+    {
+      LogInfo("CTCSS reassert requested after tune");
+      CtcssReassertAfterTune = true;
+    }
+
     // one-shot keyed carrier with the given tone, used to arm the SO-50 timer
     public void SendArmingTone(double toneHz)
     {
@@ -153,6 +167,8 @@ namespace SkyRoof
 
       if (NeedToWriteRxMode()) TryWriteRxMode();
       if (NeedToWriteTxMode()) TryWriteTxMode();
+
+      TryReassertCtcssAfterTune();
 
       if (RequestedArmingTone.HasValue) TrySendArmingTone();
     }
@@ -476,6 +492,21 @@ namespace SkyRoof
         SendWriteCommand(CtcssEnabled == true ? commands.enable_ctcss! : commands.disable_ctcss!);
 
       CtcssPending = false;
+    }
+
+    private void TryReassertCtcssAfterTune()
+    {
+      if (!CtcssReassertAfterTune || !CtcssEnabled.HasValue) return;
+
+      // Do not consume the one-shot request until all frequency/mode changes that could
+      // cause a backend VFO/Main-Sub swap have actually been applied.
+      if (NeedToWriteRxFrequency() || NeedToWriteTxFrequency() ||
+          NeedToWriteRxMode() || NeedToWriteTxMode())
+        return;
+
+      LogInfo("Reasserting CTCSS after tune");
+      TryWriteCtcss();
+      CtcssReassertAfterTune = false;
     }
 
     private void TrySendArmingTone()
