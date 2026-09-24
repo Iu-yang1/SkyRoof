@@ -221,8 +221,13 @@ namespace SkyRoof
         previous = selected.Handle;
 
       Windows.Clear();
+      var enumerated =
+        RsBa1WindowInspector.EnumerateTopLevelWindows(ShowAllCheckbox.Checked);
+
       Windows.AddRange(
-        RsBa1WindowInspector.EnumerateTopLevelWindows(ShowAllCheckbox.Checked));
+        ShowAllCheckbox.Checked
+          ? enumerated
+          : enumerated.Where(RsBa1WindowInspector.IsSpectrumScope));
 
       WindowCombo.BeginUpdate();
       try
@@ -396,7 +401,7 @@ namespace SkyRoof
 
       StatusLabel.Text =
         $"Live DWM preview: {RsBa1WindowInspector.FormatHandle(info.Handle)} · " +
-        $"{info.Bounds.Width}×{info.Bounds.Height} · DPI {info.Dpi}.";
+        $"{info.Bounds.Width}×{info.Bounds.Height} · DPI {info.Dpi} · left-click control enabled.";
       Log.Information(
         "Attached RS-BA1 DWM preview: source={Source}, destination={Destination}",
         RsBa1WindowInspector.FormatHandle(PreviewSource),
