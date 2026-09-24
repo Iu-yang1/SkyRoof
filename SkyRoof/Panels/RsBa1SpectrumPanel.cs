@@ -15,6 +15,7 @@ namespace SkyRoof
     private readonly Label StatusLabel = new();
     private readonly TreeView WindowTree = new();
     private readonly TextBox DetailsBox = new();
+    private readonly SplitContainer InspectorSplit = new();
     private readonly System.Windows.Forms.Timer RefreshTimer = new() { Interval = 1500 };
     private readonly List<RsBa1WindowInspector.WindowInfo> Windows = new();
 
@@ -31,7 +32,11 @@ namespace SkyRoof
       ctx.RsBa1SpectrumPanel = this;
       ctx.MainForm.RsBa1SpectrumMNU.Checked = true;
 
-      Shown += (_, _) => RefreshWindows();
+      Shown += (_, _) =>
+      {
+        RestoreInspectorSplitter();
+        RefreshWindows();
+      };
     }
 
     private void InitializeUi()
@@ -108,19 +113,19 @@ namespace SkyRoof
         "Inspector only: no RS-BA1 window is re-parented in this build.";
       root.Controls.Add(StatusLabel, 0, 1);
 
-      var split = new SplitContainer
-      {
-        Dock = DockStyle.Fill,
-        Orientation = Orientation.Vertical,
-        SplitterDistance = 420,
-        Panel1MinSize = 260,
-        Panel2MinSize = 260
-      };
+      // Do not assign SplitterDistance here. At construction time the control still has
+      // its tiny default size, so a fixed distance such as 420 px can be outside the legal
+      // range and SplitContainer throws before the dock layout is even established.
+      InspectorSplit.Dock = DockStyle.Fill;
+      InspectorSplit.Orientation = Orientation.Vertical;
+      InspectorSplit.Panel1MinSize = 0;
+      InspectorSplit.Panel2MinSize = 0;
+      InspectorSplit.SizeChanged += (_, _) => ClampInspectorSplitter();
 
       WindowTree.Dock = DockStyle.Fill;
       WindowTree.HideSelection = false;
       WindowTree.AfterSelect += (_, e) => ShowWindowDetails(e.Node);
-      split.Panel1.Controls.Add(WindowTree);
+      InspectorSplit.Panel1.Controls.Add(WindowTree);
 
       DetailsBox.Dock = DockStyle.Fill;
       DetailsBox.Multiline = true;
@@ -128,12 +133,43 @@ namespace SkyRoof
       DetailsBox.ScrollBars = ScrollBars.Both;
       DetailsBox.WordWrap = false;
       DetailsBox.Font = new Font(FontFamily.GenericMonospace, 9F);
-      split.Panel2.Controls.Add(DetailsBox);
+      InspectorSplit.Panel2.Controls.Add(DetailsBox);
 
-      root.Controls.Add(split, 0, 2);
+      root.Controls.Add(InspectorSplit, 0, 2);
       Controls.Add(root);
 
       RefreshTimer.Tick += (_, _) => RefreshWindows(preserveSelection: true);
+    }
+
+    private void RestoreInspectorSplitter()
+    {
+      int extent = InspectorSplit.ClientSize.Width;
+      if (extent <= InspectorSplit.SplitterWidth) return;
+
+      int available = extent - InspectorSplit.SplitterWidth;
+      int target = available / 2;
+
+      // Keep both panes usable when possible, but gracefully allow very narrow dock widths.
+      int minPane = available >= 240 ? 80 : 0;
+      int max = Math.Max(minPane, available - minPane);
+      int safe = Math.Clamp(target, minPane, max);
+
+      if (InspectorSplit.SplitterDistance != safe)
+        InspectorSplit.SplitterDistance = safe;
+    }
+
+    private void ClampInspectorSplitter()
+    {
+      int extent = InspectorSplit.ClientSize.Width;
+      if (extent <= InspectorSplit.SplitterWidth) return;
+
+      int available = extent - InspectorSplit.SplitterWidth;
+      int minPane = available >= 240 ? 80 : 0;
+      int max = Math.Max(minPane, available - minPane);
+      int safe = Math.Clamp(InspectorSplit.SplitterDistance, minPane, max);
+
+      if (InspectorSplit.SplitterDistance != safe)
+        InspectorSplit.SplitterDistance = safe;
     }
 
     private void RefreshWindows(bool preserveSelection = true)
