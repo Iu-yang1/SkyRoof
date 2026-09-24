@@ -66,7 +66,7 @@ namespace SkyRoof
         }
 
         const int samplesStart = 21;
-        const int availableSamples = frame.Length - samplesStart - 1;
+        int availableSamples = frame.Length - samplesStart - 1;
         if (availableSamples < ScopePointCount)
           return false;
 
