@@ -585,6 +585,19 @@ namespace SkyRoof
       LastScopeRequestRouted = ctx.CatControl.RequestIcomScopeOutput();
     }
 
+    internal void ApplySettings()
+    {
+      bool restart = Capture != null;
+
+      if (restart)
+        StopCapture();
+
+      LoadSettingsToUi();
+
+      if (restart)
+        StartCapture();
+    }
+
     private void IcomLanSpectrumPanel_FormClosing(object? sender, FormClosingEventArgs e)
     {
       UiTimer.Stop();
