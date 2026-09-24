@@ -36,7 +36,7 @@ namespace SkyRoof
     private long SequenceGapCountValue;
     private long SequenceResetCountValue;
     private long InvalidScopeFrameCountValue;
-    private long LanChunkLengthMismatchCountValue;
+    private long LanLengthOverflowPacketCountValue;
     private long LastScopeFrameTicks;
 
     internal event Action<IcomScopeFrame>? ScopeFrameReceived;
@@ -55,7 +55,7 @@ namespace SkyRoof
     internal long SequenceGapCount => Interlocked.Read(ref SequenceGapCountValue);
     internal long SequenceResetCount => Interlocked.Read(ref SequenceResetCountValue);
     internal long InvalidScopeFrameCount => Interlocked.Read(ref InvalidScopeFrameCountValue);
-    internal long LanChunkLengthMismatchCount => Interlocked.Read(ref LanChunkLengthMismatchCountValue);
+    internal long LanLengthOverflowPacketCount => Interlocked.Read(ref LanLengthOverflowPacketCountValue);
 
     internal DateTime? LastScopeFrameUtc
     {
@@ -263,9 +263,21 @@ namespace SkyRoof
         int declared = payload[17];
         if (available <= 0 || declared <= 0) return;
 
-        int count = Math.Min(declared, available);
-        if (declared != available)
-          Interlocked.Increment(ref LanChunkLengthMismatchCountValue);
+        // Normal RS-BA1 serial packets carry one bounded chunk and [17] is its
+        // exact length.  Some RS-BA1 scope paths observed in the field can instead
+        // place an entire >255-byte CI-V frame in one datagram and expose only the
+        // low byte of that length.  Support both encodings so opening the RS-BA1
+        // scope and enabling 27 11 directly through SkyCAT use the same decoder.
+        bool wrappedBulkLength =
+          available > 255 &&
+          declared == (byte)(available & 0xFF);
+
+        int count = wrappedBulkLength
+          ? available
+          : Math.Min(declared, available);
+
+        if (wrappedBulkLength)
+          Interlocked.Increment(ref LanLengthOverflowPacketCountValue);
 
         ushort sequence = (ushort)((payload[19] << 8) | payload[20]);
         Interlocked.Increment(ref SerialChunkCountValue);
