@@ -264,15 +264,25 @@ namespace SkyRoof
             int audioPort = BinaryPrimitives.ReadUInt16BigEndian(
               packet.AsSpan(70, 2));
 
-            if (civPort > 0) RemoteCivPort = civPort;
+            if (civPort > 0)
+            {
+              RemoteCivPort = civPort;
+
+              // wfview opens the CI-V media socket as soon as the successful
+              // 0x50 status assigns a remote CI-V port. Some Icom firmware does
+              // not follow that status with the 0x90 "selected" notification,
+              // so do not make the latter mandatory.
+              streamAccepted = true;
+            }
+
             if (audioPort > 0) RemoteAudioPort = audioPort;
           }
         }
         else if (packet.Length == ConnInfoSize &&
                  packet[20] == 0x03)
         {
-          // On actual Icom radios byte 96 becomes 1 when the selected radio
-          // stream is assigned to this client.
+          // Kappanhang observes byte 96 == 1 when the selected radio stream is
+          // assigned. Accept this path as well as the successful status packet.
           if (packet[96] == 0x01)
             streamAccepted = true;
         }
