@@ -45,7 +45,7 @@ Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\SkyRoof.exe; DestDir: {app
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\SkyRoof.pdb; DestDir: {app}; Flags: overwritereadonly ignoreversion
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\SkyRoof.runtimeconfig.json; DestDir: {app}; Flags: overwritereadonly ignoreversion
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\WinDivert.dll; DestDir: {app}; Flags: overwritereadonly ignoreversion
-Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\WinDivert64.sys; DestDir: {app}; Flags: overwritereadonly ignoreversion
+Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\WinDivert64.sys; DestDir: {app}; Flags: onlyifdoesntexist
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\WinDivert-NOTICE.txt; DestDir: {app}; Flags: overwritereadonly ignoreversion
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\SoapySDR.dll; DestDir: {app}; Flags: overwritereadonly ignoreversion
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\WeifenLuo.WinFormsUI.Docking.dll; DestDir: {app}; Flags: overwritereadonly ignoreversion
