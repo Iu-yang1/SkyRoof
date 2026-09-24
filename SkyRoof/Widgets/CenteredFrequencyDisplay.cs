@@ -1,13 +1,10 @@
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
 namespace SkyRoof
 {
   /// <summary>
-  /// Black frequency readout whose visible glyphs are geometrically centered.
-  /// This deliberately does not rely on Label.TextAlign/TextRenderer font metrics,
-  /// because those center the font layout box rather than the actual digit outlines.
+  /// Frequency readout centered by the actual rendered pixel bounds rather than font metrics.
   /// </summary>
   internal sealed class CenteredFrequencyDisplay : Control
   {
@@ -27,41 +24,69 @@ namespace SkyRoof
     protected override void OnPaint(PaintEventArgs e)
     {
       base.OnPaint(e);
-
-      Graphics g = e.Graphics;
-      g.Clear(BackColor);
+      e.Graphics.Clear(BackColor);
 
       if (string.IsNullOrEmpty(Text) || ClientSize.Width <= 0 || ClientSize.Height <= 0)
         return;
 
-      g.SmoothingMode = SmoothingMode.AntiAlias;
-      g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+      TextFormatFlags flags =
+        TextFormatFlags.SingleLine |
+        TextFormatFlags.NoPadding |
+        TextFormatFlags.NoPrefix;
 
-      using var format = (StringFormat)StringFormat.GenericTypographic.Clone();
-      format.FormatFlags |= StringFormatFlags.NoWrap;
+      Size measured = TextRenderer.MeasureText(Text, Font, Size.Empty, flags);
+      int pad = Math.Max(8, DeviceDpi / 12);
+      int scratchWidth = Math.Max(1, measured.Width + pad * 2);
+      int scratchHeight = Math.Max(1, measured.Height + pad * 2);
 
-      float emSize = Font.SizeInPoints * g.DpiY / 72F;
-      using var path = new GraphicsPath();
-      path.AddString(
-        Text,
-        Font.FontFamily,
-        (int)Font.Style,
-        emSize,
-        PointF.Empty,
-        format);
+      using var scratch = new Bitmap(scratchWidth, scratchHeight);
+      using (Graphics sg = Graphics.FromImage(scratch))
+      {
+        sg.Clear(BackColor);
+        TextRenderer.DrawText(
+          sg,
+          Text,
+          Font,
+          new Point(pad, pad),
+          ForeColor,
+          BackColor,
+          flags);
+      }
 
-      RectangleF ink = path.GetBounds();
+      Rectangle ink = FindInkBounds(scratch);
+      if (ink.IsEmpty) return;
 
-      // Center the actual visible glyph outline, not the font's ascent/descent layout box.
-      float offsetX = (ClientSize.Width - ink.Width) / 2F - ink.X;
-      float offsetY = (ClientSize.Height - ink.Height) / 2F - ink.Y;
+      int x = (ClientSize.Width - ink.Width) / 2;
+      int y = (ClientSize.Height - ink.Height) / 2;
 
-      using var matrix = new Matrix();
-      matrix.Translate(offsetX, offsetY);
-      path.Transform(matrix);
+      e.Graphics.DrawImage(
+        scratch,
+        new Rectangle(x, y, ink.Width, ink.Height),
+        ink,
+        GraphicsUnit.Pixel);
+    }
 
-      using var brush = new SolidBrush(ForeColor);
-      g.FillPath(brush, path);
+    private Rectangle FindInkBounds(Bitmap bitmap)
+    {
+      int left = bitmap.Width;
+      int top = bitmap.Height;
+      int right = -1;
+      int bottom = -1;
+      int background = BackColor.ToArgb();
+
+      for (int y = 0; y < bitmap.Height; y++)
+        for (int x = 0; x < bitmap.Width; x++)
+          if (bitmap.GetPixel(x, y).ToArgb() != background)
+          {
+            if (x < left) left = x;
+            if (x > right) right = x;
+            if (y < top) top = y;
+            if (y > bottom) bottom = y;
+          }
+
+      return right < left || bottom < top
+        ? Rectangle.Empty
+        : Rectangle.FromLTRB(left, top, right + 1, bottom + 1);
     }
 
     protected override void OnTextChanged(EventArgs e)
