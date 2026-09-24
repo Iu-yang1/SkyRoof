@@ -84,7 +84,7 @@ namespace SkyRoof
       return freq;
     }
 
-    private double EffectiveDownlinkBase(SatnogsDbTransmitter tx)
+    internal double EffectiveDownlinkBase(SatnogsDbTransmitter tx)
     {
       long baseOffset = ctx.Settings.Satellites.TransmitterCustomizations
         .TryGetValue(tx.uuid, out var cust)
