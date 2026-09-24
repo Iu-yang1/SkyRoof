@@ -664,7 +664,7 @@ namespace SkyRoof
       else
         UplinkBaseFrequencyLabel.Text = $"B {RadioLink.BaseUplinkFrequency:n0}";
 
-      TuningBar.Frequency = RadioLink.CorrectedDownlinkFrequency;
+      TuningBar.SetFrequency(RadioLink.CorrectedDownlinkFrequency);
 
       if (RadioLink.UplinkFrequency == 0)
         UplinkFrequencyLabel.Text = "000,000,000";
