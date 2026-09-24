@@ -26,8 +26,8 @@ namespace SkyRoof
     private readonly Button UplinkResetBtn = new();
 
     private readonly GroupBox TuningGroup = new();
-    private readonly Label NoDopplerDownlinkValue = new();
-    private readonly Label NoDopplerUplinkValue = new();
+    private readonly CenteredFrequencyDisplay NoDopplerDownlinkValue = new();
+    private readonly CenteredFrequencyDisplay NoDopplerUplinkValue = new();
     private readonly Label TuningModeLabel = new();
     private readonly FrequencyTuningBar TuningBar = new();
     private readonly Label TuningHelpLabel = new();
@@ -264,7 +264,7 @@ namespace SkyRoof
       TuningGroup.Controls.Add(layout);
     }
 
-    private static Control MakeNoDopplerFrequencyBlock(string caption, Label value)
+    private static Control MakeNoDopplerFrequencyBlock(string caption, CenteredFrequencyDisplay value)
     {
       var panel = new TableLayoutPanel
       {
@@ -292,8 +292,6 @@ namespace SkyRoof
       value.ForeColor = Color.Aqua;
       value.Font = new Font("Microsoft Sans Serif", 14F);
       value.Text = "000,000,000 Hz";
-      value.TextAlign = ContentAlignment.MiddleCenter;
-      value.AutoEllipsis = false;
       value.Margin = new Padding(0, 2, 0, 2);
       panel.Controls.Add(value, 0, 1);
 
