@@ -540,6 +540,13 @@ namespace SkyRoof
       if (PreviewSource == IntPtr.Zero || !IsWindow(PreviewSource))
         return;
 
+      if (ViewTabs.SelectedTab != PreviewTab || !PreviewHost.Visible)
+      {
+        if (PreviewKeepAliveActive)
+          RestorePreviewSourceWindow();
+        return;
+      }
+
       bool ownerMinimized =
         PreviewOriginalOwner != IntPtr.Zero &&
         IsWindow(PreviewOriginalOwner) &&
@@ -582,6 +589,18 @@ namespace SkyRoof
             currentRect.Left, currentRect.Top, currentRect.Right, currentRect.Bottom);
 
         _ = SetWindowLongPtr(PreviewSource, GWLP_HWNDPARENT, IntPtr.Zero);
+
+        if (GetWindow(PreviewSource, GW_OWNER) != IntPtr.Zero)
+        {
+          int error = Marshal.GetLastWin32Error();
+          StatusLabel.Text =
+            "RS-BA1 minimized: live preview keep-alive could not detach the Spectrum Scope owner.";
+          Log.Warning(
+            "Unable to detach RS-BA1 Spectrum Scope owner for background preview " +
+            "(Win32 error {Error}); try running SkyRoof at the same integrity level as RS-BA1",
+            error);
+          return;
+        }
 
         long keepAliveStyle =
           (exStyle | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW;
