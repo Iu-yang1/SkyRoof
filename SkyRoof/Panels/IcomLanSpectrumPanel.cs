@@ -312,7 +312,7 @@ namespace SkyRoof
         $"Serial {capture.SerialChunkCount:N0} · CI-V {capture.CivFrameCount:N0} · " +
         $"Scope {scopeFrames:N0} · {ScopeFps:0.0} fps · " +
         $"BadScope {capture.InvalidScopeFrameCount:N0} · " +
-        $"LargeCI-V {capture.LanLengthOverflowPacketCount:N0} · " +
+        $"ChunkLenΔ {capture.LanChunkLengthMismatchCount:N0} · " +
         $"Gaps {capture.SequenceGapCount:N0} · Duplicates {capture.DuplicateChunkCount:N0}";
 
       DateTime? last = capture.LastScopeFrameUtc;
