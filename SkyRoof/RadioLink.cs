@@ -259,7 +259,6 @@ namespace SkyRoof
 
       else
       {
-        freq = Math.Max(-25000, Math.Min(25000, freq));
         DownlinkManualCorrection = freq;
       }
 
@@ -271,8 +270,7 @@ namespace SkyRoof
       // RIT
       if (RitEnabled)
       {
-        long newOffset = (long)RitOffset + delta;
-        RitOffset = Math.Max(-25000, Math.Min(25000, newOffset));
+        RitOffset += delta;
       }
 
       // terrestrial
@@ -295,16 +293,15 @@ namespace SkyRoof
       // transmitter
       else
       {
-        double newOffset = DownlinkManualCorrection + delta;
-        DownlinkManualCorrection = Math.Max(-25000, Math.Min(25000, newOffset));
+        DownlinkManualCorrection += delta;
       }
 
       ComputeFrequencies();
     }
 
     /// <summary>
-    /// Return operator tuning to this transmitter's Base position without touching persistent
-    /// Base/Manual calibration. RIT/XIT are transient tuning offsets, so they are cleared too.
+    /// Reset every operator tuning offset so the no-Doppler downlink/uplink return exactly
+    /// to their saved Base frequencies.
     /// </summary>
     public void ReturnToBaseTuningPosition()
     {
@@ -314,8 +311,14 @@ namespace SkyRoof
       RitOffset = 0;
       XitOffset = 0;
 
-      if (IsTransponder)
+      if (TxCust != null)
         TransponderOffset = 0;
+
+      if (SatCust != null)
+      {
+        DownlinkManualCorrection = 0;
+        UplinkManualCorrection = 0;
+      }
 
       ComputeFrequencies();
     }
@@ -326,9 +329,7 @@ namespace SkyRoof
         UplinkFrequency += delta;
       else
       {
-        double newOffset = UplinkManualCorrection + delta;
-        if (newOffset >= -25000 && newOffset <= 25000)
-          UplinkManualCorrection = newOffset;
+        UplinkManualCorrection += delta;
       }
 
       ComputeFrequencies();
