@@ -20,10 +20,9 @@ namespace SkyRoof
     private int[] WaterfallArgb = Array.Empty<int>();
     private readonly int[] Palette = BuildPalette();
 
-    internal int HistoryRows
+    internal void SetHistoryRows(int rows)
     {
-      get => WaterfallRows.Length;
-      set => ConfigureHistory(Math.Clamp(value, 40, 800));
+      ConfigureHistory(Math.Clamp(rows, 40, 800));
     }
 
     internal IcomLanSpectrumView()
