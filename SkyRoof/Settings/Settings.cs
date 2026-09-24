@@ -38,6 +38,10 @@ namespace SkyRoof
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public CatSettings Cat { get; set; } = new();
 
+    [DisplayName("Icom LAN Spectrum")]
+    [TypeConverter(typeof(ExpandableObjectConverter))]
+    public IcomLanSpectrumSettings IcomLanSpectrum { get; set; } = new();
+
     [DisplayName("Rotator Control")]
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public RotatorSettings Rotator { get; set; } = new();
