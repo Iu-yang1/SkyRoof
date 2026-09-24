@@ -10,6 +10,7 @@ namespace SkyRoof
     internal long FrequencyAHz { get; init; }
     internal long FrequencyBHz { get; init; }
     internal bool OutOfRange { get; init; }
+    internal bool SweepComplete { get; init; } = true;
     internal byte[] Samples { get; init; } = Array.Empty<byte>();
 
     internal string ScopeName => Scope == 1 ? "SUB" : "MAIN";
