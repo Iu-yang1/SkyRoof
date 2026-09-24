@@ -107,7 +107,7 @@ transponder.
 
 ## Frequency Tuning Ruler
 
-The lower half of the Frequency Control panel contains an HRD-style tuning ruler, the current corrected
+The lower half of the Frequency Control panel contains an frequency tuning ruler, the current corrected
 downlink frequency, and the active tuning target. Drag the ruler horizontally or spin the mouse wheel
 to tune. It uses the same tuning path as the existing frequency scale and manual controls, so no
 additional hidden offset is introduced:
