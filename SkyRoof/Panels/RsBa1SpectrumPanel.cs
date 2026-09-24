@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text;
 using Serilog;
 using WeifenLuo.WinFormsUI.Docking;
@@ -16,7 +17,15 @@ namespace SkyRoof
     private readonly TreeView WindowTree = new();
     private readonly TextBox DetailsBox = new();
     private readonly SplitContainer InspectorSplit = new();
+    private readonly TabControl ViewTabs = new();
+    private readonly TabPage PreviewTab = new("Preview");
+    private readonly TabPage InspectorTab = new("Inspector");
+    private readonly Panel PreviewHost = new();
+    private readonly Label PreviewMessage = new();
     private readonly System.Windows.Forms.Timer RefreshTimer = new() { Interval = 1500 };
+    private IntPtr PreviewThumbnail;
+    private IntPtr PreviewSource;
+    private IntPtr PreviewDestinationRoot;
     private readonly List<RsBa1WindowInspector.WindowInfo> Windows = new();
 
     public RsBa1SpectrumPanel()
@@ -36,7 +45,11 @@ namespace SkyRoof
       {
         RestoreInspectorSplitter();
         RefreshWindows();
+        UpdatePreviewDestination();
       };
+
+      LocationChanged += (_, _) => UpdatePreviewDestination();
+      SizeChanged += (_, _) => UpdatePreviewDestination();
     }
 
     private void InitializeUi()
@@ -135,7 +148,32 @@ namespace SkyRoof
       DetailsBox.Font = new Font(FontFamily.GenericMonospace, 9F);
       InspectorSplit.Panel2.Controls.Add(DetailsBox);
 
-      root.Controls.Add(InspectorSplit, 0, 2);
+      PreviewHost.Dock = DockStyle.Fill;
+      PreviewHost.BackColor = Color.Black;
+      PreviewHost.Margin = new Padding(0);
+      PreviewHost.Resize += (_, _) => UpdatePreviewDestination();
+      PreviewHost.LocationChanged += (_, _) => UpdatePreviewDestination();
+      PreviewHost.VisibleChanged += (_, _) => UpdatePreviewDestination();
+
+      PreviewMessage.Dock = DockStyle.Fill;
+      PreviewMessage.TextAlign = ContentAlignment.MiddleCenter;
+      PreviewMessage.ForeColor = SystemColors.GrayText;
+      PreviewMessage.BackColor = Color.Black;
+      PreviewMessage.Text = "Select a visible RS-BA1 Spectrum Scope.";
+      PreviewHost.Controls.Add(PreviewMessage);
+
+      PreviewTab.Padding = new Padding(0);
+      PreviewTab.Controls.Add(PreviewHost);
+
+      InspectorTab.Padding = new Padding(0);
+      InspectorTab.Controls.Add(InspectorSplit);
+
+      ViewTabs.Dock = DockStyle.Fill;
+      ViewTabs.TabPages.Add(PreviewTab);
+      ViewTabs.TabPages.Add(InspectorTab);
+      ViewTabs.SelectedIndexChanged += (_, _) => UpdatePreviewDestination();
+
+      root.Controls.Add(ViewTabs, 0, 2);
       Controls.Add(root);
 
       RefreshTimer.Tick += (_, _) => RefreshWindows(preserveSelection: true);
@@ -199,6 +237,8 @@ namespace SkyRoof
         WindowTree.Nodes.Clear();
         DetailsBox.Clear();
         CopyReportBtn.Enabled = false;
+        DetachPreview();
+        PreviewMessage.Text = "No RS-BA1 Spectrum Scope candidate found.";
         StatusLabel.Text = ShowAllCheckbox.Checked
           ? "No top-level windows were enumerated."
           : "No RS-BA1/Spectrum Scope candidate found. Open the RS-BA1 Spectrum Scope, then Refresh.";
@@ -206,8 +246,41 @@ namespace SkyRoof
       }
 
       int index = -1;
+
       if (previous != IntPtr.Zero)
-        index = Windows.FindIndex(x => x.Handle == previous);
+      {
+        int previousIndex = Windows.FindIndex(x => x.Handle == previous);
+        if (previousIndex >= 0 &&
+            RsBa1WindowInspector.IsSpectrumScope(Windows[previousIndex]) &&
+            Windows[previousIndex].Visible)
+          index = previousIndex;
+      }
+
+      if (index < 0)
+      {
+        var best = Windows
+          .Select((info, i) => new { info, i })
+          .Where(x =>
+            RsBa1WindowInspector.IsSpectrumScope(x.info) &&
+            x.info.Visible &&
+            x.info.ClassName.Equals("TFormScope", StringComparison.OrdinalIgnoreCase) &&
+            x.info.ProcessName.Equals("RemoteCtrl", StringComparison.OrdinalIgnoreCase))
+          .OrderByDescending(x => x.info.Bounds.Width * x.info.Bounds.Height)
+          .FirstOrDefault();
+
+        if (best != null) index = best.i;
+      }
+
+      if (index < 0)
+      {
+        var visibleScope = Windows
+          .Select((info, i) => new { info, i })
+          .Where(x => RsBa1WindowInspector.IsSpectrumScope(x.info) && x.info.Visible)
+          .OrderByDescending(x => x.info.Bounds.Width * x.info.Bounds.Height)
+          .FirstOrDefault();
+
+        if (visibleScope != null) index = visibleScope.i;
+      }
 
       if (index < 0)
         index = Windows.FindIndex(RsBa1WindowInspector.IsSpectrumScope);
@@ -247,10 +320,177 @@ namespace SkyRoof
         root.Expand();
 
         WindowTree.SelectedNode = root;
+        AttachPreview(rootInfo);
       }
       finally
       {
         WindowTree.EndUpdate();
+      }
+    }
+
+    private void AttachPreview(RsBa1WindowInspector.WindowInfo info)
+    {
+      if (!RsBa1WindowInspector.IsSpectrumScope(info) || !info.Visible)
+      {
+        DetachPreview();
+        PreviewMessage.Text = info.Visible
+          ? "Selected window is not a Spectrum Scope."
+          : "Selected Spectrum Scope is not visible.";
+        return;
+      }
+
+      if (!PreviewHost.IsHandleCreated)
+      {
+        PreviewHost.CreateControl();
+        if (!PreviewHost.IsHandleCreated)
+        {
+          PreviewMessage.Text = "Preview host is not ready.";
+          return;
+        }
+      }
+
+      IntPtr destinationRoot = GetAncestor(PreviewHost.Handle, GA_ROOT);
+      if (destinationRoot == IntPtr.Zero)
+      {
+        PreviewMessage.Text = "Unable to resolve the preview destination window.";
+        return;
+      }
+
+      if (PreviewThumbnail != IntPtr.Zero &&
+          PreviewSource == info.Handle &&
+          PreviewDestinationRoot == destinationRoot)
+      {
+        UpdatePreviewDestination();
+        return;
+      }
+
+      DetachPreview();
+
+      int compositionHr = DwmIsCompositionEnabled(out bool compositionEnabled);
+      if (compositionHr < 0 || !compositionEnabled)
+      {
+        PreviewMessage.Text = "Desktop Window Manager composition is unavailable.";
+        return;
+      }
+
+      int hr = DwmRegisterThumbnail(destinationRoot, info.Handle, out PreviewThumbnail);
+      if (hr < 0 || PreviewThumbnail == IntPtr.Zero)
+      {
+        PreviewThumbnail = IntPtr.Zero;
+        PreviewMessage.Text = $"DWM preview registration failed (0x{hr:X8}).";
+        StatusLabel.Text = PreviewMessage.Text;
+        Log.Warning(
+          "Failed to register RS-BA1 DWM thumbnail for {Hwnd}: HRESULT 0x{Hr:X8}",
+          RsBa1WindowInspector.FormatHandle(info.Handle),
+          hr);
+        return;
+      }
+
+      PreviewSource = info.Handle;
+      PreviewDestinationRoot = destinationRoot;
+      PreviewMessage.Visible = false;
+
+      StatusLabel.Text =
+        $"Live DWM preview: {RsBa1WindowInspector.FormatHandle(info.Handle)} · " +
+        $"{info.Bounds.Width}×{info.Bounds.Height} · DPI {info.Dpi}.";
+      Log.Information(
+        "Attached RS-BA1 DWM preview: source={Source}, destination={Destination}",
+        RsBa1WindowInspector.FormatHandle(PreviewSource),
+        RsBa1WindowInspector.FormatHandle(PreviewDestinationRoot));
+
+      UpdatePreviewDestination();
+    }
+
+    private void DetachPreview()
+    {
+      if (PreviewThumbnail != IntPtr.Zero)
+      {
+        _ = DwmUnregisterThumbnail(PreviewThumbnail);
+        PreviewThumbnail = IntPtr.Zero;
+      }
+
+      PreviewSource = IntPtr.Zero;
+      PreviewDestinationRoot = IntPtr.Zero;
+      PreviewMessage.Visible = true;
+    }
+
+    private void UpdatePreviewDestination()
+    {
+      if (PreviewThumbnail == IntPtr.Zero ||
+          PreviewSource == IntPtr.Zero ||
+          PreviewDestinationRoot == IntPtr.Zero ||
+          !PreviewHost.IsHandleCreated)
+        return;
+
+      bool visible =
+        ViewTabs.SelectedTab == PreviewTab &&
+        PreviewHost.Visible &&
+        PreviewHost.ClientSize.Width > 1 &&
+        PreviewHost.ClientSize.Height > 1;
+
+      Rectangle screenRect = PreviewHost.RectangleToScreen(PreviewHost.ClientRectangle);
+      var topLeft = new POINT(screenRect.Left, screenRect.Top);
+      var bottomRight = new POINT(screenRect.Right, screenRect.Bottom);
+
+      if (!ScreenToClient(PreviewDestinationRoot, ref topLeft) ||
+          !ScreenToClient(PreviewDestinationRoot, ref bottomRight))
+        return;
+
+      int availableWidth = Math.Max(0, bottomRight.X - topLeft.X);
+      int availableHeight = Math.Max(0, bottomRight.Y - topLeft.Y);
+
+      RECT destination = new()
+      {
+        Left = topLeft.X,
+        Top = topLeft.Y,
+        Right = bottomRight.X,
+        Bottom = bottomRight.Y
+      };
+
+      if (availableWidth > 0 && availableHeight > 0 &&
+          GetClientRect(PreviewSource, out RECT sourceClient))
+      {
+        int sourceWidth = Math.Max(1, sourceClient.Right - sourceClient.Left);
+        int sourceHeight = Math.Max(1, sourceClient.Bottom - sourceClient.Top);
+
+        double scale = Math.Min(
+          availableWidth / (double)sourceWidth,
+          availableHeight / (double)sourceHeight);
+
+        int drawWidth = Math.Max(1, (int)Math.Round(sourceWidth * scale));
+        int drawHeight = Math.Max(1, (int)Math.Round(sourceHeight * scale));
+        int x = topLeft.X + (availableWidth - drawWidth) / 2;
+        int y = topLeft.Y + (availableHeight - drawHeight) / 2;
+
+        destination = new RECT
+        {
+          Left = x,
+          Top = y,
+          Right = x + drawWidth,
+          Bottom = y + drawHeight
+        };
+      }
+
+      var props = new DWM_THUMBNAIL_PROPERTIES
+      {
+        dwFlags =
+          DWM_TNP_RECTDESTINATION |
+          DWM_TNP_OPACITY |
+          DWM_TNP_VISIBLE |
+          DWM_TNP_SOURCECLIENTAREAONLY,
+        rcDestination = destination,
+        opacity = 255,
+        fVisible = visible,
+        fSourceClientAreaOnly = true
+      };
+
+      int hr = DwmUpdateThumbnailProperties(PreviewThumbnail, ref props);
+      if (hr < 0)
+      {
+        Log.Warning(
+          "Failed to update RS-BA1 DWM thumbnail {Thumbnail}: HRESULT 0x{Hr:X8}",
+          RsBa1WindowInspector.FormatHandle(PreviewThumbnail),
+          hr);
       }
     }
 
@@ -323,6 +563,7 @@ namespace SkyRoof
     private void RsBa1SpectrumPanel_FormClosing(object? sender, FormClosingEventArgs e)
     {
       RefreshTimer.Stop();
+      DetachPreview();
 
       if (ctx == null) return;
 
@@ -330,5 +571,76 @@ namespace SkyRoof
       ctx.RsBa1SpectrumPanel = null;
       ctx.MainForm.RsBa1SpectrumMNU.Checked = false;
     }
+    private const uint GA_ROOT = 2;
+    private const uint DWM_TNP_RECTDESTINATION = 0x00000001;
+    private const uint DWM_TNP_OPACITY = 0x00000004;
+    private const uint DWM_TNP_VISIBLE = 0x00000008;
+    private const uint DWM_TNP_SOURCECLIENTAREAONLY = 0x00000010;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT
+    {
+      internal int X;
+      internal int Y;
+
+      internal POINT(int x, int y)
+      {
+        X = x;
+        Y = y;
+      }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT
+    {
+      internal int Left;
+      internal int Top;
+      internal int Right;
+      internal int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct DWM_THUMBNAIL_PROPERTIES
+    {
+      internal uint dwFlags;
+      internal RECT rcDestination;
+      internal RECT rcSource;
+      internal byte opacity;
+
+      [MarshalAs(UnmanagedType.Bool)]
+      internal bool fVisible;
+
+      [MarshalAs(UnmanagedType.Bool)]
+      internal bool fSourceClientAreaOnly;
+    }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmRegisterThumbnail(
+      IntPtr hwndDestination,
+      IntPtr hwndSource,
+      out IntPtr thumbnailId);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmUnregisterThumbnail(IntPtr thumbnailId);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmUpdateThumbnailProperties(
+      IntPtr thumbnailId,
+      ref DWM_THUMBNAIL_PROPERTIES properties);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmIsCompositionEnabled(
+      [MarshalAs(UnmanagedType.Bool)] out bool enabled);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ScreenToClient(IntPtr hwnd, ref POINT point);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetClientRect(IntPtr hwnd, out RECT rect);
   }
 }
