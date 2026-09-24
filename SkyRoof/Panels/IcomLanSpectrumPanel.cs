@@ -10,6 +10,7 @@ namespace SkyRoof
     private readonly TextBox RadioAddressBox = new();
     private readonly NumericUpDown SerialPortBox = new();
     private readonly ComboBox ScopeBandBox = new();
+    private readonly Button SourceBtn = new();
     private readonly Button StartStopBtn = new();
     private readonly Button ClearBtn = new();
     private readonly Label StatusLabel = new();
@@ -125,6 +126,11 @@ namespace SkyRoof
       };
       toolbar.Controls.Add(ScopeBandBox);
 
+      SourceBtn.AutoSize = true;
+      SourceBtn.Margin = new Padding(0, 2, 8, 2);
+      SourceBtn.Click += (_, _) => ToggleScopeSource();
+      toolbar.Controls.Add(SourceBtn);
+
       StartStopBtn.Text = "Start";
       StartStopBtn.AutoSize = true;
       StartStopBtn.Margin = new Padding(0, 2, 6, 2);
@@ -155,7 +161,7 @@ namespace SkyRoof
       StatusLabel.TextAlign = ContentAlignment.MiddleLeft;
       StatusLabel.ForeColor = SystemColors.GrayText;
       StatusLabel.Text =
-        "Stopped. Open the RS-BA1 Spectrum Scope, then start passive capture.";
+        "Stopped. Select SkyCAT or RS-BA1 as the scope source, then start passive capture.";
       root.Controls.Add(StatusLabel, 0, 1);
 
       StatsLabel.Dock = DockStyle.Fill;
@@ -179,6 +185,7 @@ namespace SkyRoof
       SerialPortBox.Value = Math.Clamp(settings.SerialPort, 1, 65535);
       ScopeBandBox.SelectedIndex = Math.Clamp((int)settings.ScopeBand, 0, 2);
       Volatile.Write(ref SelectedScopeBand, ScopeBandBox.SelectedIndex);
+      UpdateSourceButton();
       SpectrumView.SetHistoryRows(settings.WaterfallRows);
     }
 
@@ -190,6 +197,51 @@ namespace SkyRoof
       settings.ScopeBand =
         (IcomLanScopeBand)Math.Clamp(ScopeBandBox.SelectedIndex, 0, 2);
       ctx.Settings.SaveToFile();
+    }
+
+    private bool UsingSkyCatScopeSource =>
+      ctx.Settings.IcomLanSpectrum.Source == IcomLanSpectrumSource.SkyCat;
+
+    private void UpdateSourceButton()
+    {
+      SourceBtn.Text = UsingSkyCatScopeSource
+        ? "Source: SkyCAT"
+        : "Source: RS-BA1";
+    }
+
+    private void ToggleScopeSource()
+    {
+      IcomLanSpectrumSettings settings = ctx.Settings.IcomLanSpectrum;
+      settings.Source = settings.Source == IcomLanSpectrumSource.SkyCat
+        ? IcomLanSpectrumSource.RsBa1
+        : IcomLanSpectrumSource.SkyCat;
+
+      ctx.Settings.SaveToFile();
+      UpdateSourceButton();
+
+      LastScopeRequestRouted = false;
+      LastScopeOutputRequestUtc = DateTime.MinValue;
+
+      if (Capture == null)
+      {
+        StatusLabel.Text = UsingSkyCatScopeSource
+          ? "SkyCAT source selected. Start capture to enable native CI-V 27 00 scope output."
+          : "RS-BA1 source selected. Open/enable the RS-BA1 Spectrum Scope, then start capture.";
+        return;
+      }
+
+      if (UsingSkyCatScopeSource)
+      {
+        StatusLabel.Text =
+          "Switched to SkyCAT scope source; requesting CI-V 27 10 / 27 11...";
+        RequestScopeOutputIfDue(force: true);
+      }
+      else
+      {
+        StatusLabel.Text =
+          "Switched to RS-BA1 scope source; SkyCAT scope reassert is disabled. " +
+          "Open/enable the RS-BA1 Spectrum Scope.";
+      }
     }
 
     private void StartCapture()
@@ -332,22 +384,32 @@ namespace SkyRoof
         StatusLabel.Text =
           capture.PacketCount == 0
             ? "Listening for IC-9700 UDP/50002 traffic..."
-            : LastScopeRequestRouted
+            : !UsingSkyCatScopeSource
               ? "Icom LAN traffic detected, but no CI-V 27 00 waveform yet. " +
-                "Scope output reasserted through SkyCAT; waiting for waveform data..."
-              : "Icom LAN traffic detected, but no CI-V 27 00 waveform yet. " +
-                "No active SkyCAT CAT engine is available to enable scope output.";
+                "RS-BA1 source selected; open/enable the RS-BA1 Spectrum Scope."
+              : LastScopeRequestRouted
+                ? "Icom LAN traffic detected, but no CI-V 27 00 waveform yet. " +
+                  "Scope output reasserted through SkyCAT; waiting for waveform data..."
+                : "Icom LAN traffic detected, but no CI-V 27 00 waveform yet. " +
+                  "No active SkyCAT CAT engine is available to enable scope output.";
       }
       else if (capture.IsRunning && last != null)
       {
         StatusLabel.Text =
-          "Receiving native IC-9700 CI-V 27 00 spectrum data · " +
+          $"Receiving native IC-9700 CI-V 27 00 spectrum data · " +
+          $"{(UsingSkyCatScopeSource ? "SkyCAT" : "RS-BA1")} source · " +
           "WinDivert SNIFF/RECV_ONLY.";
       }
     }
 
     private void RequestScopeOutputIfDue(bool force)
     {
+      if (!UsingSkyCatScopeSource)
+      {
+        LastScopeRequestRouted = false;
+        return;
+      }
+
       DateTime now = DateTime.UtcNow;
 
       if (!force && (now - LastScopeOutputRequestUtc).TotalSeconds < 2.0)
