@@ -120,7 +120,9 @@ namespace SkyRoof
 
       if (waterfallHeight > 0 && WaterfallBitmap != null)
       {
-        e.Graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
+        // The radio provides 475 horizontal bins. Bilinear scaling is much easier to
+        // read than nearest-neighbour when the dock panel is 2x-3x wider than that.
+        e.Graphics.InterpolationMode = InterpolationMode.Bilinear;
         e.Graphics.PixelOffsetMode = PixelOffsetMode.Half;
         e.Graphics.DrawImage(
           WaterfallBitmap,
