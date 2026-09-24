@@ -38,6 +38,11 @@ namespace SkyRoof
     private bool CtcssReassertAfterTune;
     private double? RequestedArmingTone;
 
+    // One-shot request used by the native Icom LAN Spectrum panel. The actual CI-V
+    // command is sent by SkyCAT over the already-open CAT/virtual-serial path, so this
+    // does not create a second Icom LAN session.
+    private volatile bool IcomScopeOutputPending;
+
     public event EventHandler? RxTuned;
     public event EventHandler? TxTuned;
 
@@ -146,6 +151,12 @@ namespace SkyRoof
       RequestedArmingTone = toneHz;
     }
 
+    public void RequestIcomScopeOutput()
+    {
+      LogInfo("IC-9700 scope output reassert requested");
+      IcomScopeOutputPending = true;
+    }
+
 
 
 
@@ -169,6 +180,8 @@ namespace SkyRoof
       if (NeedToWriteTxMode()) TryWriteTxMode();
 
       TryReassertCtcssAfterTune();
+
+      if (IcomScopeOutputPending) TryEnableIcomScopeOutput();
 
       if (RequestedArmingTone.HasValue) TrySendArmingTone();
     }
@@ -539,6 +552,31 @@ namespace SkyRoof
     }
 
 
+
+
+    private void TryEnableIcomScopeOutput()
+    {
+      IcomScopeOutputPending = false;
+
+      // These are SkyCAT extensions backed by IC-9700 CI-V 27 10 / 27 11.
+      // Generic rigctld does not expose an equivalent command, so simply leave passive
+      // sniffing in place when SkyCAT is not the active backend.
+      if (!ReferenceEquals(commands, RigCtldCommands.SkyCat))
+      {
+        LogInfo("IC-9700 scope output request skipped: CAT backend is not SkyCAT");
+        return;
+      }
+
+      bool scopeOk = SendWriteCommand("U SCOPE 1");
+      bool dataOk = SendWriteCommand("U SCOPE_DATA 1");
+
+      if (scopeOk && dataOk)
+        LogInfo("IC-9700 scope and waveform output enabled through SkyCAT");
+      else
+        Log.Warning(
+          "SkyCAT did not accept IC-9700 scope output commands. " +
+          "Update SkyCAT to a build that supports U SCOPE / U SCOPE_DATA.");
+    }
 
 
     //----------------------------------------------------------------------------------------------
