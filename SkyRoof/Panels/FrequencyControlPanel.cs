@@ -26,8 +26,8 @@ namespace SkyRoof
     private readonly Button UplinkResetBtn = new();
 
     private readonly GroupBox TuningGroup = new();
-    private readonly CenteredFrequencyDisplay NoDopplerDownlinkValue = new();
-    private readonly CenteredFrequencyDisplay NoDopplerUplinkValue = new();
+    private readonly Label NoDopplerDownlinkValue = new();
+    private readonly Label NoDopplerUplinkValue = new();
     private readonly Label TuningModeLabel = new();
     private readonly Button BackToBaseBtn = new();
     private readonly FrequencyTuningBar TuningBar = new();
@@ -283,7 +283,7 @@ namespace SkyRoof
       TuningGroup.Controls.Add(layout);
     }
 
-    private static Control MakeNoDopplerFrequencyBlock(string caption, CenteredFrequencyDisplay value)
+    private static Control MakeNoDopplerFrequencyBlock(string caption, Label value)
     {
       var panel = new TableLayoutPanel
       {
@@ -306,12 +306,15 @@ namespace SkyRoof
       };
       panel.Controls.Add(label, 0, 0);
 
+      // Use exactly the same WinForms text layout as the Base frequency display above.
+      // The previous custom-drawn control was consistently vertically offset on high-DPI systems.
       value.Dock = DockStyle.Fill;
       value.BackColor = Color.Black;
       value.ForeColor = Color.Aqua;
-      value.Font = new Font("Microsoft Sans Serif", 14F);
+      value.Font = new Font("Microsoft Sans Serif", 16F);
       value.Text = "000,000,000 Hz";
-      // Match the black display height/spacing used by the Base frequency readout above.
+      value.TextAlign = ContentAlignment.MiddleCenter;
+      value.AutoEllipsis = false;
       value.Margin = new Padding(0, 0, 0, 7);
       panel.Controls.Add(value, 0, 1);
 
