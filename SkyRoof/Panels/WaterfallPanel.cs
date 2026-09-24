@@ -392,8 +392,17 @@ namespace SkyRoof
       // tune to offset in transponder passband
       if (label != null)
       {
-        double offset = ScaleControl.PixelToNominalFreq(label.Pass, DateTime.UtcNow, x) - label.Transponder!.DownlinkLow;
-        ctx.FrequencyControl.SetTransponderOffset(label.Transponder, offset);
+        var transponder = label.Transponder!;
+        long baseOffset = ctx.Settings.Satellites.TransmitterCustomizations
+          .TryGetValue(transponder.uuid, out var txCust)
+            ? txCust.DownlinkBaseOffset
+            : 0;
+
+        double effectiveBase = transponder.DownlinkLow + baseOffset;
+        double offset =
+          ScaleControl.PixelToNominalFreq(label.Pass, DateTime.UtcNow, x) - effectiveBase;
+
+        ctx.FrequencyControl.SetTransponderOffset(transponder, offset);
       }
 
       // tune to terrestrial frequency
