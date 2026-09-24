@@ -30,6 +30,13 @@ namespace SkyRoof
     // cached so the Terrestrial/normal toggle does not allocate (and leak) a new font each update
     private readonly Font DownlinkRegularFont, DownlinkBoldFont;
 
+    private readonly Label DownlinkBaseFrequencyLabel = new();
+    private readonly Label UplinkBaseFrequencyLabel = new();
+    private readonly FrequencyTuningBar TuningBar = new();
+    private readonly ContextMenuStrip BaseFrequencyMenu = new();
+    private readonly ToolStripMenuItem EditBaseFrequencyMnu = new("Edit Base Frequency");
+    private readonly ToolStripMenuItem ResetBaseFrequencyMnu = new("Reset to Database Frequency");
+
     public FrequencyWidget()
     {
       InitializeComponent();
@@ -42,6 +49,50 @@ namespace SkyRoof
       UplinkModeCombobox.SelectedIndex = 0;
       Changing = false;
       BuildCtcssMenu();
+      InitializeExtendedFrequencyUi();
+    }
+
+    private void InitializeExtendedFrequencyUi()
+    {
+      SuspendLayout();
+
+      ConfigureBaseFrequencyLabel(DownlinkBaseFrequencyLabel, 7);
+      ConfigureBaseFrequencyLabel(UplinkBaseFrequencyLabel, 346);
+
+      BaseFrequencyMenu.Items.AddRange(new ToolStripItem[] { EditBaseFrequencyMnu, ResetBaseFrequencyMnu });
+      EditBaseFrequencyMnu.Click += EditBaseFrequencyMnu_Click;
+      ResetBaseFrequencyMnu.Click += ResetBaseFrequencyMnu_Click;
+
+      DownlinkBaseFrequencyLabel.ContextMenuStrip = BaseFrequencyMenu;
+      UplinkBaseFrequencyLabel.ContextMenuStrip = BaseFrequencyMenu;
+      DownlinkBaseFrequencyLabel.Click += DownlinkBaseFrequencyLabel_Click;
+      UplinkBaseFrequencyLabel.Click += UplinkBaseFrequencyLabel_Click;
+
+      TuningBar.Location = new Point(7, 101);
+      TuningBar.Size = new Size(664, 27);
+      TuningBar.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
+      TuningBar.TuneDeltaRequested += IncrementDownlinkFrequency;
+      toolTip1.SetToolTip(TuningBar,
+        "HRD-style tuning ruler. Drag left/right or use the mouse wheel. Hold Alt for 500 Hz steps; hold Ctrl for RIT.");
+
+      Controls.Add(DownlinkBaseFrequencyLabel);
+      Controls.Add(UplinkBaseFrequencyLabel);
+      Controls.Add(TuningBar);
+      Size = new Size(677, 130);
+
+      ResumeLayout(false);
+    }
+
+    private void ConfigureBaseFrequencyLabel(Label label, int x)
+    {
+      label.BackColor = Color.Black;
+      label.Cursor = Cursors.Hand;
+      label.Font = new Font("Microsoft Sans Serif", 10.5F);
+      label.ForeColor = Color.Aqua;
+      label.Location = new Point(x, 77);
+      label.Size = new Size(170, 22);
+      label.Text = "B 000,000,000";
+      label.TextAlign = ContentAlignment.MiddleCenter;
     }
 
     internal string GetBandName(bool uplink)
@@ -82,6 +133,24 @@ namespace SkyRoof
       // the telemetry panel decodes terrestrial signals from manually entered parameters, so it must learn
       // that the radio has moved: nothing else tells it, and the tuned frequency is the pass identity there
       ctx.TelemetryPanel?.SetTransmitter();
+    }
+
+    private void SetDownlinkBaseFrequency(double frequency)
+    {
+      if (RadioLink.IsTerrestrial || RadioLink.TxCust == null) return;
+      RadioLink.SetDownlinkBaseFrequency(frequency);
+      ctx.Settings.SaveToFile();
+      RadioLinkToRadio();
+      RadioLinkToUi();
+    }
+
+    private void SetUplinkBaseFrequency(double frequency)
+    {
+      if (!RadioLink.HasUplink || RadioLink.TxCust == null) return;
+      RadioLink.SetUplinkBaseFrequency(frequency);
+      ctx.Settings.SaveToFile();
+      RadioLinkToRadio();
+      RadioLinkToUi();
     }
 
     internal void SetTransponderOffset(SatnogsDbTransmitter transponder, double offset)
@@ -585,6 +654,18 @@ namespace SkyRoof
       else
         DownlinkFrequencyLabel.Text = $"{RadioLink.DownlinkFrequency:n0}";
 
+      if (RadioLink.IsTerrestrial)
+        DownlinkBaseFrequencyLabel.Text = "B —";
+      else
+        DownlinkBaseFrequencyLabel.Text = $"B {RadioLink.BaseDownlinkFrequency:n0}";
+
+      if (!RadioLink.HasUplink)
+        UplinkBaseFrequencyLabel.Text = "B —";
+      else
+        UplinkBaseFrequencyLabel.Text = $"B {RadioLink.BaseUplinkFrequency:n0}";
+
+      TuningBar.Frequency = RadioLink.CorrectedDownlinkFrequency;
+
       if (RadioLink.UplinkFrequency == 0)
         UplinkFrequencyLabel.Text = "000,000,000";
       else if (ctx.Settings.Cat.TxCat.ShowCorrectedFrequency)
@@ -609,6 +690,8 @@ namespace SkyRoof
       else
         DownlinkFrequencyLabel.ForeColor = bright ? Color.White : Color.Gray;
       toolTip1.SetToolTip(DownlinkFrequencyLabel, MakeDownlinkTooltip());
+      DownlinkBaseFrequencyLabel.ForeColor = RadioLink.IsTerrestrial ? Color.Gray : DownlinkFrequencyLabel.ForeColor;
+      toolTip1.SetToolTip(DownlinkBaseFrequencyLabel, MakeBaseFrequencyTooltip(false));
 
       // uplink
       bright = ctx.CatControl.Tx?.IsRunning ?? false;
@@ -621,8 +704,26 @@ namespace SkyRoof
       else
         UplinkFrequencyLabel.ForeColor = bright ? Color.White : Color.Gray;
       toolTip1.SetToolTip(UplinkFrequencyLabel, MakeUplinkTooltip());
+      UplinkBaseFrequencyLabel.ForeColor = RadioLink.HasUplink ? UplinkFrequencyLabel.ForeColor : Color.Gray;
+      toolTip1.SetToolTip(UplinkBaseFrequencyLabel, MakeBaseFrequencyTooltip(true));
 
       UpdateTxButton();    
+    }
+
+    private string MakeBaseFrequencyTooltip(bool uplink)
+    {
+      if (RadioLink.IsTerrestrial) return "Base frequency is available while tracking a satellite transmitter";
+      if (uplink && !RadioLink.HasUplink) return "No uplink frequency";
+
+      double database = uplink ? RadioLink.DatabaseUplinkBaseFrequency : RadioLink.DatabaseDownlinkBaseFrequency;
+      double reference = uplink ? RadioLink.BaseUplinkFrequency : RadioLink.BaseDownlinkFrequency;
+      long correction = uplink ? RadioLink.UplinkBaseOffset : RadioLink.DownlinkBaseOffset;
+      string side = uplink ? "Uplink" : "Downlink";
+
+      return $"{side} database reference: {database:n0} Hz\n" +
+        $"{side} saved base: {reference:n0} Hz\n" +
+        $"Base correction: {correction:+0;-0;0} Hz\n\n" +
+        "Click to edit; right-click to edit or reset";
     }
 
     private string MakeUplinkTooltip()
@@ -749,9 +850,59 @@ namespace SkyRoof
     private void DownlinkFrequencyLabel_Click(object sender, EventArgs e)
     {
       FrequencyDialog.Location = Cursor.Position;
+      FrequencyDialog.SetInitialFrequency(RadioLink.DownlinkFrequency, "Tune to Frequency");
       FrequencyDialog.ShowDialog();
       if (FrequencyDialog.EnteredFrequency > 0)
         SetTerrestrialFrequency(FrequencyDialog.EnteredFrequency);
+    }
+
+    private void DownlinkBaseFrequencyLabel_Click(object? sender, EventArgs e)
+    {
+      EditBaseFrequency(false);
+    }
+
+    private void UplinkBaseFrequencyLabel_Click(object? sender, EventArgs e)
+    {
+      EditBaseFrequency(true);
+    }
+
+    private void EditBaseFrequency(bool uplink)
+    {
+      if (RadioLink.IsTerrestrial || RadioLink.TxCust == null) return;
+      if (uplink && !RadioLink.HasUplink) return;
+
+      double frequency = uplink ? RadioLink.BaseUplinkFrequency : RadioLink.BaseDownlinkFrequency;
+      FrequencyDialog.Location = Cursor.Position;
+      FrequencyDialog.SetInitialFrequency(frequency, uplink ? "Edit Uplink Base Frequency" : "Edit Downlink Base Frequency");
+      FrequencyDialog.ShowDialog();
+
+      if (FrequencyDialog.EnteredFrequency <= 0) return;
+      if (uplink) SetUplinkBaseFrequency(FrequencyDialog.EnteredFrequency);
+      else SetDownlinkBaseFrequency(FrequencyDialog.EnteredFrequency);
+    }
+
+    private bool BaseMenuIsUplink()
+    {
+      return BaseFrequencyMenu.SourceControl == UplinkBaseFrequencyLabel;
+    }
+
+    private void EditBaseFrequencyMnu_Click(object? sender, EventArgs e)
+    {
+      EditBaseFrequency(BaseMenuIsUplink());
+    }
+
+    private void ResetBaseFrequencyMnu_Click(object? sender, EventArgs e)
+    {
+      if (RadioLink.IsTerrestrial || RadioLink.TxCust == null) return;
+
+      if (BaseMenuIsUplink())
+        RadioLink.ResetUplinkBaseFrequency();
+      else
+        RadioLink.ResetDownlinkBaseFrequency();
+
+      ctx.Settings.SaveToFile();
+      RadioLinkToRadio();
+      RadioLinkToUi();
     }
 
     private void TxBtn_Click(object sender, EventArgs e)
