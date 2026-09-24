@@ -177,7 +177,7 @@ namespace SkyRoof
       SerialPortBox.Value = Math.Clamp(settings.SerialPort, 1, 65535);
       ScopeBandBox.SelectedIndex = Math.Clamp((int)settings.ScopeBand, 0, 2);
       Volatile.Write(ref SelectedScopeBand, ScopeBandBox.SelectedIndex);
-      SpectrumView.HistoryRows = settings.WaterfallRows;
+      SpectrumView.SetHistoryRows(settings.WaterfallRows);
     }
 
     private void SaveUiSettings()
@@ -197,7 +197,7 @@ namespace SkyRoof
       SaveUiSettings();
 
       IcomLanSpectrumSettings settings = ctx.Settings.IcomLanSpectrum;
-      SpectrumView.HistoryRows = settings.WaterfallRows;
+      SpectrumView.SetHistoryRows(settings.WaterfallRows);
 
       var capture = new IcomLanSpectrumCapture(
         settings.RadioAddress,
