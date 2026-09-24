@@ -20,6 +20,7 @@ namespace SkyRoof
     private readonly System.Windows.Forms.Timer UiTimer = new() { Interval = 500 };
 
     private IcomLanSpectrumCapture? Capture;
+    private IcomLanSpectrumCapture? NativeLanAssistCapture;
     private long LastScopeFrames;
     private DateTime LastRateTime = DateTime.UtcNow;
     private DateTime LastScopeOutputRequestUtc = DateTime.MinValue;
@@ -27,6 +28,7 @@ namespace SkyRoof
     private double ScopeFps;
     private int SelectedScopeBand;
     private long LastRenderedScopeFrameTicks;
+    private bool LastStatsUsedNativeLan;
 
     public IcomLanSpectrumPanel(Context ctx)
     {
@@ -208,7 +210,7 @@ namespace SkyRoof
         : "Source: RS-BA1";
 
       TransportLabel.Text = UsingSkyCatScopeSource
-        ? $"Native SkyCAT scope TCP/127.0.0.1:{ctx.Settings.IcomLanSpectrum.SkyCatScopePort}"
+        ? $"SkyCAT control · native LAN UDP/{ctx.Settings.IcomLanSpectrum.SerialPort} preferred · TCP/{ctx.Settings.IcomLanSpectrum.SkyCatScopePort} fallback"
         : "Passive RS-BA1 LAN sniff · WinDivert RECV_ONLY";
     }
 
@@ -261,17 +263,36 @@ namespace SkyRoof
       capture.StatusChanged += Capture_StatusChanged;
 
       Capture = capture;
+
+      // SkyCAT receives the radio's Remote Utility virtual-COM scope stream. That
+      // stream is intentionally converted to USB-style 11-division waveform frames.
+      // The underlying RS-BA1 LAN packet still carries the native one-division
+      // waveform. Sniff it in parallel and prefer it whenever available; the SkyCAT
+      // TCP stream remains a reliable fallback if native LAN capture is unavailable.
+      if (UsingSkyCatScopeSource)
+      {
+        var nativeLan = new IcomLanSpectrumCapture(
+          settings.RadioAddress,
+          settings.SerialPort,
+          useSkyCatStream: false,
+          settings.SkyCatScopePort);
+
+        nativeLan.ScopeFrameReceived += NativeLanAssist_ScopeFrameReceived;
+        NativeLanAssistCapture = nativeLan;
+      }
       LastScopeFrames = 0;
       LastRateTime = DateTime.UtcNow;
       ScopeFps = 0;
       LastRenderedScopeFrameTicks = 0;
+      LastStatsUsedNativeLan = false;
 
       SetCaptureInputsEnabled(false);
       StartStopBtn.Text = "Stop";
       StatusLabel.Text = UsingSkyCatScopeSource
-        ? $"Connecting to SkyCAT scope stream 127.0.0.1:{settings.SkyCatScopePort}..."
+        ? $"Starting SkyCAT scope control with native LAN UDP/{settings.SerialPort} high-rate capture..."
         : "Starting WinDivert passive RS-BA1 LAN capture...";
 
+      NativeLanAssistCapture?.Start();
       capture.Start();
       RequestScopeOutputIfDue(force: true);
     }
@@ -281,7 +302,15 @@ namespace SkyRoof
       IcomLanSpectrumCapture? capture = Capture;
       if (capture == null) return;
 
+      IcomLanSpectrumCapture? nativeLan = NativeLanAssistCapture;
       Capture = null;
+      NativeLanAssistCapture = null;
+
+      if (nativeLan != null)
+      {
+        nativeLan.ScopeFrameReceived -= NativeLanAssist_ScopeFrameReceived;
+        nativeLan.Dispose();
+      }
 
       capture.ScopeFrameReceived -= Capture_ScopeFrameReceived;
       capture.StatusChanged -= Capture_StatusChanged;
@@ -299,6 +328,31 @@ namespace SkyRoof
     }
 
     private void Capture_ScopeFrameReceived(IcomScopeFrame frame)
+    {
+      if (IsDisposed || !IsHandleCreated) return;
+
+      // When the original LAN waveform is arriving, do not interleave the slower
+      // 11-division virtual-COM copy into the display.
+      DateTime? nativeLast = NativeLanAssistCapture?.LastScopeFrameUtc;
+      if (nativeLast != null &&
+          (DateTime.UtcNow - nativeLast.Value).TotalSeconds < 0.75)
+        return;
+
+      try
+      {
+        BeginInvoke((Action)(() =>
+        {
+          if (!IsDisposed)
+            RenderScopeFrame(frame);
+        }));
+      }
+      catch (InvalidOperationException)
+      {
+        // The panel is closing.
+      }
+    }
+
+    private void NativeLanAssist_ScopeFrameReceived(IcomScopeFrame frame)
     {
       if (IsDisposed || !IsHandleCreated) return;
 
@@ -355,16 +409,32 @@ namespace SkyRoof
       IcomLanSpectrumCapture? capture = Capture;
       if (capture == null) return;
 
-      long scopeFrames = capture.ScopeFrameCount;
       DateTime now = DateTime.UtcNow;
+      IcomLanSpectrumCapture? nativeLan = NativeLanAssistCapture;
+      DateTime? nativeLast = nativeLan?.LastScopeFrameUtc;
+      bool nativeLanActive =
+        nativeLan != null &&
+        nativeLast != null &&
+        (now - nativeLast.Value).TotalSeconds < 1.0;
 
-      // Event delivery is the normal ~30 FPS path. This pull fallback guarantees
-      // that a completed capture frame still reaches the view if WinForms drops or
-      // delays a BeginInvoke during docking/layout churn.
-      IcomScopeFrame? latestFrame = capture.LatestScopeFrame;
+      IcomLanSpectrumCapture effectiveCapture =
+        nativeLanActive ? nativeLan! : capture;
+      long scopeFrames = effectiveCapture.ScopeFrameCount;
+
+      // Event delivery is the normal high-rate path. Pull the newest frame as a
+      // fallback if WinForms temporarily delays BeginInvoke during docking/layout.
+      IcomScopeFrame? latestFrame = effectiveCapture.LatestScopeFrame;
       if (latestFrame != null &&
           latestFrame.TimestampUtc.Ticks > LastRenderedScopeFrameTicks)
         RenderScopeFrame(latestFrame);
+
+      if (nativeLanActive != LastStatsUsedNativeLan)
+      {
+        LastStatsUsedNativeLan = nativeLanActive;
+        LastScopeFrames = scopeFrames;
+        LastRateTime = now;
+        ScopeFps = 0;
+      }
 
       double elapsed = (now - LastRateTime).TotalSeconds;
 
@@ -376,22 +446,24 @@ namespace SkyRoof
       }
 
       string radio =
-        capture.IsSkyCatStream
-          ? "SkyCAT"
-          : capture.DetectedRadioAddress ??
-            (string.IsNullOrWhiteSpace(ctx.Settings.IcomLanSpectrum.RadioAddress)
-              ? "auto"
-              : ctx.Settings.IcomLanSpectrum.RadioAddress);
+        nativeLanActive
+          ? $"LAN {nativeLan!.DetectedRadioAddress ?? "auto"}"
+          : capture.IsSkyCatStream
+            ? "SkyCAT TCP fallback"
+            : capture.DetectedRadioAddress ??
+              (string.IsNullOrWhiteSpace(ctx.Settings.IcomLanSpectrum.RadioAddress)
+                ? "auto"
+                : ctx.Settings.IcomLanSpectrum.RadioAddress);
 
       StatsLabel.Text =
-        $"Source {radio} · Frames {capture.PacketCount:N0} · " +
-        $"CI-V {capture.CivFrameCount:N0} · Scope {scopeFrames:N0} · " +
-        $"{ScopeFps:0.0} fps · BadScope {capture.InvalidScopeFrameCount:N0}" +
-        (capture.IsSkyCatStream
-          ? ""
-          : $" · Gaps {capture.SequenceGapCount:N0} · Duplicates {capture.DuplicateChunkCount:N0}");
+        $"Source {radio} · Frames {effectiveCapture.PacketCount:N0} · " +
+        $"CI-V {effectiveCapture.CivFrameCount:N0} · Scope {scopeFrames:N0} · " +
+        $"{ScopeFps:0.0} fps · BadScope {effectiveCapture.InvalidScopeFrameCount:N0}" +
+        (!effectiveCapture.IsSkyCatStream
+          ? $" · Gaps {effectiveCapture.SequenceGapCount:N0} · Duplicates {effectiveCapture.DuplicateChunkCount:N0}"
+          : "");
 
-      DateTime? last = capture.LastScopeFrameUtc;
+      DateTime? last = effectiveCapture.LastScopeFrameUtc;
       bool scopeStale =
         last == null || (now - last.Value).TotalSeconds > 1.5;
 
@@ -419,7 +491,9 @@ namespace SkyRoof
       else if (capture.IsRunning && last != null)
       {
         StatusLabel.Text =
-          $"Receiving native IC-9700 CI-V 27 00 spectrum data · {capture.TransportName}.";
+          nativeLanActive
+            ? $"Receiving high-rate native IC-9700 LAN 27 00 waveform · UDP/{ctx.Settings.IcomLanSpectrum.SerialPort} · SkyCAT controls scope."
+            : $"Receiving IC-9700 CI-V 27 00 spectrum data · {capture.TransportName}.";
       }
     }
 
