@@ -16,15 +16,11 @@ namespace SkyRoof
 
     public event Action<int>? TuneDeltaRequested;
 
-    public double Frequency
+    public void SetFrequency(double value)
     {
-      get => frequency;
-      set
-      {
-        if (Math.Abs(frequency - value) < 0.5) return;
-        frequency = value;
-        Invalidate();
-      }
+      if (Math.Abs(frequency - value) < 0.5) return;
+      frequency = value;
+      Invalidate();
     }
 
     public FrequencyTuningBar()
@@ -46,7 +42,7 @@ namespace SkyRoof
       g.Clear(BackColor);
 
       double hzPerPixel = SpanHz / Math.Max(1, Width);
-      double left = Frequency - SpanHz / 2d;
+      double left = frequency - SpanHz / 2d;
       const int majorStep = 10000;
       const int minorStep = 1000;
 
