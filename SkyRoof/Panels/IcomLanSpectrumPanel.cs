@@ -21,6 +21,7 @@ namespace SkyRoof
     private long LastScopeFrames;
     private DateTime LastRateTime = DateTime.UtcNow;
     private double ScopeFps;
+    private int SelectedScopeBand;
 
     public IcomLanSpectrumPanel(Context ctx)
     {
@@ -115,7 +116,11 @@ namespace SkyRoof
       ScopeBandBox.Width = 90;
       ScopeBandBox.Items.AddRange(new object[] { "Auto", "MAIN", "SUB" });
       ScopeBandBox.Margin = new Padding(0, 3, 8, 3);
-      ScopeBandBox.SelectedIndexChanged += (_, _) => SaveUiSettings();
+      ScopeBandBox.SelectedIndexChanged += (_, _) =>
+      {
+        Volatile.Write(ref SelectedScopeBand, Math.Clamp(ScopeBandBox.SelectedIndex, 0, 2));
+        SaveUiSettings();
+      };
       toolbar.Controls.Add(ScopeBandBox);
 
       StartStopBtn.Text = "Start";
@@ -171,6 +176,7 @@ namespace SkyRoof
       RadioAddressBox.Text = settings.RadioAddress ?? string.Empty;
       SerialPortBox.Value = Math.Clamp(settings.SerialPort, 1, 65535);
       ScopeBandBox.SelectedIndex = Math.Clamp((int)settings.ScopeBand, 0, 2);
+      Volatile.Write(ref SelectedScopeBand, ScopeBandBox.SelectedIndex);
       SpectrumView.HistoryRows = settings.WaterfallRows;
     }
 
@@ -237,7 +243,7 @@ namespace SkyRoof
     private void Capture_ScopeFrameReceived(IcomScopeFrame frame)
     {
       IcomLanScopeBand selected =
-        (IcomLanScopeBand)Math.Clamp(ScopeBandBox.SelectedIndex, 0, 2);
+        (IcomLanScopeBand)Volatile.Read(ref SelectedScopeBand);
 
       if (selected == IcomLanScopeBand.Main && frame.Scope != 0) return;
       if (selected == IcomLanScopeBand.Sub && frame.Scope != 1) return;
