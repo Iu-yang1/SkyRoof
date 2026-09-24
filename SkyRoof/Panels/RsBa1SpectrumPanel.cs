@@ -23,11 +23,17 @@ namespace SkyRoof
     private readonly Panel PreviewHost = new();
     private readonly Label PreviewMessage = new();
     private readonly System.Windows.Forms.Timer RefreshTimer = new() { Interval = 1500 };
+    private readonly System.Windows.Forms.Timer PreviewKeepAliveTimer = new() { Interval = 250 };
     private IntPtr PreviewThumbnail;
     private IntPtr PreviewSource;
     private IntPtr PreviewDestinationRoot;
     private Rectangle PreviewContentRect = Rectangle.Empty;
     private Size PreviewSourceClientSize = Size.Empty;
+    private IntPtr PreviewOriginalOwner;
+    private long PreviewOriginalExStyle;
+    private Rectangle PreviewOriginalBounds = Rectangle.Empty;
+    private bool PreviewOriginallyVisible;
+    private bool PreviewKeepAliveActive;
     private readonly List<RsBa1WindowInspector.WindowInfo> Windows = new();
 
     public RsBa1SpectrumPanel()
@@ -181,6 +187,8 @@ namespace SkyRoof
       Controls.Add(root);
 
       RefreshTimer.Tick += (_, _) => RefreshWindows(preserveSelection: true);
+      PreviewKeepAliveTimer.Tick += (_, _) => MaintainPreviewSource();
+      PreviewKeepAliveTimer.Start();
     }
 
     private void RestoreInspectorSplitter()
@@ -300,9 +308,12 @@ namespace SkyRoof
       CopyReportBtn.Enabled = true;
 
       int spectrumCount = Windows.Count(RsBa1WindowInspector.IsSpectrumScope);
-      StatusLabel.Text = ShowAllCheckbox.Checked
-        ? $"{Windows.Count} top-level windows shown; {spectrumCount} Spectrum Scope candidate(s)."
-        : $"{Windows.Count} RS-BA1-related candidate(s); {spectrumCount} Spectrum Scope candidate(s).";
+      if (PreviewThumbnail == IntPtr.Zero)
+      {
+        StatusLabel.Text = ShowAllCheckbox.Checked
+          ? $"{Windows.Count} top-level windows shown; {spectrumCount} Spectrum Scope candidate(s)."
+          : $"{Windows.Count} Spectrum Scope candidate(s).";
+      }
     }
 
     private void LoadSelectedWindow()
@@ -397,6 +408,10 @@ namespace SkyRoof
 
       PreviewSource = info.Handle;
       PreviewDestinationRoot = destinationRoot;
+      PreviewOriginalOwner = info.Owner;
+      PreviewOriginalExStyle = info.ExStyle;
+      PreviewOriginalBounds = info.Bounds;
+      PreviewOriginallyVisible = info.Visible;
       PreviewMessage.Visible = false;
 
       StatusLabel.Text =
@@ -412,6 +427,8 @@ namespace SkyRoof
 
     private void DetachPreview()
     {
+      RestorePreviewSourceWindow();
+
       if (PreviewThumbnail != IntPtr.Zero)
       {
         _ = DwmUnregisterThumbnail(PreviewThumbnail);
@@ -422,6 +439,11 @@ namespace SkyRoof
       PreviewDestinationRoot = IntPtr.Zero;
       PreviewContentRect = Rectangle.Empty;
       PreviewSourceClientSize = Size.Empty;
+      PreviewOriginalOwner = IntPtr.Zero;
+      PreviewOriginalExStyle = 0;
+      PreviewOriginalBounds = Rectangle.Empty;
+      PreviewOriginallyVisible = false;
+      PreviewKeepAliveActive = false;
       PreviewMessage.Visible = true;
     }
 
@@ -511,6 +533,148 @@ namespace SkyRoof
           RsBa1WindowInspector.FormatHandle(PreviewThumbnail),
           hr);
       }
+    }
+
+    private void MaintainPreviewSource()
+    {
+      if (PreviewSource == IntPtr.Zero || !IsWindow(PreviewSource))
+        return;
+
+      bool ownerMinimized =
+        PreviewOriginalOwner != IntPtr.Zero &&
+        IsWindow(PreviewOriginalOwner) &&
+        IsIconic(PreviewOriginalOwner);
+
+      bool sourceMinimized = IsIconic(PreviewSource);
+
+      if (ownerMinimized || sourceMinimized)
+      {
+        KeepPreviewSourceAlive();
+        return;
+      }
+
+      if (PreviewKeepAliveActive)
+      {
+        RestorePreviewSourceWindow();
+        UpdatePreviewDestination();
+      }
+    }
+
+    private void KeepPreviewSourceAlive()
+    {
+      if (PreviewSource == IntPtr.Zero || !IsWindow(PreviewSource))
+        return;
+
+      if (!PreviewKeepAliveActive)
+      {
+        // A normal owned top-level window is automatically hidden when its owner is
+        // minimized. Temporarily clear that owner and make the scope a tool window so
+        // Windows keeps composing it without creating a taskbar button.
+        long exStyle = GetWindowLongPtr(PreviewSource, GWL_EXSTYLE).ToInt64();
+        if (PreviewOriginalExStyle == 0)
+          PreviewOriginalExStyle = exStyle;
+
+        if (PreviewOriginalOwner == IntPtr.Zero)
+          PreviewOriginalOwner = GetWindow(PreviewSource, GW_OWNER);
+
+        if (PreviewOriginalBounds.IsEmpty && GetWindowRect(PreviewSource, out RECT currentRect))
+          PreviewOriginalBounds = Rectangle.FromLTRB(
+            currentRect.Left, currentRect.Top, currentRect.Right, currentRect.Bottom);
+
+        _ = SetWindowLongPtr(PreviewSource, GWLP_HWNDPARENT, IntPtr.Zero);
+
+        long keepAliveStyle =
+          (exStyle | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW;
+        _ = SetWindowLongPtr(
+          PreviewSource,
+          GWL_EXSTYLE,
+          new IntPtr(keepAliveStyle));
+
+        PreviewKeepAliveActive = true;
+        Log.Information(
+          "Keeping RS-BA1 Spectrum Scope alive while its owner is minimized: {Hwnd}",
+          RsBa1WindowInspector.FormatHandle(PreviewSource));
+      }
+
+      Rectangle bounds = PreviewOriginalBounds;
+      int width = Math.Max(1, bounds.Width);
+      int height = Math.Max(1, bounds.Height);
+
+      // Leave one source pixel on the virtual desktop so DWM continues composing the
+      // window, but keep the real scope effectively invisible to the user.
+      Rectangle virtualScreen = SystemInformation.VirtualScreen;
+      int x = virtualScreen.Right - 1;
+      int y = virtualScreen.Bottom - 1;
+
+      _ = ShowWindow(PreviewSource, SW_SHOWNOACTIVATE);
+      _ = SetWindowPos(
+        PreviewSource,
+        HWND_BOTTOM,
+        x,
+        y,
+        width,
+        height,
+        SWP_NOACTIVATE |
+        SWP_NOOWNERZORDER |
+        SWP_SHOWWINDOW |
+        SWP_FRAMECHANGED);
+
+      StatusLabel.Text =
+        "Live DWM preview · RS-BA1 minimized · Spectrum Scope kept rendering in background.";
+      UpdatePreviewDestination();
+    }
+
+    private void RestorePreviewSourceWindow()
+    {
+      if (!PreviewKeepAliveActive || PreviewSource == IntPtr.Zero)
+        return;
+
+      if (!IsWindow(PreviewSource))
+      {
+        PreviewKeepAliveActive = false;
+        return;
+      }
+
+      // Hide first to avoid flashing the parked scope on screen while restoring its
+      // original ownership/style/position.
+      _ = ShowWindow(PreviewSource, SW_HIDE);
+
+      _ = SetWindowLongPtr(
+        PreviewSource,
+        GWL_EXSTYLE,
+        new IntPtr(PreviewOriginalExStyle));
+
+      _ = SetWindowLongPtr(
+        PreviewSource,
+        GWLP_HWNDPARENT,
+        PreviewOriginalOwner);
+
+      if (!PreviewOriginalBounds.IsEmpty)
+      {
+        _ = SetWindowPos(
+          PreviewSource,
+          IntPtr.Zero,
+          PreviewOriginalBounds.X,
+          PreviewOriginalBounds.Y,
+          Math.Max(1, PreviewOriginalBounds.Width),
+          Math.Max(1, PreviewOriginalBounds.Height),
+          SWP_NOACTIVATE |
+          SWP_NOZORDER |
+          SWP_NOOWNERZORDER |
+          SWP_FRAMECHANGED);
+      }
+
+      if (PreviewOriginallyVisible)
+        _ = ShowWindow(PreviewSource, SW_SHOWNOACTIVATE);
+
+      PreviewKeepAliveActive = false;
+      Log.Information(
+        "Restored RS-BA1 Spectrum Scope ownership after minimize: {Hwnd}",
+        RsBa1WindowInspector.FormatHandle(PreviewSource));
+
+      if (PreviewThumbnail != IntPtr.Zero)
+        StatusLabel.Text =
+          $"Live DWM preview: {RsBa1WindowInspector.FormatHandle(PreviewSource)}";
     }
 
     private void PreviewHost_MouseDown(object? sender, MouseEventArgs e)
@@ -629,6 +793,7 @@ namespace SkyRoof
     private void RsBa1SpectrumPanel_FormClosing(object? sender, FormClosingEventArgs e)
     {
       RefreshTimer.Stop();
+      PreviewKeepAliveTimer.Stop();
       DetachPreview();
 
       if (ctx == null) return;
@@ -637,6 +802,19 @@ namespace SkyRoof
       ctx.RsBa1SpectrumPanel = null;
       ctx.MainForm.RsBa1SpectrumMNU.Checked = false;
     }
+    private const int GWL_EXSTYLE = -20;
+    private const int GWLP_HWNDPARENT = -8;
+    private const uint GW_OWNER = 4;
+    private const long WS_EX_TOOLWINDOW = 0x00000080L;
+    private const long WS_EX_APPWINDOW = 0x00040000L;
+    private const int SW_HIDE = 0;
+    private const int SW_SHOWNOACTIVATE = 4;
+    private static readonly IntPtr HWND_BOTTOM = new(1);
+    private const uint SWP_NOZORDER = 0x0004;
+    private const uint SWP_NOACTIVATE = 0x0010;
+    private const uint SWP_FRAMECHANGED = 0x0020;
+    private const uint SWP_SHOWWINDOW = 0x0040;
+    private const uint SWP_NOOWNERZORDER = 0x0200;
     private const uint GA_ROOT = 2;
     private const uint WM_LBUTTONDOWN = 0x0201;
     private const uint WM_LBUTTONUP = 0x0202;
@@ -711,6 +889,42 @@ namespace SkyRoof
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetClientRect(IntPtr hwnd, out RECT rect);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindow(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsIconic(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetWindow(IntPtr hwnd, uint command);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+    private static extern IntPtr GetWindowLongPtr(IntPtr hwnd, int index);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
+    private static extern IntPtr SetWindowLongPtr(IntPtr hwnd, int index, IntPtr value);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShowWindow(IntPtr hwnd, int command);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(
+      IntPtr hwnd,
+      IntPtr hwndInsertAfter,
+      int x,
+      int y,
+      int cx,
+      int cy,
+      uint flags);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
