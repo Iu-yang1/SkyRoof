@@ -59,11 +59,14 @@ namespace SkyRoof
       int x = (ClientSize.Width - ink.Width) / 2;
       int y = (ClientSize.Height - ink.Height) / 2;
 
-      e.Graphics.DrawImage(
+      // ClientSize and the detected ink bounds are device pixels. DrawImage(destinationRect, ...)
+      // applies the target Graphics page-unit/DPI transform again on high-DPI displays, which
+      // shifts/scales the supposedly centered coordinates. Draw the bitmap unscaled instead and
+      // offset the scratch origin so the measured ink rectangle lands exactly at (x, y).
+      e.Graphics.DrawImageUnscaled(
         scratch,
-        new Rectangle(x, y, ink.Width, ink.Height),
-        ink,
-        GraphicsUnit.Pixel);
+        x - ink.X,
+        y - ink.Y);
     }
 
     private Rectangle FindInkBounds(Bitmap bitmap)
