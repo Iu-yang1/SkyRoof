@@ -19,6 +19,7 @@ namespace SkyRoof
     private readonly string ConfiguredRadioAddress;
     private readonly int SerialPort;
     private readonly bool UseSkyCatStream;
+    private readonly bool AutoDiscoverCivPort;
     private readonly int SkyCatScopePort;
     private readonly CivStreamAssembler StreamAssembler;
     private readonly IcomScopeAssembler ScopeAssembler = new();
@@ -53,6 +54,7 @@ namespace SkyRoof
     internal event Action<string>? StatusChanged;
 
     internal string? DetectedRadioAddress { get; private set; }
+    internal int? DetectedCivPort { get; private set; }
     internal string? LastError { get; private set; }
     internal bool IsRunning { get; private set; }
     internal bool IsSkyCatStream => UseSkyCatStream;
@@ -88,11 +90,13 @@ namespace SkyRoof
       string radioAddress,
       int serialPort,
       bool useSkyCatStream = false,
-      int skyCatScopePort = 4535)
+      int skyCatScopePort = 4535,
+      bool autoDiscoverCivPort = false)
     {
       ConfiguredRadioAddress = (radioAddress ?? string.Empty).Trim();
       SerialPort = Math.Clamp(serialPort, 1, 65535);
       UseSkyCatStream = useSkyCatStream;
+      AutoDiscoverCivPort = autoDiscoverCivPort;
       SkyCatScopePort = Math.Clamp(skyCatScopePort, 1, 65535);
       StreamAssembler = new CivStreamAssembler(OnCivFrame);
     }
@@ -291,9 +295,13 @@ namespace SkyRoof
 
         IsRunning = true;
         PublishStatus(
-          string.IsNullOrWhiteSpace(ConfiguredRadioAddress)
-            ? $"Passive Icom LAN capture started · inbound UDP/{SerialPort} · auto radio IP"
-            : $"Passive Icom LAN capture started · {ConfiguredRadioAddress}:{SerialPort}");
+          AutoDiscoverCivPort
+            ? string.IsNullOrWhiteSpace(ConfiguredRadioAddress)
+              ? "Passive Icom LAN capture started · auto-discovering negotiated CI-V UDP port and radio IP"
+              : $"Passive Icom LAN capture started · {ConfiguredRadioAddress} · auto-discovering negotiated CI-V UDP port"
+            : string.IsNullOrWhiteSpace(ConfiguredRadioAddress)
+              ? $"Passive Icom LAN capture started · inbound UDP/{SerialPort} · auto radio IP"
+              : $"Passive Icom LAN capture started · {ConfiguredRadioAddress}:{SerialPort}");
 
         var packet = new byte[65535];
 
@@ -352,7 +360,15 @@ namespace SkyRoof
 
     private string BuildFilter()
     {
-      string filter = $"inbound and ip and udp.SrcPort == {SerialPort}";
+      // Icom LAN does not guarantee that the negotiated CI-V media socket uses
+      // the well-known control-adjacent port. The control login exchanges a
+      // client-selected local CI-V port and the radio replies with its actual
+      // remote CI-V port. RS-BA1 can therefore use a negotiated source port that
+      // is not 50002. In auto-discovery mode capture inbound UDP and identify the
+      // CI-V stream from the 0xC1 transport wrapper instead of hard-coding a port.
+      string filter = AutoDiscoverCivPort
+        ? "inbound and ip and udp"
+        : $"inbound and ip and udp.SrcPort == {SerialPort}";
 
       if (!string.IsNullOrWhiteSpace(ConfiguredRadioAddress))
       {
@@ -378,7 +394,7 @@ namespace SkyRoof
 
       int udpOffset = ipHeaderLength;
       int sourcePort = ReadUInt16Network(packet, udpOffset);
-      if (sourcePort != SerialPort) return;
+      if (!AutoDiscoverCivPort && sourcePort != SerialPort) return;
 
       int udpLength = ReadUInt16Network(packet, udpOffset + 4);
       if (udpLength < 8) return;
@@ -391,9 +407,27 @@ namespace SkyRoof
 
       string sourceAddress =
         $"{packet[12]}.{packet[13]}.{packet[14]}.{packet[15]}";
-      DetectedRadioAddress ??= sourceAddress;
 
-      ProcessLanPayload(new ReadOnlySpan<byte>(packet, payloadOffset, payloadLength));
+      ReadOnlySpan<byte> payload =
+        new ReadOnlySpan<byte>(packet, payloadOffset, payloadLength);
+
+      // In discovery mode do not claim arbitrary UDP traffic as radio traffic.
+      // Only lock onto a source after it exposes the RS-BA1/Icom C1 CI-V wrapper.
+      if (AutoDiscoverCivPort)
+      {
+        if (!LooksLikeIcomCivTransport(payload))
+          return;
+
+        DetectedRadioAddress ??= sourceAddress;
+        DetectedCivPort ??= sourcePort;
+      }
+      else
+      {
+        DetectedRadioAddress ??= sourceAddress;
+        DetectedCivPort ??= sourcePort;
+      }
+
+      ProcessLanPayload(payload);
     }
 
     private void ProcessLanPayload(ReadOnlySpan<byte> payload)
@@ -558,6 +592,25 @@ namespace SkyRoof
       Interlocked.Exchange(ref LastScopeFrameTicks, scope.TimestampUtc.Ticks);
       Volatile.Write(ref LatestScopeFrameValue, scope);
       ScopeFrameReceived?.Invoke(scope);
+    }
+
+    private static bool LooksLikeIcomCivTransport(ReadOnlySpan<byte> payload)
+    {
+      if (payload.Length < 21 || payload[16] != 0xC1)
+        return false;
+
+      int declaredLength =
+        payload[17] |
+        (payload[18] << 8);
+
+      if (declaredLength <= 0 ||
+          payload.Length < 21 + declaredLength)
+        return false;
+
+      ReadOnlySpan<byte> data = payload.Slice(21, declaredLength);
+      return data.Length >= 3 &&
+             data[0] == 0xFE &&
+             data[1] == 0xFE;
     }
 
     internal static bool TryGetSerialPayload(
