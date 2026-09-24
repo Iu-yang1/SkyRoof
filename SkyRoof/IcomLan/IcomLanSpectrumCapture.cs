@@ -660,13 +660,29 @@ namespace SkyRoof
             Buffer.RemoveRange(0, start);
 
           int end = -1;
+          int nestedStart = -1;
+
           for (int i = 2; i < Buffer.Count; i++)
           {
+            if (i + 1 < Buffer.Count &&
+                Buffer[i] == 0xFE &&
+                Buffer[i + 1] == 0xFE)
+            {
+              nestedStart = i;
+              break;
+            }
+
             if (Buffer[i] == 0xFD)
             {
               end = i;
               break;
             }
+          }
+
+          if (nestedStart >= 0)
+          {
+            Buffer.RemoveRange(0, nestedStart);
+            continue;
           }
 
           if (end < 0)
