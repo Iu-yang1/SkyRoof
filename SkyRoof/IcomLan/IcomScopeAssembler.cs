@@ -88,7 +88,7 @@ namespace SkyRoof
 
       if (sequence == 1)
       {
-        state.Reset();
+        state.Reset(preserveDisplaySamples: true);
 
         if (!TryReadWaveInfo(frame, out byte mode, out long frequencyA,
               out long frequencyB, out bool outOfRange))
