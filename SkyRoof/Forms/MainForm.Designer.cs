@@ -59,6 +59,7 @@
       SkyViewMNU = new ToolStripMenuItem();
       EarthViewMNU = new ToolStripMenuItem();
       FrequencyControlMNU = new ToolStripMenuItem();
+      RsBa1SpectrumMNU = new ToolStripMenuItem();
       QsoEntryMNU = new ToolStripMenuItem();
       Ft4ConsoleMNU = new ToolStripMenuItem();
       RecorderMNU = new ToolStripMenuItem();
@@ -309,7 +310,7 @@
       // 
       // GroupViewPanelMNU
       // 
-      GroupViewPanelMNU.DropDownItems.AddRange(new ToolStripItem[] { GroupViewMNU, SatelliteDetailsMNU, TransmittersMNU, SatellitePassesMNU, WaterfallMNU, FrequencyControlMNU, TimelineMNU, SkyViewMNU, EarthViewMNU, QsoEntryMNU, Ft4ConsoleMNU, RecorderMNU, QsoSchedulerMNU, TelemetryMNU, AutoSelectionMNU, toolStripMenuItem4, ResetWindowLayoutMNU });
+      GroupViewPanelMNU.DropDownItems.AddRange(new ToolStripItem[] { GroupViewMNU, SatelliteDetailsMNU, TransmittersMNU, SatellitePassesMNU, WaterfallMNU, FrequencyControlMNU, RsBa1SpectrumMNU, TimelineMNU, SkyViewMNU, EarthViewMNU, QsoEntryMNU, Ft4ConsoleMNU, RecorderMNU, QsoSchedulerMNU, TelemetryMNU, AutoSelectionMNU, toolStripMenuItem4, ResetWindowLayoutMNU });
       GroupViewPanelMNU.Name = "GroupViewPanelMNU";
       GroupViewPanelMNU.Size = new Size(44, 20);
       GroupViewPanelMNU.Text = "&View";
@@ -376,6 +377,13 @@
       FrequencyControlMNU.Size = new Size(188, 22);
       FrequencyControlMNU.Text = "&Frequency Control";
       FrequencyControlMNU.Click += FrequencyControlMNU_Click;
+      // 
+      // RsBa1SpectrumMNU
+      // 
+      RsBa1SpectrumMNU.Name = "RsBa1SpectrumMNU";
+      RsBa1SpectrumMNU.Size = new Size(188, 22);
+      RsBa1SpectrumMNU.Text = "RS-BA1 &Spectrum";
+      RsBa1SpectrumMNU.Click += RsBa1SpectrumMNU_Click;
       // 
       // QsoEntryMNU
       // 
@@ -893,6 +901,7 @@
     public ToolStripMenuItem SkyViewMNU;
     public ToolStripMenuItem EarthViewMNU;
     public ToolStripMenuItem FrequencyControlMNU;
+    public ToolStripMenuItem RsBa1SpectrumMNU;
     private ToolStripMenuItem SupportGroupMNU;
     private StatusStrip StatusStrip;
     private ToolStripStatusLabel toolStripStatusLabel2;
