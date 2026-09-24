@@ -15,6 +15,7 @@ namespace SkyRoof
     private readonly Button ClearBtn = new();
     private readonly Label StatusLabel = new();
     private readonly Label StatsLabel = new();
+    private readonly Label TransportLabel = new();
     private readonly IcomLanSpectrumView SpectrumView = new();
     private readonly System.Windows.Forms.Timer UiTimer = new() { Interval = 500 };
 
@@ -148,13 +149,10 @@ namespace SkyRoof
       ClearBtn.Click += (_, _) => SpectrumView.Clear();
       toolbar.Controls.Add(ClearBtn);
 
-      toolbar.Controls.Add(new Label
-      {
-        AutoSize = true,
-        Text = "Passive WinDivert sniff · no packet injection",
-        ForeColor = SystemColors.GrayText,
-        Margin = new Padding(4, 7, 0, 0)
-      });
+      TransportLabel.AutoSize = true;
+      TransportLabel.ForeColor = SystemColors.GrayText;
+      TransportLabel.Margin = new Padding(4, 7, 0, 0);
+      toolbar.Controls.Add(TransportLabel);
 
       root.Controls.Add(toolbar, 0, 0);
 
@@ -162,7 +160,7 @@ namespace SkyRoof
       StatusLabel.TextAlign = ContentAlignment.MiddleLeft;
       StatusLabel.ForeColor = SystemColors.GrayText;
       StatusLabel.Text =
-        "Stopped. Select who controls IC-9700 scope output, then start passive capture.";
+        "Stopped. Select SkyCAT or RS-BA1 as the spectrum source, then start capture.";
       root.Controls.Add(StatusLabel, 0, 1);
 
       StatsLabel.Dock = DockStyle.Fill;
@@ -206,12 +204,21 @@ namespace SkyRoof
     private void UpdateSourceButton()
     {
       SourceBtn.Text = UsingSkyCatScopeSource
-        ? "Scope Control: SkyCAT"
-        : "Scope Control: RS-BA1";
+        ? "Source: SkyCAT"
+        : "Source: RS-BA1";
+
+      TransportLabel.Text = UsingSkyCatScopeSource
+        ? $"Native SkyCAT scope TCP/127.0.0.1:{ctx.Settings.IcomLanSpectrum.SkyCatScopePort}"
+        : "Passive RS-BA1 LAN sniff · WinDivert RECV_ONLY";
     }
 
     private void ToggleScopeSource()
     {
+      bool wasRunning = Capture != null;
+
+      if (wasRunning)
+        StopCapture();
+
       IcomLanSpectrumSettings settings = ctx.Settings.IcomLanSpectrum;
       settings.Source = settings.Source == IcomLanSpectrumSource.SkyCat
         ? IcomLanSpectrumSource.RsBa1
@@ -222,27 +229,17 @@ namespace SkyRoof
 
       LastScopeRequestRouted = false;
       LastScopeOutputRequestUtc = DateTime.MinValue;
+      SpectrumView.Clear();
 
-      if (Capture == null)
+      if (wasRunning)
       {
-        StatusLabel.Text = UsingSkyCatScopeSource
-          ? "SkyCAT scope control selected. Start capture to enable CI-V 27 00 output."
-          : "RS-BA1 scope control selected. Open/enable the RS-BA1 Spectrum Scope, then start capture.";
+        StartCapture();
         return;
       }
 
-      if (UsingSkyCatScopeSource)
-      {
-        StatusLabel.Text =
-          "Switched scope control to SkyCAT; requesting CI-V 27 10 / 27 11...";
-        RequestScopeOutputIfDue(force: true);
-      }
-      else
-      {
-        StatusLabel.Text =
-          "Switched scope control to RS-BA1; SkyCAT scope reassert is disabled. " +
-          "Open/enable the RS-BA1 Spectrum Scope.";
-      }
+      StatusLabel.Text = UsingSkyCatScopeSource
+        ? $"SkyCAT source selected. Start capture to use native scope TCP/{settings.SkyCatScopePort}."
+        : "RS-BA1 source selected. Open/enable the RS-BA1 Spectrum Scope, then start passive LAN capture.";
     }
 
     private void StartCapture()
@@ -256,7 +253,9 @@ namespace SkyRoof
 
       var capture = new IcomLanSpectrumCapture(
         settings.RadioAddress,
-        settings.SerialPort);
+        settings.SerialPort,
+        UsingSkyCatScopeSource,
+        settings.SkyCatScopePort);
 
       capture.ScopeFrameReceived += Capture_ScopeFrameReceived;
       capture.StatusChanged += Capture_StatusChanged;
@@ -269,7 +268,9 @@ namespace SkyRoof
 
       SetCaptureInputsEnabled(false);
       StartStopBtn.Text = "Stop";
-      StatusLabel.Text = "Starting WinDivert passive capture...";
+      StatusLabel.Text = UsingSkyCatScopeSource
+        ? $"Connecting to SkyCAT scope stream 127.0.0.1:{settings.SkyCatScopePort}..."
+        : "Starting WinDivert passive RS-BA1 LAN capture...";
 
       capture.Start();
       RequestScopeOutputIfDue(force: true);
@@ -288,7 +289,7 @@ namespace SkyRoof
 
       SetCaptureInputsEnabled(true);
       StartStopBtn.Text = "Start";
-      StatusLabel.Text = "Icom LAN capture stopped.";
+      StatusLabel.Text = "Spectrum capture stopped.";
     }
 
     private void SetCaptureInputsEnabled(bool enabled)
@@ -375,18 +376,20 @@ namespace SkyRoof
       }
 
       string radio =
-        capture.DetectedRadioAddress ??
-        (string.IsNullOrWhiteSpace(ctx.Settings.IcomLanSpectrum.RadioAddress)
-          ? "auto"
-          : ctx.Settings.IcomLanSpectrum.RadioAddress);
+        capture.IsSkyCatStream
+          ? "SkyCAT"
+          : capture.DetectedRadioAddress ??
+            (string.IsNullOrWhiteSpace(ctx.Settings.IcomLanSpectrum.RadioAddress)
+              ? "auto"
+              : ctx.Settings.IcomLanSpectrum.RadioAddress);
 
       StatsLabel.Text =
-        $"Radio {radio} · Packets {capture.PacketCount:N0} · " +
-        $"Serial {capture.SerialChunkCount:N0} · CI-V {capture.CivFrameCount:N0} · " +
-        $"Scope {scopeFrames:N0} · {ScopeFps:0.0} fps · " +
-        $"BadScope {capture.InvalidScopeFrameCount:N0} · " +
-        $"LargeCI-V {capture.LanLengthOverflowPacketCount:N0} · " +
-        $"Gaps {capture.SequenceGapCount:N0} · Duplicates {capture.DuplicateChunkCount:N0}";
+        $"Source {radio} · Frames {capture.PacketCount:N0} · " +
+        $"CI-V {capture.CivFrameCount:N0} · Scope {scopeFrames:N0} · " +
+        $"{ScopeFps:0.0} fps · BadScope {capture.InvalidScopeFrameCount:N0}" +
+        (capture.IsSkyCatStream
+          ? ""
+          : $" · Gaps {capture.SequenceGapCount:N0} · Duplicates {capture.DuplicateChunkCount:N0}");
 
       DateTime? last = capture.LastScopeFrameUtc;
       bool scopeStale =
@@ -403,23 +406,20 @@ namespace SkyRoof
                (last == null || (now - last.Value).TotalSeconds > 3))
       {
         StatusLabel.Text =
-          capture.PacketCount == 0
-            ? "Listening for IC-9700 UDP/50002 traffic..."
-            : !UsingSkyCatScopeSource
-              ? "Icom LAN traffic detected, but no CI-V 27 00 waveform yet. " +
-                "RS-BA1 scope control selected; open/enable the RS-BA1 Spectrum Scope."
-              : LastScopeRequestRouted
-                ? "Icom LAN traffic detected, but no CI-V 27 00 waveform yet. " +
-                  "Scope output reasserted through SkyCAT; waiting for waveform data..."
-                : "Icom LAN traffic detected, but no CI-V 27 00 waveform yet. " +
-                  "No active SkyCAT CAT engine is available to enable scope output.";
+          capture.IsSkyCatStream
+            ? capture.PacketCount == 0
+              ? $"Connected/waiting for SkyCAT scope TCP/{ctx.Settings.IcomLanSpectrum.SkyCatScopePort}; " +
+                "CI-V 27 10 / 27 11 are being reasserted."
+              : "SkyCAT scope stream is connected, but no complete CI-V 27 00 sweep has been assembled yet."
+            : capture.PacketCount == 0
+              ? $"Listening for IC-9700 UDP/{ctx.Settings.IcomLanSpectrum.SerialPort} traffic..."
+              : "RS-BA1 LAN traffic detected, but no CI-V 27 00 waveform yet. " +
+                "Open/enable the RS-BA1 Spectrum Scope.";
       }
       else if (capture.IsRunning && last != null)
       {
         StatusLabel.Text =
-          $"Receiving native IC-9700 CI-V 27 00 spectrum data · " +
-          $"{(UsingSkyCatScopeSource ? "SkyCAT" : "RS-BA1")} scope control · " +
-          "WinDivert SNIFF/RECV_ONLY.";
+          $"Receiving native IC-9700 CI-V 27 00 spectrum data · {capture.TransportName}.";
       }
     }
 
