@@ -248,23 +248,28 @@ namespace SkyRoof
     private void ProcessLanPayload(ReadOnlySpan<byte> payload)
     {
       // Icom LAN serial stream packet:
-      // [16] = 0xC1, [17] = low byte of the CI-V byte count,
-      // [19..20] = CI-V stream sequence, [21..] = CI-V bytes.
+      // [16] = 0xC1, [17] = byte count for THIS serial chunk,
+      // [19..20] = CI-V serial-stream sequence, [21..] = chunk bytes.
       //
-      // IMPORTANT: the scope waveform frame is ~497 bytes. The one-byte count at [17]
-      // therefore wraps for large frames and MUST NOT be used to truncate inbound data.
-      // The UDP datagram length is authoritative; take every byte from offset 21 onward.
+      // A 27 00 scope waveform is a ~497-byte CI-V frame, but the RS-BA1 LAN
+      // transport fragments that serial frame across multiple C1 datagrams.  The
+      // one-byte count is therefore the chunk length, not the complete CI-V frame
+      // length.  Feeding bytes beyond the declared chunk length injects transport
+      // padding/trailer data into the CI-V stream and prevents fragmented scope frames
+      // from ever being reassembled.
       if (payload.Length >= 22 && payload[16] == 0xC1)
       {
         int available = payload.Length - 21;
-        if (available <= 0) return;
+        int declared = payload[17];
+        if (available <= 0 || declared <= 0) return;
 
-        if (available > 255 && payload[17] == (byte)(available & 0xFF))
+        int count = Math.Min(declared, available);
+        if (declared != available)
           Interlocked.Increment(ref LanLengthOverflowPacketCountValue);
 
         ushort sequence = (ushort)((payload[19] << 8) | payload[20]);
         Interlocked.Increment(ref SerialChunkCountValue);
-        PushSerialChunk(sequence, payload.Slice(21, available));
+        PushSerialChunk(sequence, payload.Slice(21, count));
         return;
       }
 
