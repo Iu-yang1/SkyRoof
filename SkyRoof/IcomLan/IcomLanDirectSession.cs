@@ -88,6 +88,7 @@ namespace SkyRoof
     internal bool IsAuthenticated { get; private set; }
     internal bool IsStreaming { get; private set; }
     internal int LocalCivPort { get; private set; }
+    internal int RemoteCivPortNumber => RemoteCivPort;
     internal long DatagramCount { get; private set; }
     internal long CivPayloadCount { get; private set; }
 
