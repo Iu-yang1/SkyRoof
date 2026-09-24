@@ -252,7 +252,8 @@ namespace SkyRoof
 
       else if (IsTransponder)
       {
-        freq = Math.Max(0, Math.Min(freq, (double)(Tx!.uplink_high! - Tx!.uplink_low!)));
+        // Do not clamp to the SatNOGS passband. Published transponder/IF edges can be
+        // approximate, and operators may need to tune beyond them.
         TransponderOffset = freq;
       }
 
@@ -287,9 +288,8 @@ namespace SkyRoof
       // transponder
       else if (IsTransponder)
       {
-        long newOffset = (long)TransponderOffset + delta;
-        long maxOffset = (long)Tx!.uplink_high! - (long)Tx!.uplink_low!;
-        TransponderOffset = Math.Max(0, Math.Min(maxOffset, newOffset));
+        // The tuning position is intentionally unbounded by the database passband edges.
+        TransponderOffset += delta;
       }
 
       // transmitter
@@ -298,6 +298,24 @@ namespace SkyRoof
         double newOffset = DownlinkManualCorrection + delta;
         DownlinkManualCorrection = Math.Max(-25000, Math.Min(25000, newOffset));
       }
+
+      ComputeFrequencies();
+    }
+
+    /// <summary>
+    /// Return operator tuning to this transmitter's Base position without touching persistent
+    /// Base/Manual calibration. RIT/XIT are transient tuning offsets, so they are cleared too.
+    /// </summary>
+    public void ReturnToBaseTuningPosition()
+    {
+      if (IsTerrestrial) return;
+
+      RitEnabled = false;
+      RitOffset = 0;
+      XitOffset = 0;
+
+      if (IsTransponder)
+        TransponderOffset = 0;
 
       ComputeFrequencies();
     }
