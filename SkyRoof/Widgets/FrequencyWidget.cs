@@ -61,9 +61,11 @@ namespace SkyRoof
     //----------------------------------------------------------------------------------------------
     //                                 set from outside
     //----------------------------------------------------------------------------------------------
-    public void SetTransmitter()
+    public void SetTransmitter(bool returnToBase = false)
     {
       SettingsToRadioLink(false);
+      if (returnToBase)
+        RadioLink.ReturnToBaseTuningPosition();
       RadioLinkToUi();
       ctx.CatControl.ApplyTune();
       ctx.RotatorControl.SetSatellite(ctx.SatelliteSelector.SelectedSatellite);
@@ -128,6 +130,16 @@ namespace SkyRoof
 
     internal void CompleteDownlinkTuning()
     {
+      RadioLinkToUi();
+    }
+
+    internal void ReturnToBaseTuningPosition()
+    {
+      if (RadioLink.IsTerrestrial) return;
+
+      RadioLink.ReturnToBaseTuningPosition();
+      ctx.Settings.SaveToFile();
+      RadioLinkToRadio();
       RadioLinkToUi();
     }
 
