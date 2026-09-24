@@ -7,6 +7,16 @@ namespace VE3NEA.Dsp.Tests
   public class IcomLanSpectrumTests
   {
     [Fact]
+    public void DirectLanPasscode_UsesIcomCredentialSubstitution()
+    {
+      byte[] encoded = IcomLanDirectSession.EncodePasscode("abc");
+
+      encoded.Length.Should().Be(16);
+      encoded.Take(3).Should().Equal(new byte[] { 0x38, 0x2E, 0x40 });
+      encoded.Skip(3).Should().OnlyContain(value => value == 0);
+    }
+
+    [Fact]
     public void RsBa1SerialPayloadLength_Is16BitLittleEndian()
     {
       byte[] civ = new byte[497];
