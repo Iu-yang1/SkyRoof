@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Net;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using Serilog;
 
@@ -17,6 +18,8 @@ namespace SkyRoof
 
     private readonly string ConfiguredRadioAddress;
     private readonly int SerialPort;
+    private readonly bool UseSkyCatStream;
+    private readonly int SkyCatScopePort;
     private readonly CivStreamAssembler StreamAssembler;
     private readonly IcomScopeAssembler ScopeAssembler = new();
 
@@ -24,6 +27,8 @@ namespace SkyRoof
     private Task? Worker;
     private IntPtr Handle = IntPtr.Zero;
     private readonly object HandleSync = new();
+    private TcpClient? SkyCatClient;
+    private readonly object SkyCatClientSync = new();
 
     private const int RecentTransportSequenceWindow = 512;
     private readonly HashSet<ushort> RecentTransportSequences = new();
@@ -50,6 +55,11 @@ namespace SkyRoof
     internal string? DetectedRadioAddress { get; private set; }
     internal string? LastError { get; private set; }
     internal bool IsRunning { get; private set; }
+    internal bool IsSkyCatStream => UseSkyCatStream;
+    internal string TransportName =>
+      UseSkyCatStream
+        ? $"SkyCAT scope TCP/127.0.0.1:{SkyCatScopePort}"
+        : $"RS-BA1 LAN UDP/{SerialPort} via WinDivert";
 
     internal long PacketCount => Interlocked.Read(ref PacketCountValue);
     internal long CapturedBytes => Interlocked.Read(ref CapturedBytesValue);
@@ -74,10 +84,16 @@ namespace SkyRoof
     internal IcomScopeFrame? LatestScopeFrame =>
       Volatile.Read(ref LatestScopeFrameValue);
 
-    internal IcomLanSpectrumCapture(string radioAddress, int serialPort)
+    internal IcomLanSpectrumCapture(
+      string radioAddress,
+      int serialPort,
+      bool useSkyCatStream = false,
+      int skyCatScopePort = 4535)
     {
       ConfiguredRadioAddress = (radioAddress ?? string.Empty).Trim();
       SerialPort = Math.Clamp(serialPort, 1, 65535);
+      UseSkyCatStream = useSkyCatStream;
+      SkyCatScopePort = Math.Clamp(skyCatScopePort, 1, 65535);
       StreamAssembler = new CivStreamAssembler(OnCivFrame);
     }
 
@@ -88,7 +104,9 @@ namespace SkyRoof
       LastError = null;
       Cancellation = new CancellationTokenSource();
       CancellationToken token = Cancellation.Token;
-      Worker = Task.Run(() => CaptureLoop(token), token);
+      Worker = UseSkyCatStream
+        ? Task.Run(() => SkyCatScopeLoop(token), token)
+        : Task.Run(() => CaptureLoop(token), token);
     }
 
     internal void Stop()
@@ -106,6 +124,11 @@ namespace SkyRoof
           _ = WinDivertNative.Shutdown(Handle, WinDivertNative.ShutdownBoth);
       }
 
+      lock (SkyCatClientSync)
+      {
+        try { SkyCatClient?.Close(); } catch { }
+      }
+
       if (worker != null && !worker.IsCompleted)
       {
         try { worker.Wait(1500); }
@@ -120,6 +143,126 @@ namespace SkyRoof
     public void Dispose()
     {
       Stop();
+    }
+
+    private async Task SkyCatScopeLoop(CancellationToken token)
+    {
+      while (!token.IsCancellationRequested)
+      {
+        TcpClient? client = null;
+
+        try
+        {
+          LastError = null;
+          PublishStatus(
+            $"Connecting to SkyCAT native scope stream 127.0.0.1:{SkyCatScopePort}...");
+
+          client = new TcpClient
+          {
+            NoDelay = true,
+            ReceiveBufferSize = 64 * 1024
+          };
+
+          lock (SkyCatClientSync) SkyCatClient = client;
+
+          await client.ConnectAsync(
+            IPAddress.Loopback,
+            SkyCatScopePort,
+            token);
+
+          IsRunning = true;
+          DetectedRadioAddress = "SkyCAT";
+          PublishStatus(
+            $"Receiving IC-9700 scope frames directly from SkyCAT on 127.0.0.1:{SkyCatScopePort}.");
+
+          NetworkStream stream = client.GetStream();
+          byte[] lengthBytes = new byte[4];
+
+          while (!token.IsCancellationRequested)
+          {
+            if (!await ReadExactAsync(stream, lengthBytes, token))
+              break;
+
+            int length =
+              lengthBytes[0] |
+              (lengthBytes[1] << 8) |
+              (lengthBytes[2] << 16) |
+              (lengthBytes[3] << 24);
+
+            if (length < 7 || length > 4096)
+              throw new InvalidDataException(
+                $"Invalid SkyCAT scope frame length {length}.");
+
+            byte[] frame = new byte[length];
+            if (!await ReadExactAsync(stream, frame, token))
+              break;
+
+            Interlocked.Increment(ref PacketCountValue);
+            Interlocked.Increment(ref SerialChunkCountValue);
+            Interlocked.Add(ref CapturedBytesValue, length + 4);
+            OnCivFrame(frame);
+          }
+        }
+        catch (OperationCanceledException)
+        {
+          break;
+        }
+        catch (Exception ex) when (
+          ex is SocketException ||
+          ex is IOException ||
+          ex is InvalidDataException)
+        {
+          if (!token.IsCancellationRequested)
+          {
+            IsRunning = false;
+            PublishStatus(
+              $"SkyCAT scope stream unavailable ({ex.Message}). Retrying...");
+          }
+        }
+        finally
+        {
+          IsRunning = false;
+
+          lock (SkyCatClientSync)
+          {
+            if (ReferenceEquals(SkyCatClient, client))
+              SkyCatClient = null;
+          }
+
+          try { client?.Close(); } catch { }
+        }
+
+        if (!token.IsCancellationRequested)
+        {
+          try { await Task.Delay(300, token); }
+          catch (OperationCanceledException) { break; }
+        }
+      }
+
+      if (token.IsCancellationRequested)
+        PublishStatus("SkyCAT scope capture stopped.");
+    }
+
+    private static async Task<bool> ReadExactAsync(
+      NetworkStream stream,
+      byte[] buffer,
+      CancellationToken token)
+    {
+      int offset = 0;
+
+      while (offset < buffer.Length)
+      {
+        int read = await stream.ReadAsync(
+          buffer.AsMemory(offset, buffer.Length - offset),
+          token);
+
+        if (read == 0)
+          return false;
+
+        offset += read;
+      }
+
+      return true;
     }
 
     private void CaptureLoop(CancellationToken token)
