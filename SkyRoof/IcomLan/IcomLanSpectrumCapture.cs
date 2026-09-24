@@ -19,8 +19,13 @@ namespace SkyRoof
     private readonly string ConfiguredRadioAddress;
     private readonly int SerialPort;
     private readonly bool UseSkyCatStream;
+    private readonly bool UseDirectLan;
     private readonly bool AutoDiscoverCivPort;
     private readonly int SkyCatScopePort;
+    private readonly int DirectLanControlPort;
+    private readonly string DirectLanUsername;
+    private readonly string DirectLanPassword;
+    private readonly string DirectLanClientName;
     private readonly CivStreamAssembler StreamAssembler;
     private readonly IcomScopeAssembler ScopeAssembler = new();
 
@@ -30,6 +35,8 @@ namespace SkyRoof
     private readonly object HandleSync = new();
     private TcpClient? SkyCatClient;
     private readonly object SkyCatClientSync = new();
+    private IcomLanDirectSession? DirectSession;
+    private readonly object DirectSessionSync = new();
 
     private const int RecentTransportSequenceWindow = 512;
     private readonly HashSet<ushort> RecentTransportSequences = new();
@@ -59,10 +66,13 @@ namespace SkyRoof
     internal string? LastError { get; private set; }
     internal bool IsRunning { get; private set; }
     internal bool IsSkyCatStream => UseSkyCatStream;
+    internal bool IsDirectLan => UseDirectLan;
     internal string TransportName =>
-      UseSkyCatStream
-        ? $"SkyCAT scope TCP/127.0.0.1:{SkyCatScopePort}"
-        : $"RS-BA1 LAN UDP/{SerialPort} via WinDivert";
+      UseDirectLan
+        ? $"Direct authenticated Icom LAN {ConfiguredRadioAddress}:{DetectedCivPort?.ToString() ?? "negotiating"}"
+        : UseSkyCatStream
+          ? $"SkyCAT scope TCP/127.0.0.1:{SkyCatScopePort}"
+          : $"RS-BA1 LAN UDP/{SerialPort} via WinDivert";
 
     internal long PacketCount => Interlocked.Read(ref PacketCountValue);
     internal long CapturedBytes => Interlocked.Read(ref CapturedBytesValue);
@@ -93,13 +103,30 @@ namespace SkyRoof
       int serialPort,
       bool useSkyCatStream = false,
       int skyCatScopePort = 4535,
-      bool autoDiscoverCivPort = false)
+      bool autoDiscoverCivPort = false,
+      bool useDirectLan = false,
+      int directLanControlPort = 50001,
+      string directLanUsername = "",
+      string directLanPassword = "",
+      string directLanClientName = "SkyRoof")
     {
       ConfiguredRadioAddress = (radioAddress ?? string.Empty).Trim();
       SerialPort = Math.Clamp(serialPort, 1, 65535);
       UseSkyCatStream = useSkyCatStream;
+      UseDirectLan = useDirectLan;
       AutoDiscoverCivPort = autoDiscoverCivPort;
       SkyCatScopePort = Math.Clamp(skyCatScopePort, 1, 65535);
+      DirectLanControlPort = Math.Clamp(directLanControlPort, 1, 65535);
+      DirectLanUsername = directLanUsername ?? string.Empty;
+      DirectLanPassword = directLanPassword ?? string.Empty;
+      DirectLanClientName = string.IsNullOrWhiteSpace(directLanClientName)
+        ? "SkyRoof"
+        : directLanClientName.Trim();
+
+      if (UseSkyCatStream && UseDirectLan)
+        throw new ArgumentException(
+          "SkyCAT stream and Direct LAN cannot both be selected.");
+
       StreamAssembler = new CivStreamAssembler(OnCivFrame);
     }
 
@@ -110,9 +137,11 @@ namespace SkyRoof
       LastError = null;
       Cancellation = new CancellationTokenSource();
       CancellationToken token = Cancellation.Token;
-      Worker = UseSkyCatStream
-        ? Task.Run(() => SkyCatScopeLoop(token), token)
-        : Task.Run(() => CaptureLoop(token), token);
+      Worker = UseDirectLan
+        ? Task.Run(() => DirectLanLoop(token), token)
+        : UseSkyCatStream
+          ? Task.Run(() => SkyCatScopeLoop(token), token)
+          : Task.Run(() => CaptureLoop(token), token);
     }
 
     internal void Stop()
@@ -137,8 +166,14 @@ namespace SkyRoof
 
       if (worker != null && !worker.IsCompleted)
       {
-        try { worker.Wait(1500); }
+        try { worker.Wait(2500); }
         catch (AggregateException) { }
+      }
+
+      lock (DirectSessionSync)
+      {
+        try { DirectSession?.Dispose(); } catch { }
+        DirectSession = null;
       }
 
       cancellation?.Dispose();
@@ -149,6 +184,103 @@ namespace SkyRoof
     public void Dispose()
     {
       Stop();
+    }
+
+    private async Task DirectLanLoop(CancellationToken token)
+    {
+      IcomLanDirectSession? session = null;
+
+      try
+      {
+        LastError = null;
+        DetectedRadioAddress = ConfiguredRadioAddress;
+        PublishStatus(
+          $"Direct Icom LAN: connecting to {ConfiguredRadioAddress}:{DirectLanControlPort}...");
+
+        session = new IcomLanDirectSession(
+          ConfiguredRadioAddress,
+          DirectLanControlPort,
+          DirectLanUsername,
+          DirectLanPassword,
+          DirectLanClientName);
+
+        session.StatusChanged += DirectSession_StatusChanged;
+        session.CivDataReceived += DirectSession_CivDataReceived;
+
+        lock (DirectSessionSync)
+          DirectSession = session;
+
+        IsRunning = true;
+        await session.RunAsync(token);
+      }
+      catch (OperationCanceledException)
+      {
+        // Normal stop path.
+      }
+      catch (Exception ex)
+      {
+        if (!token.IsCancellationRequested)
+          Fail($"Direct Icom LAN failed: {ex.Message}", ex);
+      }
+      finally
+      {
+        IsRunning = false;
+
+        if (session != null)
+        {
+          session.StatusChanged -= DirectSession_StatusChanged;
+          session.CivDataReceived -= DirectSession_CivDataReceived;
+
+          DetectedCivPort =
+            session.RemoteCivPortNumber > 0
+              ? session.RemoteCivPortNumber
+              : null;
+
+          lock (DirectSessionSync)
+          {
+            if (ReferenceEquals(DirectSession, session))
+              DirectSession = null;
+          }
+
+          try { session.Dispose(); } catch { }
+        }
+
+        if (token.IsCancellationRequested)
+          PublishStatus("Direct Icom LAN scope capture stopped.");
+      }
+    }
+
+    private void DirectSession_StatusChanged(string message)
+    {
+      IcomLanDirectSession? session;
+
+      lock (DirectSessionSync)
+        session = DirectSession;
+
+      if (session != null && session.RemoteCivPortNumber > 0)
+        DetectedCivPort = session.RemoteCivPortNumber;
+
+      PublishStatus(message);
+    }
+
+    private void DirectSession_CivDataReceived(byte[] bytes)
+    {
+      if (bytes.Length == 0)
+        return;
+
+      Interlocked.Increment(ref PacketCountValue);
+      Interlocked.Increment(ref SerialChunkCountValue);
+      Interlocked.Add(ref CapturedBytesValue, bytes.Length);
+
+      IcomLanDirectSession? session;
+      lock (DirectSessionSync)
+        session = DirectSession;
+
+      if (session != null && session.RemoteCivPortNumber > 0)
+        DetectedCivPort = session.RemoteCivPortNumber;
+
+      if (!TryDeliverCompleteCivPayload(bytes))
+        StreamAssembler.Feed(bytes);
     }
 
     private async Task SkyCatScopeLoop(CancellationToken token)
