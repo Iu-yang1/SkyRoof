@@ -275,7 +275,8 @@ namespace SkyRoof
           settings.RadioAddress,
           settings.SerialPort,
           useSkyCatStream: false,
-          settings.SkyCatScopePort);
+          skyCatScopePort: settings.SkyCatScopePort,
+          autoDiscoverCivPort: true);
 
         nativeLan.ScopeFrameReceived += NativeLanAssist_ScopeFrameReceived;
         NativeLanAssistCapture = nativeLan;
@@ -447,7 +448,8 @@ namespace SkyRoof
 
       string radio =
         nativeLanActive
-          ? $"LAN {nativeLan!.DetectedRadioAddress ?? "auto"}"
+          ? $"LAN {nativeLan!.DetectedRadioAddress ?? "auto"}:" +
+            $"{nativeLan.DetectedCivPort?.ToString() ?? "auto"}"
           : capture.IsSkyCatStream
             ? "SkyCAT TCP fallback"
             : capture.DetectedRadioAddress ??
@@ -492,7 +494,9 @@ namespace SkyRoof
       {
         StatusLabel.Text =
           nativeLanActive
-            ? $"Receiving high-rate native IC-9700 LAN 27 00 waveform · UDP/{ctx.Settings.IcomLanSpectrum.SerialPort} · SkyCAT controls scope."
+            ? $"Receiving high-rate native IC-9700 LAN 27 00 waveform · " +
+              $"{nativeLan!.DetectedRadioAddress ?? "radio"}:" +
+              $"{nativeLan.DetectedCivPort?.ToString() ?? "auto"} · SkyCAT controls scope."
             : $"Receiving IC-9700 CI-V 27 00 spectrum data · {capture.TransportName}.";
       }
     }
