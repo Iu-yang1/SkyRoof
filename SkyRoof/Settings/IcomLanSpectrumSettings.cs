@@ -12,13 +12,14 @@ namespace SkyRoof
   public enum IcomLanSpectrumSource
   {
     SkyCat = 0,
-    RsBa1 = 1
+    RsBa1 = 1,
+    DirectLan = 2
   }
 
   public class IcomLanSpectrumSettings
   {
     [DisplayName("Radio IPv4 address")]
-    [Description("Optional IC-9700 IPv4 address. Leave empty to sniff all inbound UDP packets whose source port is the configured CI-V LAN port.")]
+    [Description("IC-9700 IPv4 address. Optional for passive RS-BA1 capture, but required for the authenticated Direct LAN source.")]
     public string RadioAddress { get; set; } = "";
 
     [DisplayName("CI-V LAN port")]
@@ -32,7 +33,7 @@ namespace SkyRoof
     public IcomLanScopeBand ScopeBand { get; set; } = IcomLanScopeBand.Auto;
 
     [DisplayName("Scope source")]
-    [Description("SkyCAT receives CI-V 27 00 frames from skycatd's loopback scope stream and actively reasserts 27 10 / 27 11. RS-BA1 passively sniffs the IC-9700 LAN CI-V UDP stream and leaves scope enable/disable control to the RS-BA1 Spectrum Scope window.")]
+    [Description("Direct LAN creates a separate authenticated IC-9700 network session and receives native combined 475-bin waveforms. SkyCAT uses skycatd's loopback scope stream. RS-BA1 passively sniffs an existing RS-BA1 LAN session.")]
     [DefaultValue(IcomLanSpectrumSource.SkyCat)]
     public IcomLanSpectrumSource Source { get; set; } = IcomLanSpectrumSource.SkyCat;
 
@@ -40,6 +41,25 @@ namespace SkyRoof
     [Description("Loopback TCP port exported by skycatd for native IC-9700 scope frames.")]
     [DefaultValue(4535)]
     public int SkyCatScopePort { get; set; } = 4535;
+
+    [DisplayName("Direct LAN control port")]
+    [Description("IC-9700 authenticated LAN control port. The factory/default RS-BA1 control port is 50001.")]
+    [DefaultValue(50001)]
+    public int DirectLanControlPort { get; set; } = 50001;
+
+    [DisplayName("Direct LAN username")]
+    [Description("Network username configured in the IC-9700 for RS-BA1/LAN remote access.")]
+    public string DirectLanUsername { get; set; } = "";
+
+    [DisplayName("Direct LAN password")]
+    [Description("Network password configured in the IC-9700 for RS-BA1/LAN remote access.")]
+    [PasswordPropertyText(true)]
+    public string DirectLanPassword { get; set; } = "";
+
+    [DisplayName("Direct LAN client name")]
+    [Description("Client name presented to the IC-9700 authenticated LAN server.")]
+    [DefaultValue("SkyRoof")]
+    public string DirectLanClientName { get; set; } = "SkyRoof";
 
     [DisplayName("Auto start")]
     [Description("Start the selected spectrum source automatically when the Icom LAN Spectrum panel is opened.")]
