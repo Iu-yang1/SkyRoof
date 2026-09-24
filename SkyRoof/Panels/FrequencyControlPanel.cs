@@ -29,6 +29,7 @@ namespace SkyRoof
     private readonly CenteredFrequencyDisplay NoDopplerDownlinkValue = new();
     private readonly CenteredFrequencyDisplay NoDopplerUplinkValue = new();
     private readonly Label TuningModeLabel = new();
+    private readonly Button BackToBaseBtn = new();
     private readonly FrequencyTuningBar TuningBar = new();
     private readonly Label TuningHelpLabel = new();
 
@@ -242,11 +243,29 @@ namespace SkyRoof
         MakeNoDopplerFrequencyBlock("Uplink · no Doppler", NoDopplerUplinkValue), 1, 0);
       layout.Controls.Add(frequencyLayout, 0, 0);
 
+      var tuningStatusLayout = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        ColumnCount = 2,
+        RowCount = 1,
+        Margin = new Padding(0)
+      };
+      tuningStatusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+      tuningStatusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
       TuningModeLabel.Dock = DockStyle.Fill;
       TuningModeLabel.AutoEllipsis = true;
       TuningModeLabel.TextAlign = ContentAlignment.MiddleLeft;
-      TuningModeLabel.Margin = new Padding(2, 3, 2, 5);
-      layout.Controls.Add(TuningModeLabel, 0, 1);
+      TuningModeLabel.Margin = new Padding(2, 3, 6, 3);
+      tuningStatusLayout.Controls.Add(TuningModeLabel, 0, 0);
+
+      BackToBaseBtn.Text = "Back to Base";
+      BackToBaseBtn.AutoSize = true;
+      BackToBaseBtn.Margin = new Padding(4, 0, 0, 0);
+      BackToBaseBtn.Click += (_, _) => ReturnToBase();
+      tuningStatusLayout.Controls.Add(BackToBaseBtn, 1, 0);
+
+      layout.Controls.Add(tuningStatusLayout, 0, 1);
 
       TuningBar.Dock = DockStyle.Fill;
       TuningBar.MinimumSize = new Size(100, 58);
@@ -256,7 +275,7 @@ namespace SkyRoof
 
       TuningHelpLabel.AutoSize = true;
       TuningHelpLabel.Text =
-        "Drag horizontally or use the mouse wheel. Ctrl = RIT; Alt + wheel = 500 Hz step.";
+        "Drag or use the mouse wheel. Tuning may extend beyond database passband edges. Ctrl = RIT; Alt + wheel = 500 Hz.";
       TuningHelpLabel.ForeColor = SystemColors.GrayText;
       TuningHelpLabel.Margin = new Padding(2, 5, 0, 0);
       layout.Controls.Add(TuningHelpLabel, 0, 3);
@@ -319,6 +338,7 @@ namespace SkyRoof
 
       DownlinkGroup.Enabled = satellite;
       UplinkGroup.Enabled = satellite && link.HasUplink;
+      BackToBaseBtn.Enabled = satellite;
 
       if (satellite)
       {
@@ -431,6 +451,11 @@ namespace SkyRoof
         ctx.FrequencyControl.ResetUplinkBaseFrequency();
       else
         ctx.FrequencyControl.ResetDownlinkBaseFrequency();
+    }
+
+    private void ReturnToBase()
+    {
+      ctx?.FrequencyControl.ReturnToBaseTuningPosition();
     }
 
     private void TuningBar_TuneDeltaRequested(int delta)
