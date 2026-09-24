@@ -244,12 +244,6 @@ namespace SkyRoof
       if (IsTerrestrial)
         DownlinkFrequency = freq;
 
-      else if (!IsAboveHorizon)
-      {
-        Console.Beep();
-        return;
-      }
-
       else if (IsTransponder)
       {
         // Do not clamp to the SatNOGS passband. Published transponder/IF edges can be
