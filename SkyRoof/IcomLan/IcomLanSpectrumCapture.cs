@@ -36,7 +36,7 @@ namespace SkyRoof
     private long SequenceGapCountValue;
     private long SequenceResetCountValue;
     private long InvalidScopeFrameCountValue;
-    private long LanLengthOverflowPacketCountValue;
+    private long LanChunkLengthMismatchCountValue;
     private long LastScopeFrameTicks;
 
     internal event Action<IcomScopeFrame>? ScopeFrameReceived;
@@ -55,7 +55,7 @@ namespace SkyRoof
     internal long SequenceGapCount => Interlocked.Read(ref SequenceGapCountValue);
     internal long SequenceResetCount => Interlocked.Read(ref SequenceResetCountValue);
     internal long InvalidScopeFrameCount => Interlocked.Read(ref InvalidScopeFrameCountValue);
-    internal long LanLengthOverflowPacketCount => Interlocked.Read(ref LanLengthOverflowPacketCountValue);
+    internal long LanChunkLengthMismatchCount => Interlocked.Read(ref LanChunkLengthMismatchCountValue);
 
     internal DateTime? LastScopeFrameUtc
     {
@@ -265,7 +265,7 @@ namespace SkyRoof
 
         int count = Math.Min(declared, available);
         if (declared != available)
-          Interlocked.Increment(ref LanLengthOverflowPacketCountValue);
+          Interlocked.Increment(ref LanChunkLengthMismatchCountValue);
 
         ushort sequence = (ushort)((payload[19] << 8) | payload[20]);
         Interlocked.Increment(ref SerialChunkCountValue);
