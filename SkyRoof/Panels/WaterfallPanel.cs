@@ -26,7 +26,11 @@ namespace SkyRoof
       ctx.WaterfallPanel = this;
       ctx.MainForm.WaterfallMNU.Checked = true;
 
-      SplitContainer.SplitterDistance = ctx.Settings.Waterfall.SplitterDistance;
+      // Restore the saved splitter only after the docked panel has its final size.
+      // Assigning a stale value here can throw when DPI/layout changes make it fall
+      // outside Panel1MinSize..(available size - Panel2MinSize).
+      Shown += (_, _) => RestoreSavedSplitterDistance();
+
       ctx.MainForm.CreateSpectrumAnalyzer();
       ApplySettings();
       ctx.MainForm.ConfigureWaterfall();
@@ -44,6 +48,34 @@ namespace SkyRoof
       WaterfallControl.OpenglControl.MouseDown += WaterfallControl_MouseDown;
       WaterfallControl.OpenglControl.MouseUp += WaterfallControl_MouseUp;
       WaterfallControl.OpenglControl.MouseWheel += WaterfallControl_MouseWheel;
+    }
+
+    private void RestoreSavedSplitterDistance()
+    {
+      int extent = SplitContainer.Orientation == Orientation.Vertical
+        ? SplitContainer.ClientSize.Width
+        : SplitContainer.ClientSize.Height;
+
+      int min = SplitContainer.Panel1MinSize;
+      int max = extent - SplitContainer.Panel2MinSize - SplitContainer.SplitterWidth;
+
+      // If docking has temporarily produced an unusably small extent, keep the designer
+      // default and wait for the next visible/layout cycle rather than throwing.
+      if (max < min) return;
+
+      int saved = ctx.Settings.Waterfall.SplitterDistance;
+      int safe = Math.Clamp(saved, min, max);
+
+      if (SplitContainer.SplitterDistance != safe)
+        SplitContainer.SplitterDistance = safe;
+
+      if (safe != saved)
+      {
+        Log.Warning(
+          $"Waterfall splitter distance {saved} is invalid for current size {extent}; using {safe}");
+        ctx.Settings.Waterfall.SplitterDistance = safe;
+        ctx.Settings.SaveToFile();
+      }
     }
 
     private void WaterfallPanel_FormClosing(object sender, FormClosingEventArgs e)
