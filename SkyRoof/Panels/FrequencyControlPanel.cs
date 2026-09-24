@@ -26,7 +26,8 @@ namespace SkyRoof
     private readonly Button UplinkResetBtn = new();
 
     private readonly GroupBox TuningGroup = new();
-    private readonly Label TuningFrequencyLabel = new();
+    private readonly Label NoDopplerDownlinkValue = new();
+    private readonly Label NoDopplerUplinkValue = new();
     private readonly Label TuningModeLabel = new();
     private readonly FrequencyTuningBar TuningBar = new();
     private readonly Label TuningHelpLabel = new();
@@ -50,8 +51,8 @@ namespace SkyRoof
     {
       Text = "Frequency Control";
       Name = "FrequencyControlPanel";
-      ClientSize = new Size(760, 390);
-      MinimumSize = new Size(560, 330);
+      ClientSize = new Size(760, 430);
+      MinimumSize = new Size(580, 380);
       FormClosing += FrequencyControlPanel_FormClosing;
 
       var root = new TableLayoutPanel
@@ -63,8 +64,8 @@ namespace SkyRoof
       };
       root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
       root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-      root.RowStyles.Add(new RowStyle(SizeType.Percent, 56));
-      root.RowStyles.Add(new RowStyle(SizeType.Percent, 44));
+      root.RowStyles.Add(new RowStyle(SizeType.Percent, 48));
+      root.RowStyles.Add(new RowStyle(SizeType.Percent, 52));
 
       SelectionLabel.Dock = DockStyle.Fill;
       SelectionLabel.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
@@ -203,7 +204,7 @@ namespace SkyRoof
 
     private void ConfigureTuningGroup()
     {
-      TuningGroup.Text = "HRD-style Tuning Ruler";
+      TuningGroup.Text = "Tuning";
       TuningGroup.Dock = DockStyle.Fill;
       TuningGroup.Margin = new Padding(4);
 
@@ -211,41 +212,85 @@ namespace SkyRoof
       {
         Dock = DockStyle.Fill,
         Padding = new Padding(8, 5, 8, 6),
-        ColumnCount = 2,
-        RowCount = 3
+        ColumnCount = 1,
+        RowCount = 4
       };
-      layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-      layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+      layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+      layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
       layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
       layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
       layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-      TuningFrequencyLabel.Dock = DockStyle.Fill;
-      TuningFrequencyLabel.Font = new Font("Microsoft Sans Serif", 14F);
-      TuningFrequencyLabel.Text = "000,000,000 Hz";
-      TuningFrequencyLabel.TextAlign = ContentAlignment.MiddleLeft;
-      TuningFrequencyLabel.Margin = new Padding(0, 0, 6, 5);
-      layout.Controls.Add(TuningFrequencyLabel, 0, 0);
+      var frequencyLayout = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        ColumnCount = 2,
+        RowCount = 1,
+        Margin = new Padding(0)
+      };
+      frequencyLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+      frequencyLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+
+      frequencyLayout.Controls.Add(
+        MakeNoDopplerFrequencyBlock("Downlink · no Doppler", NoDopplerDownlinkValue), 0, 0);
+      frequencyLayout.Controls.Add(
+        MakeNoDopplerFrequencyBlock("Uplink · no Doppler", NoDopplerUplinkValue), 1, 0);
+      layout.Controls.Add(frequencyLayout, 0, 0);
 
       TuningModeLabel.Dock = DockStyle.Fill;
-      TuningModeLabel.TextAlign = ContentAlignment.MiddleRight;
-      TuningModeLabel.Margin = new Padding(6, 0, 0, 5);
-      layout.Controls.Add(TuningModeLabel, 1, 0);
+      TuningModeLabel.AutoEllipsis = true;
+      TuningModeLabel.TextAlign = ContentAlignment.MiddleLeft;
+      TuningModeLabel.Margin = new Padding(2, 3, 2, 5);
+      layout.Controls.Add(TuningModeLabel, 0, 1);
 
       TuningBar.Dock = DockStyle.Fill;
-      TuningBar.MinimumSize = new Size(100, 54);
+      TuningBar.MinimumSize = new Size(100, 58);
       TuningBar.TuneDeltaRequested += TuningBar_TuneDeltaRequested;
-      layout.SetColumnSpan(TuningBar, 2);
-      layout.Controls.Add(TuningBar, 0, 1);
+      layout.Controls.Add(TuningBar, 0, 2);
 
       TuningHelpLabel.AutoSize = true;
-      TuningHelpLabel.Text = "Drag horizontally or use the mouse wheel. Ctrl = RIT; Alt + wheel = 500 Hz step.";
+      TuningHelpLabel.Text =
+        "Drag horizontally or use the mouse wheel. Ctrl = RIT; Alt + wheel = 500 Hz step.";
       TuningHelpLabel.ForeColor = SystemColors.GrayText;
-      TuningHelpLabel.Margin = new Padding(0, 5, 0, 0);
-      layout.SetColumnSpan(TuningHelpLabel, 2);
-      layout.Controls.Add(TuningHelpLabel, 0, 2);
+      TuningHelpLabel.Margin = new Padding(2, 5, 0, 0);
+      layout.Controls.Add(TuningHelpLabel, 0, 3);
 
       TuningGroup.Controls.Add(layout);
+    }
+
+    private static Control MakeNoDopplerFrequencyBlock(string caption, Label value)
+    {
+      var panel = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        ColumnCount = 1,
+        RowCount = 2,
+        Margin = new Padding(3, 0, 3, 0)
+      };
+      panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+      panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
+      panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+      var label = new Label
+      {
+        Dock = DockStyle.Fill,
+        Text = caption,
+        TextAlign = ContentAlignment.MiddleLeft,
+        ForeColor = SystemColors.GrayText,
+        Margin = new Padding(1, 0, 1, 1)
+      };
+      panel.Controls.Add(label, 0, 0);
+
+      value.Dock = DockStyle.Fill;
+      value.BackColor = Color.Black;
+      value.ForeColor = Color.Aqua;
+      value.Font = new Font("Microsoft Sans Serif", 14F);
+      value.Text = "000,000,000 Hz";
+      value.TextAlign = ContentAlignment.MiddleCenter;
+      value.Margin = new Padding(0);
+      panel.Controls.Add(value, 0, 1);
+
+      return panel;
     }
 
     internal void RefreshFromRadioLink()
@@ -264,7 +309,8 @@ namespace SkyRoof
         SelectionLabel.Text = $"{satelliteName} — {transmitterName}";
       }
       else
-        SelectionLabel.Text = "Terrestrial tuning — select a satellite transmitter to edit saved Base frequencies";
+        SelectionLabel.Text =
+          "Terrestrial tuning — select a satellite transmitter to edit saved Base frequencies";
 
       DownlinkGroup.Enabled = satellite;
       UplinkGroup.Enabled = satellite && link.HasUplink;
@@ -298,25 +344,48 @@ namespace SkyRoof
         UplinkCorrectionValue.Text = "—";
       }
 
-      Color rxColor = GetFrequencyColor(link.CorrectedDownlinkFrequency, ctx.CatControl.Rx?.IsRunning == true);
-      DownlinkBaseValue.ForeColor = satellite ? rxColor : Color.Gray;
+      Color rxColor = GetFrequencyColor(
+        link.DownlinkFrequencyWithoutDoppler,
+        ctx.CatControl.Rx?.IsRunning == true);
+      Color txColor = GetFrequencyColor(
+        link.UplinkFrequencyWithoutDoppler,
+        ctx.CatControl.Tx?.IsRunning == true);
 
-      Color txColor = GetFrequencyColor(link.CorrectedUplinkFrequency, ctx.CatControl.Tx?.IsRunning == true);
+      DownlinkBaseValue.ForeColor = satellite ? rxColor : Color.Gray;
       UplinkBaseValue.ForeColor = satellite && link.HasUplink ? txColor : Color.Gray;
 
-      TuningFrequencyLabel.Text = $"{link.CorrectedDownlinkFrequency:n0} Hz";
-      TuningFrequencyLabel.ForeColor = rxColor;
+      NoDopplerDownlinkValue.Text = $"{link.DownlinkFrequencyWithoutDoppler:n0} Hz";
+      NoDopplerDownlinkValue.ForeColor = rxColor;
+
+      if (link.HasUplink)
+      {
+        NoDopplerUplinkValue.Text = $"{link.UplinkFrequencyWithoutDoppler:n0} Hz";
+        NoDopplerUplinkValue.ForeColor = txColor;
+      }
+      else
+      {
+        NoDopplerUplinkValue.Text = "No Uplink";
+        NoDopplerUplinkValue.ForeColor = Color.Gray;
+      }
+
+      // The ruler represents operator tuning in the transponder/channel before Doppler is applied.
+      // The top toolbar remains the place to read the actual Doppler-corrected radio frequency.
       TuningBar.ForeColor = rxColor;
-      TuningBar.SetFrequency(link.CorrectedDownlinkFrequency);
+      TuningBar.SetFrequency(link.DownlinkFrequencyWithoutDoppler);
 
       if (link.RitEnabled)
-        TuningModeLabel.Text = $"Tuning target: RIT ({link.RitOffset:+0;-0;0} Hz)";
+        TuningModeLabel.Text = $"RIT: {link.RitOffset:+0;-0;0} Hz";
       else if (link.IsTerrestrial)
-        TuningModeLabel.Text = "Tuning target: terrestrial frequency";
+        TuningModeLabel.Text = "Terrestrial frequency";
       else if (link.IsTransponder)
-        TuningModeLabel.Text = $"Tuning target: transponder offset ({link.TransponderOffset:n0} Hz)";
+      {
+        string direction = link.Tx?.invert == true ? "inverting" : "non-inverting";
+        TuningModeLabel.Text =
+          $"Transponder offset: {link.TransponderOffset:n0} Hz · {direction}";
+      }
       else
-        TuningModeLabel.Text = $"Tuning target: Manual correction ({link.DownlinkManualCorrection:+0;-0;0} Hz)";
+        TuningModeLabel.Text =
+          $"Manual correction: {link.DownlinkManualCorrection:+0;-0;0} Hz";
     }
 
     private static Color GetFrequencyColor(double frequency, bool bright)
