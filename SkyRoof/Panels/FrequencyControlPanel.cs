@@ -259,29 +259,32 @@ namespace SkyRoof
       layout.Controls.Add(NoDopplerDownlinkValue, 0, 1);
       layout.Controls.Add(NoDopplerUplinkValue, 1, 1);
 
-      var statusPanel = new Panel
+      var statusLayout = new TableLayoutPanel
       {
         Dock = DockStyle.Fill,
+        ColumnCount = 2,
+        RowCount = 1,
         Margin = new Padding(3, 1, 3, 1)
       };
-      layout.SetColumnSpan(statusPanel, 2);
-
-      BackToBaseBtn.Text = "Reset to Base";
-      BackToBaseBtn.AutoSize = true;
-      BackToBaseBtn.Dock = DockStyle.Right;
-      BackToBaseBtn.Margin = new Padding(6, 0, 0, 0);
-      BackToBaseBtn.Click += (_, _) => ReturnToBase();
+      statusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+      statusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+      statusLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+      layout.SetColumnSpan(statusLayout, 2);
 
       TuningModeLabel.Dock = DockStyle.Fill;
       TuningModeLabel.AutoEllipsis = true;
       TuningModeLabel.TextAlign = ContentAlignment.MiddleLeft;
       TuningModeLabel.Margin = new Padding(0, 0, 6, 0);
+      statusLayout.Controls.Add(TuningModeLabel, 0, 0);
 
-      // Add the fill control first and the right-docked button second so WinForms lays them out
-      // predictably without another nested TableLayoutPanel.
-      statusPanel.Controls.Add(TuningModeLabel);
-      statusPanel.Controls.Add(BackToBaseBtn);
-      layout.Controls.Add(statusPanel, 0, 2);
+      BackToBaseBtn.Text = "Reset to Base";
+      BackToBaseBtn.AutoSize = true;
+      BackToBaseBtn.Anchor = AnchorStyles.Right;
+      BackToBaseBtn.Margin = new Padding(6, 0, 0, 0);
+      BackToBaseBtn.Click += (_, _) => ReturnToBase();
+      statusLayout.Controls.Add(BackToBaseBtn, 1, 0);
+
+      layout.Controls.Add(statusLayout, 0, 2);
 
       TuningBar.Dock = DockStyle.Fill;
       TuningBar.MinimumSize = new Size(100, 58);
