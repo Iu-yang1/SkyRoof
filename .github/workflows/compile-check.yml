@@ -25,6 +25,35 @@ jobs:
       - name: Setup NuGet
         uses: NuGet/setup-nuget@v1
 
+      - name: Download WinDivert 2.2.2 x64
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $url = "https://github.com/basil00/WinDivert/releases/download/v2.2.2/WinDivert-2.2.2-A.zip"
+          $zip = Join-Path $env:RUNNER_TEMP "WinDivert-2.2.2-A.zip"
+          $extract = Join-Path $env:RUNNER_TEMP "WinDivert-2.2.2-A"
+
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          if (Test-Path $extract) { Remove-Item $extract -Recurse -Force }
+          Expand-Archive -Path $zip -DestinationPath $extract -Force
+
+          $dll = Get-ChildItem $extract -Recurse -File -Filter "WinDivert.dll" |
+            Where-Object { $_.FullName -match "[\\/]x64[\\/]" } |
+            Select-Object -First 1
+          $sys = Get-ChildItem $extract -Recurse -File -Filter "WinDivert64.sys" |
+            Select-Object -First 1
+
+          if (-not $dll) { throw "x64 WinDivert.dll not found in upstream archive" }
+          if (-not $sys) { throw "WinDivert64.sys not found in upstream archive" }
+
+          $dest = Join-Path $env:GITHUB_WORKSPACE "Vendor\WinDivert\x64"
+          New-Item -ItemType Directory -Path $dest -Force | Out-Null
+          Copy-Item $dll.FullName (Join-Path $dest "WinDivert.dll") -Force
+          Copy-Item $sys.FullName (Join-Path $dest "WinDivert64.sys") -Force
+
+          Write-Host "WinDivert DLL: $($dll.FullName)"
+          Write-Host "WinDivert driver: $($sys.FullName)"
+
       - name: Restore NuGet packages
         run: nuget restore SkyRoof.sln
 
