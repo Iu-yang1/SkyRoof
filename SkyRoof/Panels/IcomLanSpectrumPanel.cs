@@ -22,10 +22,12 @@ namespace SkyRoof
     private IcomLanSpectrumCapture? Capture;
     private IcomLanSpectrumCapture? NativeLanAssistCapture;
     private long LastScopeFrames;
+    private long LastScopeUpdates;
     private DateTime LastRateTime = DateTime.UtcNow;
     private DateTime LastScopeOutputRequestUtc = DateTime.MinValue;
     private bool LastScopeRequestRouted;
     private double ScopeFps;
+    private double DisplayFps;
     private int SelectedScopeBand;
     private long LastRenderedScopeFrameTicks;
     private bool LastStatsUsedNativeLan;
@@ -282,8 +284,10 @@ namespace SkyRoof
         NativeLanAssistCapture = nativeLan;
       }
       LastScopeFrames = 0;
+      LastScopeUpdates = 0;
       LastRateTime = DateTime.UtcNow;
       ScopeFps = 0;
+      DisplayFps = 0;
       LastRenderedScopeFrameTicks = 0;
       LastStatsUsedNativeLan = false;
 
@@ -421,6 +425,7 @@ namespace SkyRoof
       IcomLanSpectrumCapture effectiveCapture =
         nativeLanActive ? nativeLan! : capture;
       long scopeFrames = effectiveCapture.ScopeFrameCount;
+      long scopeUpdates = effectiveCapture.ScopeUpdateCount;
 
       // Event delivery is the normal high-rate path. Pull the newest frame as a
       // fallback if WinForms temporarily delays BeginInvoke during docking/layout.
@@ -433,8 +438,10 @@ namespace SkyRoof
       {
         LastStatsUsedNativeLan = nativeLanActive;
         LastScopeFrames = scopeFrames;
+        LastScopeUpdates = scopeUpdates;
         LastRateTime = now;
         ScopeFps = 0;
+        DisplayFps = 0;
       }
 
       double elapsed = (now - LastRateTime).TotalSeconds;
@@ -442,7 +449,9 @@ namespace SkyRoof
       if (elapsed >= 0.4)
       {
         ScopeFps = (scopeFrames - LastScopeFrames) / elapsed;
+        DisplayFps = (scopeUpdates - LastScopeUpdates) / elapsed;
         LastScopeFrames = scopeFrames;
+        LastScopeUpdates = scopeUpdates;
         LastRateTime = now;
       }
 
@@ -459,8 +468,9 @@ namespace SkyRoof
 
       StatsLabel.Text =
         $"Source {radio} · Frames {effectiveCapture.PacketCount:N0} · " +
-        $"CI-V {effectiveCapture.CivFrameCount:N0} · Scope {scopeFrames:N0} · " +
-        $"{ScopeFps:0.0} fps · BadScope {effectiveCapture.InvalidScopeFrameCount:N0}" +
+        $"CI-V {effectiveCapture.CivFrameCount:N0} · Sweeps {scopeFrames:N0} · " +
+        $"{ScopeFps:0.0}/s · Display {DisplayFps:0.0} fps · " +
+        $"BadScope {effectiveCapture.InvalidScopeFrameCount:N0}" +
         (!effectiveCapture.IsSkyCatStream
           ? $" · Gaps {effectiveCapture.SequenceGapCount:N0} · Duplicates {effectiveCapture.DuplicateChunkCount:N0}"
           : "");
