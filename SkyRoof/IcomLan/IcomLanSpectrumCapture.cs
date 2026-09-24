@@ -35,6 +35,8 @@ namespace SkyRoof
     private long DuplicateChunkCountValue;
     private long SequenceGapCountValue;
     private long SequenceResetCountValue;
+    private long InvalidScopeFrameCountValue;
+    private long LanLengthOverflowPacketCountValue;
     private long LastScopeFrameTicks;
 
     internal event Action<IcomScopeFrame>? ScopeFrameReceived;
@@ -52,6 +54,8 @@ namespace SkyRoof
     internal long DuplicateChunkCount => Interlocked.Read(ref DuplicateChunkCountValue);
     internal long SequenceGapCount => Interlocked.Read(ref SequenceGapCountValue);
     internal long SequenceResetCount => Interlocked.Read(ref SequenceResetCountValue);
+    internal long InvalidScopeFrameCount => Interlocked.Read(ref InvalidScopeFrameCountValue);
+    internal long LanLengthOverflowPacketCount => Interlocked.Read(ref LanLengthOverflowPacketCountValue);
 
     internal DateTime? LastScopeFrameUtc
     {
@@ -244,21 +248,23 @@ namespace SkyRoof
     private void ProcessLanPayload(ReadOnlySpan<byte> payload)
     {
       // Icom LAN serial stream packet:
-      // [16] = 0xC1, [17] = serial byte count, [19..20] = CI-V stream sequence,
-      // [21..] = bytes from the virtual serial stream.
+      // [16] = 0xC1, [17] = low byte of the CI-V byte count,
+      // [19..20] = CI-V stream sequence, [21..] = CI-V bytes.
+      //
+      // IMPORTANT: the scope waveform frame is ~497 bytes. The one-byte count at [17]
+      // therefore wraps for large frames and MUST NOT be used to truncate inbound data.
+      // The UDP datagram length is authoritative; take every byte from offset 21 onward.
       if (payload.Length >= 22 && payload[16] == 0xC1)
       {
         int available = payload.Length - 21;
-        int declared = payload[17];
-        int count = declared == 0
-          ? available
-          : Math.Min(declared, available);
+        if (available <= 0) return;
 
-        if (count <= 0) return;
+        if (available > 255 && payload[17] == (byte)(available & 0xFF))
+          Interlocked.Increment(ref LanLengthOverflowPacketCountValue);
 
         ushort sequence = (ushort)((payload[19] << 8) | payload[20]);
         Interlocked.Increment(ref SerialChunkCountValue);
-        PushSerialChunk(sequence, payload.Slice(21, count));
+        PushSerialChunk(sequence, payload.Slice(21, available));
         return;
       }
 
@@ -318,8 +324,19 @@ namespace SkyRoof
     {
       Interlocked.Increment(ref CivFrameCountValue);
 
+      bool isScopeCommand =
+        frame.Length >= 6 &&
+        frame[0] == 0xFE &&
+        frame[1] == 0xFE &&
+        frame[4] == 0x27 &&
+        frame[5] == 0x00;
+
       if (!TryParseScopeFrame(frame, out IcomScopeFrame? scope) || scope == null)
+      {
+        if (isScopeCommand)
+          Interlocked.Increment(ref InvalidScopeFrameCountValue);
         return;
+      }
 
       Interlocked.Increment(ref ScopeFrameCountValue);
       Interlocked.Exchange(ref LastScopeFrameTicks, scope.TimestampUtc.Ticks);
@@ -331,8 +348,24 @@ namespace SkyRoof
     {
       result = null;
 
-      // FE FE <to> <from> 27 00 <scope-data> FD
-      if (frame.Length < 7 ||
+      // IC-9700 LAN 27 00 full scope frame:
+      // FE FE <to> <from> 27 00
+      // scope currentDiv maxDiv mode
+      // freqA[5] freqB/span[5] outOfRange
+      // waveform[475]
+      // FD
+      //
+      // Total = 497 bytes. The radio can also emit short informational 27 00 frames;
+      // those are intentionally ignored here because they contain no complete waveform.
+      const int FullLanFrameLength = 497;
+      const int dataStart = 6;
+      const int modeIndex = 9;
+      const int frequencyAIndex = 10;
+      const int frequencyBIndex = 15;
+      const int outOfRangeIndex = 20;
+      const int samplesStart = 21;
+
+      if (frame.Length != FullLanFrameLength ||
           frame[0] != 0xFE ||
           frame[1] != 0xFE ||
           frame[4] != 0x27 ||
@@ -340,40 +373,42 @@ namespace SkyRoof
           frame[^1] != 0xFD)
         return false;
 
-      const int dataStart = 6;
-      int dataLength = frame.Length - dataStart - 1;
-
-      // MAIN/SUB + current division + maximum division + scope mode,
-      // waveform information, out-of-range flag, then 475 magnitude bytes.
-      if (dataLength < 4 + 1 + ScopePointCount)
-        return false;
-
-      int samplesStart = frame.Length - 1 - ScopePointCount;
-      int outOfRangeIndex = samplesStart - 1;
-      if (outOfRangeIndex < dataStart + 4)
-        return false;
-
       byte scope = frame[dataStart];
       byte divisionCurrent = frame[dataStart + 1];
       byte divisionMaximum = frame[dataStart + 2];
-      byte mode = frame[dataStart + 3];
+      byte mode = frame[modeIndex];
 
-      ReadOnlySpan<byte> waveformInfo =
-        new ReadOnlySpan<byte>(
-          frame,
-          dataStart + 4,
-          outOfRangeIndex - (dataStart + 4));
+      // LAN sends the whole sweep in one division.
+      if (scope > 1 ||
+          divisionCurrent != 1 ||
+          divisionMaximum != 1 ||
+          mode > 3)
+        return false;
 
-      long frequencyA = 0;
-      long frequencyB = 0;
-      if (waveformInfo.Length >= 10)
-      {
-        frequencyA = DecodeBcdFrequency(waveformInfo.Slice(0, 5));
-        frequencyB = DecodeBcdFrequency(waveformInfo.Slice(5, 5));
-      }
+      if (!TryDecodeBcdFrequency(
+            new ReadOnlySpan<byte>(frame, frequencyAIndex, 5),
+            out long frequencyA) ||
+          !TryDecodeBcdFrequency(
+            new ReadOnlySpan<byte>(frame, frequencyBIndex, 5),
+            out long frequencyB))
+        return false;
+
+      byte outOfRange = frame[outOfRangeIndex];
+      if (outOfRange > 1)
+        return false;
 
       var samples = new byte[ScopePointCount];
-      Buffer.BlockCopy(frame, samplesStart, samples, 0, ScopePointCount);
+      for (int i = 0; i < ScopePointCount; i++)
+      {
+        byte sample = frame[samplesStart + i];
+
+        // Official IC-9700 scope data range is 0..160. Values above that indicate
+        // a malformed/reassembled frame, not a legitimate high-amplitude bin.
+        if (sample > 160)
+          return false;
+
+        samples[i] = sample;
+      }
 
       result = new IcomScopeFrame
       {
@@ -384,29 +419,36 @@ namespace SkyRoof
         Mode = mode,
         FrequencyAHz = frequencyA,
         FrequencyBHz = frequencyB,
-        OutOfRange = frame[outOfRangeIndex] != 0,
+        OutOfRange = outOfRange != 0,
         Samples = samples
       };
 
       return true;
     }
 
-    private static long DecodeBcdFrequency(ReadOnlySpan<byte> bytes)
+    private static bool TryDecodeBcdFrequency(
+      ReadOnlySpan<byte> bytes,
+      out long value)
     {
-      long value = 0;
+      value = 0;
       long multiplier = 1;
 
       foreach (byte b in bytes)
       {
         int low = b & 0x0F;
         int high = (b >> 4) & 0x0F;
-        if (low > 9 || high > 9) return 0;
+
+        if (low > 9 || high > 9)
+        {
+          value = 0;
+          return false;
+        }
 
         value += (low + high * 10L) * multiplier;
         multiplier *= 100;
       }
 
-      return value;
+      return true;
     }
 
     private static int FindPreamble(ReadOnlySpan<byte> bytes)
