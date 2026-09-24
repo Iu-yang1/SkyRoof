@@ -116,7 +116,8 @@ namespace SkyRoof
 
     internal static bool IsSpectrumScope(WindowInfo info)
     {
-      return info.Title.Contains("Spectrum Scope", StringComparison.OrdinalIgnoreCase);
+      return info.Title.Equals("Spectrum Scope", StringComparison.OrdinalIgnoreCase) &&
+             info.ClassName.Equals("TFormScope", StringComparison.OrdinalIgnoreCase);
     }
 
     internal static bool IsRsBa1Candidate(WindowInfo info)
