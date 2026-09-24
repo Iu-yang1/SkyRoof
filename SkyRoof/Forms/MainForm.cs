@@ -1246,7 +1246,7 @@ namespace SkyRoof
 
     private void SatelliteSelector_SelectedTransmitterChanged(object sender, EventArgs e)
     {
-      FrequencyWidget.SetTransmitter();
+      FrequencyWidget.SetTransmitter(returnToBase: true);
       ctx.TransmittersPanel?.ShowSelectedTransmitter();
       ctx.WaterfallPanel?.BringInView(ctx.FrequencyControl.RadioLink.CorrectedDownlinkFrequency);
       ctx.SdrPasses.UpdateFrequencyRange();
