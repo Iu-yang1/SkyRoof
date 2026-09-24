@@ -1,11 +1,13 @@
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
 namespace SkyRoof
 {
   /// <summary>
-  /// Black frequency readout whose text is explicitly centered by TextRenderer.
-  /// This avoids the baseline/DPI-dependent vertical placement of a large WinForms Label.
+  /// Black frequency readout whose visible glyphs are geometrically centered.
+  /// This deliberately does not rely on Label.TextAlign/TextRenderer font metrics,
+  /// because those center the font layout box rather than the actual digit outlines.
   /// </summary>
   internal sealed class CenteredFrequencyDisplay : Control
   {
@@ -25,20 +27,41 @@ namespace SkyRoof
     protected override void OnPaint(PaintEventArgs e)
     {
       base.OnPaint(e);
-      e.Graphics.Clear(BackColor);
 
-      TextRenderer.DrawText(
-        e.Graphics,
+      Graphics g = e.Graphics;
+      g.Clear(BackColor);
+
+      if (string.IsNullOrEmpty(Text) || ClientSize.Width <= 0 || ClientSize.Height <= 0)
+        return;
+
+      g.SmoothingMode = SmoothingMode.AntiAlias;
+      g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+
+      using var format = (StringFormat)StringFormat.GenericTypographic.Clone();
+      format.FormatFlags |= StringFormatFlags.NoWrap;
+
+      float emSize = Font.SizeInPoints * g.DpiY / 72F;
+      using var path = new GraphicsPath();
+      path.AddString(
         Text,
-        Font,
-        ClientRectangle,
-        ForeColor,
-        BackColor,
-        TextFormatFlags.HorizontalCenter |
-        TextFormatFlags.VerticalCenter |
-        TextFormatFlags.SingleLine |
-        TextFormatFlags.NoPadding |
-        TextFormatFlags.NoPrefix);
+        Font.FontFamily,
+        (int)Font.Style,
+        emSize,
+        PointF.Empty,
+        format);
+
+      RectangleF ink = path.GetBounds();
+
+      // Center the actual visible glyph outline, not the font's ascent/descent layout box.
+      float offsetX = (ClientSize.Width - ink.Width) / 2F - ink.X;
+      float offsetY = (ClientSize.Height - ink.Height) / 2F - ink.Y;
+
+      using var matrix = new Matrix();
+      matrix.Translate(offsetX, offsetY);
+      path.Transform(matrix);
+
+      using var brush = new SolidBrush(ForeColor);
+      g.FillPath(brush, path);
     }
 
     protected override void OnTextChanged(EventArgs e)
