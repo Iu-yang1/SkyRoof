@@ -211,101 +211,99 @@ namespace SkyRoof
       TuningGroup.Dock = DockStyle.Fill;
       TuningGroup.Margin = new Padding(4);
 
+      // Keep the tuning header flat: no nested fixed-height frequency panels.
+      // This avoids DPI-dependent clipping on high-scaling Windows displays.
       var layout = new TableLayoutPanel
       {
         Dock = DockStyle.Fill,
         Padding = new Padding(8, 5, 8, 6),
-        ColumnCount = 1,
-        RowCount = 4
+        ColumnCount = 2,
+        RowCount = 5
       };
-      layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-      // Compact tuning readouts: these are reference values for the ruler rather than
-      // primary radio-frequency displays, so keep them visually close to the ruler scale.
-      layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
-      layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
-      layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-      layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 27));
+      layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+      layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
 
-      var frequencyLayout = new TableLayoutPanel
+      layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));          // captions
+      layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));     // no-Doppler values
+      layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));     // tuning status / reset
+      layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));     // ruler
+      layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));         // help
+
+      var downlinkCaption = new Label
       {
         Dock = DockStyle.Fill,
-        ColumnCount = 2,
-        RowCount = 1,
-        Margin = new Padding(0)
+        AutoSize = true,
+        Text = "Downlink · no Doppler",
+        TextAlign = ContentAlignment.MiddleLeft,
+        ForeColor = SystemColors.GrayText,
+        Font = new Font("Segoe UI", 9F),
+        Margin = new Padding(3, 0, 3, 2)
       };
-      frequencyLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-      frequencyLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
 
-      frequencyLayout.Controls.Add(
-        MakeNoDopplerFrequencyBlock("Downlink · no Doppler", NoDopplerDownlinkValue), 0, 0);
-      frequencyLayout.Controls.Add(
-        MakeNoDopplerFrequencyBlock("Uplink · no Doppler", NoDopplerUplinkValue), 1, 0);
-      layout.Controls.Add(frequencyLayout, 0, 0);
-
-      var tuningStatusLayout = new TableLayoutPanel
+      var uplinkCaption = new Label
       {
         Dock = DockStyle.Fill,
-        ColumnCount = 2,
-        RowCount = 1,
-        Margin = new Padding(0)
+        AutoSize = true,
+        Text = "Uplink · no Doppler",
+        TextAlign = ContentAlignment.MiddleLeft,
+        ForeColor = SystemColors.GrayText,
+        Font = new Font("Segoe UI", 9F),
+        Margin = new Padding(3, 0, 3, 2)
       };
-      tuningStatusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-      tuningStatusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
+      layout.Controls.Add(downlinkCaption, 0, 0);
+      layout.Controls.Add(uplinkCaption, 1, 0);
+
+      ConfigureCompactTuningValue(NoDopplerDownlinkValue);
+      ConfigureCompactTuningValue(NoDopplerUplinkValue);
+      layout.Controls.Add(NoDopplerDownlinkValue, 0, 1);
+      layout.Controls.Add(NoDopplerUplinkValue, 1, 1);
+
+      var statusPanel = new Panel
+      {
+        Dock = DockStyle.Fill,
+        Margin = new Padding(3, 1, 3, 1)
+      };
+      layout.SetColumnSpan(statusPanel, 2);
+
+      BackToBaseBtn.Text = "Reset to Base";
+      BackToBaseBtn.AutoSize = true;
+      BackToBaseBtn.Dock = DockStyle.Right;
+      BackToBaseBtn.Margin = new Padding(6, 0, 0, 0);
+      BackToBaseBtn.Click += (_, _) => ReturnToBase();
 
       TuningModeLabel.Dock = DockStyle.Fill;
       TuningModeLabel.AutoEllipsis = true;
       TuningModeLabel.TextAlign = ContentAlignment.MiddleLeft;
-      TuningModeLabel.Margin = new Padding(2, 3, 6, 3);
-      tuningStatusLayout.Controls.Add(TuningModeLabel, 0, 0);
+      TuningModeLabel.Margin = new Padding(0, 0, 6, 0);
 
-      BackToBaseBtn.Text = "Reset to Base";
-      BackToBaseBtn.AutoSize = true;
-      BackToBaseBtn.Margin = new Padding(4, 0, 0, 0);
-      BackToBaseBtn.Click += (_, _) => ReturnToBase();
-      tuningStatusLayout.Controls.Add(BackToBaseBtn, 1, 0);
-
-      layout.Controls.Add(tuningStatusLayout, 0, 1);
+      // Add the fill control first and the right-docked button second so WinForms lays them out
+      // predictably without another nested TableLayoutPanel.
+      statusPanel.Controls.Add(TuningModeLabel);
+      statusPanel.Controls.Add(BackToBaseBtn);
+      layout.Controls.Add(statusPanel, 0, 2);
 
       TuningBar.Dock = DockStyle.Fill;
       TuningBar.MinimumSize = new Size(100, 58);
+      TuningBar.Margin = new Padding(3, 0, 3, 0);
       TuningBar.TuneDeltaRequested += TuningBar_TuneDeltaRequested;
       TuningBar.TuningCompleted += TuningBar_TuningCompleted;
-      layout.Controls.Add(TuningBar, 0, 2);
+      layout.SetColumnSpan(TuningBar, 2);
+      layout.Controls.Add(TuningBar, 0, 3);
 
       TuningHelpLabel.AutoSize = true;
       TuningHelpLabel.Text =
         "Drag horizontally or use the mouse wheel. Ctrl = RIT; Alt + wheel = 500 Hz step.";
       TuningHelpLabel.ForeColor = SystemColors.GrayText;
-      TuningHelpLabel.Margin = new Padding(2, 5, 0, 0);
-      layout.Controls.Add(TuningHelpLabel, 0, 3);
+      TuningHelpLabel.Margin = new Padding(3, 5, 0, 0);
+      layout.SetColumnSpan(TuningHelpLabel, 2);
+      layout.Controls.Add(TuningHelpLabel, 0, 4);
 
       TuningGroup.Controls.Add(layout);
     }
 
-    private static Control MakeNoDopplerFrequencyBlock(string caption, Label value)
+    private static void ConfigureCompactTuningValue(Label value)
     {
-      var panel = new TableLayoutPanel
-      {
-        Dock = DockStyle.Fill,
-        ColumnCount = 1,
-        RowCount = 2,
-        Margin = new Padding(3, 0, 3, 0)
-      };
-      panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-      panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 18));
-      panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
-
-      var label = new Label
-      {
-        Dock = DockStyle.Fill,
-        Text = caption,
-        TextAlign = ContentAlignment.MiddleLeft,
-        ForeColor = SystemColors.GrayText,
-        Font = new Font("Segoe UI", 9F),
-        Margin = new Padding(1, 0, 1, 0)
-      };
-      panel.Controls.Add(label, 0, 0);
-
       value.Dock = DockStyle.Fill;
       value.BackColor = Color.Black;
       value.ForeColor = Color.Aqua;
@@ -313,10 +311,7 @@ namespace SkyRoof
       value.Text = "000,000,000 Hz";
       value.TextAlign = ContentAlignment.MiddleCenter;
       value.AutoEllipsis = false;
-      value.Margin = new Padding(0);
-      panel.Controls.Add(value, 0, 1);
-
-      return panel;
+      value.Margin = new Padding(3, 0, 3, 4);
     }
 
     internal void RefreshFromRadioLink()
