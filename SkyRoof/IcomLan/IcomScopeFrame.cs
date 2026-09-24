@@ -24,14 +24,14 @@ namespace SkyRoof
     };
 
     internal long CenterFrequencyHz =>
-      Mode is 0 or 2
+      Mode == 0
         ? FrequencyAHz
         : FrequencyAHz > 0 && FrequencyBHz > FrequencyAHz
           ? FrequencyAHz + (FrequencyBHz - FrequencyAHz) / 2
           : 0;
 
     internal long SpanHz =>
-      Mode is 0 or 2
+      Mode == 0
         ? FrequencyBHz
         : FrequencyAHz > 0 && FrequencyBHz > FrequencyAHz
           ? FrequencyBHz - FrequencyAHz
