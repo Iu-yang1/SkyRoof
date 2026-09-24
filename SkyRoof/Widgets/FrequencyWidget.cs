@@ -798,6 +798,12 @@ namespace SkyRoof
       if (Changing) return;
       UiToRadioLink();
       RadioLink.ComputeFrequencies();
+
+      // Manual RX/TX corrections, modes and correction enable states are persistent
+      // satellite/operator settings. Save them immediately instead of relying on the
+      // application-close path, which may not run after an exception or forced exit.
+      ctx.Settings.SaveToFile();
+
       RadioLinkToRadio();
       FrequenciesToUi();
 
