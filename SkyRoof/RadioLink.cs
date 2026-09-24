@@ -271,12 +271,6 @@ namespace SkyRoof
       else if (IsTerrestrial) 
         DownlinkFrequency += delta;
 
-      //else if (!IsAboveHorizon)
-      //{
-      //  Console.Beep();
-      //  return;
-      //}
-
       // transponder
       else if (IsTransponder)
       {
