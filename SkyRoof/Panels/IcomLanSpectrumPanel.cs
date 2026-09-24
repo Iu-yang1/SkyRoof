@@ -21,6 +21,7 @@ namespace SkyRoof
     private long LastScopeFrames;
     private DateTime LastRateTime = DateTime.UtcNow;
     private DateTime LastScopeOutputRequestUtc = DateTime.MinValue;
+    private bool LastScopeRequestRouted;
     private double ScopeFps;
     private int SelectedScopeBand;
 
@@ -331,8 +332,11 @@ namespace SkyRoof
         StatusLabel.Text =
           capture.PacketCount == 0
             ? "Listening for IC-9700 UDP/50002 traffic..."
-            : "Icom LAN traffic detected, but no CI-V 27 00 waveform yet. " +
-              "Requesting scope output through SkyCAT...";
+            : LastScopeRequestRouted
+              ? "Icom LAN traffic detected, but no CI-V 27 00 waveform yet. " +
+                "Scope output reasserted through SkyCAT; waiting for waveform data..."
+              : "Icom LAN traffic detected, but no CI-V 27 00 waveform yet. " +
+                "No active SkyCAT CAT engine is available to enable scope output.";
       }
       else if (capture.IsRunning && last != null)
       {
@@ -351,11 +355,7 @@ namespace SkyRoof
 
       LastScopeOutputRequestUtc = now;
 
-      CatControlEngine? engine = ctx.CatControl.Rx ?? ctx.CatControl.Tx;
-      if (engine == null)
-        return;
-
-      engine.RequestIcomScopeOutput();
+      LastScopeRequestRouted = ctx.CatControl.RequestIcomScopeOutput();
     }
 
     private void IcomLanSpectrumPanel_FormClosing(object? sender, FormClosingEventArgs e)
