@@ -33,6 +33,30 @@
       ApplyTune();
     }
 
+    /// <summary>
+    /// Route an IC-9700 scope-output request to an active SkyCAT engine.
+    /// RX and TX may be separate CAT backends in cross-band configurations, so
+    /// selecting Rx ?? Tx can silently choose a non-SkyCAT engine and drop the request.
+    /// </summary>
+    internal bool RequestIcomScopeOutput()
+    {
+      if (Rx?.SupportsIcomScopeOutput == true)
+      {
+        Rx.RequestIcomScopeOutput();
+        return true;
+      }
+
+      if (Tx != null &&
+          !ReferenceEquals(Tx, Rx) &&
+          Tx.SupportsIcomScopeOutput)
+      {
+        Tx.RequestIcomScopeOutput();
+        return true;
+      }
+
+      return false;
+    }
+
     private void SyncRxEngine(bool wantRx, bool rxAlsoTx, bool crossband)
     {
       if (!wantRx)
