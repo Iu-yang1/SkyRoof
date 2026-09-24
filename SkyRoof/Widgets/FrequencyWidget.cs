@@ -84,6 +84,12 @@ namespace SkyRoof
       ctx.CatControl.ApplyTune();
       ctx.RotatorControl.SetSatellite(ctx.SatelliteSelector.SelectedSatellite);
       RadioLinkToRadio();
+
+      // Reassert the saved TX CTCSS once the new frequency/mode pair has been written.
+      // On IC-9700 Duplex/SAT, SkyCAT may swap Main/Sub while resolving a cross-band
+      // frequency conflict; the final CTCSS write must therefore happen after that tune.
+      ctx.CatControl.Tx?.RequestCtcssReassertAfterTune();
+
       UpdateTxButton();
     }
 
