@@ -86,6 +86,37 @@ the external radio between the RX and TX modes.
 The **Manual Correction** setting of the uplink allows you to align your transmit and receive frequencies.
 See the [Frequency Scale](frequency_scale.md) section for details.
 
+
+## Base Frequency
+
+For satellite transmitters, SkyRoof can store a transmitter-specific **Base Frequency** correction
+without modifying the downloaded SatNOGS database. The base frequency is shown below the main
+downlink and uplink frequency displays using the same black frequency-display style.
+
+Click a Base Frequency display to enter a corrected reference frequency. The correction is stored
+as an offset from the database value, so later SatNOGS frequency updates are still applied while
+preserving your local calibration. Right-click the Base Frequency display to edit it or reset it to
+the database value.
+
+For a linear transponder, the saved base correction shifts the whole passband without changing its
+width. The uplink base is the edge paired with the downlink low edge: `uplink_low` for a
+non-inverting transponder and `uplink_high` for an inverting transponder.
+
+## Frequency Tuning Ruler
+
+The compact frequency ruler below the Base Frequency displays provides an HRD-style tuning control.
+Drag the ruler horizontally or spin the mouse wheel to tune. It uses the same tuning path as the
+existing frequency scale and manual controls, so no additional hidden offset is introduced:
+
+- terrestrial operation changes the absolute receive frequency;
+- a linear transponder changes the existing transponder offset;
+- a single-frequency satellite changes the existing downlink Manual Correction;
+- holding **Ctrl** uses the existing RIT behavior;
+- holding **Alt** while using the wheel selects the existing 500 Hz fast step.
+
+The original Manual, Doppler, RIT, XIT, waterfall frequency scale and radio dial controls remain active
+and synchronized with the ruler.
+
 ## CTCSS Tone
 
 The FM repeater satellites relay your signal only if a sub-audible CTCSS (PL) tone is present on the
