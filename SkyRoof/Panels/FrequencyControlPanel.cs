@@ -275,7 +275,7 @@ namespace SkyRoof
 
       TuningHelpLabel.AutoSize = true;
       TuningHelpLabel.Text =
-        "Drag or use the mouse wheel. Tuning may extend beyond database passband edges. Ctrl = RIT; Alt + wheel = 500 Hz.";
+        "Drag horizontally or use the mouse wheel. Ctrl = RIT; Alt + wheel = 500 Hz step.";
       TuningHelpLabel.ForeColor = SystemColors.GrayText;
       TuningHelpLabel.Margin = new Padding(2, 5, 0, 0);
       layout.Controls.Add(TuningHelpLabel, 0, 3);
