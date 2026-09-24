@@ -1,0 +1,32 @@
+name: Compile Check
+
+on:
+  push:
+    branches:
+      - master
+      - feature/base-frequency-tuning
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v1
+
+      - name: Restore NuGet packages
+        run: nuget restore SkyRoof.sln
+
+      - name: Build solution
+        run: msbuild SkyRoof.sln /m /p:Configuration=Release /p:Platform=x64
