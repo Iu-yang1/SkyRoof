@@ -29,6 +29,7 @@ namespace SkyRoof
 
     // cached so the Terrestrial/normal toggle does not allocate (and leak) a new font each update
     private readonly Font DownlinkRegularFont, DownlinkBoldFont;
+    private long SuppressCatTuneFeedbackUntil;
 
     public FrequencyWidget()
     {
@@ -41,6 +42,16 @@ namespace SkyRoof
       DownlinkModeCombobox.SelectedIndex = 0;
       UplinkModeCombobox.SelectedIndex = 0;
       Changing = false;
+      // The ruler is intentionally not constrained by the old ±25 kHz manual/RIT UI range.
+      // Keep the numeric controls broad enough to display any practical tuning position.
+      const decimal WideTuningLimitKhz = 2000000m;
+      RitSpinner.Minimum = -WideTuningLimitKhz;
+      RitSpinner.Maximum = WideTuningLimitKhz;
+      DownlinkManualSpinner.Minimum = -WideTuningLimitKhz;
+      DownlinkManualSpinner.Maximum = WideTuningLimitKhz;
+      UplinkManualSpinner.Minimum = -WideTuningLimitKhz;
+      UplinkManualSpinner.Maximum = WideTuningLimitKhz;
+
       BuildCtcssMenu();
     }
 
@@ -65,7 +76,10 @@ namespace SkyRoof
     {
       SettingsToRadioLink(false);
       if (returnToBase)
+      {
+        SuppressCatTuneFeedback();
         RadioLink.ReturnToBaseTuningPosition();
+      }
       RadioLinkToUi();
       ctx.CatControl.ApplyTune();
       ctx.RotatorControl.SetSatellite(ctx.SatelliteSelector.SelectedSatellite);
@@ -106,15 +120,17 @@ namespace SkyRoof
 
     internal void SetTransponderOffset(SatnogsDbTransmitter transponder, double offset)
     {
-      // set the offset first
-      var transponderCust = ctx.Settings.Satellites.GetOrCreateTransmitterCustomization(transponder);
+      // Selecting a new transmitter normally resets tuning to Base. A waterfall click carries an
+      // explicit target offset, so select first and apply that target after the selection event.
+      if (transponder != RadioLink.Tx)
+        ctx.SatelliteSelector.SetSelectedTransmitter(transponder);
+
+      var transponderCust =
+        ctx.Settings.Satellites.GetOrCreateTransmitterCustomization(transponder);
       transponderCust.TransponderOffset = offset;
 
-      // if same TX, just force its settings in case we were in terrestrial mode and changed them
-      if (transponder == RadioLink.Tx) SetTransmitter();
-
-      // if different TX, select it for all panels in the app
-      else ctx.SatelliteSelector.SetSelectedTransmitter(transponder);
+      if (transponder == RadioLink.Tx)
+        SetTransmitter(returnToBase: false);
     }
 
     internal void IncrementDownlinkFrequency(int delta)
@@ -136,6 +152,9 @@ namespace SkyRoof
     {
       if (RadioLink.IsTerrestrial) return;
 
+      // CAT polling reads before writes. Ignore stale dial feedback briefly so the radio's old
+      // frequency cannot be interpreted as a fresh manual tune immediately after the reset.
+      SuppressCatTuneFeedback();
       RadioLink.ReturnToBaseTuningPosition();
       ctx.Settings.SaveToFile();
       RadioLinkToRadio();
@@ -180,6 +199,12 @@ namespace SkyRoof
 
     internal void RxTuned()
     {
+      if (IsCatTuneFeedbackSuppressed())
+      {
+        RadioLinkToRadio();
+        return;
+      }
+
       int delta = (int)(ctx.CatControl.Rx!.LastReadRxFrequency - RadioLink.CorrectedDownlinkFrequency);
       RadioLink.IncrementDownlinkFrequency(delta);
       RadioLinkToRadio();
@@ -188,6 +213,12 @@ namespace SkyRoof
 
     internal void TxTuned()
     {
+      if (IsCatTuneFeedbackSuppressed())
+      {
+        RadioLinkToRadio();
+        return;
+      }
+
       // when FT4 XIT is on, ignore dial knob
       if (RadioLink.XitOffset != 0) return;
 
@@ -195,6 +226,16 @@ namespace SkyRoof
       RadioLink.IncrementUplinkFrequency(delta);
       RadioLinkToRadio();
       BeginInvoke(RadioLinkToUi);
+    }
+
+    private void SuppressCatTuneFeedback()
+    {
+      SuppressCatTuneFeedbackUntil = Environment.TickCount64 + 1500;
+    }
+
+    private bool IsCatTuneFeedbackSuppressed()
+    {
+      return Environment.TickCount64 < SuppressCatTuneFeedbackUntil;
     }
 
     internal void ToggleRit()
