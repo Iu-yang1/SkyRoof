@@ -5,23 +5,21 @@ using System.Windows.Forms;
 namespace SkyRoof
 {
   /// <summary>
-  /// Compact HRD-style frequency ruler. It is intentionally an input/view only control:
-  /// all tuning semantics remain in RadioLink / FrequencyWidget.
+  /// Frequency ruler used by the dockable Frequency Control panel.
+  /// Mouse dragging is previewed locally on every move while tuning updates are throttled,
+  /// so CAT/SDR traffic cannot stall the UI at raw mouse-event rate.
   /// </summary>
   internal sealed class FrequencyTuningBar : Control
   {
     private int LastDragX;
     private double frequency;
+    private double displayFrequency;
+    private int PendingDragDelta;
+    private bool Dragging;
     private const double SpanHz = 50000d;
+    private readonly System.Windows.Forms.Timer DragCommitTimer = new() { Interval = 40 };
 
     public event Action<int>? TuneDeltaRequested;
-
-    public void SetFrequency(double value)
-    {
-      if (Math.Abs(frequency - value) < 0.5) return;
-      frequency = value;
-      Invalidate();
-    }
 
     public FrequencyTuningBar()
     {
@@ -31,6 +29,27 @@ namespace SkyRoof
       Cursor = Cursors.SizeWE;
       SetStyle(ControlStyles.Selectable, true);
       TabStop = true;
+
+      DragCommitTimer.Tick += (_, _) => FlushPendingDragDelta();
+    }
+
+    public void SetFrequency(double value)
+    {
+      frequency = value;
+
+      // During a drag the ruler follows the local preview continuously. Model/CAT refreshes
+      // must not snap the scale back between throttled commits.
+      if (Dragging) return;
+
+      if (Math.Abs(displayFrequency - value) < 0.5) return;
+      displayFrequency = value;
+      Invalidate();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+      if (disposing) DragCommitTimer.Dispose();
+      base.Dispose(disposing);
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -42,7 +61,7 @@ namespace SkyRoof
       g.Clear(BackColor);
 
       double hzPerPixel = SpanHz / Math.Max(1, Width);
-      double left = frequency - SpanHz / 2d;
+      double left = displayFrequency - SpanHz / 2d;
       const int majorStep = 10000;
       const int minorStep = 1000;
 
@@ -76,15 +95,20 @@ namespace SkyRoof
     {
       base.OnMouseDown(e);
       if (e.Button != MouseButtons.Left) return;
+
       Focus();
       Capture = true;
+      Dragging = true;
       LastDragX = e.X;
+      displayFrequency = frequency;
+      PendingDragDelta = 0;
+      DragCommitTimer.Start();
     }
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
       base.OnMouseMove(e);
-      if (!Capture || e.Button != MouseButtons.Left || Width <= 0) return;
+      if (!Dragging || !Capture || e.Button != MouseButtons.Left || Width <= 0) return;
 
       int dx = e.X - LastDragX;
       if (dx == 0) return;
@@ -93,13 +117,37 @@ namespace SkyRoof
       if (delta == 0) return;
 
       LastDragX = e.X;
-      TuneDeltaRequested?.Invoke(delta);
+      PendingDragDelta += delta;
+      displayFrequency += delta;
+      Invalidate();
     }
 
     protected override void OnMouseUp(MouseEventArgs e)
     {
       base.OnMouseUp(e);
-      if (e.Button == MouseButtons.Left) Capture = false;
+      if (e.Button != MouseButtons.Left) return;
+
+      Capture = false;
+      Dragging = false;
+      DragCommitTimer.Stop();
+      FlushPendingDragDelta();
+
+      // The synchronous commit above normally refreshes frequency. This assignment also makes
+      // the final position deterministic if no subscriber is present.
+      displayFrequency = frequency;
+      Invalidate();
+    }
+
+    protected override void OnMouseCaptureChanged(EventArgs e)
+    {
+      base.OnMouseCaptureChanged(e);
+      if (Capture || !Dragging) return;
+
+      Dragging = false;
+      DragCommitTimer.Stop();
+      FlushPendingDragDelta();
+      displayFrequency = frequency;
+      Invalidate();
     }
 
     protected override void OnMouseWheel(MouseEventArgs e)
@@ -107,6 +155,15 @@ namespace SkyRoof
       base.OnMouseWheel(e);
       int step = ModifierKeys.HasFlag(Keys.Alt) ? 500 : 20;
       TuneDeltaRequested?.Invoke(e.Delta > 0 ? step : -step);
+    }
+
+    private void FlushPendingDragDelta()
+    {
+      if (PendingDragDelta == 0) return;
+
+      int delta = PendingDragDelta;
+      PendingDragDelta = 0;
+      TuneDeltaRequested?.Invoke(delta);
     }
   }
 }
