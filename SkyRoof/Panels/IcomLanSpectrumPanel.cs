@@ -20,6 +20,7 @@ namespace SkyRoof
     private IcomLanSpectrumCapture? Capture;
     private long LastScopeFrames;
     private DateTime LastRateTime = DateTime.UtcNow;
+    private DateTime LastScopeOutputRequestUtc = DateTime.MinValue;
     private double ScopeFps;
     private int SelectedScopeBand;
 
@@ -216,6 +217,7 @@ namespace SkyRoof
       StatusLabel.Text = "Starting WinDivert passive capture...";
 
       capture.Start();
+      RequestScopeOutputIfDue(force: true);
     }
 
     private void StopCapture()
@@ -313,6 +315,12 @@ namespace SkyRoof
         $"Gaps {capture.SequenceGapCount:N0} · Duplicates {capture.DuplicateChunkCount:N0}";
 
       DateTime? last = capture.LastScopeFrameUtc;
+      bool scopeStale =
+        last == null || (now - last.Value).TotalSeconds > 1.5;
+
+      if (capture.IsRunning && scopeStale)
+        RequestScopeOutputIfDue(force: false);
+
       if (capture.LastError != null)
       {
         StatusLabel.Text = capture.LastError;
@@ -324,7 +332,7 @@ namespace SkyRoof
           capture.PacketCount == 0
             ? "Listening for IC-9700 UDP/50002 traffic..."
             : "Icom LAN traffic detected, but no CI-V 27 00 waveform yet. " +
-              "Open/enable the RS-BA1 Spectrum Scope.";
+              "Requesting scope output through SkyCAT...";
       }
       else if (capture.IsRunning && last != null)
       {
@@ -332,6 +340,22 @@ namespace SkyRoof
           "Receiving native IC-9700 CI-V 27 00 spectrum data · " +
           "WinDivert SNIFF/RECV_ONLY.";
       }
+    }
+
+    private void RequestScopeOutputIfDue(bool force)
+    {
+      DateTime now = DateTime.UtcNow;
+
+      if (!force && (now - LastScopeOutputRequestUtc).TotalSeconds < 2.0)
+        return;
+
+      LastScopeOutputRequestUtc = now;
+
+      CatControlEngine? engine = ctx.CatControl.Rx ?? ctx.CatControl.Tx;
+      if (engine == null)
+        return;
+
+      engine.RequestIcomScopeOutput();
     }
 
     private void IcomLanSpectrumPanel_FormClosing(object? sender, FormClosingEventArgs e)
