@@ -1,0 +1,10 @@
+WinDivert third-party component
+
+SkyRoof's optional Icom LAN Spectrum feature uses WinDivert 2.2.2 by Basil.
+Project: https://github.com/basil00/WinDivert
+License: GNU Lesser General Public License version 3 (LGPL-3.0)
+
+The official pre-built x64 WinDivert.dll and WinDivert64.sys are downloaded
+from the upstream WinDivert v2.2.2 release during the SkyRoof installer build.
+SkyRoof opens WinDivert only in SNIFF + RECV_ONLY mode for this feature; it
+does not reinject or modify the captured RS-BA1 / IC-9700 packets.
