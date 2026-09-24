@@ -61,7 +61,8 @@ namespace SkyRoof
         {
           completed = BuildFrame(
             receiver, 1, 1, mode, frequencyA, frequencyB, true,
-            new byte[ScopePointCount]);
+            new byte[ScopePointCount],
+            sweepComplete: true);
           return true;
         }
 
