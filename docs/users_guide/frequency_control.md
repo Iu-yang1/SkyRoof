@@ -87,26 +87,30 @@ The **Manual Correction** setting of the uplink allows you to align your transmi
 See the [Frequency Scale](frequency_scale.md) section for details.
 
 
-## Base Frequency
+## Frequency Control Panel
 
-For satellite transmitters, SkyRoof can store a transmitter-specific **Base Frequency** correction
-without modifying the downloaded SatNOGS database. The base frequency is shown below the main
-downlink and uplink frequency displays using the same black frequency-display style.
+Open **View | Frequency Control** to show the dockable Frequency Control panel. It can float, dock,
+or be tabbed with panels such as Timeline and Earth View, and its docking state participates in the
+normal SkyRoof window-layout persistence.
 
-Click a Base Frequency display to enter a corrected reference frequency. The correction is stored
-as an offset from the database value, so later SatNOGS frequency updates are still applied while
-preserving your local calibration. Right-click the Base Frequency display to edit it or reset it to
-the database value.
+For satellite transmitters, the panel stores transmitter-specific **Downlink Base** and **Uplink Base**
+corrections without modifying the downloaded SatNOGS database. Each Base card shows the saved
+reference frequency, the database reference, and the persistent correction. Click the large frequency
+or use **Edit Base...** to enter a corrected reference frequency; **Reset to Database** clears the saved
+correction.
 
-For a linear transponder, the saved base correction shifts the whole passband without changing its
-width. The uplink base is the edge paired with the downlink low edge: `uplink_low` for a
-non-inverting transponder and `uplink_high` for an inverting transponder.
+The correction is stored as an offset from the database value, so later SatNOGS frequency updates are
+still applied while preserving your local calibration. For a linear transponder, the saved correction
+shifts the whole passband without changing its width. The uplink base is the edge paired with the
+downlink low edge: `uplink_low` for a non-inverting transponder and `uplink_high` for an inverting
+transponder.
 
 ## Frequency Tuning Ruler
 
-The compact frequency ruler below the Base Frequency displays provides an HRD-style tuning control.
-Drag the ruler horizontally or spin the mouse wheel to tune. It uses the same tuning path as the
-existing frequency scale and manual controls, so no additional hidden offset is introduced:
+The lower half of the Frequency Control panel contains an HRD-style tuning ruler, the current corrected
+downlink frequency, and the active tuning target. Drag the ruler horizontally or spin the mouse wheel
+to tune. It uses the same tuning path as the existing frequency scale and manual controls, so no
+additional hidden offset is introduced:
 
 - terrestrial operation changes the absolute receive frequency;
 - a linear transponder changes the existing transponder offset;
