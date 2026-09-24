@@ -9,6 +9,12 @@ namespace SkyRoof
     Sub = 2
   }
 
+  public enum IcomLanSpectrumSource
+  {
+    SkyCat = 0,
+    RsBa1 = 1
+  }
+
   public class IcomLanSpectrumSettings
   {
     [DisplayName("Radio IPv4 address")]
@@ -24,6 +30,11 @@ namespace SkyRoof
     [Description("Auto shows whichever scope stream is present. MAIN or SUB filters CI-V 27 00 frames to that scope only.")]
     [DefaultValue(IcomLanScopeBand.Auto)]
     public IcomLanScopeBand ScopeBand { get; set; } = IcomLanScopeBand.Auto;
+
+    [DisplayName("Scope source")]
+    [Description("Select who owns/enables IC-9700 scope waveform output. SkyCAT actively reasserts CI-V 27 10 / 27 11; RS-BA1 leaves scope control to the RS-BA1 Spectrum Scope window and SkyRoof only sniffs the LAN stream.")]
+    [DefaultValue(IcomLanSpectrumSource.SkyCat)]
+    public IcomLanSpectrumSource Source { get; set; } = IcomLanSpectrumSource.SkyCat;
 
     [DisplayName("Auto start")]
     [Description("Start passive WinDivert capture automatically when the Icom LAN Spectrum panel is opened.")]
