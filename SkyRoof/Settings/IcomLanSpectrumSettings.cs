@@ -31,8 +31,8 @@ namespace SkyRoof
     [DefaultValue(IcomLanScopeBand.Auto)]
     public IcomLanScopeBand ScopeBand { get; set; } = IcomLanScopeBand.Auto;
 
-    [DisplayName("Scope source")]
-    [Description("Select who owns/enables IC-9700 scope waveform output. SkyCAT actively reasserts CI-V 27 10 / 27 11; RS-BA1 leaves scope control to the RS-BA1 Spectrum Scope window and SkyRoof only sniffs the LAN stream.")]
+    [DisplayName("Scope control")]
+    [Description("Select who controls IC-9700 scope waveform output. SkyCAT actively reasserts CI-V 27 10 / 27 11; RS-BA1 leaves those commands to the RS-BA1 Spectrum Scope window. In both cases SkyRoof receives the waveform by passively sniffing the RS-BA1 LAN CI-V transport.")]
     [DefaultValue(IcomLanSpectrumSource.SkyCat)]
     public IcomLanSpectrumSource Source { get; set; } = IcomLanSpectrumSource.SkyCat;
 
