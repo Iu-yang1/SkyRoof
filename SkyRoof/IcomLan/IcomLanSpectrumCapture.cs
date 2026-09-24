@@ -25,8 +25,11 @@ namespace SkyRoof
     private IntPtr Handle = IntPtr.Zero;
     private readonly object HandleSync = new();
 
-    private bool HaveTransportSequence;
-    private ushort LastTransportSequence;
+    private const int RecentTransportSequenceWindow = 512;
+    private readonly HashSet<ushort> RecentTransportSequences = new();
+    private readonly Queue<ushort> RecentTransportSequenceOrder = new();
+    private bool HaveExpectedTransportSequence;
+    private ushort ExpectedTransportSequence;
 
     private long PacketCountValue;
     private long CapturedBytesValue;
@@ -39,6 +42,7 @@ namespace SkyRoof
     private long InvalidScopeFrameCountValue;
     private long LanLengthOverflowPacketCountValue;
     private long LastScopeFrameTicks;
+    private IcomScopeFrame? LatestScopeFrameValue;
 
     internal event Action<IcomScopeFrame>? ScopeFrameReceived;
     internal event Action<string>? StatusChanged;
@@ -66,6 +70,9 @@ namespace SkyRoof
         return ticks == 0 ? null : new DateTime(ticks, DateTimeKind.Utc);
       }
     }
+
+    internal IcomScopeFrame? LatestScopeFrame =>
+      Volatile.Read(ref LatestScopeFrameValue);
 
     internal IcomLanSpectrumCapture(string radioAddress, int serialPort)
     {
@@ -283,7 +290,15 @@ namespace SkyRoof
           Interlocked.Increment(ref LanLengthOverflowPacketCountValue);
 
         Interlocked.Increment(ref SerialChunkCountValue);
-        StreamAssembler.Feed(serialBytes);
+
+        // Each RS-BA1 C1 datagram normally carries one complete CI-V payload.
+        // Decode complete datagrams independently so one reordered/lost packet cannot
+        // contaminate the following high-rate scope frames. Retain the stream
+        // assembler only as a fallback for an implementation that genuinely splits
+        // a CI-V frame across C1 datagrams.
+        if (!TryDeliverCompleteCivPayload(serialBytes))
+          StreamAssembler.Feed(serialBytes);
+
         return;
       }
 
@@ -296,49 +311,86 @@ namespace SkyRoof
 
     private bool AcceptTransportSequence(ushort sequence)
     {
-      if (!HaveTransportSequence)
-      {
-        HaveTransportSequence = true;
-        LastTransportSequence = sequence;
-        return true;
-      }
-
-      ushort expected = unchecked((ushort)(LastTransportSequence + 1));
-      if (sequence == LastTransportSequence)
+      // Match the IC-9700 LAN receive semantics used by mature RS-BA1-compatible
+      // implementations: suppress only a sequence number that was actually seen
+      // recently. Reordered packets are still delivered. A passive sniffer must not
+      // infer "old" from numeric direction alone because retransmission and rollover
+      // can legally move backwards in the 16-bit sequence space.
+      if (RecentTransportSequences.Contains(sequence))
       {
         Interlocked.Increment(ref DuplicateChunkCountValue);
         return false;
       }
 
-      if (sequence != expected)
+      if (!HaveExpectedTransportSequence)
       {
-        ushort forward = unchecked((ushort)(sequence - expected));
+        HaveExpectedTransportSequence = true;
+        ExpectedTransportSequence = unchecked((ushort)(sequence + 1));
+      }
+      else
+      {
+        short distance = unchecked((short)(sequence - ExpectedTransportSequence));
 
-        if (forward < 0x8000)
+        if (distance > 0)
         {
-          // A missing tracked packet may only have been an idle packet.  Do not reset
-          // CI-V assembly here; if actual serial data was lost, the CI-V frame parser
-          // will reject the incomplete frame and resynchronize at the next FE FE.
-          Interlocked.Add(ref SequenceGapCountValue, Math.Max(1, (int)forward));
+          Interlocked.Add(ref SequenceGapCountValue, distance);
+          ExpectedTransportSequence = unchecked((ushort)(sequence + 1));
+        }
+        else if (distance == 0)
+        {
+          ExpectedTransportSequence = unchecked((ushort)(sequence + 1));
         }
         else
         {
-          ushort backward = unchecked((ushort)(expected - sequence));
-          if (backward <= 128)
-          {
-            // Late retransmission / duplicate packet.
-            Interlocked.Increment(ref DuplicateChunkCountValue);
-            return false;
-          }
-
-          // The tracked transport sequence can restart when RS-BA1 reconnects.
+          // Reordered/retransmitted-but-not-duplicate packet. Deliver it without
+          // moving the expected high-water mark backwards.
           Interlocked.Increment(ref SequenceResetCountValue);
-          StreamAssembler.Reset();
         }
       }
 
-      LastTransportSequence = sequence;
+      RecentTransportSequences.Add(sequence);
+      RecentTransportSequenceOrder.Enqueue(sequence);
+
+      while (RecentTransportSequenceOrder.Count > RecentTransportSequenceWindow)
+        RecentTransportSequences.Remove(RecentTransportSequenceOrder.Dequeue());
+
       return true;
+    }
+
+    private bool TryDeliverCompleteCivPayload(ReadOnlySpan<byte> bytes)
+    {
+      if (bytes.Length < 3 ||
+          bytes[0] != 0xFE ||
+          bytes[1] != 0xFE ||
+          bytes[^1] != 0xFD)
+        return false;
+
+      int start = 0;
+      bool delivered = false;
+
+      for (int i = 2; i < bytes.Length; i++)
+      {
+        if (bytes[i] != 0xFD)
+          continue;
+
+        int length = i - start + 1;
+        if (length < 3 ||
+            bytes[start] != 0xFE ||
+            bytes[start + 1] != 0xFE)
+          return false;
+
+        OnCivFrame(bytes.Slice(start, length).ToArray());
+        delivered = true;
+        start = i + 1;
+
+        if (start < bytes.Length &&
+            (start + 1 >= bytes.Length ||
+             bytes[start] != 0xFE ||
+             bytes[start + 1] != 0xFE))
+          return false;
+      }
+
+      return delivered && start == bytes.Length;
     }
 
     private void OnCivFrame(byte[] frame)
@@ -361,6 +413,7 @@ namespace SkyRoof
 
       Interlocked.Increment(ref ScopeFrameCountValue);
       Interlocked.Exchange(ref LastScopeFrameTicks, scope.TimestampUtc.Ticks);
+      Volatile.Write(ref LatestScopeFrameValue, scope);
       ScopeFrameReceived?.Invoke(scope);
     }
 
