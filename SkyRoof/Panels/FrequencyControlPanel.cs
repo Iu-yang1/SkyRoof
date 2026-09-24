@@ -246,6 +246,7 @@ namespace SkyRoof
       TuningBar.Dock = DockStyle.Fill;
       TuningBar.MinimumSize = new Size(100, 58);
       TuningBar.TuneDeltaRequested += TuningBar_TuneDeltaRequested;
+      TuningBar.TuningCompleted += TuningBar_TuningCompleted;
       layout.Controls.Add(TuningBar, 0, 2);
 
       TuningHelpLabel.AutoSize = true;
@@ -430,7 +431,12 @@ namespace SkyRoof
 
     private void TuningBar_TuneDeltaRequested(int delta)
     {
-      ctx?.FrequencyControl.IncrementDownlinkFrequency(delta);
+      ctx?.FrequencyControl.IncrementDownlinkFrequencyLive(delta);
+    }
+
+    private void TuningBar_TuningCompleted()
+    {
+      ctx?.FrequencyControl.CompleteDownlinkTuning();
     }
 
     private void FrequencyControlPanel_FormClosing(object? sender, FormClosingEventArgs e)
