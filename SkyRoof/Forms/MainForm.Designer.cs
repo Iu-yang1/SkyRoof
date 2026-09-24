@@ -58,6 +58,7 @@
       TimelineMNU = new ToolStripMenuItem();
       SkyViewMNU = new ToolStripMenuItem();
       EarthViewMNU = new ToolStripMenuItem();
+      FrequencyControlMNU = new ToolStripMenuItem();
       QsoEntryMNU = new ToolStripMenuItem();
       Ft4ConsoleMNU = new ToolStripMenuItem();
       RecorderMNU = new ToolStripMenuItem();
@@ -308,7 +309,7 @@
       // 
       // GroupViewPanelMNU
       // 
-      GroupViewPanelMNU.DropDownItems.AddRange(new ToolStripItem[] { GroupViewMNU, SatelliteDetailsMNU, TransmittersMNU, SatellitePassesMNU, WaterfallMNU, TimelineMNU, SkyViewMNU, EarthViewMNU, QsoEntryMNU, Ft4ConsoleMNU, RecorderMNU, QsoSchedulerMNU, TelemetryMNU, AutoSelectionMNU, toolStripMenuItem4, ResetWindowLayoutMNU });
+      GroupViewPanelMNU.DropDownItems.AddRange(new ToolStripItem[] { GroupViewMNU, SatelliteDetailsMNU, TransmittersMNU, SatellitePassesMNU, WaterfallMNU, FrequencyControlMNU, TimelineMNU, SkyViewMNU, EarthViewMNU, QsoEntryMNU, Ft4ConsoleMNU, RecorderMNU, QsoSchedulerMNU, TelemetryMNU, AutoSelectionMNU, toolStripMenuItem4, ResetWindowLayoutMNU });
       GroupViewPanelMNU.Name = "GroupViewPanelMNU";
       GroupViewPanelMNU.Size = new Size(44, 20);
       GroupViewPanelMNU.Text = "&View";
@@ -368,6 +369,13 @@
       EarthViewMNU.Size = new Size(188, 22);
       EarthViewMNU.Text = "&Earth View";
       EarthViewMNU.Click += EarthViewMNU_Click;
+      // 
+      // FrequencyControlMNU
+      // 
+      FrequencyControlMNU.Name = "FrequencyControlMNU";
+      FrequencyControlMNU.Size = new Size(188, 22);
+      FrequencyControlMNU.Text = "&Frequency Control";
+      FrequencyControlMNU.Click += FrequencyControlMNU_Click;
       // 
       // QsoEntryMNU
       // 
@@ -884,6 +892,7 @@
     public ToolStripMenuItem TimelineMNU;
     public ToolStripMenuItem SkyViewMNU;
     public ToolStripMenuItem EarthViewMNU;
+    public ToolStripMenuItem FrequencyControlMNU;
     private ToolStripMenuItem SupportGroupMNU;
     private StatusStrip StatusStrip;
     private ToolStripStatusLabel toolStripStatusLabel2;
