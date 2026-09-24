@@ -42,6 +42,7 @@ namespace SkyRoof
     private long SerialChunkCountValue;
     private long CivFrameCountValue;
     private long ScopeFrameCountValue;
+    private long ScopeUpdateCountValue;
     private long DuplicateChunkCountValue;
     private long SequenceGapCountValue;
     private long SequenceResetCountValue;
@@ -68,6 +69,7 @@ namespace SkyRoof
     internal long SerialChunkCount => Interlocked.Read(ref SerialChunkCountValue);
     internal long CivFrameCount => Interlocked.Read(ref CivFrameCountValue);
     internal long ScopeFrameCount => Interlocked.Read(ref ScopeFrameCountValue);
+    internal long ScopeUpdateCount => Interlocked.Read(ref ScopeUpdateCountValue);
     internal long DuplicateChunkCount => Interlocked.Read(ref DuplicateChunkCountValue);
     internal long SequenceGapCount => Interlocked.Read(ref SequenceGapCountValue);
     internal long SequenceResetCount => Interlocked.Read(ref SequenceResetCountValue);
@@ -584,12 +586,16 @@ namespace SkyRoof
         return;
       }
 
-      // A valid multi-frame sweep yields null for sequences 01..10 and produces
-      // the completed 475-bin frame only when the final sequence arrives.
       if (scope == null)
         return;
 
-      Interlocked.Increment(ref ScopeFrameCountValue);
+      // Multi-frame serial/virtual-COM data now emits a display update for each
+      // waveform division. Count those separately from completed sweeps so the UI
+      // can report both the smooth display cadence and the true sweep cadence.
+      Interlocked.Increment(ref ScopeUpdateCountValue);
+      if (scope.SweepComplete)
+        Interlocked.Increment(ref ScopeFrameCountValue);
+
       Interlocked.Exchange(ref LastScopeFrameTicks, scope.TimestampUtc.Ticks);
       Volatile.Write(ref LatestScopeFrameValue, scope);
       ScopeFrameReceived?.Invoke(scope);
