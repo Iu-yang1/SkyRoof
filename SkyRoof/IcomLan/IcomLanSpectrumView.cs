@@ -291,7 +291,7 @@ namespace SkyRoof
 
         for (int x = 0; x < ScopePoints; x++)
         {
-          int level = Math.Clamp(row[x], 0, 160);
+          int level = Math.Clamp((int)row[x], 0, 160);
           WaterfallArgb[index++] = Palette[level];
         }
       }
