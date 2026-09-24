@@ -20,6 +20,7 @@ namespace SkyRoof
     private readonly System.Windows.Forms.Timer DragCommitTimer = new() { Interval = 40 };
 
     public event Action<int>? TuneDeltaRequested;
+    public event Action? TuningCompleted;
 
     public FrequencyTuningBar()
     {
@@ -136,6 +137,7 @@ namespace SkyRoof
       // the final position deterministic if no subscriber is present.
       displayFrequency = frequency;
       Invalidate();
+      TuningCompleted?.Invoke();
     }
 
     protected override void OnMouseCaptureChanged(EventArgs e)
@@ -148,6 +150,7 @@ namespace SkyRoof
       FlushPendingDragDelta();
       displayFrequency = frequency;
       Invalidate();
+      TuningCompleted?.Invoke();
     }
 
     protected override void OnMouseWheel(MouseEventArgs e)
@@ -155,6 +158,7 @@ namespace SkyRoof
       base.OnMouseWheel(e);
       int step = ModifierKeys.HasFlag(Keys.Alt) ? 500 : 20;
       TuneDeltaRequested?.Invoke(e.Delta > 0 ? step : -step);
+      TuningCompleted?.Invoke();
     }
 
     private void FlushPendingDragDelta()
