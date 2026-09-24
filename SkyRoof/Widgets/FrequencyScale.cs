@@ -84,6 +84,16 @@ namespace SkyRoof
       return freq;
     }
 
+    private double EffectiveDownlinkBase(SatnogsDbTransmitter tx)
+    {
+      long baseOffset = ctx.Settings.Satellites.TransmitterCustomizations
+        .TryGetValue(tx.uuid, out var cust)
+          ? cust.DownlinkBaseOffset
+          : 0;
+
+      return tx.DownlinkLow + baseOffset;
+    }
+
 
 
 
@@ -214,9 +224,18 @@ namespace SkyRoof
     {
       if (Labels.Count == 0) return;
 
-      // recompute labels' X
+      // Recompute labels' X from the effective transmitter Base, not only the raw
+      // SatNOGS downlink_low. A saved Base correction shifts the whole transponder/channel.
       var now = DateTime.UtcNow;
-      foreach (var label in Labels) label.x = (float)CorrectedFreqToPixel(label.Pass, now, label.Frequency);
+      foreach (var label in Labels)
+      {
+        var referenceTx = label.Transponder ?? label.Transmitters.FirstOrDefault();
+        double nominalBase = referenceTx != null
+          ? EffectiveDownlinkBase(referenceTx)
+          : label.Frequency;
+
+        label.x = (float)CorrectedFreqToPixel(label.Pass, now, nominalBase);
+      }
       VisibleLabels = Labels.Where(IsLabelVisible).OrderByDescending(label => label.x).ToList();
 
       // draw spans
@@ -294,7 +313,11 @@ namespace SkyRoof
     const int SPAN_HEIGHT = 14;
     private void DrawSpan(TransmitterLabel label, Graphics g)
     {
-      label.endX = (float)CorrectedFreqToPixel(label.Pass, DateTime.UtcNow, label.Frequency + (long)label.Span!);
+      var transponder = label.Transponder!;
+      double effectiveLow = EffectiveDownlinkBase(transponder);
+      double effectiveHigh = effectiveLow + (double)label.Span!;
+
+      label.endX = (float)CorrectedFreqToPixel(label.Pass, DateTime.UtcNow, effectiveHigh);
       if (label.x > width || label.endX < 0) return;
 
       RectangleF r = new(label.x, height - SPAN_HEIGHT-1, label.endX - label.x, SPAN_HEIGHT);
