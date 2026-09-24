@@ -662,6 +662,14 @@ namespace SkyRoof
         ctx.EarthViewPanel.Close();
     }
 
+    private void FrequencyControlMNU_Click(object sender, EventArgs e)
+    {
+      if (ctx.FrequencyControlPanel == null)
+        ShowFloatingPanel(new FrequencyControlPanel(ctx));
+      else
+        ctx.FrequencyControlPanel.Close();
+    }
+
     private void WaterfallMNU_Click(object sender, EventArgs e)
     {
       if (ctx.WaterfallPanel == null)
@@ -1034,6 +1042,7 @@ namespace SkyRoof
         case "SkyRoof.TimelinePanel": return new TimelinePanel(ctx);
         case "SkyRoof.SkyViewPanel": return new SkyViewPanel(ctx);
         case "SkyRoof.EarthViewPanel": return new EarthViewPanel(ctx);
+        case "SkyRoof.FrequencyControlPanel": return new FrequencyControlPanel(ctx);
         case "SkyRoof.WaterfallPanel": return new WaterfallPanel(ctx);
         case "SkyRoof.QsoEntryPanel": return new QsoEntryPanel(ctx);
         case "SkyRoof.Ft4ConsolePanel": return new Ft4ConsolePanel(ctx);
