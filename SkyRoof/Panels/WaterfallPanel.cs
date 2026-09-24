@@ -393,12 +393,7 @@ namespace SkyRoof
       if (label != null)
       {
         var transponder = label.Transponder!;
-        long baseOffset = ctx.Settings.Satellites.TransmitterCustomizations
-          .TryGetValue(transponder.uuid, out var txCust)
-            ? txCust.DownlinkBaseOffset
-            : 0;
-
-        double effectiveBase = transponder.DownlinkLow + baseOffset;
+        double effectiveBase = ScaleControl.EffectiveDownlinkBase(transponder);
         double offset =
           ScaleControl.PixelToNominalFreq(label.Pass, DateTime.UtcNow, x) - effectiveBase;
 
