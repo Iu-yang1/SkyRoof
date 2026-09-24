@@ -270,11 +270,11 @@ namespace SkyRoof
 
       try
       {
-        BeginInvoke(() =>
+        BeginInvoke((Action)(() =>
         {
           if (!IsDisposed)
             StatusLabel.Text = message;
-        });
+        }));
       }
       catch (InvalidOperationException)
       {
