@@ -421,7 +421,7 @@
       Controls.Add(DownlinkFrequencyLabel);
       Controls.Add(DownlinkLabel);
       Name = "FrequencyWidget";
-      Size = new Size(677, 75);
+      Size = new Size(677, 130);
       ((System.ComponentModel.ISupportInitialize)RitSpinner).EndInit();
       ((System.ComponentModel.ISupportInitialize)UplinkManualSpinner).EndInit();
       contextMenuStrip1.ResumeLayout(false);
