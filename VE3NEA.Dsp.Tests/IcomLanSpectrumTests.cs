@@ -50,7 +50,8 @@ namespace VE3NEA.Dsp.Tests
 
       assembler.TryFeed(frame, out IcomScopeFrame? result).Should().BeTrue();
       result.Should().NotBeNull();
-      result!.Scope.Should().Be(0);
+      result!.SweepComplete.Should().BeTrue();
+      result.Scope.Should().Be(0);
       result.Mode.Should().Be(0);
       result.FrequencyAHz.Should().Be(437_800_000);
       result.FrequencyBHz.Should().Be(500_000);
@@ -90,7 +91,10 @@ namespace VE3NEA.Dsp.Tests
           BuildScopeChunk(receiver: 1, sequence, sequenceMaximum: 11, chunk),
           out result).Should().BeTrue();
 
-        result.Should().BeNull();
+        result.Should().NotBeNull();
+        result!.SweepComplete.Should().BeFalse();
+        result.DivisionCurrent.Should().Be((byte)sequence);
+        result.Samples.Take(offset).Should().Equal(samples.Take(offset));
       }
 
       byte[] finalChunk = samples.Skip(offset).ToArray();
@@ -101,7 +105,8 @@ namespace VE3NEA.Dsp.Tests
         out result).Should().BeTrue();
 
       result.Should().NotBeNull();
-      result!.Scope.Should().Be(1);
+      result!.SweepComplete.Should().BeTrue();
+      result.Scope.Should().Be(1);
       result.Mode.Should().Be(0);
       result.FrequencyAHz.Should().Be(145_987_500);
       result.FrequencyBHz.Should().Be(100_000);
@@ -136,7 +141,8 @@ namespace VE3NEA.Dsp.Tests
       }
 
       result.Should().NotBeNull();
-      result!.Samples.Should().Equal(samples);
+      result!.SweepComplete.Should().BeTrue();
+      result.Samples.Should().Equal(samples);
     }
 
     private static byte[] BuildScopeHeaderFrame(
