@@ -252,11 +252,11 @@ namespace SkyRoof
 
       try
       {
-        BeginInvoke(() =>
+        BeginInvoke((Action)(() =>
         {
           if (!IsDisposed)
             SpectrumView.PushFrame(frame);
-        });
+        }));
       }
       catch (InvalidOperationException)
       {
