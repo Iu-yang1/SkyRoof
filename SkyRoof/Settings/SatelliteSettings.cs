@@ -146,6 +146,12 @@ namespace SkyRoof
     public Slicer.Mode UplinkMode;
     public double TransponderOffset;
 
+    // Persistent transmitter-specific corrections of the database reference frequencies.
+    // They are stored as offsets rather than absolute values so a future SatNOGS frequency
+    // correction still flows through while preserving the operator's local calibration.
+    public long DownlinkBaseOffset;
+    public long UplinkBaseOffset;
+
     // CTCSS encode on the uplink. the tone value and the on/off state are stored separately so that
     // turning the encoder off does not lose the tone selected for this transmitter
     public double CtcssTone = CtcssTones.DEFAULT_TONE;
