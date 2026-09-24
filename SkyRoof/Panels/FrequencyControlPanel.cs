@@ -1,0 +1,480 @@
+using System.Drawing;
+using System.Windows.Forms;
+using Serilog;
+using WeifenLuo.WinFormsUI.Docking;
+
+namespace SkyRoof
+{
+  public class FrequencyControlPanel : DockContent
+  {
+    private Context? ctx;
+    private readonly FrequencyEntryForm FrequencyDialog = new();
+
+    private readonly Label SelectionLabel = new();
+    private readonly GroupBox DownlinkGroup = new();
+    private readonly GroupBox UplinkGroup = new();
+
+    private readonly Label DownlinkBaseValue = new();
+    private readonly Label UplinkBaseValue = new();
+    private readonly Label DownlinkDatabaseValue = new();
+    private readonly Label UplinkDatabaseValue = new();
+    private readonly Label DownlinkCorrectionValue = new();
+    private readonly Label UplinkCorrectionValue = new();
+    private readonly Button DownlinkEditBtn = new();
+    private readonly Button UplinkEditBtn = new();
+    private readonly Button DownlinkResetBtn = new();
+    private readonly Button UplinkResetBtn = new();
+
+    private readonly GroupBox TuningGroup = new();
+    private readonly Label NoDopplerDownlinkValue = new();
+    private readonly Label NoDopplerUplinkValue = new();
+    private readonly Label TuningModeLabel = new();
+    private readonly Button BackToBaseBtn = new();
+    private readonly FrequencyTuningBar TuningBar = new();
+    private readonly Label TuningHelpLabel = new();
+
+    public FrequencyControlPanel()
+    {
+      InitializeUi();
+    }
+
+    public FrequencyControlPanel(Context ctx) : this()
+    {
+      this.ctx = ctx;
+      Log.Information("Creating FrequencyControlPanel");
+
+      ctx.FrequencyControlPanel = this;
+      ctx.MainForm.FrequencyControlMNU.Checked = true;
+      RefreshFromRadioLink();
+    }
+
+    private void InitializeUi()
+    {
+      Text = "Frequency Control";
+      Name = "FrequencyControlPanel";
+      ClientSize = new Size(760, 430);
+      MinimumSize = new Size(580, 380);
+      FormClosing += FrequencyControlPanel_FormClosing;
+
+      var root = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        Padding = new Padding(10),
+        ColumnCount = 1,
+        RowCount = 3
+      };
+      root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+      root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+      root.RowStyles.Add(new RowStyle(SizeType.Percent, 48));
+      root.RowStyles.Add(new RowStyle(SizeType.Percent, 52));
+
+      SelectionLabel.Dock = DockStyle.Fill;
+      SelectionLabel.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
+      SelectionLabel.TextAlign = ContentAlignment.MiddleLeft;
+      SelectionLabel.AutoEllipsis = true;
+      SelectionLabel.Text = "Frequency Control";
+      root.Controls.Add(SelectionLabel, 0, 0);
+
+      var baseLayout = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        ColumnCount = 2,
+        RowCount = 1,
+        Padding = new Padding(0, 0, 0, 6)
+      };
+      baseLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+      baseLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+      baseLayout.Controls.Add(DownlinkGroup, 0, 0);
+      baseLayout.Controls.Add(UplinkGroup, 1, 0);
+      root.Controls.Add(baseLayout, 0, 1);
+
+      ConfigureBaseGroup(
+        DownlinkGroup, "Downlink Base",
+        DownlinkBaseValue, DownlinkDatabaseValue, DownlinkCorrectionValue,
+        DownlinkEditBtn, DownlinkResetBtn,
+        (_, _) => EditBaseFrequency(false),
+        (_, _) => ResetBaseFrequency(false));
+
+      ConfigureBaseGroup(
+        UplinkGroup, "Uplink Base",
+        UplinkBaseValue, UplinkDatabaseValue, UplinkCorrectionValue,
+        UplinkEditBtn, UplinkResetBtn,
+        (_, _) => EditBaseFrequency(true),
+        (_, _) => ResetBaseFrequency(true));
+
+      DownlinkBaseValue.Click += (_, _) => EditBaseFrequency(false);
+      UplinkBaseValue.Click += (_, _) => EditBaseFrequency(true);
+
+      ConfigureTuningGroup();
+      root.Controls.Add(TuningGroup, 0, 2);
+
+      Controls.Add(root);
+    }
+
+    private static void ConfigureBaseGroup(
+      GroupBox group,
+      string title,
+      Label baseValue,
+      Label databaseValue,
+      Label correctionValue,
+      Button editBtn,
+      Button resetBtn,
+      EventHandler editHandler,
+      EventHandler resetHandler)
+    {
+      group.Text = title;
+      group.Dock = DockStyle.Fill;
+      group.Margin = new Padding(4);
+
+      var layout = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        Padding = new Padding(8, 5, 8, 7),
+        ColumnCount = 2,
+        RowCount = 4
+      };
+      layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));
+      layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58));
+      // Keep the primary Base frequency display from being squeezed to a 1-pixel strip when
+      // the caption/button rows request their AutoSize height.
+      layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+      layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+      layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+      layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+      baseValue.BackColor = Color.Black;
+      baseValue.ForeColor = Color.Aqua;
+      baseValue.Cursor = Cursors.Hand;
+      baseValue.Font = new Font("Microsoft Sans Serif", 16F);
+      baseValue.Text = "000,000,000";
+      baseValue.TextAlign = ContentAlignment.MiddleCenter;
+      baseValue.Dock = DockStyle.Fill;
+      baseValue.Margin = new Padding(0, 0, 0, 7);
+      layout.SetColumnSpan(baseValue, 2);
+      layout.Controls.Add(baseValue, 0, 0);
+
+      var dbCaption = MakeCaptionLabel("Database reference");
+      layout.Controls.Add(dbCaption, 0, 1);
+      ConfigureValueLabel(databaseValue);
+      layout.Controls.Add(databaseValue, 1, 1);
+
+      var correctionCaption = MakeCaptionLabel("Saved correction");
+      layout.Controls.Add(correctionCaption, 0, 2);
+      ConfigureValueLabel(correctionValue);
+      layout.Controls.Add(correctionValue, 1, 2);
+
+      var buttons = new FlowLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        AutoSize = true,
+        FlowDirection = FlowDirection.LeftToRight,
+        WrapContents = false,
+        Margin = new Padding(0, 7, 0, 0)
+      };
+      editBtn.Text = "Edit Base...";
+      editBtn.AutoSize = true;
+      editBtn.Click += editHandler;
+      resetBtn.Text = "Reset to Database";
+      resetBtn.AutoSize = true;
+      resetBtn.Click += resetHandler;
+      buttons.Controls.Add(editBtn);
+      buttons.Controls.Add(resetBtn);
+      layout.SetColumnSpan(buttons, 2);
+      layout.Controls.Add(buttons, 0, 3);
+
+      group.Controls.Add(layout);
+    }
+
+    private static Label MakeCaptionLabel(string text)
+    {
+      return new Label
+      {
+        Text = text,
+        AutoSize = true,
+        Anchor = AnchorStyles.Left,
+        Margin = new Padding(0, 2, 6, 2)
+      };
+    }
+
+    private static void ConfigureValueLabel(Label label)
+    {
+      label.AutoSize = true;
+      label.Anchor = AnchorStyles.Right;
+      label.TextAlign = ContentAlignment.MiddleRight;
+      label.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+      label.Margin = new Padding(6, 2, 0, 2);
+    }
+
+    private void ConfigureTuningGroup()
+    {
+      TuningGroup.Text = "Tuning";
+      TuningGroup.Dock = DockStyle.Fill;
+      TuningGroup.Margin = new Padding(4);
+
+      // Keep the tuning header flat: no nested fixed-height frequency panels.
+      // This avoids DPI-dependent clipping on high-scaling Windows displays.
+      var layout = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        Padding = new Padding(8, 5, 8, 6),
+        ColumnCount = 2,
+        RowCount = 5
+      };
+      layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+      layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+
+      layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));          // captions
+      layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));     // no-Doppler values
+      layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));     // tuning status / reset
+      layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));     // ruler
+      layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));         // help
+
+      var downlinkCaption = new Label
+      {
+        Dock = DockStyle.Fill,
+        AutoSize = true,
+        Text = "Downlink · no Doppler",
+        TextAlign = ContentAlignment.MiddleLeft,
+        ForeColor = SystemColors.GrayText,
+        Font = new Font("Segoe UI", 9F),
+        Margin = new Padding(3, 0, 3, 2)
+      };
+
+      var uplinkCaption = new Label
+      {
+        Dock = DockStyle.Fill,
+        AutoSize = true,
+        Text = "Uplink · no Doppler",
+        TextAlign = ContentAlignment.MiddleLeft,
+        ForeColor = SystemColors.GrayText,
+        Font = new Font("Segoe UI", 9F),
+        Margin = new Padding(3, 0, 3, 2)
+      };
+
+      layout.Controls.Add(downlinkCaption, 0, 0);
+      layout.Controls.Add(uplinkCaption, 1, 0);
+
+      ConfigureCompactTuningValue(NoDopplerDownlinkValue);
+      ConfigureCompactTuningValue(NoDopplerUplinkValue);
+      layout.Controls.Add(NoDopplerDownlinkValue, 0, 1);
+      layout.Controls.Add(NoDopplerUplinkValue, 1, 1);
+
+      var statusLayout = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        ColumnCount = 2,
+        RowCount = 1,
+        Margin = new Padding(3, 1, 3, 1)
+      };
+      statusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+      statusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+      statusLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+      layout.SetColumnSpan(statusLayout, 2);
+
+      TuningModeLabel.Dock = DockStyle.Fill;
+      TuningModeLabel.AutoEllipsis = true;
+      TuningModeLabel.TextAlign = ContentAlignment.MiddleLeft;
+      TuningModeLabel.Margin = new Padding(0, 0, 6, 0);
+      statusLayout.Controls.Add(TuningModeLabel, 0, 0);
+
+      BackToBaseBtn.Text = "Reset to Base";
+      BackToBaseBtn.AutoSize = true;
+      BackToBaseBtn.Anchor = AnchorStyles.Right;
+      BackToBaseBtn.Margin = new Padding(6, 0, 0, 0);
+      BackToBaseBtn.Click += (_, _) => ReturnToBase();
+      statusLayout.Controls.Add(BackToBaseBtn, 1, 0);
+
+      layout.Controls.Add(statusLayout, 0, 2);
+
+      TuningBar.Dock = DockStyle.Fill;
+      TuningBar.MinimumSize = new Size(100, 58);
+      TuningBar.Margin = new Padding(3, 0, 3, 0);
+      TuningBar.TuneDeltaRequested += TuningBar_TuneDeltaRequested;
+      TuningBar.TuningCompleted += TuningBar_TuningCompleted;
+      layout.SetColumnSpan(TuningBar, 2);
+      layout.Controls.Add(TuningBar, 0, 3);
+
+      TuningHelpLabel.AutoSize = true;
+      TuningHelpLabel.Text =
+        "Drag horizontally or use the mouse wheel. Ctrl = RIT; Alt + wheel = 500 Hz step.";
+      TuningHelpLabel.ForeColor = SystemColors.GrayText;
+      TuningHelpLabel.Margin = new Padding(3, 5, 0, 0);
+      layout.SetColumnSpan(TuningHelpLabel, 2);
+      layout.Controls.Add(TuningHelpLabel, 0, 4);
+
+      TuningGroup.Controls.Add(layout);
+    }
+
+    private static void ConfigureCompactTuningValue(Label value)
+    {
+      value.Dock = DockStyle.Fill;
+      value.BackColor = Color.Black;
+      value.ForeColor = Color.Aqua;
+      value.Font = new Font("Segoe UI", 10F);
+      value.Text = "000,000,000 Hz";
+      value.TextAlign = ContentAlignment.MiddleCenter;
+      value.AutoEllipsis = false;
+      value.Margin = new Padding(3, 0, 3, 4);
+    }
+
+    internal void RefreshFromRadioLink()
+    {
+      if (ctx == null || IsDisposed) return;
+
+      var link = ctx.FrequencyControl.RadioLink;
+      bool satellite = !link.IsTerrestrial && link.Tx != null && link.TxCust != null;
+
+      if (satellite)
+      {
+        string satelliteName = link.Sat?.name ?? "Satellite";
+        string transmitterName = string.IsNullOrWhiteSpace(link.Tx?.description)
+          ? "Selected transmitter"
+          : link.Tx.description;
+        SelectionLabel.Text = $"{satelliteName} — {transmitterName}";
+      }
+      else
+        SelectionLabel.Text =
+          "Terrestrial tuning — select a satellite transmitter to edit saved Base frequencies";
+
+      DownlinkGroup.Enabled = satellite;
+      UplinkGroup.Enabled = satellite && link.HasUplink;
+      BackToBaseBtn.Enabled = satellite;
+
+      if (satellite)
+      {
+        DownlinkBaseValue.Text = $"{link.BaseDownlinkFrequency:n0}";
+        DownlinkDatabaseValue.Text = $"{link.DatabaseDownlinkBaseFrequency:n0} Hz";
+        DownlinkCorrectionValue.Text = $"{link.DownlinkBaseOffset:+0;-0;0} Hz";
+
+        if (link.HasUplink)
+        {
+          UplinkBaseValue.Text = $"{link.BaseUplinkFrequency:n0}";
+          UplinkDatabaseValue.Text = $"{link.DatabaseUplinkBaseFrequency:n0} Hz";
+          UplinkCorrectionValue.Text = $"{link.UplinkBaseOffset:+0;-0;0} Hz";
+        }
+        else
+        {
+          UplinkBaseValue.Text = "No Uplink";
+          UplinkDatabaseValue.Text = "—";
+          UplinkCorrectionValue.Text = "—";
+        }
+      }
+      else
+      {
+        DownlinkBaseValue.Text = "—";
+        DownlinkDatabaseValue.Text = "—";
+        DownlinkCorrectionValue.Text = "—";
+        UplinkBaseValue.Text = "—";
+        UplinkDatabaseValue.Text = "—";
+        UplinkCorrectionValue.Text = "—";
+      }
+
+      Color rxColor = GetFrequencyColor(
+        link.DownlinkFrequencyWithoutDoppler,
+        ctx.CatControl.Rx?.IsRunning == true);
+      Color txColor = GetFrequencyColor(
+        link.UplinkFrequencyWithoutDoppler,
+        ctx.CatControl.Tx?.IsRunning == true);
+
+      DownlinkBaseValue.ForeColor = satellite ? rxColor : Color.Gray;
+      UplinkBaseValue.ForeColor = satellite && link.HasUplink ? txColor : Color.Gray;
+
+      NoDopplerDownlinkValue.Text = $"{link.DownlinkFrequencyWithoutDoppler:n0} Hz";
+      NoDopplerDownlinkValue.ForeColor = rxColor;
+
+      if (link.HasUplink)
+      {
+        NoDopplerUplinkValue.Text = $"{link.UplinkFrequencyWithoutDoppler:n0} Hz";
+        NoDopplerUplinkValue.ForeColor = txColor;
+      }
+      else
+      {
+        NoDopplerUplinkValue.Text = "No Uplink";
+        NoDopplerUplinkValue.ForeColor = Color.Gray;
+      }
+
+      // The ruler represents operator tuning in the transponder/channel before Doppler is applied.
+      // The top toolbar remains the place to read the actual Doppler-corrected radio frequency.
+      TuningBar.ForeColor = rxColor;
+      TuningBar.SetFrequency(link.DownlinkFrequencyWithoutDoppler);
+
+      if (link.RitEnabled)
+        TuningModeLabel.Text = $"RIT: {link.RitOffset:+0;-0;0} Hz";
+      else if (link.IsTerrestrial)
+        TuningModeLabel.Text = "Terrestrial frequency";
+      else if (link.IsTransponder)
+      {
+        string direction = link.Tx?.invert == true ? "inverting" : "non-inverting";
+        TuningModeLabel.Text =
+          $"Transponder offset: {link.TransponderOffset:n0} Hz · {direction}";
+      }
+      else
+        TuningModeLabel.Text =
+          $"Manual correction: {link.DownlinkManualCorrection:+0;-0;0} Hz";
+    }
+
+    private static Color GetFrequencyColor(double frequency, bool bright)
+    {
+      if (SatnogsDbTransmitter.IsUhfFrequency(frequency))
+        return bright ? Color.Cyan : Color.Teal;
+      if (SatnogsDbTransmitter.IsVhfFrequency(frequency))
+        return bright ? Color.Yellow : Color.Olive;
+      return bright ? Color.White : Color.Gray;
+    }
+
+    private void EditBaseFrequency(bool uplink)
+    {
+      if (ctx == null) return;
+      var link = ctx.FrequencyControl.RadioLink;
+      if (link.IsTerrestrial || link.TxCust == null || (uplink && !link.HasUplink)) return;
+
+      double frequency = uplink ? link.BaseUplinkFrequency : link.BaseDownlinkFrequency;
+      FrequencyDialog.Location = Cursor.Position;
+      FrequencyDialog.SetInitialFrequency(
+        frequency,
+        uplink ? "Edit Uplink Base Frequency" : "Edit Downlink Base Frequency");
+
+      FrequencyDialog.ShowDialog(this);
+      if (FrequencyDialog.EnteredFrequency <= 0) return;
+
+      if (uplink)
+        ctx.FrequencyControl.SetUplinkBaseFrequency(FrequencyDialog.EnteredFrequency);
+      else
+        ctx.FrequencyControl.SetDownlinkBaseFrequency(FrequencyDialog.EnteredFrequency);
+    }
+
+    private void ResetBaseFrequency(bool uplink)
+    {
+      if (ctx == null) return;
+
+      if (uplink)
+        ctx.FrequencyControl.ResetUplinkBaseFrequency();
+      else
+        ctx.FrequencyControl.ResetDownlinkBaseFrequency();
+    }
+
+    private void ReturnToBase()
+    {
+      ctx?.FrequencyControl.ReturnToBaseTuningPosition();
+    }
+
+    private void TuningBar_TuneDeltaRequested(int delta)
+    {
+      ctx?.FrequencyControl.IncrementDownlinkFrequencyLive(delta);
+    }
+
+    private void TuningBar_TuningCompleted()
+    {
+      ctx?.FrequencyControl.CompleteDownlinkTuning();
+    }
+
+    private void FrequencyControlPanel_FormClosing(object? sender, FormClosingEventArgs e)
+    {
+      if (ctx == null) return;
+
+      Log.Information("Closing FrequencyControlPanel");
+      ctx.FrequencyControlPanel = null;
+      ctx.MainForm.FrequencyControlMNU.Checked = false;
+    }
+  }
+}

@@ -29,6 +29,7 @@ namespace SkyRoof
 
     // cached so the Terrestrial/normal toggle does not allocate (and leak) a new font each update
     private readonly Font DownlinkRegularFont, DownlinkBoldFont;
+    private long SuppressCatTuneFeedbackUntil;
 
     public FrequencyWidget()
     {
@@ -41,6 +42,16 @@ namespace SkyRoof
       DownlinkModeCombobox.SelectedIndex = 0;
       UplinkModeCombobox.SelectedIndex = 0;
       Changing = false;
+      // The ruler is intentionally not constrained by the old ±25 kHz manual/RIT UI range.
+      // Keep the numeric controls broad enough to display any practical tuning position.
+      const decimal WideTuningLimitKhz = 2000000m;
+      RitSpinner.Minimum = -WideTuningLimitKhz;
+      RitSpinner.Maximum = WideTuningLimitKhz;
+      DownlinkManualSpinner.Minimum = -WideTuningLimitKhz;
+      DownlinkManualSpinner.Maximum = WideTuningLimitKhz;
+      UplinkManualSpinner.Minimum = -WideTuningLimitKhz;
+      UplinkManualSpinner.Maximum = WideTuningLimitKhz;
+
       BuildCtcssMenu();
     }
 
@@ -61,13 +72,24 @@ namespace SkyRoof
     //----------------------------------------------------------------------------------------------
     //                                 set from outside
     //----------------------------------------------------------------------------------------------
-    public void SetTransmitter()
+    public void SetTransmitter(bool returnToBase = false)
     {
       SettingsToRadioLink(false);
+      if (returnToBase)
+      {
+        SuppressCatTuneFeedback();
+        RadioLink.ReturnToBaseTuningPosition();
+      }
       RadioLinkToUi();
       ctx.CatControl.ApplyTune();
       ctx.RotatorControl.SetSatellite(ctx.SatelliteSelector.SelectedSatellite);
       RadioLinkToRadio();
+
+      // Reassert the saved TX CTCSS once the new frequency/mode pair has been written.
+      // On IC-9700 Duplex/SAT, SkyCAT may swap Main/Sub while resolving a cross-band
+      // frequency conflict; the final CTCSS write must therefore happen after that tune.
+      ctx.CatControl.Tx?.RequestCtcssReassertAfterTune();
+
       UpdateTxButton();
     }
 
@@ -84,27 +106,80 @@ namespace SkyRoof
       ctx.TelemetryPanel?.SetTransmitter();
     }
 
+    internal void SetDownlinkBaseFrequency(double frequency)
+    {
+      if (RadioLink.IsTerrestrial || RadioLink.TxCust == null) return;
+      RadioLink.SetDownlinkBaseFrequency(frequency);
+      ctx.Settings.SaveToFile();
+      RadioLinkToRadio();
+      RadioLinkToUi();
+    }
+
+    internal void SetUplinkBaseFrequency(double frequency)
+    {
+      if (!RadioLink.HasUplink || RadioLink.TxCust == null) return;
+      RadioLink.SetUplinkBaseFrequency(frequency);
+      ctx.Settings.SaveToFile();
+      RadioLinkToRadio();
+      RadioLinkToUi();
+    }
+
     internal void SetTransponderOffset(SatnogsDbTransmitter transponder, double offset)
     {
-      // set the offset first
-      var transponderCust = ctx.Settings.Satellites.GetOrCreateTransmitterCustomization(transponder);
-      Debug.Assert(offset >= 0 && offset <= transponder.uplink_high - transponder.uplink_low);
+      // Selecting a new transmitter normally resets tuning to Base. A waterfall click carries an
+      // explicit target offset, so select first and apply that target after the selection event.
+      if (transponder != RadioLink.Tx)
+        ctx.SatelliteSelector.SetSelectedTransmitter(transponder);
+
+      var transponderCust =
+        ctx.Settings.Satellites.GetOrCreateTransmitterCustomization(transponder);
       transponderCust.TransponderOffset = offset;
 
-      // if same TX, just force its settings in case we were in terrestrial mode and changed them
-      if (transponder == RadioLink.Tx) SetTransmitter();
-
-      // if different TX, select it for all panels in the app
-      else ctx.SatelliteSelector.SetSelectedTransmitter(transponder);
+      if (transponder == RadioLink.Tx)
+        SetTransmitter(returnToBase: false);
     }
 
     internal void IncrementDownlinkFrequency(int delta)
     {
-      //Ctrl-mousewheel-spin enables RIT
+      IncrementDownlinkFrequencyCore(delta, false);
+    }
+
+    internal void IncrementDownlinkFrequencyLive(int delta)
+    {
+      IncrementDownlinkFrequencyCore(delta, true);
+    }
+
+    internal void CompleteDownlinkTuning()
+    {
+      RadioLinkToUi();
+    }
+
+    internal void ReturnToBaseTuningPosition()
+    {
+      if (RadioLink.IsTerrestrial) return;
+
+      // CAT polling reads before writes. Ignore stale dial feedback briefly so the radio's old
+      // frequency cannot be interpreted as a fresh manual tune immediately after the reset.
+      SuppressCatTuneFeedback();
+      RadioLink.ReturnToBaseTuningPosition();
+      ctx.Settings.SaveToFile();
+      RadioLinkToRadio();
+      RadioLinkToUi();
+    }
+
+    private void IncrementDownlinkFrequencyCore(int delta, bool lightweightUi)
+    {
+      // Ctrl-mousewheel/drag enables RIT.
       RadioLink.RitEnabled = ModifierKeys.HasFlag(Keys.Control);
       RadioLink.IncrementDownlinkFrequency(delta);
       RadioLinkToRadio();
-      RadioLinkToUi();
+
+      // During a continuous ruler drag, avoid expensive waterfall redraws and repeatedly
+      // reassigning every toolbar control. The full sync runs once when the gesture ends.
+      if (lightweightUi)
+        FrequenciesToUi();
+      else
+        RadioLinkToUi();
     }
 
     internal double GetDraggableFrequency()
@@ -130,6 +205,12 @@ namespace SkyRoof
 
     internal void RxTuned()
     {
+      if (IsCatTuneFeedbackSuppressed())
+      {
+        RadioLinkToRadio();
+        return;
+      }
+
       int delta = (int)(ctx.CatControl.Rx!.LastReadRxFrequency - RadioLink.CorrectedDownlinkFrequency);
       RadioLink.IncrementDownlinkFrequency(delta);
       RadioLinkToRadio();
@@ -138,6 +219,12 @@ namespace SkyRoof
 
     internal void TxTuned()
     {
+      if (IsCatTuneFeedbackSuppressed())
+      {
+        RadioLinkToRadio();
+        return;
+      }
+
       // when FT4 XIT is on, ignore dial knob
       if (RadioLink.XitOffset != 0) return;
 
@@ -145,6 +232,16 @@ namespace SkyRoof
       RadioLink.IncrementUplinkFrequency(delta);
       RadioLinkToRadio();
       BeginInvoke(RadioLinkToUi);
+    }
+
+    private void SuppressCatTuneFeedback()
+    {
+      SuppressCatTuneFeedbackUntil = Environment.TickCount64 + 1500;
+    }
+
+    private bool IsCatTuneFeedbackSuppressed()
+    {
+      return Environment.TickCount64 < SuppressCatTuneFeedbackUntil;
     }
 
     internal void ToggleRit()
@@ -160,8 +257,6 @@ namespace SkyRoof
       var currentFrequency = RadioLink.CorrectedDownlinkFrequency;
       if (RadioLink.RitEnabled) currentFrequency -= RadioLink.RitOffset;
       var delta = frequency - currentFrequency;
-
-      if (Math.Abs(delta) > 25000) return;
 
       RadioLink.RitEnabled = true;
       RadioLink.RitOffset = delta;
@@ -622,7 +717,8 @@ namespace SkyRoof
         UplinkFrequencyLabel.ForeColor = bright ? Color.White : Color.Gray;
       toolTip1.SetToolTip(UplinkFrequencyLabel, MakeUplinkTooltip());
 
-      UpdateTxButton();    
+      UpdateTxButton();
+      ctx.FrequencyControlPanel?.RefreshFromRadioLink();    
     }
 
     private string MakeUplinkTooltip()
@@ -702,6 +798,12 @@ namespace SkyRoof
       if (Changing) return;
       UiToRadioLink();
       RadioLink.ComputeFrequencies();
+
+      // Manual RX/TX corrections, modes and correction enable states are persistent
+      // satellite/operator settings. Save them immediately instead of relying on the
+      // application-close path, which may not run after an exception or forced exit.
+      ctx.Settings.SaveToFile();
+
       RadioLinkToRadio();
       FrequenciesToUi();
 
@@ -749,9 +851,28 @@ namespace SkyRoof
     private void DownlinkFrequencyLabel_Click(object sender, EventArgs e)
     {
       FrequencyDialog.Location = Cursor.Position;
+      FrequencyDialog.SetInitialFrequency(RadioLink.DownlinkFrequency, "Tune to Frequency");
       FrequencyDialog.ShowDialog();
       if (FrequencyDialog.EnteredFrequency > 0)
         SetTerrestrialFrequency(FrequencyDialog.EnteredFrequency);
+    }
+
+    internal void ResetDownlinkBaseFrequency()
+    {
+      if (RadioLink.IsTerrestrial || RadioLink.TxCust == null) return;
+      RadioLink.ResetDownlinkBaseFrequency();
+      ctx.Settings.SaveToFile();
+      RadioLinkToRadio();
+      RadioLinkToUi();
+    }
+
+    internal void ResetUplinkBaseFrequency()
+    {
+      if (!RadioLink.HasUplink || RadioLink.TxCust == null) return;
+      RadioLink.ResetUplinkBaseFrequency();
+      ctx.Settings.SaveToFile();
+      RadioLinkToRadio();
+      RadioLinkToUi();
     }
 
     private void TxBtn_Click(object sender, EventArgs e)

@@ -662,6 +662,30 @@ namespace SkyRoof
         ctx.EarthViewPanel.Close();
     }
 
+    private void FrequencyControlMNU_Click(object sender, EventArgs e)
+    {
+      if (ctx.FrequencyControlPanel == null)
+        ShowFloatingPanel(new FrequencyControlPanel(ctx));
+      else
+        ctx.FrequencyControlPanel.Close();
+    }
+
+    private void RsBa1SpectrumMNU_Click(object sender, EventArgs e)
+    {
+      if (ctx.RsBa1SpectrumPanel == null)
+        ShowFloatingPanel(new RsBa1SpectrumPanel(ctx));
+      else
+        ctx.RsBa1SpectrumPanel.Close();
+    }
+
+    private void IcomLanSpectrumMNU_Click(object sender, EventArgs e)
+    {
+      if (ctx.IcomLanSpectrumPanel == null)
+        ShowFloatingPanel(new IcomLanSpectrumPanel(ctx));
+      else
+        ctx.IcomLanSpectrumPanel.Close();
+    }
+
     private void WaterfallMNU_Click(object sender, EventArgs e)
     {
       if (ctx.WaterfallPanel == null)
@@ -1034,6 +1058,9 @@ namespace SkyRoof
         case "SkyRoof.TimelinePanel": return new TimelinePanel(ctx);
         case "SkyRoof.SkyViewPanel": return new SkyViewPanel(ctx);
         case "SkyRoof.EarthViewPanel": return new EarthViewPanel(ctx);
+        case "SkyRoof.FrequencyControlPanel": return new FrequencyControlPanel(ctx);
+        case "SkyRoof.RsBa1SpectrumPanel": return new RsBa1SpectrumPanel(ctx);
+        case "SkyRoof.IcomLanSpectrumPanel": return new IcomLanSpectrumPanel(ctx);
         case "SkyRoof.WaterfallPanel": return new WaterfallPanel(ctx);
         case "SkyRoof.QsoEntryPanel": return new QsoEntryPanel(ctx);
         case "SkyRoof.Ft4ConsolePanel": return new Ft4ConsolePanel(ctx);
@@ -1228,7 +1255,7 @@ namespace SkyRoof
 
     private void SatelliteSelector_SelectedTransmitterChanged(object sender, EventArgs e)
     {
-      FrequencyWidget.SetTransmitter();
+      FrequencyWidget.SetTransmitter(returnToBase: true);
       ctx.TransmittersPanel?.ShowSelectedTransmitter();
       ctx.WaterfallPanel?.BringInView(ctx.FrequencyControl.RadioLink.CorrectedDownlinkFrequency);
       ctx.SdrPasses.UpdateFrequencyRange();

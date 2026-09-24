@@ -33,6 +33,9 @@ namespace SkyRoof
     public TimelinePanel? TimelinePanel;
     public SkyViewPanel? SkyViewPanel;
     public EarthViewPanel? EarthViewPanel;
+    public FrequencyControlPanel? FrequencyControlPanel;
+    public RsBa1SpectrumPanel? RsBa1SpectrumPanel;
+    public IcomLanSpectrumPanel? IcomLanSpectrumPanel;
     public TransmittersPanel? TransmittersPanel;
     public WaterfallPanel? WaterfallPanel;
     public QsoEntryPanel? QsoEntryPanel;
@@ -65,6 +68,9 @@ namespace SkyRoof
       TimelinePanel?.Close();
       SkyViewPanel?.Close();
       EarthViewPanel?.Close();
+      FrequencyControlPanel?.Close();
+      RsBa1SpectrumPanel?.Close();
+      IcomLanSpectrumPanel?.Close();
       TransmittersPanel?.Close();
       WaterfallPanel?.Close();
       QsoEntryPanel?.Close();

@@ -32,7 +32,16 @@ namespace SkyRoof
     private double CtcssTone = CtcssTones.DEFAULT_TONE;
     private bool? CtcssEnabled;
     private bool CtcssPending;
+    // One-shot guard for transmitter changes. IC-9700/SkyCAT may swap Main/Sub while
+    // applying a new cross-band frequency pair; reassert CTCSS only after those tune
+    // writes have settled so the encoder ends up on the final TX/Sub side.
+    private bool CtcssReassertAfterTune;
     private double? RequestedArmingTone;
+
+    // One-shot request used by the native Icom LAN Spectrum panel. The actual CI-V
+    // command is sent by SkyCAT over the already-open CAT/virtual-serial path, so this
+    // does not create a second Icom LAN session.
+    private volatile bool IcomScopeOutputPending;
 
     public event EventHandler? RxTuned;
     public event EventHandler? TxTuned;
@@ -125,11 +134,30 @@ namespace SkyRoof
       CtcssPending = true;
     }
 
+    // Request a one-shot CTCSS write after all currently pending RX/TX frequency and
+    // mode changes are complete. This is intentionally separate from CtcssPending:
+    // the desired tone may be unchanged while an IC-9700 Main/Sub swap moves the
+    // previously configured encoder state to the wrong side.
+    public void RequestCtcssReassertAfterTune()
+    {
+      LogInfo("CTCSS reassert requested after tune");
+      CtcssReassertAfterTune = true;
+    }
+
     // one-shot keyed carrier with the given tone, used to arm the SO-50 timer
     public void SendArmingTone(double toneHz)
     {
       LogInfo($"SendArmingTone {toneHz}");
       RequestedArmingTone = toneHz;
+    }
+
+    internal bool SupportsIcomScopeOutput =>
+      ReferenceEquals(commands, RigCtldCommands.SkyCat);
+
+    public void RequestIcomScopeOutput()
+    {
+      LogInfo("IC-9700 scope output reassert requested");
+      IcomScopeOutputPending = true;
     }
 
 
@@ -153,6 +181,10 @@ namespace SkyRoof
 
       if (NeedToWriteRxMode()) TryWriteRxMode();
       if (NeedToWriteTxMode()) TryWriteTxMode();
+
+      TryReassertCtcssAfterTune();
+
+      if (IcomScopeOutputPending) TryEnableIcomScopeOutput();
 
       if (RequestedArmingTone.HasValue) TrySendArmingTone();
     }
@@ -478,6 +510,21 @@ namespace SkyRoof
       CtcssPending = false;
     }
 
+    private void TryReassertCtcssAfterTune()
+    {
+      if (!CtcssReassertAfterTune || !CtcssEnabled.HasValue) return;
+
+      // Do not consume the one-shot request until all frequency/mode changes that could
+      // cause a backend VFO/Main-Sub swap have actually been applied.
+      if (NeedToWriteRxFrequency() || NeedToWriteTxFrequency() ||
+          NeedToWriteRxMode() || NeedToWriteTxMode())
+        return;
+
+      LogInfo("Reasserting CTCSS after tune");
+      TryWriteCtcss();
+      CtcssReassertAfterTune = false;
+    }
+
     private void TrySendArmingTone()
     {
       double toneHz = RequestedArmingTone!.Value;
@@ -508,6 +555,34 @@ namespace SkyRoof
     }
 
 
+
+
+    private void TryEnableIcomScopeOutput()
+    {
+      IcomScopeOutputPending = false;
+
+      // These are SkyCAT extensions backed by IC-9700 CI-V 27 10 / 27 11.
+      // Generic rigctld does not expose an equivalent command, so simply leave passive
+      // sniffing in place when SkyCAT is not the active backend.
+      if (!ReferenceEquals(commands, RigCtldCommands.SkyCat))
+      {
+        LogInfo("IC-9700 scope output request skipped: CAT backend is not SkyCAT");
+        return;
+      }
+
+      bool scopeOk = SendWriteCommand("U SCOPE 1");
+      bool dataOk = SendWriteCommand("U SCOPE_DATA 1");
+      bool fastOk = SendWriteCommand("U SCOPE_FAST 1");
+
+      if (scopeOk && dataOk && fastOk)
+        LogInfo(
+          "IC-9700 scope and waveform output enabled through SkyCAT; " +
+          "MAIN/SUB sweep speed set to FAST");
+      else
+        Log.Warning(
+          "SkyCAT did not accept all IC-9700 scope commands. " +
+          "Update SkyCAT to a build that supports U SCOPE / U SCOPE_DATA / U SCOPE_FAST.");
+    }
 
 
     //----------------------------------------------------------------------------------------------

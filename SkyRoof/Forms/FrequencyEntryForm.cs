@@ -24,6 +24,14 @@ namespace SkyRoof
       InitializeComponent();
     }
 
+    public void SetInitialFrequency(double frequency, string title)
+    {
+      Text = title;
+      FrequencyComboBox.Text = $"{frequency:N0}";
+      FrequencyComboBox.SelectionStart = 0;
+      FrequencyComboBox.SelectionLength = FrequencyComboBox.Text.Length;
+    }
+
     private void ComboBox_KeyPress(object sender, KeyPressEventArgs e)
     {
       //allow only digits, control keys and a  single decimal point

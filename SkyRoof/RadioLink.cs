@@ -31,6 +31,24 @@ namespace SkyRoof
       get => TxCust!.TransponderOffset;
       set => TxCust!.TransponderOffset = value;
     }
+    public long DownlinkBaseOffset
+    {
+      get => TxCust!.DownlinkBaseOffset;
+      set => TxCust!.DownlinkBaseOffset = value;
+    }
+    public long UplinkBaseOffset
+    {
+      get => TxCust!.UplinkBaseOffset;
+      set => TxCust!.UplinkBaseOffset = value;
+    }
+    public double DatabaseDownlinkBaseFrequency => Tx?.downlink_low ?? 0;
+    public double DatabaseUplinkBaseFrequency =>
+      Tx?.uplink_low == null ? 0 :
+      Tx.invert && Tx.uplink_high.HasValue ? Tx.uplink_high.Value : Tx.uplink_low.Value;
+    public double BaseDownlinkFrequency => DatabaseDownlinkBaseFrequency + DownlinkBaseOffset;
+    public double BaseUplinkFrequency =>
+      DatabaseUplinkBaseFrequency == 0 ? 0 : DatabaseUplinkBaseFrequency + UplinkBaseOffset;
+
     public double CtcssTone
     {
       get => TxCust!.CtcssTone;
@@ -76,6 +94,21 @@ namespace SkyRoof
     // computed
     public double DownlinkFrequency, CorrectedDownlinkFrequency;
     public double UplinkFrequency, CorrectedUplinkFrequency;
+
+    // What the radio frequency would be if Doppler correction alone were disabled.
+    // Base/transponder position and operator corrections remain included.
+    public double DownlinkFrequencyWithoutDoppler =>
+      DownlinkFrequency +
+      (RitEnabled ? RitOffset : 0) +
+      (!IsTerrestrial && SatCust != null && DownlinkManualCorrectionEnabled
+        ? DownlinkManualCorrection : 0);
+
+    public double UplinkFrequencyWithoutDoppler =>
+      IsTerrestrial || UplinkFrequency <= 0 ? 0 :
+      UplinkFrequency +
+      (SatCust != null && UplinkManualCorrectionEnabled ? UplinkManualCorrection : 0) +
+      XitOffset;
+
     public double DopplerFactor = 0;
     public bool IsAboveHorizon;
     // true when the propagator returned a valid observation this tick (independent of elevation);
@@ -135,8 +168,9 @@ namespace SkyRoof
 
       else
       {
-        // downlink nominal
-        DownlinkFrequency = Tx!.DownlinkLow;
+        // downlink nominal. Base correction shifts the whole transmitter/transponder passband.
+        double downlinkLow = Tx!.DownlinkLow + DownlinkBaseOffset;
+        DownlinkFrequency = downlinkLow;
         if (IsTransponder) DownlinkFrequency += TransponderOffset;
 
         // downlink corrected
@@ -145,11 +179,15 @@ namespace SkyRoof
         if (DownlinkDopplerCorrectionEnabled) CorrectedDownlinkFrequency *= 1 - DopplerFactor;
         if (DownlinkManualCorrectionEnabled) CorrectedDownlinkFrequency += DownlinkManualCorrection;
 
-        // uplink nominal
+        // uplink nominal. Apply the same base offset to both passband edges so its width is unchanged.
         if (IsTransponder)
-          if (Tx.invert) UplinkFrequency = (double)Tx.uplink_high! - TransponderOffset;
-          else UplinkFrequency = (double)Tx.uplink_low! + TransponderOffset;
-        else if (Tx.uplink_low.HasValue) UplinkFrequency = (double)Tx.uplink_low;
+        {
+          double uplinkLow = (double)Tx.uplink_low! + UplinkBaseOffset;
+          double uplinkHigh = (double)Tx.uplink_high! + UplinkBaseOffset;
+          UplinkFrequency = Tx.invert ? uplinkHigh - TransponderOffset : uplinkLow + TransponderOffset;
+        }
+        else if (Tx.uplink_low.HasValue)
+          UplinkFrequency = (double)Tx.uplink_low + UplinkBaseOffset;
         else UplinkFrequency = 0;
 
         // uplink corrected
@@ -161,6 +199,34 @@ namespace SkyRoof
           CorrectedUplinkFrequency += XitOffset;
         }
       }
+    }
+
+    public void SetDownlinkBaseFrequency(double frequency)
+    {
+      if (IsTerrestrial || Tx == null || TxCust == null) return;
+      DownlinkBaseOffset = checked((long)Math.Round(frequency - DatabaseDownlinkBaseFrequency));
+      ComputeFrequencies();
+    }
+
+    public void SetUplinkBaseFrequency(double frequency)
+    {
+      if (IsTerrestrial || Tx == null || TxCust == null || DatabaseUplinkBaseFrequency == 0) return;
+      UplinkBaseOffset = checked((long)Math.Round(frequency - DatabaseUplinkBaseFrequency));
+      ComputeFrequencies();
+    }
+
+    public void ResetDownlinkBaseFrequency()
+    {
+      if (TxCust == null) return;
+      DownlinkBaseOffset = 0;
+      ComputeFrequencies();
+    }
+
+    public void ResetUplinkBaseFrequency()
+    {
+      if (TxCust == null) return;
+      UplinkBaseOffset = 0;
+      ComputeFrequencies();
     }
 
     // dragging changes either the absolute frequency (terrestrial),
@@ -178,21 +244,15 @@ namespace SkyRoof
       if (IsTerrestrial)
         DownlinkFrequency = freq;
 
-      else if (!IsAboveHorizon)
-      {
-        Console.Beep();
-        return;
-      }
-
       else if (IsTransponder)
       {
-        freq = Math.Max(0, Math.Min(freq, (double)(Tx!.uplink_high! - Tx!.uplink_low!)));
+        // Do not clamp to the SatNOGS passband. Published transponder/IF edges can be
+        // approximate, and operators may need to tune beyond them.
         TransponderOffset = freq;
       }
 
       else
       {
-        freq = Math.Max(-25000, Math.Min(25000, freq));
         DownlinkManualCorrection = freq;
       }
 
@@ -204,33 +264,48 @@ namespace SkyRoof
       // RIT
       if (RitEnabled)
       {
-        long newOffset = (long)RitOffset + delta;
-        RitOffset = Math.Max(-25000, Math.Min(25000, newOffset));
+        RitOffset += delta;
       }
 
       // terrestrial
       else if (IsTerrestrial) 
         DownlinkFrequency += delta;
 
-      //else if (!IsAboveHorizon)
-      //{
-      //  Console.Beep();
-      //  return;
-      //}
-
       // transponder
       else if (IsTransponder)
       {
-        long newOffset = (long)TransponderOffset + delta;
-        long maxOffset = (long)Tx!.uplink_high! - (long)Tx!.uplink_low!;
-        TransponderOffset = Math.Max(0, Math.Min(maxOffset, newOffset));
+        // The tuning position is intentionally unbounded by the database passband edges.
+        TransponderOffset += delta;
       }
 
       // transmitter
       else
       {
-        double newOffset = DownlinkManualCorrection + delta;
-        DownlinkManualCorrection = Math.Max(-25000, Math.Min(25000, newOffset));
+        DownlinkManualCorrection += delta;
+      }
+
+      ComputeFrequencies();
+    }
+
+    /// <summary>
+    /// Reset every operator tuning offset so the no-Doppler downlink/uplink return exactly
+    /// to their saved Base frequencies.
+    /// </summary>
+    public void ReturnToBaseTuningPosition()
+    {
+      if (IsTerrestrial) return;
+
+      RitEnabled = false;
+      RitOffset = 0;
+      XitOffset = 0;
+
+      if (TxCust != null)
+        TransponderOffset = 0;
+
+      if (SatCust != null)
+      {
+        DownlinkManualCorrection = 0;
+        UplinkManualCorrection = 0;
       }
 
       ComputeFrequencies();
@@ -242,9 +317,7 @@ namespace SkyRoof
         UplinkFrequency += delta;
       else
       {
-        double newOffset = UplinkManualCorrection + delta;
-        if (newOffset >= -25000 && newOffset <= 25000)
-          UplinkManualCorrection = newOffset;
+        UplinkManualCorrection += delta;
       }
 
       ComputeFrequencies();

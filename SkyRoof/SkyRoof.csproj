@@ -56,6 +56,25 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- WinDivert is downloaded from the official v2.2.2 release by the CI/installer
+         workflow. Local source builds remain possible without it; the Icom LAN Spectrum
+         panel reports a clear runtime error until these two x64 files are present. -->
+    <None Include="..\Vendor\WinDivert\x64\WinDivert.dll"
+          Link="WinDivert.dll"
+          Condition="Exists('..\Vendor\WinDivert\x64\WinDivert.dll')">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Include="..\Vendor\WinDivert\x64\WinDivert64.sys"
+          Link="WinDivert64.sys"
+          Condition="Exists('..\Vendor\WinDivert\x64\WinDivert64.sys')">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="WinDivert-NOTICE.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- VE3NEA.Dsp's native P/Invoke DLLs. VE3NEA.Dsp now lives in the VE3NEA.SkySignals sibling repo and is
          consumed here as a vendored assembly (see RefreshVendoredDsp below), so a plain <Reference> no longer
          flows these native libraries automatically; they are committed under Vendor\VE3NEA.Dsp and copied to

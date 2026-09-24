@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <DockPanel FormatVersion="1.0" DockLeftPortion="0.2171866594943518" DockRightPortion="0.2241796664873588" DockTopPortion="0.25" DockBottomPortion="0.25" ActiveDocumentPane="7" ActivePane="11">
-  <Contents Count="8">
+  <Contents Count="9">
     <Content ID="0" PersistString="SkyRoof.GroupViewPanel" AutoHidePortion="0.25" IsHidden="False" IsFloat="False" />
     <Content ID="1" PersistString="SkyRoof.WaterfallPanel" AutoHidePortion="0.25" IsHidden="False" IsFloat="False" />
     <Content ID="2" PersistString="SkyRoof.SkyViewPanel" AutoHidePortion="0.25" IsHidden="False" IsFloat="False" />
@@ -9,6 +9,7 @@
     <Content ID="5" PersistString="SkyRoof.SatelliteDetailsPanel" AutoHidePortion="0.2247175901022055" IsHidden="False" IsFloat="False" />
     <Content ID="6" PersistString="SkyRoof.TransmittersPanel" AutoHidePortion="0.2247175901022055" IsHidden="False" IsFloat="False" />
     <Content ID="7" PersistString="SkyRoof.PassesPanel" AutoHidePortion="0.2247175901022055" IsHidden="False" IsFloat="False" />
+    <Content ID="8" PersistString="SkyRoof.FrequencyControlPanel" AutoHidePortion="0.25" IsHidden="False" IsFloat="False" />
   </Contents>
   <Panes Count="12">
     <Pane ID="0" DockState="DockLeft" ActiveContent="0">
@@ -47,8 +48,9 @@
       </Contents>
     </Pane>
     <Pane ID="7" DockState="Document" ActiveContent="4">
-      <Contents Count="1">
+      <Contents Count="2">
         <Content ID="0" RefID="4" />
+        <Content ID="1" RefID="8" />
       </Contents>
     </Pane>
     <Pane ID="8" DockState="Float" ActiveContent="-1">
