@@ -118,11 +118,32 @@ namespace SkyRoof
 
     internal void IncrementDownlinkFrequency(int delta)
     {
-      //Ctrl-mousewheel-spin enables RIT
+      IncrementDownlinkFrequencyCore(delta, false);
+    }
+
+    internal void IncrementDownlinkFrequencyLive(int delta)
+    {
+      IncrementDownlinkFrequencyCore(delta, true);
+    }
+
+    internal void CompleteDownlinkTuning()
+    {
+      RadioLinkToUi();
+    }
+
+    private void IncrementDownlinkFrequencyCore(int delta, bool lightweightUi)
+    {
+      // Ctrl-mousewheel/drag enables RIT.
       RadioLink.RitEnabled = ModifierKeys.HasFlag(Keys.Control);
       RadioLink.IncrementDownlinkFrequency(delta);
       RadioLinkToRadio();
-      RadioLinkToUi();
+
+      // During a continuous ruler drag, avoid expensive waterfall redraws and repeatedly
+      // reassigning every toolbar control. The full sync runs once when the gesture ends.
+      if (lightweightUi)
+        FrequenciesToUi();
+      else
+        RadioLinkToUi();
     }
 
     internal double GetDraggableFrequency()
