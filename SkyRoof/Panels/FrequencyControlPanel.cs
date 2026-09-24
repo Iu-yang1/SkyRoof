@@ -222,7 +222,7 @@ namespace SkyRoof
       // The first row contains a caption plus a large frequency label. Keep it fixed-height:
       // nested percentage sizing here was being rounded too aggressively at some DPI/font scales,
       // clipping the bottom half of the frequency text.
-      layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
+      layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
       layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
       layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
       layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 27));
@@ -294,7 +294,7 @@ namespace SkyRoof
       };
       panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
       panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
-      panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+      panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
 
       var label = new Label
       {
@@ -311,7 +311,8 @@ namespace SkyRoof
       value.ForeColor = Color.Aqua;
       value.Font = new Font("Microsoft Sans Serif", 14F);
       value.Text = "000,000,000 Hz";
-      value.Margin = new Padding(0, 2, 0, 2);
+      // Match the black display height/spacing used by the Base frequency readout above.
+      value.Margin = new Padding(0, 0, 0, 7);
       panel.Controls.Add(value, 0, 1);
 
       return panel;
