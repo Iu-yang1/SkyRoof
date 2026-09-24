@@ -128,8 +128,10 @@ namespace SkyRoof
       base.OnMouseUp(e);
       if (e.Button != MouseButtons.Left) return;
 
-      Capture = false;
+      // Clear the drag flag before releasing capture so the normal MouseUp path, rather than
+      // OnMouseCaptureChanged, owns the final flush and full UI synchronization.
       Dragging = false;
+      Capture = false;
       DragCommitTimer.Stop();
       FlushPendingDragDelta();
 
