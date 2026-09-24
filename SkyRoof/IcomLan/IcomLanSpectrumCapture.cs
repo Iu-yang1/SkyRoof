@@ -367,7 +367,8 @@ namespace SkyRoof
       // is not 50002. In auto-discovery mode capture inbound UDP and identify the
       // CI-V stream from the 0xC1 transport wrapper instead of hard-coding a port.
       string filter = AutoDiscoverCivPort
-        ? "inbound and ip and udp"
+        ? "inbound and ip and udp and udp.PayloadLength >= 24 and " +
+          "udp.Payload[16] == 0xC1 and udp.Payload[21] == 0xFE and udp.Payload[22] == 0xFE"
         : $"inbound and ip and udp.SrcPort == {SerialPort}";
 
       if (!string.IsNullOrWhiteSpace(ConfiguredRadioAddress))
