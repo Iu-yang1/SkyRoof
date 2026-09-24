@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Frequently Asked Questions | SkyRoof </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Frequently Asked Questions | SkyRoof ">
+      
+      
+      <link rel="icon" href="../images/SkyRoof.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/Iu-yang1/SkyRoof/blob/master/docs/users_guide/faq.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-1MMW827H44"></script>
+      <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments); }
+        gtag('js', new Date());
+        gtag('config', 'G-1MMW827H44');
+      </script>
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../images/s_over_the_globe.svg" alt="  kyRoof">
+              kyRoof
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="frequently-asked-questions">Frequently Asked Questions</h1>
+
+<p><strong>Q: I downloaded SkyRoof, and my virus scanner shows an infection. Is it real?</strong></p>
+<p><strong>A:</strong> Most likely, it is a false detection. A false detection is a <strong>bug in the virus scanner</strong>, not malicious
+code in SkyRoof, and the scanner is what needs to be corrected.</p>
+<p>Modern scanners do not rely on signature detection alone. Alongside it they run machine-learning classifiers,
+and these are the usual source of false alarms. A signature detection means the scanner actually found known
+malicious code inside the file. A machine-learning verdict means nothing of the sort: it is a guess based on
+how the file looks from the outside and on how many people have downloaded it before you. A newly released
+installer that the scanner has never seen is unfamiliar by definition, and it can be flagged for that reason
+alone. In Microsoft Defender such verdicts are easy to recognize, because the detection name ends in <code>!ml</code>,
+as in <code>Trojan:Script/Wacatac.B!ml</code>.</p>
+<p>The right way to check any download, from any author, is to scan it with several independent engines at once.
+There are several online virus scanning services that you can use to check the link.
+<a href="https://www.virustotal.com/gui/home/url">VirusTotal</a> and <a href="https://www.hybrid-analysis.com/">Hybrid Analysis</a>
+are just two examples.</p>
+<p>Copy the download link and paste it in the virus scanner page. The scanner
+will download the file, test it with multiple antivirus programs, and show you the results.</p>
+<p>In the screenshot below the download link of SkyRoof 1.5 beta was tested with VirusTotal, and all virus scanners, except one, agreed that the file was clean. When you see something like this, you know that it was a false alarm.</p>
+<p>If the file is clean, you can add it to the exception list of your virus scanner and safely install it. For Windows Defender follow
+<a href="https://support.microsoft.com/en-us/windows/add-an-exclusion-to-windows-security-811816c0-4dfd-af4a-47e4-c301afe13b26#ID0EBF=Windows_11">these instructions</a>, for other anti-virus products
+follow the instructions in their documentation.</p>
+<p>The only real fix is in the scanner itself, so please report the false detection to its vendor. For Microsoft
+Defender, submit the file for analysis using this link:</p>
+<p><a href="https://www.microsoft.com/en-us/wdsi/filesubmission">https://www.microsoft.com/en-us/wdsi/filesubmission</a></p>
+<p>On our side we do what we can to make a false detection less likely, but those measures only reduce the odds
+of a wrong guess. They are a work-around, not a fix.</p>
+<p><br><br></p>
+<p><img src="../images/virus_total.png" alt="VirusTotal"></p>
+<hr>
+<p><strong>Q: The right part of the SkyRoof toolbar does not fit in the screen, even though the screen resolution is 1980x1280.</strong></p>
+<p><strong>A:</strong> This happens because your <strong>text size</strong> setting in Windows is too high. For example, if it is set to 200%, the effective
+screen width is only <code>1900 / 2 = 950 pixels</code>. To fix this, right-click on the Desktop, click on <strong>Display Settings</strong> and set the text size
+to a lower value.</p>
+<hr>
+<p><strong>Q: How can I run two instances of SkyRoof?</strong></p>
+<p><strong>A:</strong> By default, only one instance of SkyRoof can run at any time, but there is a work around. Make a copy of the SkyRoof.exe file in the same folder, but with a different name, e.g., SkyRoof_2.exe. Each exe will have its own settings, its own data folder, and will run independently of the other instance.</p>
+<hr>
+<p><strong>Q: I found an error in the satellite database: one of the satellite transmitters is marked as active, while it has been inactive for years. How can I correct the error?</strong></p>
+<p><strong>A:</strong> SkyRoof uses
+<a href="satellite_data.html">satellite data</a>
+from the
+<a href="https://db.satnogs.org/">SatNOGS database</a>.
+This database is crowd-sourced, so anyone can suggest changes.
+If you find an error in a satellite record (shown in the
+<a href="satellite_details_panel.html">Satellite Details</a>
+and
+<a href="satellite_transmitters_panel.html">Satellite Transmitters</a>
+panels), click on the &quot;SatNOGS&quot; link in the Satellite Details panel  to open the SatNOGS web site, then click on Transmitters, and select Edit from the drop-down menu. You may need to create an account with them (free) in order to submit changes.</p>
+<hr>
+<p><strong>Q: How can I add a satellite that is currently not listed in SkyRoof?</strong></p>
+<p><strong>A:</strong> The only way to add a satellite to SkyRoof is to add it to the SatNOGS database. Here is how you can do this:</p>
+<ul>
+<li>navigate to the <a href="https://db.satnogs.org/">SatNOGS DB web site</a>;</li>
+<li>click on <strong>Sign Up / Log In</strong> in the top right corner of the page;</li>
+<li>create a free account, or log in to an existing one;</li>
+<li>click on <strong>All Satellites</strong>;</li>
+<li>in the <strong>Actions</strong> drop-down list select *<em>Suggest New Satellite</em>.</li>
+</ul>
+<p>See this <a href="https://wiki.satnogs.org/SatNOGS_DB">Wiki page</a> for details.</p>
+<hr>
+<p><strong>Q: My video card does not have an OpenGL 3.3 driver. Is there a way to use a software-only implementation of OpenGL?</strong></p>
+<p><strong>A:</strong> Some users have had success with the OpenGL 3.3 functionality implemented in the software, though this approach is very CPU-intensive. You can try
+<a href="https://github.com/lightningterror/Mesa3D-Windows">this</a> or
+<a href="https://github.com/pal1000/mesa-dist-win">this</a> solution. Download the 64-bit version of the library and extract all DLL's from the archive to the SkyRoof folder.</p>
+<hr>
+<p><strong>Q: How do I prevent CTCSS from turning off when using SkyRoof with FM satellites and an Icom radio?</strong></p>
+<p><strong>A:</strong> If you're experiencing an issue where the CTCSS tone turns off when transmitting or changing frequencies with SkyRoof and an Icom radio, the solution is to disable the &quot;Auto Repeater&quot; setting in the radio. This setting causes the radio to automatically disable repeater-related features like CTCSS when the frequency is changed, assuming you're no longer on a repeater. Disabling &quot;Auto Repeater&quot; prevents this behavior and keeps CTCSS enabled during frequency changes. This workaround was highlighted in a helpful <a href="https://www.youtube.com/watch?v=6xO3LNsTidQ">YouTube video</a>.</p>
+<hr>
+<p><strong>Q: What are all those offset settings for?</strong></p>
+<p><strong>A:</strong></p>
+<ul>
+<li><p><strong>Downlink Manual Correction:</strong> the frequencies of most satellite transmitters slightly differ from their published values. The purpose of this setting is to compensate for the difference, you set it once for each satellite and never change it again;</p>
+</li>
+<li><p><strong>RIT:</strong> just as in any HF radio, it is used to quickly switch the receiver between two frequencies close to each other. A typical use case is when someone answers your CQ slightly off the frequency and you want to tune to it without changing your main operating frequency;</p>
+</li>
+<li><p><strong>Uplink Manual Correction:</strong> this setting allows you to precisely align your own signal received back from the satellite with your receiver frequency. It needs to be set only once per satellite, and the offset is usually very small;</p>
+</li>
+<li><p><strong>Transponder Offset:</strong> the position of your operating frequency within the transponder passband. This offset is included in the Corrected Downlink Frequency shown on the toolbar, the actual value of the offset is shown only on the mouse tooltip of the frequency display. There are many ways to tune within the transponder passband, such as click on the desired frequency, drag the green passband rectangle, spin the mouse wheel over the rectangle, etc. These methods work only when the transponder is selected in the Transmitter drop-down box.</p>
+</li>
+<li><p><strong>Doppler correction:</strong> this correction is computed and applied automatically, it keeps your RX and TX signals in sync when you tune through the transponder segment.</p>
+</li>
+</ul>
+<p><strong>Q: How to troubleshoot the rotator control?</strong></p>
+<p><strong>A:</strong></p>
+<ol>
+<li><p>Set up and enable rotator control as described in
+<a href="setting_up_rotator_control.html">Setting Up Rotator Control</a>.</p>
+<ul>
+<li>if the Rotator light on the status bar is red, the problem is with the SkyRoof to rotctld.exe connection;</li>
+<li>if the light is green, then the SkyRoof to rotcltd.exe connection is fine, the problem is with the rotctld.exe to rotor connection.</li>
+</ul>
+</li>
+<li><p>Add the <code>-vvvvv</code> option to the command line that starts rotctld.exe, and restart it. This option tells rotctld.exe to print detailed information to the console window (the black window that opens when rotctld.exe is started).</p>
+</li>
+<li><p>Read the <a href="https://hamlib.sourceforge.net/html/rotctl.1.html">rotctld.exe documentation</a> that will help you to understand information in the console window.</p>
+</li>
+<li><p>Possible causes of SkyRoof to rotctld.exe connection problems:</p>
+<ul>
+<li>rotctld.exe failed to start;</li>
+<li>SkyRoof is configured to use a port number different from the rotctld.exe listening port.</li>
+</ul>
+</li>
+<li><p>Possible causes of the rotctld.exe to rotator connection error problems:</p>
+<ul>
+<li>the rotator is not connected to the computer or not powered on;</li>
+<li>the COM port number or Baud rate specified on the command line is wrong - then the COM port fails to open;</li>
+<li>the rotator model specified on the command line is wrong - then the commands sent to the rotor are rejected or have no effect.</li>
+</ul>
+</li>
+<li><p>Make rotator control work without SkyRoof first: use <strong>rotctl.exe</strong>, an interactive version of rotctld.exe, and send commands to the rotator manually, by typing them in the console window. Rotator control uses three commands, &quot;P&quot;, &quot;p&quot; and &quot;S&quot; (set position, read position, stop rotation). Once you make rotctl.exe work with the rotator, run rotctld.exe with the same command line parameters.</p>
+</li>
+</ol>
+
+</article>
+
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

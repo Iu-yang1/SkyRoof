@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Frequency Control | SkyRoof </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Frequency Control | SkyRoof ">
+      
+      
+      <link rel="icon" href="../images/SkyRoof.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/Iu-yang1/SkyRoof/blob/master/docs/users_guide/frequency_control.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-1MMW827H44"></script>
+      <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments); }
+        gtag('js', new Date());
+        gtag('config', 'G-1MMW827H44');
+      </script>
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../images/s_over_the_globe.svg" alt="  kyRoof">
+              kyRoof
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="frequency-control">Frequency Control</h1>
+
+<p>Frequency Control is the panel on the toolbar that allows you to read and control the frequencies
+of the SDR receiver, external receiver and external transmitter:</p>
+<p><img src="../images/frequency_control.png" alt="Frequency Control"></p>
+<h2 id="downlink">Downlink</h2>
+<p>The left hand part of the panel represents the receiver settings that apply to both SDR and external radio.</p>
+<h3 id="label">Label</h3>
+<p>When the receiver is tuned to a downlink transmitter of some satellite, the label &quot;Downlink&quot; appears;
+when it is tuned to a terrestrial station, the label &quot;Terrestrial&quot; is displayed. To tune to a downlink, select
+some satellite in the
+<a href="satellite_selector.html">Satellite Selector</a>
+panel, or select a different transmitter from the drop-down list, or click on the satellite name in any
+panel. To tune to a terrestrial signal, click on it on the
+<a href="waterfall_display.html">Waterfall Display</a>
+or on the
+<a href="frequency_scale.html">Frequency Scale</a>,
+or click on the downlink frequency display and enter the frequency in the <strong>Tune to Frequency</strong> window:</p>
+<p><img src="../images/tune_to_frequency.png" alt="Tune to Frequency"></p>
+<h3 id="mode">Mode</h3>
+<p>Select the mode manually for every satellite transmitter that you are using.
+Your selection is remembered and restored when the transmitter is selected again.</p>
+<p>The <strong>Mode</strong> selected in the drop-down box applies to the SDR receiver, if it is enabled, and to the external receiver,
+if RX CAT is enabled. To enable or disable the SDR or RX CAT, click on the corresponding label
+on the status bar.</p>
+<h3 id="frequency-display">Frequency Display</h3>
+<p>The frequency display shows either the nominal frequency of the downlink, or the frequency with all
+corrections applied. Right-click on the display to switch between the two frequencies.</p>
+<p>The mouse tooltip of the frequency display shows both frequencies and some other details.</p>
+<p>When RX CAT is enabled and working properly, the frequency is shown in a bright color, otherwise
+the display is dimmed. The color depends on the band: yellow/olive for VHF, cyan/teal for UHF,
+white/gray for all other bands.</p>
+<h3 id="doppler">Doppler</h3>
+<p>The <strong>Doppler</strong> box shows the current Doppler offset of the downlink signal. This value is not editable,
+but Doppler correction may be enabled or disabled using the checkbox. See the
+<a href="doppler_tracking.html">Doppler Tracking</a> section for a detailed discussion of Doppler offset calculation
+and tracking.</p>
+<h3 id="manual">Manual</h3>
+<p>The manual correction of the downlink frequency. The frequencies of the satellite downlink signals
+usually differ from the nominal values in the database, for different reasons, by a few hundred Hertz
+and up to a couple of kilohertz. This difference is pretty stable, so it is enough to enter the
+correction once to have the receiver accurately tuned. SkyRoof remembers the manual correction
+for each satellite.</p>
+<p>The value of the  manual correction may be entered in the <strong>Manual</strong> box by clicking on the up/down
+buttons, or by spinning the mouse wheel over the box, or by typing the value directly. However, it is
+more convenient to adjust the correction visually, using the mouse on the
+<a href="frequency_scale.html">Frequency Scale</a>.</p>
+<p>The checkbox allows you to disable the manual correction if necessary.</p>
+<h3 id="rit">RIT</h3>
+<p>The RIT function is useful when listening to a conversation of two stations that are not
+exactly on the same frequency, or when your CQ is answered off the frequency.</p>
+<p>The RIT offset may be entered in the RIT box, but it is more convenient to control it on the
+<a href="frequency_scale.html">Frequency Scale</a>.</p>
+<p>Use the checkbox, or the commands on the <strong>Frequency Scale</strong>, to toggle RIT.</p>
+<h2 id="uplink">Uplink</h2>
+<p>The Uplink part of the panel is similar to the Downlink part described above. It is enabled
+only if the selected satellite transmitter has an uplink. The bright color of the frequency display
+means that TX CAT is enabled and working properly. The <strong>Transmit</strong> button switches
+the external radio between the RX and TX modes.</p>
+<p>The <strong>Manual Correction</strong> setting of the uplink allows you to align your transmit and receive frequencies.
+See the <a href="frequency_scale.html">Frequency Scale</a> section for details.</p>
+<h2 id="frequency-control-panel">Frequency Control Panel</h2>
+<p>Open <strong>View | Frequency Control</strong> to show the dockable Frequency Control panel. It can float, dock,
+or be tabbed with panels such as Timeline and Earth View, and its docking state participates in the
+normal SkyRoof window-layout persistence.</p>
+<p>For satellite transmitters, the panel stores transmitter-specific <strong>Downlink Base</strong> and <strong>Uplink Base</strong>
+corrections without modifying the downloaded SatNOGS database. Each Base card shows the saved
+reference frequency, the database reference, and the persistent correction. Click the large frequency
+or use <strong>Edit Base...</strong> to enter a corrected reference frequency; <strong>Reset to Database</strong> clears the saved
+correction.</p>
+<p>The correction is stored as an offset from the database value, so later SatNOGS frequency updates are
+still applied while preserving your local calibration. For a linear transponder, the saved correction
+shifts the whole passband without changing its width. The uplink base is the edge paired with the
+downlink low edge: <code>uplink_low</code> for a non-inverting transponder and <code>uplink_high</code> for an inverting
+transponder.</p>
+<h2 id="frequency-tuning-ruler">Frequency Tuning Ruler</h2>
+<p>The lower half of the Frequency Control panel contains an frequency tuning ruler, the current corrected
+downlink frequency, and the active tuning target. Drag the ruler horizontally or spin the mouse wheel
+to tune. It uses the same tuning path as the existing frequency scale and manual controls, so no
+additional hidden offset is introduced:</p>
+<ul>
+<li>terrestrial operation changes the absolute receive frequency;</li>
+<li>a linear transponder changes the existing transponder offset;</li>
+<li>a single-frequency satellite changes the existing downlink Manual Correction;</li>
+<li>holding <strong>Ctrl</strong> uses the existing RIT behavior;</li>
+<li>holding <strong>Alt</strong> while using the wheel selects the existing 500 Hz fast step.</li>
+</ul>
+<p>The original Manual, Doppler, RIT, XIT, waterfall frequency scale and radio dial controls remain active
+and synchronized with the ruler.</p>
+<h2 id="ctcss-tone">CTCSS Tone</h2>
+<p>The FM repeater satellites relay your signal only if a sub-audible CTCSS (PL) tone is present on the
+uplink. The small button with a triangle, to the right of the <strong>Transmit</strong> button, opens the menu with
+two tone commands:</p>
+<p><img src="../images/ctcss_menu.png" alt="CTCSS Tone Menu"></p>
+<p>The button is shown only if the uplink mode is FM and the radio can switch the CTCSS encoder over CAT.</p>
+<h3 id="send-tone-when-transmitting">Send Tone When Transmitting</h3>
+<p>The tone that the radio sends during every transmission. Check <strong>Enabled</strong> to turn the encoder on and
+off, and select the tone below the separator, for example 67.0 Hz for SO-50 and 141.3 Hz for PO-101.
+The menu lists the 38 tones that all supported radios can send, which includes every tone used by the
+FM satellites.</p>
+<p>The tone and the on/off state are saved separately for each satellite transmitter, so switching to
+another satellite applies the tone of that satellite, and turning the tone off does not lose the tone
+that you selected.</p>
+<p>If the radio has no CAT command for the tone frequency, for example the IC-706MKIIG, the tone entries
+are disabled, and only <strong>Enabled</strong> is available. Select the tone frequency on the radio in that case.</p>
+<h3 id="send-arming-tone-now">Send Arming Tone Now</h3>
+<p>SO-50 has a 10-minute on-board timer that must be armed before the satellite passes traffic. Select
+74.4 in this menu to send a 2-second carrier with the 74.4 Hz arming tone. Sending it again within
+the 10-minute window restarts the timer. When the burst ends, SkyRoof restores the tone and the
+on/off state of the <strong>Send Tone When Transmitting</strong> command.</p>
+<p>The command is disabled if the radio cannot select the tone or cannot be keyed over CAT. Key the
+radio manually for about 2 seconds with the arming tone selected in that case.</p>
+<div class="NOTE">
+<h5>Note</h5>
+<p>On Icom radios, the <strong>Auto Repeater</strong> function turns CTCSS off when the frequency changes, and the
+Doppler correction changes the frequency continuously. SkyCAT turns Auto Repeater off automatically
+on the radios whose CI-V supports it. On the IC-910 and IC-706MKIIG, and when the radio is controlled
+via rigctld, turn Auto Repeater off in the menu of the radio.</p>
+</div>
+<h2 id="dial-knob">Dial Knob</h2>
+<p>The dial knob of the transceiver can be used to tune the frequency when CAT control is enabled
+and the <strong>Ignore Dial Knob</strong> option is set to <strong>false</strong>.</p>
+<p>When both RX CAT and TX CAT are enabled, the dial knob controls the receiver frequency.</p>
+<div class="NOTE">
+<h5>Note</h5>
+<p>When the radio is in the SAT mode, the NOR/REV switch should be in the NOR position for correct
+tuning with the dial knob.</p>
+</div>
+
+</article>
+
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

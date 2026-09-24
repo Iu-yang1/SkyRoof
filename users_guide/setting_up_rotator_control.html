@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Setting Up Rotator Control | SkyRoof </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Setting Up Rotator Control | SkyRoof ">
+      
+      
+      <link rel="icon" href="../images/SkyRoof.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/Iu-yang1/SkyRoof/blob/master/docs/users_guide/setting_up_rotator_control.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-1MMW827H44"></script>
+      <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments); }
+        gtag('js', new Date());
+        gtag('config', 'G-1MMW827H44');
+      </script>
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../images/s_over_the_globe.svg" alt="  kyRoof">
+              kyRoof
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="setting-up-rotator-control">Setting Up Rotator Control</h1>
+
+<h2 id="rotctldexe">rotctld.exe</h2>
+<p>SkyRoof uses <strong>rotctld.exe</strong>, a HamLib-based rotator control daemon, to control the antenna rotator.
+See the <a href="setting_up_cat_control.html">Setting Up CAT Control</a> section for the instructions how to
+download and install HamLib.</p>
+<p>Create a shortcut to start *<em>rotctld.exe</em>, with command line arguments:</p>
+<p><img src="../images/rotctld_shortcut.png" alt="Rotctld Shortcut"></p>
+<p>The arguments on the command line must be tailored for your specific rotator and COM port settings. Refer to the
+<a href="https://hamlib.sourceforge.net/html/rotctld.1.html">rotctld documentation</a> for a complete description
+of the arguments.</p>
+<p>Assuming that HamLib is installed in the default location, here is an example string for the shortcut:</p>
+<pre><code class="lang-cmd">&quot;C:\Program Files\hamlib-w64-4.5.5\bin\rotctld.exe&quot; -m 601 -r COM12 -s 9600 
+</code></pre>
+<p>In the string above the following arguments are used:</p>
+<ul>
+<li><strong>-m 601</strong> - the rotator model is Yaesu GS-232A;</li>
+<li><strong>-r COM12</strong> - the COM port used by the rotator;</li>
+<li><strong>-s 9600</strong> - the COM port speed.</li>
+</ul>
+<p>Run rotctld.exe using this shortcut before you enable rotator control in SkyRoof.</p>
+<p>The list of rotator models supported by rotctld.exe is available on the
+<a href="https://github.com/Hamlib/Hamlib/wiki/Supported-Rotators">HamLib web site</a>. Note that one of the models is <strong>PSTRotator</strong>. When this model is selected, rotctld.exe just passes the rotation commands to the PST Rotator software.</p>
+<h2 id="settings">Settings</h2>
+<p>Click on <strong>Tools / Settings</strong> in the main menu to open the
+<a href="settings_window.html">Settings dialog</a>:</p>
+<p><img src="../images/rotator_settings.png" alt="Settings Dialog"></p>
+<ul>
+<li><strong>Delay</strong> determines how often SkyRoof sends commands to the rotator. The default delay is 300 ms, but you can set it to a lower value, such as 100 ms, without adverse effects;</li>
+<li><strong>Log Traffic</strong> should be set to False and enabled only for debugging;</li>
+<li><strong>Enabled</strong> - enable or disable rotator control. Another way to toggle the rotator control
+is to click on the Rotator label on the status bar;</li>
+<li><strong>Host</strong> - should be &quot;127.0.0.1&quot; or &quot;localhost&quot; if rotctld is running on the same computer as SkyRoof. It may be changed to a
+different address for remote control;</li>
+<li><strong>TCP Port</strong> - 4533 is the default port used by rotctld;</li>
+<li><strong>Minimum Azimuth</strong>, <strong>Maximum Azimuth</strong>, <strong>Minimum Elevation</strong>, <strong>Maximum Elevation</strong> -
+specify the range of azimuth and elevation values your rotator accepts;</li>
+<li><strong>Azimuth Offset</strong>, <strong>Elevation Offset</strong> - if your rotator is not perfectly calibrated, these settings
+allow you to apply a correction;</li>
+<li><strong>Step Size</strong> - to prevent the rotator from starting and stopping too often, change the bearing
+only when the required change is greater than the step size. The default value is 5 degrees;</li>
+<li><strong>Parking Azimuth</strong>, <strong>Parking Elevation</strong> - specify the parking position for your antenna.</li>
+</ul>
+<br>
+<p>If your rotator does not control elevation, set the MinimumElevation and MaximumElevation to the same value. With such settings,
+wrong elevation will not be considered a bearing error. Note that the bearing error is indicated with a pink color
+on the <a href="rotator_control.html">Rotator Control</a> panel.</p>
+<h2 id="see-also">See Also</h2>
+<ul>
+<li><a href="smart_antenna_rotation.html">Smart Antenna Rotation</a></li>
+</ul>
+
+</article>
+
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

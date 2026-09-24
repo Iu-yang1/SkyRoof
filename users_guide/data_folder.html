@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Data Folder | SkyRoof </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Data Folder | SkyRoof ">
+      
+      
+      <link rel="icon" href="../images/SkyRoof.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/Iu-yang1/SkyRoof/blob/master/docs/users_guide/data_folder.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-1MMW827H44"></script>
+      <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments); }
+        gtag('js', new Date());
+        gtag('config', 'G-1MMW827H44');
+      </script>
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../images/s_over_the_globe.svg" alt="  kyRoof">
+              kyRoof
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="data-folder">Data Folder</h1>
+
+<p>SkyRoof keeps all of its data in the <strong>data folder</strong>.</p>
+<ul>
+<li><p>Click on <strong>Help / Data Folder</strong> in the main menu to open this folder in File Explorer.</p>
+</li>
+<li><p>To open the folder when the program is not running, type this in File Explorer:</p>
+<pre><code class="lang-bash">%appdata%\Afreet\Products\SkyRoof`
+</code></pre>
+</li>
+</ul>
+<h2 id="data-files">Data Files</h2>
+<ul>
+<li><p><strong>Settings.json</strong> - this is the file where all user-defined settings are stored;</p>
+</li>
+<li><p><strong>amsat_sat_names.json</strong> - satellite names used on
+<a href="https://www.amsat.org/status/">AMSAT Live OSCAR Satellite Status Page</a>. The
+<a href="frequency_scale.html">Frequency Scale</a> section explains how to post your observations
+to this page;</p>
+</li>
+<li><p><strong>lotw_sat_names.json</strong> - the list of satellite abbreviations accepted by
+<a href="https://www.arrl.org/quick-start">LoTW</a>;</p>
+</li>
+<li><p><strong>Satellites.json</strong> - the satellite database compiled from the downloaded data;</p>
+</li>
+<li><p><strong>transmitters-override.json</strong> - hand-curated corrections to the transmitter
+<a href="satellite_data.html#signal-parameters">signal parameters</a>. Ships with a default set that SkyRoof
+keeps up to date; mark an entry <code>&quot;read_only&quot;: true</code> to protect your own edits;</p>
+</li>
+<li><p><strong>cat_info.json</strong> - lists the CAT capabilities of a generic simplex radio;</p>
+</li>
+<li><p><strong>wsjtx_wisdom.dat</strong> - optimal FFT transform settings found by automatic testing.</p>
+</li>
+</ul>
+<h2 id="folders">Folders</h2>
+<ul>
+<li><strong>Logs</strong> - contains the log files with error messages and other information;</li>
+<li><strong>Adif</strong> - QSO records stored in the ADIF format;</li>
+<li><strong>Downloads</strong> - a copy of the satellite data downloaded from various sources, kept for troubleshooting;</li>
+<li><strong>Palettes</strong> - definition of the color palettes used by the waterfall display. Add your own
+palette as a text file with &quot;html&quot; color codes. Pick the color codes at
+<a href="https://htmlcolorcodes.com/">htmlcolorcodes.com</a>;</li>
+<li><strong>sat_images</strong> - cached satellite thumbnails shown by the
+<a href="satellite_photo.html">Satellite Photo</a> widget. Delete this folder to force re-download;</li>
+<li><strong>Recordings</strong> - the default location for the audio and I/Q files saved by the
+<a href="recorder_panel.html">Recorder</a> panel;</li>
+<li><strong>FT4</strong> - decoded messages saved by the <a href="ft4_console_panel.html">FT4 Console</a> panel, when the
+<strong>Save to File</strong> option is enabled in the settings;</li>
+<li><strong>TelemetryDecodes</strong> - decoded telemetry frames saved by the <a href="telemetry_panel.html">Telemetry</a>
+panel, when the <strong>Save to File</strong> option is enabled in the
+<a href="setting_up_telemetry_decoding.html#decoder-settings">telemetry settings</a>. One file is created per day,
+and each line is stamped with both UTC and local time;</li>
+<li><strong>SstvImages</strong> - <a href="recevie_sstv.html">SSTV images</a> decoded by the <a href="telemetry_panel.html">Telemetry</a>
+panel, saved automatically as PNG files with a JSON metadata sidecar;</li>
+<li><strong>SsdvImages</strong> - <a href="receive_ssdv.html">images received as SSDV packets or as raw JPEG fragments</a>,
+decoded by the <a href="telemetry_panel.html">Telemetry</a> panel, saved automatically as JPEG files with a
+JSON metadata sidecar. The sidecar also holds the received packets, which is what lets a picture
+be <a href="receive_ssdv.html#combining-passes">combined with its earlier receptions</a>;</li>
+<li><strong>Codec2Voice</strong> - <a href="receive_voice.html">Codec2 voice messages</a> decoded by the
+<a href="telemetry_panel.html">Telemetry</a> panel, saved automatically as WAV files with a JSON metadata
+sidecar;</li>
+<li><strong>TelemetryRegistry</strong> - the definitions used to decode raw telemetry frames into named values
+in the <a href="telemetry_panel.html">Telemetry</a> panel.</li>
+</ul>
+
+</article>
+
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

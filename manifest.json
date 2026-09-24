@@ -1,0 +1,1875 @@
+{
+  "source_base_path": "/home/runner/work/SkyRoof/SkyRoof/docs",
+  "xrefmap": "xrefmap.yml",
+  "files": [
+    {
+      "type": "Resource",
+      "output": {
+        "resource": {
+          "relative_path": "index.json"
+        }
+      }
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "credits.md",
+      "output": {
+        ".html": {
+          "relative_path": "credits.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "download.md",
+      "output": {
+        ".html": {
+          "relative_path": "download.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/IC-9700-TX.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/IC-9700-TX.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/SkyRoof.ico",
+      "output": {
+        "resource": {
+          "relative_path": "images/SkyRoof.ico"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/adif_files.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/adif_files.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/amsat_dialog.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/amsat_dialog.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/audio_labels.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/audio_labels.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/audio_settings.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/audio_settings.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/auto_hide_button.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/auto_hide_button.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/auto_selection_config.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/auto_selection_config.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/auto_selection_panel.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/auto_selection_panel.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/callsign_status.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/callsign_status.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/cat_on_statusbar.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/cat_on_statusbar.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/cat_settings.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/cat_settings.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/clock_widget.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/clock_widget.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/ctcss_menu.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/ctcss_menu.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/current_group.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/current_group.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/data_download_dialog.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/data_download_dialog.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/dock_1.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/dock_1.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/dock_2.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/dock_2.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/dock_3.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/dock_3.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/dock_4.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/dock_4.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/dock_5.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/dock_5.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/dock_6.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/dock_6.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/dock_7.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/dock_7.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/dock_8.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/dock_8.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/earth_view_pass.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/earth_view_pass.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/earth_view_realtime.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/earth_view_realtime.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/email_me.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/email_me.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/fft_setup.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/fft_setup.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/frequency_control.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/frequency_control.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/frequency_entry_dialog.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/frequency_entry_dialog.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/frequency_scale.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/frequency_scale.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/ft4_amplitude_bar.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/ft4_amplitude_bar.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/ft4_color_settings.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/ft4_color_settings.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/ft4_console.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/ft4_console.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/ft4_console_settings.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/ft4_console_settings.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/ft4_menu.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/ft4_menu.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/ft4_uplink_offset.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/ft4_uplink_offset.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/ft4_waterfall.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/ft4_waterfall.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/ft4_wide_waterfall.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/ft4_wide_waterfall.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/ft4_win_audio.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/ft4_win_audio.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/gain_control.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/gain_control.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/letter-s-svgrepo-com.svg",
+      "output": {
+        "resource": {
+          "relative_path": "images/letter-s-svgrepo-com.svg"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/main_window.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/main_window.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/main_window_TH.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/main_window_TH.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/manual_rotator_control.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/manual_rotator_control.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/mo-122.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/mo-122.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/mouse.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/mouse.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/noaa_15_satdump.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/noaa_15_satdump.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/output_stream_label.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/output_stream_label.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/output_stream_settings.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/output_stream_settings.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/overlapping_transponders.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/overlapping_transponders.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/pass_coverage.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/pass_coverage.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/ppm_calibration_1.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/ppm_calibration_1.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/ppm_calibration_2.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/ppm_calibration_2.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/qso_entry_column.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/qso_entry_column.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/qso_entry_panel.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/qso_entry_panel.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/qso_entry_settings.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/qso_entry_settings.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/qso_schedule_window.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/qso_schedule_window.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/qso_scheduler_panel.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/qso_scheduler_panel.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/recorder_panel.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/recorder_panel.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/recorder_playback.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/recorder_playback.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/recorder_record_menu.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/recorder_record_menu.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/recorder_recording.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/recorder_recording.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/recorder_save_menu.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/recorder_save_menu.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/red_spot.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/red_spot.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/remote_device.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/remote_device.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/rigctld_shortcut.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/rigctld_shortcut.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/rit.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/rit.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/rotation/clip.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/rotation/clip.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/rotation/crossing_both.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/rotation/crossing_both.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/rotation/flip.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/rotation/flip.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/rotation/polar_path.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/rotation/polar_path.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/rotation/polar_path_flip.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/rotation/polar_path_flip.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/rotation/small_overshoot.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/rotation/small_overshoot.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/rotation/spiral.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/rotation/spiral.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/rotation/within_quadrant.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/rotation/within_quadrant.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/rotation/zero_crossing_backward.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/rotation/zero_crossing_backward.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/rotation/zero_crossing_forward.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/rotation/zero_crossing_forward.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/rotation/zero_crossing_path.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/rotation/zero_crossing_path.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/rotator_control.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/rotator_control.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/rotator_settings.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/rotator_settings.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/rotctld_shortcut.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/rotctld_shortcut.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/rx_tx_alignment.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/rx_tx_alignment.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/s_over_the_globe.svg",
+      "output": {
+        "resource": {
+          "relative_path": "images/s_over_the_globe.svg"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/satellite_data_age.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/satellite_data_age.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/satellite_details_dialog.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/satellite_details_dialog.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/satellite_details_panel.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/satellite_details_panel.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/satellite_passes.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/satellite_passes.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/satellite_selector.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/satellite_selector.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/satellite_transmitters_panel.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/satellite_transmitters_panel.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/satellites_and_groups.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/satellites_and_groups.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/save_ft4_qso.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/save_ft4_qso.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/sdr_devices_dialog.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/sdr_devices_dialog.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/settings_dialog.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/settings_dialog.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/signal_details.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/signal_details.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/sky_view.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/sky_view.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/skyroof_icon.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/skyroof_icon.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/skyroof_icon_128x128.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/skyroof_icon_128x128.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/skyroof_icon_32x32.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/skyroof_icon_32x32.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/soapyremote_settings.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/soapyremote_settings.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/splitter.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/splitter.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/ssdv_combined.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/ssdv_combined.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/sstv_denoise_after.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/sstv_denoise_after.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/sstv_denoise_before.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/sstv_denoise_before.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/sstv_denoise_dialog.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/sstv_denoise_dialog.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/sstv_image.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/sstv_image.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/telemetry_panel.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/telemetry_panel.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/telemetry_settings.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/telemetry_settings.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/time_line.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/time_line.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/tle_date_details.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/tle_date_details.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/tle_date_tooltip.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/tle_date_tooltip.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/transverter_band_editor.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/transverter_band_editor.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/transverter_settings.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/transverter_settings.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/tune_to_frequency.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/tune_to_frequency.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/user_details.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/user_details.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/uz7ho_lasarsat.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/uz7ho_lasarsat.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/uz7ho_setup.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/uz7ho_setup.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/uz7ho_tigrisat.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/uz7ho_tigrisat.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/uz7ho_veronica.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/uz7ho_veronica.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/virus_total.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/virus_total.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/voice_announcement_settings.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/voice_announcement_settings.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/waterfall.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/waterfall.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/waterfall_sliders.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/waterfall_sliders.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/window_layout_1.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/window_layout_1.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/window_layout_2.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/window_layout_2.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/window_layout_3.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/window_layout_3.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "index.md",
+      "output": {
+        ".html": {
+          "relative_path": "index.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "satyaml_import_plan.md",
+      "output": {
+        ".html": {
+          "relative_path": "satyaml_import_plan.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Toc",
+      "source_relative_path": "toc.yml",
+      "output": {
+        ".html": {
+          "relative_path": "toc.html"
+        },
+        ".json": {
+          "relative_path": "toc.json"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/auto_selection_panel.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/auto_selection_panel.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/calibrating_ppm_correction.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/calibrating_ppm_correction.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/clock.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/clock.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/configuring_window_layout.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/configuring_window_layout.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/control_rotator_sat_pstrotator.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/control_rotator_sat_pstrotator.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/creating_satellite_groups.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/creating_satellite_groups.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/current_group_panel.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/current_group_panel.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/data_folder.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/data_folder.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/decode_telemetry.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/decode_telemetry.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/doppler_tracking.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/doppler_tracking.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/earth_view_panel.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/earth_view_panel.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/faq.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/faq.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/frequency_control.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/frequency_control.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/frequency_scale.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/frequency_scale.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/fsk_afsk_telemetry.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/fsk_afsk_telemetry.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/ft4_console_panel.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/ft4_console_panel.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/gain_control.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/gain_control.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/overview.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/overview.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/pdf_cover.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/pdf_cover.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/qso_entry_panel.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/qso_entry_panel.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/qso_scheduler_panel.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/qso_scheduler_panel.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/quick_start.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/quick_start.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/receive_ssdv.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/receive_ssdv.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/receive_voice.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/receive_voice.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/recevie_sstv.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/recevie_sstv.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/recorder_panel.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/recorder_panel.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/rotator_control.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/rotator_control.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/satellite_data.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/satellite_data.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/satellite_details_panel.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/satellite_details_panel.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/satellite_details_window.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/satellite_details_window.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/satellite_highlighting.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/satellite_highlighting.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/satellite_passes_panel.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/satellite_passes_panel.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/satellite_photo.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/satellite_photo.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/satellite_selector.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/satellite_selector.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/satellite_transmitters_panel.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/satellite_transmitters_panel.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/satellites_and_groups_window.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/satellites_and_groups_window.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/setting_up_audio.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/setting_up_audio.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/setting_up_cat_control.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/setting_up_cat_control.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/setting_up_ft4_console.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/setting_up_ft4_console.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/setting_up_output_stream.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/setting_up_output_stream.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/setting_up_rotator_control.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/setting_up_rotator_control.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/setting_up_sdr.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/setting_up_sdr.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/setting_up_telemetry_decoding.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/setting_up_telemetry_decoding.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/setting_up_transverter.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/setting_up_transverter.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/setting_up_voice_announcements.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/setting_up_voice_announcements.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/settings_window.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/settings_window.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/sky_view_panel.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/sky_view_panel.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/skycat_cat_notes.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/skycat_cat_notes.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/smart_antenna_rotation.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/smart_antenna_rotation.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/system_requirements.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/system_requirements.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/telemetry_panel.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/telemetry_panel.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/time_line_panel.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/time_line_panel.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Toc",
+      "source_relative_path": "users_guide/toc.yml",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/toc.html"
+        },
+        ".json": {
+          "relative_path": "users_guide/toc.json"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "users_guide/waterfall_display.md",
+      "output": {
+        ".html": {
+          "relative_path": "users_guide/waterfall_display.html"
+        }
+      },
+      "version": ""
+    }
+  ],
+  "groups": [
+    {
+      "xrefmap": "xrefmap.yml"
+    }
+  ]
+}
