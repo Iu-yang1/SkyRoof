@@ -100,12 +100,13 @@ namespace SkyRoof
     public double DownlinkFrequencyWithoutDoppler =>
       DownlinkFrequency +
       (RitEnabled ? RitOffset : 0) +
-      (DownlinkManualCorrectionEnabled ? DownlinkManualCorrection : 0);
+      (!IsTerrestrial && SatCust != null && DownlinkManualCorrectionEnabled
+        ? DownlinkManualCorrection : 0);
 
     public double UplinkFrequencyWithoutDoppler =>
-      UplinkFrequency <= 0 ? 0 :
+      IsTerrestrial || UplinkFrequency <= 0 ? 0 :
       UplinkFrequency +
-      (UplinkManualCorrectionEnabled ? UplinkManualCorrection : 0) +
+      (SatCust != null && UplinkManualCorrectionEnabled ? UplinkManualCorrection : 0) +
       XitOffset;
 
     public double DopplerFactor = 0;
