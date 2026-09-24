@@ -31,6 +31,24 @@ namespace SkyRoof
       get => TxCust!.TransponderOffset;
       set => TxCust!.TransponderOffset = value;
     }
+    public long DownlinkBaseOffset
+    {
+      get => TxCust!.DownlinkBaseOffset;
+      set => TxCust!.DownlinkBaseOffset = value;
+    }
+    public long UplinkBaseOffset
+    {
+      get => TxCust!.UplinkBaseOffset;
+      set => TxCust!.UplinkBaseOffset = value;
+    }
+    public double DatabaseDownlinkBaseFrequency => Tx?.downlink_low ?? 0;
+    public double DatabaseUplinkBaseFrequency =>
+      Tx?.uplink_low == null ? 0 :
+      Tx.invert && Tx.uplink_high.HasValue ? Tx.uplink_high.Value : Tx.uplink_low.Value;
+    public double BaseDownlinkFrequency => DatabaseDownlinkBaseFrequency + DownlinkBaseOffset;
+    public double BaseUplinkFrequency =>
+      DatabaseUplinkBaseFrequency == 0 ? 0 : DatabaseUplinkBaseFrequency + UplinkBaseOffset;
+
     public double CtcssTone
     {
       get => TxCust!.CtcssTone;
@@ -135,8 +153,9 @@ namespace SkyRoof
 
       else
       {
-        // downlink nominal
-        DownlinkFrequency = Tx!.DownlinkLow;
+        // downlink nominal. Base correction shifts the whole transmitter/transponder passband.
+        double downlinkLow = Tx!.DownlinkLow + DownlinkBaseOffset;
+        DownlinkFrequency = downlinkLow;
         if (IsTransponder) DownlinkFrequency += TransponderOffset;
 
         // downlink corrected
@@ -145,11 +164,15 @@ namespace SkyRoof
         if (DownlinkDopplerCorrectionEnabled) CorrectedDownlinkFrequency *= 1 - DopplerFactor;
         if (DownlinkManualCorrectionEnabled) CorrectedDownlinkFrequency += DownlinkManualCorrection;
 
-        // uplink nominal
+        // uplink nominal. Apply the same base offset to both passband edges so its width is unchanged.
         if (IsTransponder)
-          if (Tx.invert) UplinkFrequency = (double)Tx.uplink_high! - TransponderOffset;
-          else UplinkFrequency = (double)Tx.uplink_low! + TransponderOffset;
-        else if (Tx.uplink_low.HasValue) UplinkFrequency = (double)Tx.uplink_low;
+        {
+          double uplinkLow = (double)Tx.uplink_low! + UplinkBaseOffset;
+          double uplinkHigh = (double)Tx.uplink_high! + UplinkBaseOffset;
+          UplinkFrequency = Tx.invert ? uplinkHigh - TransponderOffset : uplinkLow + TransponderOffset;
+        }
+        else if (Tx.uplink_low.HasValue)
+          UplinkFrequency = (double)Tx.uplink_low + UplinkBaseOffset;
         else UplinkFrequency = 0;
 
         // uplink corrected
@@ -161,6 +184,34 @@ namespace SkyRoof
           CorrectedUplinkFrequency += XitOffset;
         }
       }
+    }
+
+    public void SetDownlinkBaseFrequency(double frequency)
+    {
+      if (IsTerrestrial || Tx == null || TxCust == null) return;
+      DownlinkBaseOffset = checked((long)Math.Round(frequency - DatabaseDownlinkBaseFrequency));
+      ComputeFrequencies();
+    }
+
+    public void SetUplinkBaseFrequency(double frequency)
+    {
+      if (IsTerrestrial || Tx == null || TxCust == null || DatabaseUplinkBaseFrequency == 0) return;
+      UplinkBaseOffset = checked((long)Math.Round(frequency - DatabaseUplinkBaseFrequency));
+      ComputeFrequencies();
+    }
+
+    public void ResetDownlinkBaseFrequency()
+    {
+      if (TxCust == null) return;
+      DownlinkBaseOffset = 0;
+      ComputeFrequencies();
+    }
+
+    public void ResetUplinkBaseFrequency()
+    {
+      if (TxCust == null) return;
+      UplinkBaseOffset = 0;
+      ComputeFrequencies();
     }
 
     // dragging changes either the absolute frequency (terrestrial),
