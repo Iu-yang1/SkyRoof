@@ -164,7 +164,7 @@ namespace SkyRoof
       {
         left = $"{frame.ScopeName} · {frame.ModeName}";
 
-        if (frame.Mode is 0 or 2)
+        if (frame.Mode == 0)
         {
           string center = FormatFrequency(frame.CenterFrequencyHz);
           string span = FormatSpan(frame.SpanHz);
