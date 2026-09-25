@@ -919,6 +919,7 @@ namespace SkyRoof
       LastScopeOutputRequestUtc = now;
 
       LastScopeRequestRouted = ctx.CatControl.RequestIcomScopeOutput();
+      TransitionProbe?.RecordSkyCatScopeRequest(LastScopeRequestRouted);
     }
 
     internal void ApplySettings()
