@@ -1,3 +1,4 @@
+using System.Net;
 using FluentAssertions;
 using SkyRoof;
 using Xunit;
@@ -268,6 +269,111 @@ namespace VE3NEA.Dsp.Tests
         packet.Concat(new byte[] { 0x00 }).ToArray();
       IcomLanSpectrumCapture.TryGetSerialPayload(
         withTrailingGarbage, out _).Should().BeFalse();
+    }
+
+
+    [Fact]
+    public void TransitionProbe_IdentifiesCombinedLanScopeFrame()
+    {
+      byte[] samples = Enumerable.Range(0, IcomScopeAssembler.ScopePointCount)
+        .Select(i => (byte)(i % 161))
+        .ToArray();
+
+      byte[] civ = BuildScopeHeaderFrame(
+        receiver: 0,
+        sequence: 1,
+        sequenceMaximum: 1,
+        mode: 0,
+        frequencyAHz: 432_066_500,
+        frequencyBHz: 25_000,
+        outOfRange: false,
+        samples);
+
+      byte[] packet = BuildLanUdpPacket(
+        source: IPAddress.Parse("192.168.1.4"),
+        destination: IPAddress.Parse("192.168.1.20"),
+        sourcePort: 50002,
+        destinationPort: 54321,
+        civ);
+
+      IcomLanTransitionProbe.TryInspectPacket(
+        packet,
+        IPAddress.Parse("192.168.1.4"),
+        out ProbePacketInfo info).Should().BeTrue();
+
+      info.RadioToPc.Should().BeTrue();
+      info.RadioPort.Should().Be(50002);
+      info.CombinedScope.Should().BeTrue();
+      info.ChunkedScope.Should().BeFalse();
+      info.CivSignature.Should().Be("27-00 div=01/01");
+      info.PacketSignature.Should().Contain("RADIO->PC");
+    }
+
+    [Fact]
+    public void TransitionProbe_IdentifiesOutgoingScopeEnableCommand()
+    {
+      byte[] civ =
+      {
+        0xFE, 0xFE, 0xA2, 0xE0,
+        0x27, 0x11, 0x01, 0xFD
+      };
+
+      byte[] packet = BuildLanUdpPacket(
+        source: IPAddress.Parse("192.168.1.20"),
+        destination: IPAddress.Parse("192.168.1.4"),
+        sourcePort: 54321,
+        destinationPort: 50002,
+        civ);
+
+      IcomLanTransitionProbe.TryInspectPacket(
+        packet,
+        IPAddress.Parse("192.168.1.4"),
+        out ProbePacketInfo info).Should().BeTrue();
+
+      info.RadioToPc.Should().BeFalse();
+      info.RadioPort.Should().Be(50002);
+      info.CivSignature.Should().Be("27-11 01");
+      info.CombinedScope.Should().BeFalse();
+      info.PacketSignature.Should().Contain("PC->RADIO");
+    }
+
+    private static byte[] BuildLanUdpPacket(
+      IPAddress source,
+      IPAddress destination,
+      int sourcePort,
+      int destinationPort,
+      byte[] civ)
+    {
+      byte[] lanPayload = new byte[21 + civ.Length];
+      BitConverter.GetBytes(lanPayload.Length).CopyTo(lanPayload, 0);
+      lanPayload[16] = 0xC1;
+      BitConverter.GetBytes((ushort)civ.Length).CopyTo(lanPayload, 17);
+      civ.CopyTo(lanPayload, 21);
+
+      int udpLength = 8 + lanPayload.Length;
+      byte[] packet = new byte[20 + udpLength];
+
+      packet[0] = 0x45;
+      packet[9] = 17;
+
+      source.GetAddressBytes().CopyTo(packet, 12);
+      destination.GetAddressBytes().CopyTo(packet, 16);
+
+      WriteUInt16BigEndian(packet, 20, (ushort)sourcePort);
+      WriteUInt16BigEndian(packet, 22, (ushort)destinationPort);
+      WriteUInt16BigEndian(packet, 24, (ushort)udpLength);
+
+      lanPayload.CopyTo(packet, 28);
+      return packet;
+    }
+
+    private static void WriteUInt16BigEndian(
+      byte[] bytes,
+      int offset,
+      ushort value)
+    {
+      bytes[offset] = (byte)(value >> 8);
+      bytes[offset + 1] = (byte)value;
     }
 
     private static byte[] BuildScopeHeaderFrame(
