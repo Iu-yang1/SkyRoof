@@ -33,7 +33,7 @@ namespace SkyRoof
     public IcomLanScopeBand ScopeBand { get; set; } = IcomLanScopeBand.Auto;
 
     [DisplayName("Scope source")]
-    [Description("Direct LAN creates a separate authenticated IC-9700 network session and receives native combined 475-bin waveforms. SkyCAT uses skycatd's loopback scope stream. RS-BA1 passively sniffs an existing RS-BA1 LAN session.")]
+    [Description("Direct LAN is an experimental, manually started authenticated IC-9700 network session. SkyCAT uses skycatd's loopback scope stream. RS-BA1 passively observes an existing RS-BA1 LAN session.")]
     [DefaultValue(IcomLanSpectrumSource.SkyCat)]
     public IcomLanSpectrumSource Source { get; set; } = IcomLanSpectrumSource.SkyCat;
 
@@ -57,12 +57,12 @@ namespace SkyRoof
     public string DirectLanPassword { get; set; } = "";
 
     [DisplayName("Direct LAN client name")]
-    [Description("Client name presented to the IC-9700 authenticated LAN server.")]
-    [DefaultValue("SkyRoof")]
-    public string DirectLanClientName { get; set; } = "SkyRoof";
+    [Description("Client name presented to the Icom LAN server. 'icom-pc' matches the conservative RS-BA1-compatible baseline.")]
+    [DefaultValue("icom-pc")]
+    public string DirectLanClientName { get; set; } = "icom-pc";
 
     [DisplayName("Auto start")]
-    [Description("Start the selected spectrum source automatically when the Icom LAN Spectrum panel is opened.")]
+    [Description("Start SkyCAT or passive RS-BA1 capture automatically when the panel opens. Experimental Direct LAN always requires a manual Start.")]
     [DefaultValue(true)]
     public bool AutoStart { get; set; } = true;
 

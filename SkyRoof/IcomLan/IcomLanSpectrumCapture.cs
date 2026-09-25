@@ -501,8 +501,8 @@ namespace SkyRoof
       // is not 50002. In auto-discovery mode capture inbound UDP and identify the
       // CI-V stream from the 0xC1 transport wrapper instead of hard-coding a port.
       string filter = AutoDiscoverCivPort
-        ? "inbound and ip and udp and udp.PayloadLength >= 24 and " +
-          "udp.Payload[16] == 0xC1 and udp.Payload[21] == 0xFE and udp.Payload[22] == 0xFE"
+        ? "inbound and ip and udp and udp.PayloadLength >= 21 and " +
+          "udp.Payload[16] == 0xC1"
         : $"inbound and ip and udp.SrcPort == {SerialPort}";
 
       if (!string.IsNullOrWhiteSpace(ConfiguredRadioAddress))
@@ -546,8 +546,9 @@ namespace SkyRoof
       ReadOnlySpan<byte> payload =
         new ReadOnlySpan<byte>(packet, payloadOffset, payloadLength);
 
-      // In discovery mode do not claim arbitrary UDP traffic as radio traffic.
-      // Only lock onto a source after it exposes the RS-BA1/Icom C1 CI-V wrapper.
+      // In discovery mode identify the RS-BA1/Icom C1 transport in user space.
+      // Do not require FE FE at the first CI-V byte here: a valid C1 datagram may
+      // continue a CI-V byte stream rather than begin a new frame.
       if (AutoDiscoverCivPort)
       {
         if (!LooksLikeIcomCivTransport(payload))
@@ -733,23 +734,27 @@ namespace SkyRoof
       ScopeFrameReceived?.Invoke(scope);
     }
 
-    private static bool LooksLikeIcomCivTransport(ReadOnlySpan<byte> payload)
+    internal static bool LooksLikeIcomCivTransport(ReadOnlySpan<byte> payload)
     {
-      if (payload.Length < 21 || payload[16] != 0xC1)
+      const int headerLength = 21;
+
+      if (payload.Length < headerLength ||
+          payload[16] != 0xC1 ||
+          BinaryPrimitives.ReadUInt16LittleEndian(
+            payload.Slice(4, 2)) != 0)
         return false;
 
+      uint outerLength =
+        BinaryPrimitives.ReadUInt32LittleEndian(
+          payload.Slice(0, 4));
       int declaredLength =
-        payload[17] |
-        (payload[18] << 8);
+        BinaryPrimitives.ReadUInt16LittleEndian(
+          payload.Slice(17, 2));
 
-      if (declaredLength <= 0 ||
-          payload.Length < 21 + declaredLength)
-        return false;
-
-      ReadOnlySpan<byte> data = payload.Slice(21, declaredLength);
-      return data.Length >= 3 &&
-             data[0] == 0xFE &&
-             data[1] == 0xFE;
+      return
+        outerLength == payload.Length &&
+        declaredLength > 0 &&
+        headerLength + declaredLength == payload.Length;
     }
 
     internal static bool TryGetSerialPayload(
@@ -760,15 +765,21 @@ namespace SkyRoof
 
       const int headerLength = 21;
       if (payload.Length < headerLength ||
-          payload[16] != 0xC1)
+          payload[16] != 0xC1 ||
+          BinaryPrimitives.ReadUInt16LittleEndian(
+            payload.Slice(4, 2)) != 0)
         return false;
 
+      uint outerLength =
+        BinaryPrimitives.ReadUInt32LittleEndian(
+          payload.Slice(0, 4));
       int declaredLength =
-        payload[17] |
-        (payload[18] << 8);
+        BinaryPrimitives.ReadUInt16LittleEndian(
+          payload.Slice(17, 2));
 
-      if (declaredLength <= 0 ||
-          payload.Length < headerLength + declaredLength)
+      if (outerLength != payload.Length ||
+          declaredLength <= 0 ||
+          headerLength + declaredLength != payload.Length)
         return false;
 
       serialBytes = payload.Slice(headerLength, declaredLength);

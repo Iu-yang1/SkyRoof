@@ -49,8 +49,19 @@ namespace SkyRoof
 
       Shown += (_, _) =>
       {
-        if (ctx.Settings.IcomLanSpectrum.AutoStart)
+        IcomLanSpectrumSettings settings =
+          ctx.Settings.IcomLanSpectrum;
+
+        if (settings.AutoStart &&
+            settings.Source != IcomLanSpectrumSource.DirectLan)
+        {
           StartCapture();
+        }
+        else if (settings.Source == IcomLanSpectrumSource.DirectLan)
+        {
+          StatusLabel.Text =
+            "Direct LAN is experimental and never auto-starts. Close RS-BA1/other remote clients, then click Start manually.";
+        }
       };
 
       FormClosing += IcomLanSpectrumPanel_FormClosing;
@@ -222,7 +233,7 @@ namespace SkyRoof
       TransportLabel.Text = settings.Source switch
       {
         IcomLanSpectrumSource.DirectLan =>
-          $"Authenticated native Icom LAN · control UDP/{settings.DirectLanControlPort} · combined 475-bin waveform",
+          $"Experimental authenticated Icom LAN · manual start · control UDP/{settings.DirectLanControlPort}",
         IcomLanSpectrumSource.RsBa1 =>
           "Passive RS-BA1 LAN sniff · WinDivert RECV_ONLY",
         _ =>
@@ -261,7 +272,7 @@ namespace SkyRoof
       StatusLabel.Text = settings.Source switch
       {
         IcomLanSpectrumSource.DirectLan =>
-          "Direct LAN selected. Configure radio IP and LAN credentials in Settings, then start capture.",
+          "Direct LAN selected (experimental/manual). Close RS-BA1/other remote clients, configure credentials, then click Start.",
         IcomLanSpectrumSource.RsBa1 =>
           "RS-BA1 selected. Open/enable the RS-BA1 Spectrum Scope, then start passive LAN capture.",
         _ =>
@@ -305,11 +316,11 @@ namespace SkyRoof
 
       Capture = capture;
 
-      // SkyCAT receives the radio's Remote Utility virtual-COM scope stream. That
-      // stream is intentionally converted to USB-style 11-division waveform frames.
-      // The underlying RS-BA1 LAN packet still carries the native one-division
-      // waveform. Sniff it in parallel and prefer it whenever available; the SkyCAT
-      // TCP stream remains a reliable fallback if native LAN capture is unavailable.
+      // SkyCAT can receive serial-style multi-division 27 00 frames from the
+      // Remote Utility path. Observe the RS-BA1 LAN C1 transport independently
+      // and prefer current combined LAN sweeps when they are actually present;
+      // otherwise keep the SkyCAT TCP stream as the fallback. Division count is a
+      // wire-format distinction here, not an assumed frame-rate bottleneck.
       if (UsingSkyCatScopeSource)
       {
         var nativeLan = new IcomLanSpectrumCapture(
@@ -335,7 +346,7 @@ namespace SkyRoof
       StatusLabel.Text = settings.Source switch
       {
         IcomLanSpectrumSource.DirectLan =>
-          $"Authenticating direct Icom LAN session to {settings.RadioAddress}:{settings.DirectLanControlPort}...",
+          $"Authenticating experimental Direct LAN session to {settings.RadioAddress}:{settings.DirectLanControlPort}...",
         IcomLanSpectrumSource.RsBa1 =>
           "Starting WinDivert passive RS-BA1 LAN capture...",
         _ =>
@@ -383,8 +394,8 @@ namespace SkyRoof
     {
       if (IsDisposed || !IsHandleCreated) return;
 
-      // When the original LAN waveform is arriving, do not interleave the slower
-      // 11-division virtual-COM copy into the display.
+      // When a current combined LAN waveform is arriving, do not interleave a
+      // second serial-style representation of the same scope into the display.
       DateTime? nativeLast = NativeLanAssistCapture?.LastScopeFrameUtc;
       if (nativeLast != null &&
           (DateTime.UtcNow - nativeLast.Value).TotalSeconds < 0.75)
@@ -552,7 +563,7 @@ namespace SkyRoof
               : capture.PacketCount == 0
                 ? $"Listening for IC-9700 UDP/{ctx.Settings.IcomLanSpectrum.SerialPort} traffic..."
                 : "RS-BA1 LAN traffic detected, but no CI-V 27 00 waveform yet. " +
-                  "Open/enable the RS-BA1 Spectrum Scope.";
+                  "Toggle the RS-BA1 Spectrum Scope CLOSED/OPEN and compare the passive observation.";
       }
       else if (capture.IsRunning && last != null)
       {

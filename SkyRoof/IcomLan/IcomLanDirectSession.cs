@@ -15,10 +15,10 @@ namespace SkyRoof
   /// combined one-division waveform, so a complete 475-bin sweep can be delivered
   /// in one CI-V frame.
   ///
-  /// Packet layout and authentication are compatible with the Icom LAN protocol
-  /// used by RS-BA1/wfview/kappanhang. Audio is requested at the minimum practical
-  /// receive rate only because some Icom firmware couples the CI-V media request
-  /// to the audio/serial stream request; received audio is discarded.
+  /// Packet layout and authentication follow the RS-BA1-compatible transport
+  /// fields observed by wfview, SDR9700 and AetherSDR. Direct LAN is an
+  /// experimental, independently authenticated session; it is never required
+  /// for the normal SkyCAT or passive RS-BA1 paths.
   /// </summary>
   internal sealed class IcomLanDirectSession : IDisposable
   {
@@ -33,6 +33,8 @@ namespace SkyRoof
     private const int StatusSize = 0x50;
     private const int CapabilitiesHeaderSize = 0x42;
     private const int RadioCapabilitySize = 0x66;
+    private const ushort MacIdentityCapability = 0x8010;
+    private const byte Lpcm16MonoCodec = 0x04;
 
     private readonly IPAddress RadioAddress;
     private readonly int ControlPort;
@@ -64,10 +66,20 @@ namespace SkyRoof
 
     private byte[] AuthId = new byte[6];
     private byte[] RadioGuid = new byte[16];
+    private readonly byte[] RadioMacAddress = new byte[6];
+    private ushort RadioCommonCapability;
+    private ushort RadioRxSampleCapabilities;
+    private ushort RadioTxSampleCapabilities;
+    private uint RadioBaudRate;
+    private string RadioAudioName = string.Empty;
     private byte RadioCivAddress = 0xA2;
     private string RadioName = "IC-9700";
     private int RemoteCivPort = DefaultCivPort;
     private int RemoteAudioPort = DefaultAudioPort;
+
+    private ushort? PendingRenewalInnerSequence;
+    private byte[] PendingRenewalAuthId = Array.Empty<byte>();
+    private DateTime LastAuthRequestUtc = DateTime.MinValue;
 
     private DateTime LastControlIdleUtc = DateTime.MinValue;
     private DateTime LastControlPingUtc = DateTime.MinValue;
@@ -147,7 +159,7 @@ namespace SkyRoof
         ((IPEndPoint)audio.Client.LocalEndPoint!).Port;
 
       Publish(
-        $"Direct Icom LAN: authenticating {RadioAddress}:{ControlPort} " +
+        $"Direct Icom LAN (experimental): authenticating {RadioAddress}:{ControlPort} " +
         $"as '{Username}'...");
 
       await StartCommonHandshakeAsync(
@@ -155,27 +167,37 @@ namespace SkyRoof
         isControl: true,
         token);
 
-      await SendLoginAsync(control, token);
+      (ushort loginSequence, ushort loginRequestId) =
+        await SendLoginAsync(control, token);
 
       byte[] loginReply = await ReceiveMatchingAsync(
         control,
-        packet => packet.Length == LoginResponseSize &&
-                  packet[0] == LoginResponseSize,
+        packet => IsMatchingLoginReply(
+          packet,
+          ControlLocalSid,
+          ControlRemoteSid,
+          loginSequence,
+          loginRequestId),
         TimeSpan.FromSeconds(3),
         token);
 
-      if (loginReply.AsSpan(48, 4).SequenceEqual(
+      if (loginReply.AsSpan(0x30, 4).SequenceEqual(
             new byte[] { 0xFF, 0xFF, 0xFF, 0xFE }))
         throw new InvalidOperationException(
           "IC-9700 rejected the network username/password.");
 
-      loginReply.AsSpan(26, 6).CopyTo(AuthId);
+      AuthId = loginReply.AsSpan(0x1A, 6).ToArray();
       IsAuthenticated = true;
-      Publish("Direct Icom LAN: login accepted; requesting radio capabilities...");
+      Publish("Direct Icom LAN: login correlated; requesting radio capabilities and authentication token...");
 
-      await SendAuthAsync(control, 0x02, token);
-      await SendAuthAsync(control, 0x05, token);
-      LastAuthUtc = DateTime.UtcNow;
+      byte[] capabilitiesAuthId = AuthId.ToArray();
+      ushort capabilitiesSequence =
+        await SendAuthAsync(control, 0x02, token);
+
+      byte[] initialAuthId = AuthId.ToArray();
+      ushort initialAuthSequence =
+        await SendAuthAsync(control, 0x05, token);
+      LastAuthRequestUtc = DateTime.UtcNow;
 
       bool gotCapabilities = false;
       bool gotAuthOk = false;
@@ -198,37 +220,64 @@ namespace SkyRoof
           packet,
           token);
 
-        if (IsCapabilities(packet))
+        if (!gotCapabilities &&
+            IsMatchingCapabilitiesResponse(
+              packet,
+              ControlLocalSid,
+              ControlRemoteSid,
+              capabilitiesSequence,
+              capabilitiesAuthId))
         {
           ParseCapabilities(packet);
           gotCapabilities = true;
           Publish(
-            $"Direct Icom LAN: found {RadioName}, CI-V 0x{RadioCivAddress:X2}.");
+            $"Direct Icom LAN: found {RadioName}, CI-V 0x{RadioCivAddress:X2}, " +
+            $"RX caps 0x{RadioRxSampleCapabilities:X4}, TX caps 0x{RadioTxSampleCapabilities:X4}, " +
+            $"baud {RadioBaudRate:N0}.");
         }
-        else if (packet.Length == AuthSize &&
-                 packet[20] == 0x02 &&
-                 packet[21] == 0x05)
+        else if (!gotAuthOk &&
+                 IsMatchingAuthReply(
+                   packet,
+                   ControlLocalSid,
+                   ControlRemoteSid,
+                   0x05,
+                   initialAuthSequence,
+                   initialAuthId))
         {
+          uint response = BinaryPrimitives.ReadUInt32LittleEndian(
+            packet.AsSpan(0x30, 4));
+
+          AuthId = packet.AsSpan(0x1A, 6).ToArray();
           gotAuthOk = true;
+          LastAuthUtc = DateTime.UtcNow;
+          PendingRenewalInnerSequence = null;
+
+          if (response != 0)
+          {
+            Publish(
+              $"Direct Icom LAN: radio reissued authentication state " +
+              $"(0x{response:X8}); stream ownership still requires a correlated grant.");
+          }
         }
       }
 
       if (!gotCapabilities)
         throw new TimeoutException(
-          "IC-9700 did not return LAN capabilities after authentication.");
+          "IC-9700 did not return a correlated LAN capabilities response.");
 
       if (!gotAuthOk)
         throw new TimeoutException(
-          "IC-9700 did not acknowledge the authenticated LAN token.");
+          "IC-9700 did not return a correlated authentication-token response.");
 
-      await SendStreamRequestAsync(
+      byte[] streamAuthId = AuthId.ToArray();
+      ushort streamSequence = await SendStreamRequestAsync(
         control,
         LocalCivPort,
         localAudioPort,
         token);
 
       Publish(
-        $"Direct Icom LAN: requesting native CI-V stream on local UDP/{LocalCivPort}...");
+        $"Direct Icom LAN: requesting correlated native CI-V stream on local UDP/{LocalCivPort}...");
 
       bool streamAccepted = false;
       DateTime streamDeadline = DateTime.UtcNow.AddSeconds(6);
@@ -249,48 +298,52 @@ namespace SkyRoof
           packet,
           token);
 
-        if (packet.Length == StatusSize)
+        if (IsMatchingStreamStatus(
+              packet,
+              ControlLocalSid,
+              ControlRemoteSid,
+              streamSequence,
+              streamAuthId))
         {
-          if (packet.AsSpan(48, 4).SequenceEqual(
-                new byte[] { 0xFF, 0xFF, 0xFF, 0xFF }))
+          uint error = BinaryPrimitives.ReadUInt32LittleEndian(
+            packet.AsSpan(0x30, 4));
+          bool disconnected = packet[0x40] == 0x01;
+
+          if (error != 0 || disconnected)
             throw new InvalidOperationException(
-              "IC-9700 rejected the direct LAN media-stream request. " +
-              "The radio may already be exclusively occupied by another remote client.");
+              $"IC-9700 rejected the direct LAN media-stream request " +
+              $"(error 0x{error:X8}, disconnected={disconnected}). " +
+              "Close RS-BA1/other remote clients before starting experimental Direct LAN.");
 
-          if (packet.Length >= 72)
+          int civPort = BinaryPrimitives.ReadUInt16BigEndian(
+            packet.AsSpan(0x42, 2));
+          int audioPort = BinaryPrimitives.ReadUInt16BigEndian(
+            packet.AsSpan(0x46, 2));
+
+          if (civPort > 0)
           {
-            int civPort = BinaryPrimitives.ReadUInt16BigEndian(
-              packet.AsSpan(66, 2));
-            int audioPort = BinaryPrimitives.ReadUInt16BigEndian(
-              packet.AsSpan(70, 2));
-
-            if (civPort > 0)
-            {
-              RemoteCivPort = civPort;
-
-              // wfview opens the CI-V media socket as soon as the successful
-              // 0x50 status assigns a remote CI-V port. Some Icom firmware does
-              // not follow that status with the 0x90 "selected" notification,
-              // so do not make the latter mandatory.
-              streamAccepted = true;
-            }
-
-            if (audioPort > 0) RemoteAudioPort = audioPort;
-          }
-        }
-        else if (packet.Length == ConnInfoSize &&
-                 packet[20] == 0x03)
-        {
-          // Kappanhang observes byte 96 == 1 when the selected radio stream is
-          // assigned. Accept this path as well as the successful status packet.
-          if (packet[96] == 0x01)
+            RemoteCivPort = civPort;
             streamAccepted = true;
+          }
+
+          if (audioPort > 0)
+            RemoteAudioPort = audioPort;
+        }
+        else if (IsMatchingStreamGrant(
+                   packet,
+                   ControlLocalSid,
+                   ControlRemoteSid,
+                   streamSequence,
+                   streamAuthId))
+        {
+          streamAccepted = packet[0x60] == 0x01;
         }
       }
 
       if (!streamAccepted)
         throw new TimeoutException(
-          "IC-9700 did not open the requested direct CI-V stream.");
+          "IC-9700 did not return a correlated grant for the requested direct CI-V stream. " +
+          "Close RS-BA1/other remote clients before retrying experimental Direct LAN.");
 
       control.Client.ReceiveTimeout = 1000;
 
@@ -308,10 +361,19 @@ namespace SkyRoof
         $"Direct Icom LAN native CI-V connected: " +
         $"{RadioAddress}:{RemoteCivPort} -> local UDP/{LocalCivPort}.");
 
-      // Some firmware starts audio when the combined media request has RX enabled.
-      // Drain it without decoding so it cannot fill the OS UDP receive queue.
-      try { audio.Connect(RadioAddress, RemoteAudioPort); } catch { }
-      Task audioDrain = DrainAudioAsync(audio, token);
+      Task audioDrain = Task.CompletedTask;
+      if (RadioRxSampleCapabilities != 0 && RemoteAudioPort > 0)
+      {
+        try
+        {
+          audio.Connect(RadioAddress, RemoteAudioPort);
+          audioDrain = DrainAudioAsync(audio, token);
+        }
+        catch
+        {
+          // CI-V ownership is authoritative for this spectrum-only client.
+        }
+      }
 
       await SendScopeConfigurationAsync(civ, token);
 
@@ -334,7 +396,7 @@ namespace SkyRoof
 
         try
         {
-          await SendAuthAsync(control, 0x01, CancellationToken.None);
+          _ = await SendAuthAsync(control, 0x01, CancellationToken.None);
         }
         catch { }
 
@@ -447,15 +509,31 @@ namespace SkyRoof
         LastCivPingUtc = now;
       }
 
-      if ((now - LastAuthUtc).TotalSeconds >= 55)
+      // The radio silently expires media ownership if authentication renewal is
+      // not acknowledged. Track the request, not merely the send time: an
+      // unrelated/stale token reply must not extend this session's lifetime.
+      if (PendingRenewalInnerSequence.HasValue)
       {
-        await SendAuthAsync(control, 0x05, token);
-        LastAuthUtc = now;
+        if ((now - LastAuthUtc).TotalSeconds >= 50)
+          throw new TimeoutException(
+            "Direct Icom LAN authentication renewal was not acknowledged.");
+
+        if ((now - LastAuthRequestUtc).TotalMilliseconds >= 2500)
+        {
+          PendingRenewalAuthId = AuthId.ToArray();
+          PendingRenewalInnerSequence =
+            await SendAuthAsync(control, 0x05, token);
+          LastAuthRequestUtc = now;
+        }
+      }
+      else if ((now - LastAuthUtc).TotalSeconds >= 20)
+      {
+        PendingRenewalAuthId = AuthId.ToArray();
+        PendingRenewalInnerSequence =
+          await SendAuthAsync(control, 0x05, token);
+        LastAuthRequestUtc = now;
       }
 
-      // Reassert scope configuration occasionally. This is deliberately much
-      // slower than the waveform cadence and only protects against another
-      // controller disabling scope output.
       if ((now - LastScopeCommandUtc).TotalSeconds >= 5)
         await SendScopeConfigurationAsync(civ, token);
     }
@@ -471,15 +549,39 @@ namespace SkyRoof
         packet,
         token);
 
-      if (packet.Length == AuthSize &&
-          packet[20] == 0x02 &&
-          packet[21] == 0x05)
+      if (PendingRenewalInnerSequence.HasValue &&
+          IsMatchingAuthReply(
+            packet,
+            ControlLocalSid,
+            ControlRemoteSid,
+            0x05,
+            PendingRenewalInnerSequence.Value,
+            PendingRenewalAuthId))
+      {
+        uint response = BinaryPrimitives.ReadUInt32LittleEndian(
+          packet.AsSpan(0x30, 4));
+
+        if (response != 0)
+          throw new InvalidOperationException(
+            $"IC-9700 rejected Direct LAN authentication renewal " +
+            $"(0x{response:X8}).");
+
+        AuthId = packet.AsSpan(0x1A, 6).ToArray();
+        PendingRenewalInnerSequence = null;
+        PendingRenewalAuthId = Array.Empty<byte>();
         LastAuthUtc = DateTime.UtcNow;
+        return;
+      }
 
       if (packet.Length == StatusSize &&
-          packet.AsSpan(48, 3).SequenceEqual(
+          MatchesControlEnvelope(
+            packet,
+            ControlLocalSid,
+            ControlRemoteSid) &&
+          packet.AsSpan(0x30, 3).SequenceEqual(
             new byte[] { 0xFF, 0xFF, 0xFF }))
-        Publish("Direct Icom LAN: radio reported a control/media-stream error.");
+        Publish(
+          "Direct Icom LAN: correlated control session reported a media-stream error.");
     }
 
     private async Task HandleCivPacketAsync(
@@ -614,12 +716,18 @@ namespace SkyRoof
         packet =>
           packet.Length == 16 &&
           BinaryPrimitives.ReadUInt16LittleEndian(
-            packet.AsSpan(4, 2)) == 0x0004,
+            packet.AsSpan(4, 2)) == 0x0004 &&
+          BinaryPrimitives.ReadUInt32BigEndian(
+            packet.AsSpan(12, 4)) == localSid,
         TimeSpan.FromSeconds(2),
         token);
 
       uint remoteSid = BinaryPrimitives.ReadUInt32BigEndian(
         here.AsSpan(8, 4));
+
+      if (remoteSid == 0)
+        throw new InvalidDataException(
+          "Icom LAN handshake returned an invalid remote session ID.");
 
       if (isControl)
         ControlRemoteSid = remoteSid;
@@ -650,41 +758,35 @@ namespace SkyRoof
         packet =>
           packet.Length == 16 &&
           BinaryPrimitives.ReadUInt16LittleEndian(
-            packet.AsSpan(4, 2)) == 0x0006,
+            packet.AsSpan(4, 2)) == 0x0006 &&
+          BinaryPrimitives.ReadUInt32BigEndian(
+            packet.AsSpan(8, 4)) == remoteSid &&
+          BinaryPrimitives.ReadUInt32BigEndian(
+            packet.AsSpan(12, 4)) == localSid,
         TimeSpan.FromSeconds(2),
         token);
     }
 
-    private async Task SendLoginAsync(
+    private async Task<(ushort InnerSequence, ushort TokenRequest)> SendLoginAsync(
       UdpClient control,
       CancellationToken token)
     {
-      byte[] packet = new byte[LoginSize];
-      packet[0] = LoginSize;
+      ushort innerSequence = AuthInnerSeq++;
 
-      WriteSid(packet, 8, ControlLocalSid);
-      WriteSid(packet, 12, ControlRemoteSid);
+      Span<byte> requestBytes = stackalloc byte[2];
+      RandomNumberGenerator.Fill(requestBytes);
+      ushort tokenRequest =
+        BinaryPrimitives.ReadUInt16LittleEndian(requestBytes);
+      if (tokenRequest == 0)
+        tokenRequest = 1;
 
-      BinaryPrimitives.WriteUInt32BigEndian(
-        packet.AsSpan(16, 4),
-        LoginSize - 0x10);
-
-      packet[20] = 0x01;
-      packet[21] = 0x00;
-      packet[22] = 0x00;
-      packet[23] = (byte)AuthInnerSeq;
-      packet[24] = (byte)(AuthInnerSeq >> 8);
-      AuthInnerSeq++;
-
-      Span<byte> startId = stackalloc byte[2];
-      RandomNumberGenerator.Fill(startId);
-      packet[26] = startId[0];
-      packet[27] = startId[1];
-
-      EncodePasscode(Username).CopyTo(packet, 64);
-      EncodePasscode(Password).CopyTo(packet, 80);
-      WriteAsciiZ(
-        packet.AsSpan(96, 16),
+      byte[] packet = BuildLoginPacket(
+        ControlLocalSid,
+        ControlRemoteSid,
+        innerSequence,
+        tokenRequest,
+        Username,
+        Password,
         ClientName);
 
       await SendTrackedAsync(
@@ -692,101 +794,232 @@ namespace SkyRoof
         isControl: true,
         packet,
         token);
+
+      return (innerSequence, tokenRequest);
     }
 
-    private async Task SendAuthAsync(
+    private async Task<ushort> SendAuthAsync(
       UdpClient control,
-      byte magic,
+      byte kind,
       CancellationToken token)
     {
-      byte[] packet = new byte[AuthSize];
-      packet[0] = AuthSize;
+      ushort innerSequence = AuthInnerSeq++;
 
-      WriteSid(packet, 8, ControlLocalSid);
-      WriteSid(packet, 12, ControlRemoteSid);
-
-      BinaryPrimitives.WriteUInt32BigEndian(
-        packet.AsSpan(16, 4),
-        AuthSize - 0x10);
-
-      packet[20] = 0x01;
-      packet[21] = magic;
-      packet[22] = 0x00;
-      packet[23] = (byte)AuthInnerSeq;
-      packet[24] = (byte)(AuthInnerSeq >> 8);
-      AuthInnerSeq++;
-
-      AuthId.CopyTo(packet, 26);
+      byte[] packet = BuildAuthPacket(
+        ControlLocalSid,
+        ControlRemoteSid,
+        innerSequence,
+        kind,
+        AuthId);
 
       await SendTrackedAsync(
         control,
         isControl: true,
         packet,
         token);
+
+      return innerSequence;
     }
 
-    private async Task SendStreamRequestAsync(
+    private async Task<ushort> SendStreamRequestAsync(
       UdpClient control,
       int localCivPort,
       int localAudioPort,
       CancellationToken token)
     {
-      byte[] packet = new byte[ConnInfoSize];
-      packet[0] = ConnInfoSize;
+      ushort innerSequence = AuthInnerSeq++;
 
-      WriteSid(packet, 8, ControlLocalSid);
-      WriteSid(packet, 12, ControlRemoteSid);
-
-      BinaryPrimitives.WriteUInt32BigEndian(
-        packet.AsSpan(16, 4),
-        ConnInfoSize - 0x10);
-
-      packet[20] = 0x01;
-      packet[21] = 0x03;
-      packet[22] = 0x00;
-      packet[23] = (byte)AuthInnerSeq;
-      packet[24] = (byte)(AuthInnerSeq >> 8);
-      AuthInnerSeq++;
-
-      AuthId.CopyTo(packet, 26);
-      RadioGuid.CopyTo(packet, 32);
-
-      WriteAsciiZ(
-        packet.AsSpan(64, 32),
-        RadioName);
-
-      EncodePasscode(Username).CopyTo(
-        packet,
-        96);
-
-      // Ask for receive audio only at 8 kHz uLaw. Some Icom firmware ties the
-      // CI-V media stream setup to the combined serial/audio request; this keeps
-      // that compatibility traffic small (~64 kbit/s) while SkyRoof discards it.
-      packet[112] = 0x01; // RX audio enable
-      packet[113] = 0x00; // TX audio disable
-      packet[114] = 0x01; // uLaw mono 8-bit
-      packet[115] = 0x01;
-
-      BinaryPrimitives.WriteUInt32BigEndian(
-        packet.AsSpan(116, 4),
-        8000);
-      BinaryPrimitives.WriteUInt32BigEndian(
-        packet.AsSpan(120, 4),
-        8000);
-      BinaryPrimitives.WriteUInt32BigEndian(
-        packet.AsSpan(124, 4),
-        (uint)localCivPort);
-      BinaryPrimitives.WriteUInt32BigEndian(
-        packet.AsSpan(128, 4),
-        (uint)localAudioPort);
-
-      packet[136] = 0x01; // convert
+      byte[] packet = BuildStreamRequestPacket(
+        ControlLocalSid,
+        ControlRemoteSid,
+        innerSequence,
+        AuthId,
+        RadioName,
+        Username,
+        RadioCommonCapability,
+        RadioGuid,
+        RadioMacAddress,
+        RadioRxSampleCapabilities,
+        localCivPort,
+        localAudioPort);
 
       await SendTrackedAsync(
         control,
         isControl: true,
         packet,
         token);
+
+      return innerSequence;
+    }
+
+    internal static byte[] BuildLoginPacket(
+      uint localSid,
+      uint remoteSid,
+      ushort innerSequence,
+      ushort tokenRequest,
+      string username,
+      string password,
+      string clientName)
+    {
+      byte[] packet = new byte[LoginSize];
+      BinaryPrimitives.WriteUInt32LittleEndian(
+        packet.AsSpan(0, 4),
+        LoginSize);
+      WriteSid(packet, 8, localSid);
+      WriteSid(packet, 12, remoteSid);
+
+      BinaryPrimitives.WriteUInt32BigEndian(
+        packet.AsSpan(0x10, 4),
+        LoginSize - 0x10);
+      packet[0x14] = 0x01;
+      packet[0x15] = 0x00;
+      BinaryPrimitives.WriteUInt16BigEndian(
+        packet.AsSpan(0x16, 2),
+        innerSequence);
+      BinaryPrimitives.WriteUInt16LittleEndian(
+        packet.AsSpan(0x1A, 2),
+        tokenRequest);
+
+      EncodePasscode(username).CopyTo(packet, 0x40);
+      EncodePasscode(password).CopyTo(packet, 0x50);
+      WriteAsciiZ(
+        packet.AsSpan(0x60, 16),
+        NormalizeClientName(clientName));
+      return packet;
+    }
+
+    internal static byte[] BuildAuthPacket(
+      uint localSid,
+      uint remoteSid,
+      ushort innerSequence,
+      byte kind,
+      ReadOnlySpan<byte> authId)
+    {
+      if (authId.Length != 6)
+        throw new ArgumentException(
+          "Icom LAN authentication ID must be exactly 6 bytes.",
+          nameof(authId));
+
+      byte[] packet = new byte[AuthSize];
+      BinaryPrimitives.WriteUInt32LittleEndian(
+        packet.AsSpan(0, 4),
+        AuthSize);
+      WriteSid(packet, 8, localSid);
+      WriteSid(packet, 12, remoteSid);
+
+      BinaryPrimitives.WriteUInt32BigEndian(
+        packet.AsSpan(0x10, 4),
+        AuthSize - 0x10);
+      packet[0x14] = 0x01;
+      packet[0x15] = kind;
+      BinaryPrimitives.WriteUInt16BigEndian(
+        packet.AsSpan(0x16, 2),
+        innerSequence);
+      authId.CopyTo(packet.AsSpan(0x1A, 6));
+      return packet;
+    }
+
+    internal static byte[] BuildStreamRequestPacket(
+      uint localSid,
+      uint remoteSid,
+      ushort innerSequence,
+      ReadOnlySpan<byte> authId,
+      string radioName,
+      string username,
+      ushort commonCapability,
+      ReadOnlySpan<byte> radioGuid,
+      ReadOnlySpan<byte> radioMac,
+      ushort rxSampleCapabilities,
+      int localCivPort,
+      int localAudioPort)
+    {
+      if (authId.Length != 6)
+        throw new ArgumentException(
+          "Icom LAN authentication ID must be exactly 6 bytes.",
+          nameof(authId));
+      if (radioGuid.Length != 16)
+        throw new ArgumentException(
+          "Icom LAN radio GUID must be exactly 16 bytes.",
+          nameof(radioGuid));
+      if (radioMac.Length != 6)
+        throw new ArgumentException(
+          "Icom LAN radio MAC must be exactly 6 bytes.",
+          nameof(radioMac));
+
+      byte[] packet = new byte[ConnInfoSize];
+      BinaryPrimitives.WriteUInt32LittleEndian(
+        packet.AsSpan(0, 4),
+        ConnInfoSize);
+      WriteSid(packet, 8, localSid);
+      WriteSid(packet, 12, remoteSid);
+
+      BinaryPrimitives.WriteUInt32BigEndian(
+        packet.AsSpan(0x10, 4),
+        ConnInfoSize - 0x10);
+      packet[0x14] = 0x01;
+      packet[0x15] = 0x03;
+      BinaryPrimitives.WriteUInt16BigEndian(
+        packet.AsSpan(0x16, 2),
+        innerSequence);
+      authId.CopyTo(packet.AsSpan(0x1A, 6));
+
+      if (commonCapability == MacIdentityCapability)
+      {
+        BinaryPrimitives.WriteUInt16BigEndian(
+          packet.AsSpan(0x27, 2),
+          MacIdentityCapability);
+        radioMac.CopyTo(packet.AsSpan(0x2A, 6));
+      }
+      else
+      {
+        radioGuid.CopyTo(packet.AsSpan(0x20, 16));
+      }
+
+      WriteAsciiZ(packet.AsSpan(0x40, 32), radioName);
+      EncodePasscode(username).CopyTo(packet, 0x60);
+
+      uint receiveSampleRate =
+        SelectReceiveSampleRate(rxSampleCapabilities);
+      bool receiveAudio = receiveSampleRate != 0;
+
+      packet[0x70] = receiveAudio ? (byte)0x01 : (byte)0x00;
+      packet[0x71] = 0x00;
+      packet[0x72] = receiveAudio ? Lpcm16MonoCodec : (byte)0x00;
+      packet[0x73] = 0x00;
+
+      BinaryPrimitives.WriteUInt32BigEndian(
+        packet.AsSpan(0x74, 4),
+        receiveSampleRate);
+      BinaryPrimitives.WriteUInt32BigEndian(
+        packet.AsSpan(0x78, 4),
+        0);
+      BinaryPrimitives.WriteUInt32BigEndian(
+        packet.AsSpan(0x7C, 4),
+        checked((uint)localCivPort));
+      BinaryPrimitives.WriteUInt32BigEndian(
+        packet.AsSpan(0x80, 4),
+        checked((uint)localAudioPort));
+      BinaryPrimitives.WriteUInt32BigEndian(
+        packet.AsSpan(0x84, 4),
+        0);
+      packet[0x88] = 0x01;
+      return packet;
+    }
+
+    internal static uint SelectReceiveSampleRate(
+      ushort capabilityMask)
+    {
+      // Prefer the 48 kHz LPCM path verified on the IC-9700, then fall back
+      // only to rates explicitly advertised by the RS-BA1 capability bit set.
+      if ((capabilityMask & 0x0008) != 0) return 48000;
+      if ((capabilityMask & 0x0004) != 0) return 32000;
+      if ((capabilityMask & 0x0002) != 0) return 16000;
+      if ((capabilityMask & 0x0080) != 0) return 12000;
+      if ((capabilityMask & 0x0040) != 0) return 44100;
+      if ((capabilityMask & 0x0020) != 0) return 22050;
+      if ((capabilityMask & 0x0010) != 0) return 11025;
+      if ((capabilityMask & 0x0001) != 0) return 8000;
+      return 0;
     }
 
     private async Task SendOpenCloseAsync(
@@ -1195,27 +1428,201 @@ namespace SkyRoof
         throw new InvalidDataException(
           "IC-9700 returned an empty capabilities packet.");
 
-      int radio = CapabilitiesHeaderSize;
+      int selected = -1;
+      for (int i = 0; i < count; i++)
+      {
+        int offset =
+          CapabilitiesHeaderSize + i * RadioCapabilitySize;
+        byte civ = packet[offset + 0x52];
 
-      packet.AsSpan(radio, 16)
+        if (civ > 0 && civ < 0xE0)
+        {
+          selected = offset;
+          break;
+        }
+      }
+
+      if (selected < 0)
+        throw new InvalidDataException(
+          "Icom LAN capabilities did not contain a usable CI-V radio.");
+
+      packet.AsSpan(selected, 16)
         .CopyTo(RadioGuid);
+      packet.AsSpan(selected + 0x0A, 6)
+        .CopyTo(RadioMacAddress);
+
+      RadioCommonCapability =
+        BinaryPrimitives.ReadUInt16BigEndian(
+          packet.AsSpan(selected + 0x07, 2));
 
       string name = ReadAsciiZ(
-        packet.AsSpan(radio + 16, 32));
-
+        packet.AsSpan(selected + 0x10, 32));
       if (!string.IsNullOrWhiteSpace(name))
         RadioName = name;
 
-      RadioCivAddress = packet[radio + 82];
+      RadioAudioName = ReadAsciiZ(
+        packet.AsSpan(selected + 0x30, 32));
+      RadioCivAddress = packet[selected + 0x52];
+      RadioRxSampleCapabilities =
+        BinaryPrimitives.ReadUInt16BigEndian(
+          packet.AsSpan(selected + 0x53, 2));
+      RadioTxSampleCapabilities =
+        BinaryPrimitives.ReadUInt16BigEndian(
+          packet.AsSpan(selected + 0x55, 2));
+      RadioBaudRate =
+        BinaryPrimitives.ReadUInt32BigEndian(
+          packet.AsSpan(selected + 0x5A, 4));
+
+      string identity =
+        RadioCommonCapability == MacIdentityCapability
+          ? $"MAC {BitConverter.ToString(RadioMacAddress)}"
+          : "GUID";
+
+      Publish(
+        $"Direct Icom LAN capabilities: audio '{RadioAudioName}', " +
+        $"identity {identity}, RX 0x{RadioRxSampleCapabilities:X4}, " +
+        $"TX 0x{RadioTxSampleCapabilities:X4}.");
     }
 
-    private static bool IsCapabilities(byte[] packet) =>
-      packet.Length >=
-        CapabilitiesHeaderSize + RadioCapabilitySize &&
-      (packet.Length - CapabilitiesHeaderSize) %
-        RadioCapabilitySize == 0 &&
-      packet[20] == 0x02 &&
-      packet[21] == 0x02;
+    internal static bool MatchesControlEnvelope(
+      ReadOnlySpan<byte> packet,
+      uint localSid,
+      uint remoteSid)
+    {
+      if (packet.Length < 16)
+        return false;
+
+      return
+        BinaryPrimitives.ReadUInt32BigEndian(
+          packet.Slice(0x08, 4)) == remoteSid &&
+        BinaryPrimitives.ReadUInt32BigEndian(
+          packet.Slice(0x0C, 4)) == localSid;
+    }
+
+    internal static bool IsMatchingLoginReply(
+      ReadOnlySpan<byte> packet,
+      uint localSid,
+      uint remoteSid,
+      ushort innerSequence,
+      ushort tokenRequest)
+    {
+      return
+        packet.Length == LoginResponseSize &&
+        BinaryPrimitives.ReadUInt32LittleEndian(
+          packet.Slice(0, 4)) == LoginResponseSize &&
+        BinaryPrimitives.ReadUInt16LittleEndian(
+          packet.Slice(4, 2)) == 0 &&
+        MatchesControlEnvelope(packet, localSid, remoteSid) &&
+        packet[0x15] == 0x00 &&
+        BinaryPrimitives.ReadUInt16BigEndian(
+          packet.Slice(0x16, 2)) == innerSequence &&
+        BinaryPrimitives.ReadUInt16LittleEndian(
+          packet.Slice(0x1A, 2)) == tokenRequest;
+    }
+
+    internal static bool IsMatchingAuthReply(
+      ReadOnlySpan<byte> packet,
+      uint localSid,
+      uint remoteSid,
+      byte requestType,
+      ushort innerSequence,
+      ReadOnlySpan<byte> requestAuthId)
+    {
+      if (requestAuthId.Length != 6)
+        return false;
+
+      return
+        packet.Length == AuthSize &&
+        BinaryPrimitives.ReadUInt32LittleEndian(
+          packet.Slice(0, 4)) == AuthSize &&
+        BinaryPrimitives.ReadUInt16LittleEndian(
+          packet.Slice(4, 2)) == 0 &&
+        MatchesControlEnvelope(packet, localSid, remoteSid) &&
+        packet[0x14] == 0x02 &&
+        packet[0x15] == requestType &&
+        BinaryPrimitives.ReadUInt16BigEndian(
+          packet.Slice(0x16, 2)) == innerSequence &&
+        packet.Slice(0x1A, 2).SequenceEqual(
+          requestAuthId.Slice(0, 2));
+    }
+
+    internal static bool IsMatchingCapabilitiesResponse(
+      ReadOnlySpan<byte> packet,
+      uint localSid,
+      uint remoteSid,
+      ushort innerSequence,
+      ReadOnlySpan<byte> requestAuthId)
+    {
+      if (requestAuthId.Length != 6 ||
+          packet.Length < CapabilitiesHeaderSize + RadioCapabilitySize ||
+          (packet.Length - CapabilitiesHeaderSize) % RadioCapabilitySize != 0)
+        return false;
+
+      return
+        BinaryPrimitives.ReadUInt32LittleEndian(
+          packet.Slice(0, 4)) == packet.Length &&
+        BinaryPrimitives.ReadUInt16LittleEndian(
+          packet.Slice(4, 2)) == 0 &&
+        MatchesControlEnvelope(packet, localSid, remoteSid) &&
+        packet[0x14] == 0x02 &&
+        packet[0x15] == 0x02 &&
+        BinaryPrimitives.ReadUInt16BigEndian(
+          packet.Slice(0x16, 2)) == innerSequence &&
+        packet.Slice(0x1A, 6).SequenceEqual(requestAuthId);
+    }
+
+    internal static bool IsMatchingStreamStatus(
+      ReadOnlySpan<byte> packet,
+      uint localSid,
+      uint remoteSid,
+      ushort innerSequence,
+      ReadOnlySpan<byte> requestAuthId) =>
+      IsMatchingStreamResponse(
+        packet,
+        StatusSize,
+        localSid,
+        remoteSid,
+        innerSequence,
+        requestAuthId);
+
+    internal static bool IsMatchingStreamGrant(
+      ReadOnlySpan<byte> packet,
+      uint localSid,
+      uint remoteSid,
+      ushort innerSequence,
+      ReadOnlySpan<byte> requestAuthId) =>
+      IsMatchingStreamResponse(
+        packet,
+        ConnInfoSize,
+        localSid,
+        remoteSid,
+        innerSequence,
+        requestAuthId);
+
+    private static bool IsMatchingStreamResponse(
+      ReadOnlySpan<byte> packet,
+      int expectedLength,
+      uint localSid,
+      uint remoteSid,
+      ushort innerSequence,
+      ReadOnlySpan<byte> requestAuthId)
+    {
+      if (requestAuthId.Length != 6 ||
+          packet.Length != expectedLength)
+        return false;
+
+      return
+        BinaryPrimitives.ReadUInt32LittleEndian(
+          packet.Slice(0, 4)) == expectedLength &&
+        BinaryPrimitives.ReadUInt16LittleEndian(
+          packet.Slice(4, 2)) == 0 &&
+        MatchesControlEnvelope(packet, localSid, remoteSid) &&
+        packet[0x14] == 0x02 &&
+        packet[0x15] == 0x03 &&
+        BinaryPrimitives.ReadUInt16BigEndian(
+          packet.Slice(0x16, 2)) == innerSequence &&
+        packet.Slice(0x1A, 6).SequenceEqual(requestAuthId);
+    }
 
     private static UdpClient CreateBoundClient(
       IPAddress localAddress)
@@ -1276,7 +1683,7 @@ namespace SkyRoof
       string value)
     {
       string text = string.IsNullOrWhiteSpace(value)
-        ? "SkyRoof"
+        ? "icom-pc"
         : value.Trim();
 
       byte[] bytes = Encoding.ASCII.GetBytes(text);
