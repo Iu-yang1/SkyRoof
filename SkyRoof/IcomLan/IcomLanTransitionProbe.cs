@@ -104,6 +104,28 @@ namespace SkyRoof
       MarkClosedUtc = transitionUtc;
     }
 
+    internal void RecordSkyCatScopeRequest(bool routed)
+    {
+      lock (Sync)
+      {
+        PhaseStats stats = Phases[CurrentPhase];
+        double offset =
+          stats.StartedUtc == default
+            ? 0
+            : Math.Max(
+                0,
+                (DateTime.UtcNow - stats.StartedUtc).TotalSeconds);
+
+        if (stats.LocalScopeRequests.Count < 64)
+        {
+          stats.LocalScopeRequests.Add(
+            new LocalScopeRequestEvent(
+              offset,
+              routed));
+        }
+      }
+    }
+
     private void TransitionTo(
       IcomLanProbePhase next,
       out DateTime transitionUtc)
@@ -610,7 +632,32 @@ namespace SkyRoof
       }
 
       sb.AppendLine();
-      sb.AppendLine("Outbound small/control packet samples (chronological):");
+      sb.AppendLine("Scope-control timeline (full phase, not truncated by generic packet sampling):");
+      foreach (IcomLanProbePhase phase in Enum.GetValues<IcomLanProbePhase>())
+      {
+        PhaseStats stats = Phases[phase];
+        sb.AppendLine($"  [{phase}]");
+
+        foreach (LocalScopeRequestEvent request in stats.LocalScopeRequests)
+        {
+          sb.AppendLine(
+            $"    +{request.OffsetSeconds,7:0.000}s SKYROOF scope reassert routed={request.Routed}");
+        }
+
+        foreach (ProbeEvent sample in stats.ScopeEvents)
+        {
+          sb.AppendLine(
+            $"    +{sample.OffsetSeconds,7:0.000}s " +
+            $"{(sample.RadioToPc ? "RADIO" : "PC")}:{sample.RadioPort}" +
+            $"{(sample.RadioToPc ? "->PC:" : "->RADIO:")}{sample.LocalPort} " +
+            $"len={sample.PayloadLength} " +
+            $"{sample.CivSignature ?? "-"} " +
+            $"{sample.PayloadHex}");
+        }
+      }
+
+      sb.AppendLine();
+      sb.AppendLine("Outbound small/control packet samples (early-phase diagnostic sample):");
       foreach (IcomLanProbePhase phase in Enum.GetValues<IcomLanProbePhase>())
       {
         sb.AppendLine($"  [{phase}]");
@@ -838,6 +885,8 @@ namespace SkyRoof
       internal readonly Dictionary<string, long> CivSignatures =
         new(StringComparer.Ordinal);
       internal readonly List<ProbeEvent> Events = new();
+      internal readonly List<ProbeEvent> ScopeEvents = new();
+      internal readonly List<LocalScopeRequestEvent> LocalScopeRequests = new();
 
       internal void Reset()
       {
@@ -852,6 +901,8 @@ namespace SkyRoof
         PacketSignatures.Clear();
         CivSignatures.Clear();
         Events.Clear();
+        ScopeEvents.Clear();
+        LocalScopeRequests.Clear();
       }
 
       internal TimeSpan Duration(DateTime fallbackEnd)
@@ -913,19 +964,39 @@ namespace SkyRoof
             (info.RadioToPc ? "RADIO->PC " : "PC->RADIO ") +
             info.CivSignature);
 
+        double eventOffset =
+          StartedUtc == default
+            ? 0
+            : Math.Max(
+                0,
+                (DateTime.UtcNow - StartedUtc).TotalSeconds);
+
         if (Events.Count < 180 &&
             info.PayloadHex != null)
         {
-          double offset =
-            StartedUtc == default
-              ? 0
-              : Math.Max(
-                  0,
-                  (DateTime.UtcNow - StartedUtc).TotalSeconds);
-
           Events.Add(
             new ProbeEvent(
-              offset,
+              eventOffset,
+              info.RadioToPc,
+              info.RadioPort,
+              info.LocalPort,
+              info.PayloadLength,
+              info.CivSignature,
+              info.PayloadHex));
+        }
+
+        // Scope-control packets are sparse and are the transition evidence we
+        // actually need. Preserve them across the entire phase instead of letting
+        // high-rate keepalive/poll traffic consume the generic sample budget.
+        if (ScopeEvents.Count < 1024 &&
+            info.PayloadHex != null &&
+            info.CivSignature?.StartsWith(
+              "27-",
+              StringComparison.Ordinal) == true)
+        {
+          ScopeEvents.Add(
+            new ProbeEvent(
+              eventOffset,
               info.RadioToPc,
               info.RadioPort,
               info.LocalPort,
@@ -981,6 +1052,10 @@ namespace SkyRoof
       int PayloadLength,
       string? CivSignature,
       string PayloadHex);
+
+    private sealed record LocalScopeRequestEvent(
+      double OffsetSeconds,
+      bool Routed);
   }
 
   internal readonly record struct ProbePacketInfo(
