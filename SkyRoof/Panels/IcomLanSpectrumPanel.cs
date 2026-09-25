@@ -13,6 +13,8 @@ namespace SkyRoof
     private readonly Button SourceBtn = new();
     private readonly Button StartStopBtn = new();
     private readonly Button ClearBtn = new();
+    private readonly Button ProbeBtn = new();
+    private readonly Label ProbeStatusLabel = new();
     private readonly Label StatusLabel = new();
     private readonly Label StatsLabel = new();
     private readonly Label TransportLabel = new();
@@ -31,6 +33,9 @@ namespace SkyRoof
     private int SelectedScopeBand;
     private long LastRenderedScopeFrameTicks;
     private bool LastStatsUsedNativeLan;
+    private IcomLanTransitionProbe? TransitionProbe;
+    private const double ProbeMinimumPhaseSeconds = 4.0;
+    private const double ProbeClosedAfterSeconds = 7.0;
 
     public IcomLanSpectrumPanel(Context ctx)
     {
@@ -66,7 +71,11 @@ namespace SkyRoof
 
       FormClosing += IcomLanSpectrumPanel_FormClosing;
 
-      UiTimer.Tick += (_, _) => RefreshUiStatus();
+      UiTimer.Tick += (_, _) =>
+      {
+        RefreshUiStatus();
+        RefreshTransitionProbeStatus();
+      };
       UiTimer.Start();
     }
 
@@ -163,6 +172,18 @@ namespace SkyRoof
       ClearBtn.Margin = new Padding(0, 2, 8, 2);
       ClearBtn.Click += (_, _) => SpectrumView.Clear();
       toolbar.Controls.Add(ClearBtn);
+
+      ProbeBtn.Text = "Probe";
+      ProbeBtn.AutoSize = true;
+      ProbeBtn.Margin = new Padding(0, 2, 8, 2);
+      ProbeBtn.Click += (_, _) => HandleTransitionProbeButton();
+      toolbar.Controls.Add(ProbeBtn);
+
+      ProbeStatusLabel.AutoSize = true;
+      ProbeStatusLabel.ForeColor = SystemColors.GrayText;
+      ProbeStatusLabel.Margin = new Padding(2, 7, 8, 0);
+      ProbeStatusLabel.Text = "Probe: idle";
+      toolbar.Controls.Add(ProbeStatusLabel);
 
       TransportLabel.AutoSize = true;
       TransportLabel.ForeColor = SystemColors.GrayText;
@@ -578,6 +599,310 @@ namespace SkyRoof
       }
     }
 
+    private void HandleTransitionProbeButton()
+    {
+      IcomLanTransitionProbe? probe = TransitionProbe;
+
+      if (probe == null)
+      {
+        StartTransitionProbe();
+        return;
+      }
+
+      double elapsed =
+        (DateTime.UtcNow - probe.CurrentPhaseStartedUtc).TotalSeconds;
+
+      if (elapsed < ProbeMinimumPhaseSeconds)
+      {
+        ProbeStatusLabel.Text =
+          $"Probe: keep this phase for at least {ProbeMinimumPhaseSeconds:0}s ({elapsed:0.0}s so far).";
+        return;
+      }
+
+      switch (probe.CurrentPhase)
+      {
+        case IcomLanProbePhase.ClosedBefore:
+          probe.BeginOpenWindow();
+          ProbeBtn.Text = "Arm CLOSE";
+          ProbeStatusLabel.Text =
+            "Probe OPEN window armed — NOW open RS-BA1 Spectrum; leave it open >=4s, then click Arm CLOSE.";
+          break;
+
+        case IcomLanProbePhase.Open:
+          probe.BeginClosedAfterWindow();
+          ProbeBtn.Text = "Capturing CLOSE…";
+          ProbeBtn.Enabled = false;
+          ProbeStatusLabel.Text =
+            $"Probe CLOSED-after armed — NOW close RS-BA1 Spectrum; auto-finish in {ProbeClosedAfterSeconds:0}s.";
+          break;
+      }
+    }
+
+    private void StartTransitionProbe()
+    {
+      string? radioAddress = ResolveProbeRadioAddress();
+
+      if (radioAddress == null)
+      {
+        ProbeStatusLabel.Text =
+          "Probe needs the IC-9700 IPv4 address. Enter it in Radio IP or let native LAN detection learn it first.";
+        return;
+      }
+
+      try
+      {
+        var probe = new IcomLanTransitionProbe(radioAddress);
+        probe.Start();
+        TransitionProbe = probe;
+
+        ProbeBtn.Text = "Arm OPEN";
+        ProbeBtn.Enabled = true;
+        ProbeStatusLabel.Text =
+          $"Probe CLOSED baseline on {radioAddress} — keep RS-BA1 Spectrum closed >=4s, then click Arm OPEN.";
+      }
+      catch (Exception ex)
+      {
+        ProbeStatusLabel.Text =
+          $"Probe could not start: {ex.Message}";
+      }
+    }
+
+    private string? ResolveProbeRadioAddress()
+    {
+      static string? Validate(string? value)
+      {
+        if (string.IsNullOrWhiteSpace(value))
+          return null;
+
+        return System.Net.IPAddress.TryParse(
+                 value.Trim(),
+                 out System.Net.IPAddress? address) &&
+               address.AddressFamily ==
+                 System.Net.Sockets.AddressFamily.InterNetwork
+          ? address.ToString()
+          : null;
+      }
+
+      return
+        Validate(RadioAddressBox.Text) ??
+        Validate(NativeLanAssistCapture?.DetectedRadioAddress) ??
+        (!Capture?.IsSkyCatStream == true
+          ? Validate(Capture?.DetectedRadioAddress)
+          : null);
+    }
+
+    private void RefreshTransitionProbeStatus()
+    {
+      IcomLanTransitionProbe? probe = TransitionProbe;
+      if (probe == null)
+        return;
+
+      if (probe.LastError != null)
+      {
+        CompleteTransitionProbe(
+          $"Probe capture error: {probe.LastError}");
+        return;
+      }
+
+      double elapsed =
+        (DateTime.UtcNow - probe.CurrentPhaseStartedUtc).TotalSeconds;
+
+      switch (probe.CurrentPhase)
+      {
+        case IcomLanProbePhase.ClosedBefore:
+          ProbeStatusLabel.Text =
+            $"Probe CLOSED baseline {elapsed:0.0}s — keep Spectrum closed; click Arm OPEN before opening it.";
+          break;
+
+        case IcomLanProbePhase.Open:
+          ProbeStatusLabel.Text =
+            $"Probe OPEN window {elapsed:0.0}s — Spectrum should be open; after >=4s click Arm CLOSE before closing it.";
+          break;
+
+        case IcomLanProbePhase.ClosedAfter:
+          double remaining =
+            Math.Max(
+              0,
+              ProbeClosedAfterSeconds - elapsed);
+
+          ProbeStatusLabel.Text =
+            $"Probe CLOSED-after {elapsed:0.0}s — Spectrum should now be closed; finishing in {remaining:0.0}s.";
+
+          if (elapsed >= ProbeClosedAfterSeconds)
+            CompleteTransitionProbe();
+          break;
+      }
+    }
+
+    private void CompleteTransitionProbe(string? extraMessage = null)
+    {
+      IcomLanTransitionProbe? probe = TransitionProbe;
+      if (probe == null)
+        return;
+
+      TransitionProbe = null;
+      ProbeBtn.Text = "Probe";
+      ProbeBtn.Enabled = true;
+
+      string report;
+
+      try
+      {
+        report = probe.StopAndBuildReport();
+      }
+      catch (Exception ex)
+      {
+        report =
+          "SkyRoof RS-BA1 Spectrum transition capture\r\n\r\n" +
+          "Failed to build report: " + ex;
+      }
+      finally
+      {
+        probe.Dispose();
+      }
+
+      if (!string.IsNullOrWhiteSpace(extraMessage))
+        report = extraMessage + "\r\n\r\n" + report;
+
+      string? path = SaveTransitionProbeReport(report);
+
+      ProbeStatusLabel.Text =
+        path == null
+          ? "Probe complete — report shown below."
+          : $"Probe complete — {Path.GetFileName(path)}";
+
+      ShowTransitionProbeReport(report, path);
+    }
+
+    private static string? SaveTransitionProbeReport(string report)
+    {
+      try
+      {
+        string folder = Path.Combine(
+          Environment.GetFolderPath(
+            Environment.SpecialFolder.LocalApplicationData),
+          "SkyRoof",
+          "Diagnostics");
+
+        Directory.CreateDirectory(folder);
+
+        string path = Path.Combine(
+          folder,
+          $"IcomScopeTransition-{DateTime.Now:yyyyMMdd-HHmmss}.txt");
+
+        File.WriteAllText(
+          path,
+          report,
+          new System.Text.UTF8Encoding(
+            encoderShouldEmitUTF8Identifier: false));
+
+        return path;
+      }
+      catch
+      {
+        return null;
+      }
+    }
+
+    private void ShowTransitionProbeReport(
+      string report,
+      string? path)
+    {
+      var form = new Form
+      {
+        Text = "RS-BA1 Spectrum Transition Capture",
+        StartPosition = FormStartPosition.CenterParent,
+        Width = 1040,
+        Height = 720,
+        MinimizeBox = false
+      };
+
+      var text = new TextBox
+      {
+        Dock = DockStyle.Fill,
+        Multiline = true,
+        ReadOnly = true,
+        WordWrap = false,
+        ScrollBars = ScrollBars.Both,
+        Font = new Font(
+          FontFamily.GenericMonospace,
+          9f),
+        Text = report
+      };
+
+      var buttons = new FlowLayoutPanel
+      {
+        Dock = DockStyle.Bottom,
+        Height = 42,
+        FlowDirection = FlowDirection.RightToLeft,
+        Padding = new Padding(6)
+      };
+
+      var close = new Button
+      {
+        Text = "Close",
+        AutoSize = true
+      };
+      close.Click += (_, _) => form.Close();
+      buttons.Controls.Add(close);
+
+      var copy = new Button
+      {
+        Text = "Copy report",
+        AutoSize = true
+      };
+      copy.Click += (_, _) =>
+      {
+        try { Clipboard.SetText(report); }
+        catch { }
+      };
+      buttons.Controls.Add(copy);
+
+      if (!string.IsNullOrWhiteSpace(path))
+      {
+        var openFolder = new Button
+        {
+          Text = "Open folder",
+          AutoSize = true
+        };
+        openFolder.Click += (_, _) =>
+        {
+          try
+          {
+            System.Diagnostics.Process.Start(
+              new System.Diagnostics.ProcessStartInfo(
+                "explorer.exe",
+                $"/select,\"{path}\"")
+              {
+                UseShellExecute = true
+              });
+          }
+          catch { }
+        };
+        buttons.Controls.Add(openFolder);
+      }
+
+      form.Controls.Add(text);
+      form.Controls.Add(buttons);
+      form.Show(this);
+    }
+
+    private void StopTransitionProbe()
+    {
+      IcomLanTransitionProbe? probe = TransitionProbe;
+      TransitionProbe = null;
+
+      if (probe == null)
+        return;
+
+      try { probe.Dispose(); }
+      catch { }
+
+      ProbeBtn.Text = "Probe";
+      ProbeBtn.Enabled = true;
+      ProbeStatusLabel.Text = "Probe: stopped";
+    }
+
     private void RequestScopeOutputIfDue(bool force)
     {
       if (!UsingSkyCatScopeSource)
@@ -612,6 +937,7 @@ namespace SkyRoof
     private void IcomLanSpectrumPanel_FormClosing(object? sender, FormClosingEventArgs e)
     {
       UiTimer.Stop();
+      StopTransitionProbe();
       StopCapture();
 
       ctx.IcomLanSpectrumPanel = null;
