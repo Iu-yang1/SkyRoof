@@ -378,6 +378,11 @@ namespace SkyRoof
         transportMarker,
         civSignature);
 
+      string? payloadHex =
+        payloadLength <= 192
+          ? Convert.ToHexString(payload)
+          : null;
+
       info = new ProbePacketInfo(
         radioToPc,
         radioPort,
@@ -389,6 +394,7 @@ namespace SkyRoof
         declaredCivLength,
         civSignature,
         packetSignature,
+        payloadHex,
         combinedScope,
         chunkedScope);
 
@@ -604,6 +610,25 @@ namespace SkyRoof
       }
 
       sb.AppendLine();
+      sb.AppendLine("Outbound small/control packet samples (chronological):");
+      foreach (IcomLanProbePhase phase in Enum.GetValues<IcomLanProbePhase>())
+      {
+        sb.AppendLine($"  [{phase}]");
+
+        foreach (ProbeEvent sample in Phases[phase].Events
+          .Where(x => !x.RadioToPc)
+          .Take(60))
+        {
+          sb.AppendLine(
+            $"    +{sample.OffsetSeconds,7:0.000}s " +
+            $"PC:{sample.LocalPort}->RADIO:{sample.RadioPort} " +
+            $"len={sample.PayloadLength} " +
+            $"{sample.CivSignature ?? "-"} " +
+            $"{sample.PayloadHex}");
+        }
+      }
+
+      sb.AppendLine();
       sb.AppendLine("Top packet signatures by OPEN-only increase:");
       foreach (SignatureComparison comparison in
         BuildSignatureComparisonsLocked(endedUtc).Take(30))
@@ -812,6 +837,7 @@ namespace SkyRoof
         new(StringComparer.Ordinal);
       internal readonly Dictionary<string, long> CivSignatures =
         new(StringComparer.Ordinal);
+      internal readonly List<ProbeEvent> Events = new();
 
       internal void Reset()
       {
@@ -825,6 +851,7 @@ namespace SkyRoof
         Flows.Clear();
         PacketSignatures.Clear();
         CivSignatures.Clear();
+        Events.Clear();
       }
 
       internal TimeSpan Duration(DateTime fallbackEnd)
@@ -885,6 +912,27 @@ namespace SkyRoof
             CivSignatures,
             (info.RadioToPc ? "RADIO->PC " : "PC->RADIO ") +
             info.CivSignature);
+
+        if (Events.Count < 180 &&
+            info.PayloadHex != null)
+        {
+          double offset =
+            StartedUtc == default
+              ? 0
+              : Math.Max(
+                  0,
+                  (DateTime.UtcNow - StartedUtc).TotalSeconds);
+
+          Events.Add(
+            new ProbeEvent(
+              offset,
+              info.RadioToPc,
+              info.RadioPort,
+              info.LocalPort,
+              info.PayloadLength,
+              info.CivSignature,
+              info.PayloadHex));
+        }
       }
 
       private static void IncrementBounded(
@@ -924,6 +972,15 @@ namespace SkyRoof
       double OpenRate,
       double ClosedAfterRate,
       double Delta);
+
+    private sealed record ProbeEvent(
+      double OffsetSeconds,
+      bool RadioToPc,
+      int RadioPort,
+      int LocalPort,
+      int PayloadLength,
+      string? CivSignature,
+      string PayloadHex);
   }
 
   internal readonly record struct ProbePacketInfo(
@@ -937,6 +994,7 @@ namespace SkyRoof
     int? DeclaredCivLength,
     string? CivSignature,
     string PacketSignature,
+    string? PayloadHex,
     bool CombinedScope,
     bool ChunkedScope);
 }
