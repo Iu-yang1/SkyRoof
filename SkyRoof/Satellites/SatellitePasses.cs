@@ -155,7 +155,9 @@ namespace SkyRoof
     // rebuilds list of valid satellites, recomputes all passes
     public virtual void FullRebuild()
     {            
-      Satellites = ListSatellites().Where(sat => sat.Tle != null && sat.IsAlive()).ToList();
+      Satellites = ListSatellites()
+        .Where(sat => sat.Tracker.Enabled && sat.IsAlive())
+        .ToList();
 
       var now = DateTime.UtcNow;
       Passes = ComputePasses(now, now + PredictionTimeSpan).ToList();
