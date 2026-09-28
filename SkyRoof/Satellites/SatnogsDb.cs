@@ -20,11 +20,6 @@ namespace SkyRoof
     internal const string SunSatId = "SUN";
     internal const string VenusSatId = "VENUS";
 
-    internal const string De440sUrl =
-      "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp";
-    internal const string De421Url =
-      "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/a_old_versions/de421.bsp";
-
     private readonly string DataFolder, DownloadsFolder;
     private JplSpkKernel? PlanetaryKernel;
     private Dictionary<string, SatnogsDbSatellite> SatelliteList = new();
@@ -223,6 +218,13 @@ namespace SkyRoof
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+          try
+          {
+            if (File.Exists(temporary))
+              File.Delete(temporary);
+          }
+          catch { }
+
           throw;
         }
         catch (Exception ex)
