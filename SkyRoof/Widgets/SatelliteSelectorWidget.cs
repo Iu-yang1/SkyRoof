@@ -19,7 +19,7 @@ namespace SkyRoof
     public SatnogsDbSatellite SelectedSatellite { get; private set; }
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public SatnogsDbTransmitter SelectedTransmitter { get; private set; }
+    public SatnogsDbTransmitter? SelectedTransmitter { get; private set; }
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public SatellitePass? SelectedPass { get; private set; }
@@ -161,17 +161,45 @@ namespace SkyRoof
 
     private void ShowSelectedTransmitter()
     {
-      var cust = ctx.Settings.Satellites.SatelliteCustomizations.GetOrCreate(SelectedSatellite.sat_id);
-      cust.SelectedTransmitterId ??= SelectedSatellite.Transmitters[0].uuid;
-      SelectedTransmitter = SelectedSatellite.Transmitters.FirstOrDefault(t => t.uuid == cust.SelectedTransmitterId);
-      SelectedTransmitter ??= SelectedSatellite.Transmitters[0];
+      if (SelectedSatellite.Transmitters.Count == 0)
+      {
+        SelectedTransmitter = null;
+        changing = true;
+        TransmitterComboBox.SelectedItem = null;
+        toolTip1.SetToolTip(
+          TransmitterComboBox,
+          SelectedSatellite.IsEphemerisTarget
+            ? "Tracking-only ephemeris target; radio frequency is unchanged."
+            : "No transmitter is defined for this tracking target.");
+        changing = false;
+
+        SelectedTransmitterChanged?.Invoke(this, EventArgs.Empty);
+        return;
+      }
+
+      var cust =
+        ctx.Settings.Satellites.SatelliteCustomizations
+          .GetOrCreate(SelectedSatellite.sat_id);
+      cust.SelectedTransmitterId ??=
+        SelectedSatellite.Transmitters[0].uuid;
+      SelectedTransmitter =
+        SelectedSatellite.Transmitters
+          .FirstOrDefault(
+            t => t.uuid == cust.SelectedTransmitterId);
+      SelectedTransmitter ??=
+        SelectedSatellite.Transmitters[0];
 
       changing = true;
-      TransmitterComboBox.SelectedItem = SelectedTransmitter;
-      toolTip1.SetToolTip(TransmitterComboBox, SelectedTransmitter.GetTooltipText());
+      TransmitterComboBox.SelectedItem =
+        SelectedTransmitter;
+      toolTip1.SetToolTip(
+        TransmitterComboBox,
+        SelectedTransmitter.GetTooltipText());
       changing = false;
 
-      SelectedTransmitterChanged?.Invoke(this, EventArgs.Empty);
+      SelectedTransmitterChanged?.Invoke(
+        this,
+        EventArgs.Empty);
     }
 
     private void SetSatelliteInCombobox()
@@ -249,7 +277,7 @@ namespace SkyRoof
       else if (sat.Flags.HasFlag(SatelliteFlags.Vhf)) backBrush = Theme.VhfTintBrush;
 
       if (sat.Flags.HasFlag(SatelliteFlags.Ham)) style |= FontStyle.Bold;
-      if (sat.IsAlive() && sat.Tle == null) style |= FontStyle.Strikeout;
+      if (sat.IsAlive() && !sat.Tracker.Enabled) style |= FontStyle.Strikeout;
 
       // derived font disposed after drawing; static Brushes need no disposal
       Font? derivedFont = style == FontStyle.Regular ? null : new Font(e.Font, style);
