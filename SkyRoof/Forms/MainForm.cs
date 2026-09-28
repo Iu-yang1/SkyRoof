@@ -76,6 +76,7 @@ namespace SkyRoof
     private void MainForm_Load(object sender, EventArgs e)
     {
       ReadOrDownloadSatelliteData();
+      EnsureJplEphemerisAvailableAsync().DoNotAwait();
 
       // apply settings
       ctx.Settings.Ui.RestoreWindowPosition(this);
@@ -634,6 +635,60 @@ namespace SkyRoof
 
       ctx.SatnogsDb.LoadTleFromFile(dlg.FileName);
     }
+
+    private bool JplBootstrapRunning;
+
+    private async Task EnsureJplEphemerisAvailableAsync()
+    {
+      var settings = ctx.Settings.OrbitSources;
+      if (JplBootstrapRunning ||
+          !settings.ShowSolarSystemTargets ||
+          !settings.AutoDownloadJplKernel ||
+          settings.JplKernel == JplEphemerisKernel.CustomFile)
+        return;
+
+      string path = ctx.SatnogsDb.GetJplKernelPath(settings);
+      if (File.Exists(path))
+        return;
+
+      JplBootstrapRunning = true;
+
+      try
+      {
+        Log.Information(
+          $"JPL ephemeris cache missing; downloading {settings.JplKernel} from NASA/JPL NAIF.");
+
+        await ctx.SatnogsDb.DownloadJplKernelAsync(
+          settings.JplKernel);
+
+        int targets =
+          ctx.SatnogsDb.ConfigureSolarSystem(settings);
+        ctx.Settings.Satellites.EnsureSolarSystemGroup(
+          ctx.SatnogsDb);
+
+        if (targets > 0)
+        {
+          ctx.Settings.SaveToFile();
+          SatnogsDb_ListUpdated(null, EventArgs.Empty);
+        }
+
+        Log.Information(
+          $"JPL ephemeris bootstrap complete: {targets} tracking targets.");
+      }
+      catch (Exception ex)
+      {
+        // Planetary ephemeris is optional: a network outage must not prevent
+        // normal TLE satellite operation. The Tools menu can retry manually.
+        Log.Warning(
+          ex,
+          $"Automatic JPL {settings.JplKernel} ephemeris download failed.");
+      }
+      finally
+      {
+        JplBootstrapRunning = false;
+      }
+    }
+
 
     private void AddOrbitSourceMenuItems()
     {
