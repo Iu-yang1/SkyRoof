@@ -192,7 +192,7 @@ namespace SkyRoof
       {
         try
         {
-          Ctx.FrequencyControl.SetPtt(false);
+          Ctx.FrequencyControl.ReleaseApplicationPtt();
         }
         catch (Exception ex)
         {
