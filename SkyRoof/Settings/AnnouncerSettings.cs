@@ -4,7 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using CSCore.CoreAudioAPI;
+using NAudio.CoreAudioApi;
 using VE3NEA;
 using static SkyRoof.AosAnnouncement;
 
