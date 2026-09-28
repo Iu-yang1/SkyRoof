@@ -150,7 +150,17 @@ replaces it. Entries you add that are not in the shipped file are always kept.</
 SkyRoof updates its bundled definitions.</p>
 <h2 id="tle">TLE</h2>
 <p>The satellite orbit elements (<a href="https://celestrak.org/columns/v04n03/">TLE</a> data)
-are downloaded from <strong>SatNOGS DB</strong>.</p>
+are downloaded from <strong>SatNOGS DB</strong> by default.</p>
+<p>The built-in satellite-list, transmitter-list and primary TLE URLs are exposed in
+<strong>Tools / Orbit / TLE Sources / Edit Source URLs</strong> under <strong>Orbit / Ephemeris Sources</strong>.
+They are normal settings, so you can replace or clear them instead of editing source code.</p>
+<p>Additional TLE feeds can be entered in <strong>Custom TLE Sources</strong>. Separate multiple URLs or local
+file paths with semicolons or new lines. Plain 2-line/3-line TLE text and SatNOGS-style JSON are
+supported. For example:</p>
+<pre><code class="lang-text">http://autotle.bi4pym.cn/AutoTLE.txt
+</code></pre>
+<p>Custom TLE feeds are applied after the primary source, so they can override an existing NORAD
+object and can also add tracking-only objects that are not present in the SatNOGS database.</p>
 <p>SatNOGS obtains these data from different sources and makes the latest and most reliable data
 available on their web site. The source of TLE and its creation time are shown in the
 <a href="satellite_details_window.html">Satellite Details window</a>
@@ -158,6 +168,13 @@ or <a href="satellite_details_panel.html">panel</a>:</p>
 <p><img src="../images/tle_date_details.png" alt="TLE Date"></p>
 <p>and in the mouse tooltip of the satellite:</p>
 <p><img src="../images/tle_date_tooltip.png" alt="TLE Date"></p>
+<h2 id="jpl-ephemeris-sources">JPL Ephemeris Sources</h2>
+<p>Moon, Sun and Venus tracking uses a JPL/NAIF SPK kernel. <strong>DE440s</strong> is the default. SkyRoof ships
+no large BSP file; it downloads the selected kernel into the user data cache when needed.</p>
+<p>The DE440s and DE421 download source lists are editable in the same <strong>Orbit / Ephemeris Sources</strong>
+settings section. Each default list contains two official NASA/JPL endpoints (NAIF first, SSD
+second), and SkyRoof tries them in order. Large-kernel downloads use a 15-minute HTTP timeout.
+You can remove, reorder or replace either URL, or use <strong>Load SPK/BSP From File</strong> for a local copy.</p>
 <h2 id="automatic-updates">Automatic Updates</h2>
 <p>SkyRoof automatically downloads the satellite list every 7 days, and TLE data every 24 hours.</p>
 <p>The mouse tooltip of the Satellite Data label on the status bar shows the last download time:</p>
