@@ -35,9 +35,19 @@ namespace SkyRoof
     public GrSatsInfo? Find(int norad, double? baud)
     {
       if (!byNorad.TryGetValue(norad, out var list) || list.Count == 0) return null;
-      if (baud is double b)
-        return list.FirstOrDefault(t => (t.baudrate ?? double.MaxValue) == b);
-      return null;
+      if (list.Count == 1) return list[0];
+      if (baud is not double b) return null;
+
+      var nearest = list
+        .Where(t => t.baudrate.HasValue)
+        .Select(t => new { Info = t, Error = Math.Abs(t.baudrate!.Value - b) })
+        .OrderBy(x => x.Error)
+        .FirstOrDefault();
+
+      if (nearest == null) return null;
+
+      double tolerance = Math.Max(1.0, Math.Abs(b) * 0.02);
+      return nearest.Error <= tolerance ? nearest.Info : null;
     }
 
     private void ParseFile(string path)

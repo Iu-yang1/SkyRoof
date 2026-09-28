@@ -1,0 +1,296 @@
+{
+"version": 1,
+"dependencies": {
+"net10.0-windows7.0": {
+"FluentAssertions": {
+"type": "Direct",
+"requested": "[6.12.2, )",
+"resolved": "6.12.2",
+"contentHash": "8YE+xJmT8wgzEpFuzJ4S62oFhEL/AKouMz1RWPEMEUhy9H11aRQlGIWcHurH5BEy7tbF6gb0CJrs0wOw/AtDcQ==",
+"dependencies": {
+"System.Configuration.ConfigurationManager": "4.4.0"
+}
+},
+"Microsoft.NET.Test.Sdk": {
+"type": "Direct",
+"requested": "[17.11.1, )",
+"resolved": "17.11.1",
+"contentHash": "U3Ty4BaGoEu+T2bwSko9tWqWUOU16WzSFkq6U8zve75oRBMSLTBdMAZrVNNz1Tq12aCdDom9fcOcM9QZaFHqFg==",
+"dependencies": {
+"Microsoft.CodeCoverage": "17.11.1",
+"Microsoft.TestPlatform.TestHost": "17.11.1"
+}
+},
+"xunit": {
+"type": "Direct",
+"requested": "[2.9.2, )",
+"resolved": "2.9.2",
+"contentHash": "7LhFS2N9Z6Xgg8aE5lY95cneYivRMfRI8v+4PATa4S64D5Z/Plkg0qa8dTRHSiGRgVZ/CL2gEfJDE5AUhOX+2Q==",
+"dependencies": {
+"xunit.analyzers": "1.16.0",
+"xunit.assert": "2.9.2",
+"xunit.core": "[2.9.2]"
+}
+},
+"xunit.runner.visualstudio": {
+"type": "Direct",
+"requested": "[2.8.2, )",
+"resolved": "2.8.2",
+"contentHash": "vm1tbfXhFmjFMUmS4M0J0ASXz3/U5XvXBa6DOQUL3fEz4Vt6YPhv+ESCarx6M6D+9kJkJYZKCNvJMas1+nVfmQ=="
+},
+"AngleSharp": {
+"type": "Transitive",
+"resolved": "1.5.2",
+"contentHash": "LVZ7rrr6GHbhERhTgVDarVygl1e6KwE96pronA90LBOMacDhxR4lB+xYLjn/vlnUu+xbOB2RM9fuCPEx5bdyWA=="
+},
+"CSCore": {
+"type": "Transitive",
+"resolved": "1.2.1.2",
+"contentHash": "DoQKUcdZLQawo3mOg8CvujJD9YkvTt6NtEu7S+OCo8+ySl8eCeUw4LFyL2E1OcAkPU918HZM6sUNcvIMcXWg6g=="
+},
+"DockPanelSuite": {
+"type": "Transitive",
+"resolved": "3.1.1",
+"contentHash": "goYuIMrAHyzPfwqqW5MHXk9mWVI4oyILqC1TRlNS0pzXY7ku/fxoY1j0JuDJnwboqpIxvAatOT9ONrheCMo3/Q=="
+},
+"DockPanelSuite.ThemeVS2015": {
+"type": "Transitive",
+"resolved": "3.1.1",
+"contentHash": "5ZrBaRcCoW9FMDmWD5nY5YzGIIBmMHzTMZHs6ScZsEAISfJYKopUPo8e1T+hRKe2aKYVkAfnLAW5lgpKNMvMug==",
+"dependencies": {
+"DockPanelSuite": "3.1.1"
+}
+},
+"MathNet.Filtering": {
+"type": "Transitive",
+"resolved": "0.7.0",
+"contentHash": "Ghm/RaCS4+29PO1XGn83shZSwDJzAGxys60xh0QZH8Dz3dqxiTIwal8kksU8vcp3GtNVRDtSgM7O3FLuhep9vw==",
+"dependencies": {
+"MathNet.Numerics": "4.9.1"
+}
+},
+"MathNet.Numerics": {
+"type": "Transitive",
+"resolved": "5.0.0",
+"contentHash": "pg1W2VwaEQMAiTpGK840hZgzavnqjlCMTVSbtVCXVyT+7AX4mc1o89SPv4TBlAjhgCOo9c1Y+jZ5m3ti2YgGgA=="
+},
+"Microsoft.CodeCoverage": {
+"type": "Transitive",
+"resolved": "17.11.1",
+"contentHash": "nPJqrcA5iX+Y0kqoT3a+pD/8lrW/V7ayqnEJQsTonSoPz59J8bmoQhcSN4G8+UJ64Hkuf0zuxnfuj2lkHOq4cA=="
+},
+"Microsoft.TestPlatform.ObjectModel": {
+"type": "Transitive",
+"resolved": "17.11.1",
+"contentHash": "E2jZqAU6JeWEVsyOEOrSW1o1bpHLgb25ypvKNB/moBXPVsFYBPd/Jwi7OrYahG50J83LfHzezYI+GaEkpAotiA=="
+},
+"Microsoft.TestPlatform.TestHost": {
+"type": "Transitive",
+"resolved": "17.11.1",
+"contentHash": "DnG+GOqJXO/CkoqlJWeDFTgPhqD/V6VqUIL3vINizCWZ3X+HshCtbbyDdSHQQEjrc2Sl/K3yaxX6s+5LFEdYuw==",
+"dependencies": {
+"Microsoft.TestPlatform.ObjectModel": "17.11.1",
+"Newtonsoft.Json": "13.0.1"
+}
+},
+"MultimediaTimer": {
+"type": "Transitive",
+"resolved": "1.0.1",
+"contentHash": "aZsF4cwETUtl9bclUahMdykF1I8sClBvsrK7c2rVzspcsfY8jFkGgzXv59mfVXuj5Mrz3OQCd2KKWLicaWApRA=="
+},
+"NAudio": {
+"type": "Transitive",
+"resolved": "2.3.0",
+"contentHash": "xN+Lzlu9DmXqBiL6XkP0VZmgTxZPdSGjVSWtKG9HKuar3LhIYNOIYQETieigS+QDS+nrs1QmHbBWWOru0nWA5A==",
+"dependencies": {
+"NAudio.Asio": "2.3.0",
+"NAudio.Core": "2.3.0",
+"NAudio.Midi": "2.3.0",
+"NAudio.Wasapi": "2.3.0",
+"NAudio.WinForms": "2.3.0",
+"NAudio.WinMM": "2.3.0"
+}
+},
+"NAudio.Asio": {
+"type": "Transitive",
+"resolved": "2.3.0",
+"contentHash": "I+rAAPT8vmSEw4d4ie+AoSkrvNK6ylRrXznnjQKS+qZgTA9Jnt1Pxe0EaU8nXxOOq5h8ucBSWccBEw6I/J0nkQ==",
+"dependencies": {
+"NAudio.Core": "2.3.0"
+}
+},
+"NAudio.Core": {
+"type": "Transitive",
+"resolved": "2.3.0",
+"contentHash": "jMd7r6dB6tAtXhOYL58ntPqwERNm1/Rhw5MKOIYvsnXzuX+PTGsa2VMam6n0npZYSwlSidKa4GAm4bFcXFUlcg=="
+},
+"NAudio.Midi": {
+"type": "Transitive",
+"resolved": "2.3.0",
+"contentHash": "t8wvPFPHHQOHhoNMCaDE8OiYZoJuxmY4H6UPBtmnf+xx7oQuajFCqlG4Q00ID+tiEyj471WeVb4Nkylr4tDoow==",
+"dependencies": {
+"NAudio.Core": "2.3.0"
+}
+},
+"NAudio.Wasapi": {
+"type": "Transitive",
+"resolved": "2.3.0",
+"contentHash": "y5K2BxrLnvohgu5znzg5wRsai3YcuNXfrpo68i7PmCQqpK5MC/R24e5aO3OyN/XhfRr12e0QYV0OnUWEHi5SzA==",
+"dependencies": {
+"NAudio.Core": "2.3.0"
+}
+},
+"NAudio.WinForms": {
+"type": "Transitive",
+"resolved": "2.3.0",
+"contentHash": "vyKqFUlAZrZ0QPcCM1T+zimjYgC1cNDloHaiOdtV4S1eK4AGu3Dz1EE4yy/WgcneJwQNjGFaELY7b2TsL+g56w==",
+"dependencies": {
+"NAudio.WinMM": "2.3.0"
+}
+},
+"NAudio.WinMM": {
+"type": "Transitive",
+"resolved": "2.3.0",
+"contentHash": "5G1dRjsZm50T3luyuqcmI2BSvj3K4ZJaD/x776/0Epj88qOsOryDZG40+MufwIk1UFJSFWhRobBqtJYFc8Ss4g==",
+"dependencies": {
+"NAudio.Core": "2.3.0"
+}
+},
+"Newtonsoft.Json": {
+"type": "Transitive",
+"resolved": "13.0.3",
+"contentHash": "HrC5BXdl00IP9zeV+0Z848QWPAoCr9P3bDEZguI+gkLcBKAOxix/tLEAAHC+UvDNPv4a2d18lOReHMOagPa+zQ=="
+},
+"Serilog": {
+"type": "Transitive",
+"resolved": "4.2.0",
+"contentHash": "gmoWVOvKgbME8TYR+gwMf7osROiWAURterc6Rt2dQyX7wtjZYpqFiA/pY6ztjGQKKV62GGCyOcmtP1UKMHgSmA=="
+},
+"Serilog.Sinks.File": {
+"type": "Transitive",
+"resolved": "6.0.0",
+"contentHash": "lxjg89Y8gJMmFxVkbZ+qDgjl+T4yC5F7WSLTvA+5q0R04tfKVLRL/EHpYoJ/MEQd2EeCKDuylBIVnAYMotmh2A==",
+"dependencies": {
+"Serilog": "4.0.0"
+}
+},
+"SGP.NET": {
+"type": "Transitive",
+"resolved": "1.4.0",
+"contentHash": "fGKIkw0Af0ZBUHoAnDZ3JVSaSnMSpBF8ferW0RskfW0VC+tHYktt/OhcBNhrsbmdPopiUYJqAdVHJFIM+uZFLQ=="
+},
+"SharpGL": {
+"type": "Transitive",
+"resolved": "3.1.1",
+"contentHash": "tLTsMAl0XMjLhVK++ga65tObn/8IyPEfZ9i+icELcAPJ92mgB/DllVlfDBNJOP5T3C4GuT6YEZn3CVR11GH2qQ=="
+},
+"SharpGL.SceneGraph": {
+"type": "Transitive",
+"resolved": "3.1.1",
+"contentHash": "VY4SS/y8Ob8Mbi/oqh0lHA0SRCfRCeZ+/Kk8AM4EAw/vhHdpS1LEuVa0hVE3gA84tp3YFVmwXn8GjeLIA/VfmA==",
+"dependencies": {
+"SharpGL": "3.1.1",
+"System.Drawing.Common": "4.7.0"
+}
+},
+"SharpGL.WinForms": {
+"type": "Transitive",
+"resolved": "3.1.1",
+"contentHash": "n+4xnGkVPDRymxP4vPhtcPFw794KrESaXLIBCsDxuj//zx31SGmG1B53Y63x9cS1xlaH6KotHV1OV/MLvTKI0A==",
+"dependencies": {
+"SharpGL": "3.1.1",
+"SharpGL.SceneGraph": "3.1.1",
+"System.Data.DataSetExtensions": "4.5.0"
+}
+},
+"System.Configuration.ConfigurationManager": {
+"type": "Transitive",
+"resolved": "4.4.0",
+"contentHash": "gWwQv/Ug1qWJmHCmN17nAbxJYmQBM/E94QxKLksvUiiKB1Ld3Sc/eK1lgmbSjDFxkQhVuayI/cGFZhpBSodLrg==",
+"dependencies": {
+"System.Security.Cryptography.ProtectedData": "4.4.0"
+}
+},
+"System.Data.DataSetExtensions": {
+"type": "Transitive",
+"resolved": "4.5.0",
+"contentHash": "221clPs1445HkTBZPL+K9sDBdJRB8UN8rgjO3ztB0CQ26z//fmJXtlsr6whGatscsKGBrhJl5bwJuKSA8mwFOw=="
+},
+"System.Security.Cryptography.ProtectedData": {
+"type": "Transitive",
+"resolved": "4.4.0",
+"contentHash": "cJV7ScGW7EhatRsjehfvvYVBvtiSMKgN8bOVI0bQhnF5bU7vnHVIsH49Kva7i7GWaWYvmEzkYVk1TC+gZYBEog=="
+},
+"System.Speech": {
+"type": "Transitive",
+"resolved": "10.0.5",
+"contentHash": "MYkGiMGWYc9rhyvsmf2UGIHD4RVJ3+uNgllFPP1YW6ILJJDXpDN8jMcy++0E/KrG507kTPCo5EOW4tEwUOCKhQ=="
+},
+"WsjtxUtils.WsjtxMessages": {
+"type": "Transitive",
+"resolved": "1.0.0.69",
+"contentHash": "E3r7k7Z8O15MfF8dPdUgphZ2Hx/g3SVCef0hdY1Ogu0Uhx4GMuQJhKN5tWLC2eZgnS4Kn95yqHbVe/7hAQCwHw=="
+},
+"xunit.abstractions": {
+"type": "Transitive",
+"resolved": "2.0.3",
+"contentHash": "pot1I4YOxlWjIb5jmwvvQNbTrZ3lJQ+jUGkGjWE3hEFM0l5gOnBWS+H3qsex68s5cO52g+44vpGzhAt+42vwKg=="
+},
+"xunit.analyzers": {
+"type": "Transitive",
+"resolved": "1.16.0",
+"contentHash": "hptYM7vGr46GUIgZt21YHO4rfuBAQS2eINbFo16CV/Dqq+24Tp+P5gDCACu1AbFfW4Sp/WRfDPSK8fmUUb8s0Q=="
+},
+"xunit.assert": {
+"type": "Transitive",
+"resolved": "2.9.2",
+"contentHash": "QkNBAQG4pa66cholm28AxijBjrmki98/vsEh4Sx5iplzotvPgpiotcxqJQMRC8d7RV7nIT8ozh97957hDnZwsQ=="
+},
+"xunit.core": {
+"type": "Transitive",
+"resolved": "2.9.2",
+"contentHash": "O6RrNSdmZ0xgEn5kT927PNwog5vxTtKrWMihhhrT0Sg9jQ7iBDciYOwzBgP2krBEk5/GBXI18R1lKvmnxGcb4w==",
+"dependencies": {
+"xunit.extensibility.core": "[2.9.2]",
+"xunit.extensibility.execution": "[2.9.2]"
+}
+},
+"xunit.extensibility.core": {
+"type": "Transitive",
+"resolved": "2.9.2",
+"contentHash": "Ol+KlBJz1x8BrdnhN2DeOuLrr1I/cTwtHCggL9BvYqFuVd/TUSzxNT5O0NxCIXth30bsKxgMfdqLTcORtM52yQ==",
+"dependencies": {
+"xunit.abstractions": "2.0.3"
+}
+},
+"xunit.extensibility.execution": {
+"type": "Transitive",
+"resolved": "2.9.2",
+"contentHash": "rKMpq4GsIUIJibXuZoZ8lYp5EpROlnYaRpwu9Zr0sRZXE7JqJfEEbCsUriZqB+ByXCLFBJyjkTRULMdC+U566g==",
+"dependencies": {
+"xunit.extensibility.core": "[2.9.2]"
+}
+},
+"skyroof": {
+"type": "Project",
+"dependencies": {
+"AngleSharp": "[1.5.2, )",
+"CSCore": "[1.2.1.2, )",
+"DockPanelSuite": "[3.1.1, )",
+"DockPanelSuite.ThemeVS2015": "[3.1.1, )",
+"MathNet.Filtering": "[0.7.0, )",
+"MathNet.Numerics": "[5.0.0, )",
+"MultimediaTimer": "[1.0.1, )",
+"NAudio": "[2.3.0, )",
+"Newtonsoft.Json": "[13.0.3, )",
+"SGP.NET": "[1.4.0, )",
+"Serilog": "[4.2.0, )",
+"Serilog.Sinks.File": "[6.0.0, )",
+"SharpGL.WinForms": "[3.1.1, )",
+"System.Speech": "[10.0.5, )",
+"WsjtxUtils.WsjtxMessages": "[1.0.0.69, )"
+}
+}
+}
+}
+}

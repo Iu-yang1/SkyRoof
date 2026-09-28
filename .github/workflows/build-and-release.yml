@@ -14,8 +14,15 @@ jobs:
     runs-on: windows-latest
 
     steps:
+      - name: Require master release source
+        shell: pwsh
+        run: |
+          if ("${{ github.ref }}" -ne "refs/heads/master") {
+            throw "Build and Release must be dispatched from the master branch."
+          }
+
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # Directory.Build.props is the only place the version is maintained. MSBuild applies it
       # to the assemblies by itself, so nothing here patches SkyRoof.csproj any more.
@@ -31,10 +38,10 @@ jobs:
           "version=$version" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v2
+        uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2
 
       - name: Setup NuGet
-        uses: NuGet/setup-nuget@v1
+        uses: NuGet/setup-nuget@296fd3ccf8528660c91106efefe2364482f86d6f # v1
 
       # The WinDivert binaries are intentionally not stored in Git. Prepare the
       # same pinned upstream release used by compile-check before MSBuild so the
@@ -77,10 +84,13 @@ jobs:
           Write-Host "WinDivert driver: $($sys.FullName)"
 
       - name: Restore NuGet packages
-        run: nuget restore SkyRoof.sln
+        run: nuget restore SkyRoof.sln -LockedMode
 
       - name: Build WinForms App
         run: msbuild SkyRoof.sln /p:Configuration=Release /p:Platform=x64
+
+      - name: Run release tests
+        run: dotnet test VE3NEA.Dsp.Tests/VE3NEA.Dsp.Tests.csproj -c Release -p:Platform=x64 --no-restore
 
       - name: Install Inno Setup
         run: choco upgrade innosetup --yes --no-progress
@@ -99,12 +109,12 @@ jobs:
 
       - name: Upload Unsigned Artifact
         id: upload-unsigned-artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: 
           path: 'install\Output\SkyRoofSetup.exe'
 
       - name: Sign
-        uses: signpath/github-action-submit-signing-request@v1.1
+        uses: signpath/github-action-submit-signing-request@3c306158facd969ebdb385c6845dee38afc2ebf9 # v1.1
         with:
           api-token: '${{ secrets.SIGNPATH_API_TOKEN }}'
           github-token: '${{ secrets.GITHUB_TOKEN }}'
@@ -129,7 +139,7 @@ jobs:
         shell: pwsh
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           name: SkyRoof v.${{ steps.get_version.outputs.version }}
           tag_name: v.${{ steps.get_version.outputs.version }}

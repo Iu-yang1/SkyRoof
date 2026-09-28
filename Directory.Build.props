@@ -6,6 +6,7 @@
   <PropertyGroup>
     <Product>SkyRoof</Product>
     <Version>1.54</Version>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
 
 </Project>

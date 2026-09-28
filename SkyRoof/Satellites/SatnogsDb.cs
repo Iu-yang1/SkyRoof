@@ -393,7 +393,7 @@ namespace SkyRoof
 
     private async Task DownloadJE9PEL()
     {
-      string url = "http://www.ne.jp/asahi/hamradio/je9pel/satslist.csv";
+      string url = "https://www.ne.jp/asahi/hamradio/je9pel/satslist.csv";
       string csv = await DownloadHttpClient.GetStringAsync(url, cts.Token);
       cts.Token.ThrowIfCancellationRequested();
 
