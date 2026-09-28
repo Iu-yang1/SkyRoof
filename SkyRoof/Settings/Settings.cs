@@ -16,6 +16,10 @@ namespace SkyRoof
     public SdrSettings Sdr = new();
     public LatestVersionInfo LatestVersion = new();
 
+    [DisplayName("Orbit / Ephemeris Sources")]
+    [TypeConverter(typeof(ExpandableObjectConverter))]
+    public OrbitSourceSettings OrbitSources { get; set; } = new();
+
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public UserSettings User { get; set; } = new();
 
