@@ -226,8 +226,6 @@ namespace VE3NEA.Dsp.Tests
     private static byte[] BuildSyntheticKernel()
     {
       byte[] data = new byte[3 * 1024];
-      bool littleEndian = true;
-
       WriteAscii(data, 0, 8, "DAF/SPK ");
       WriteInt32(data, 8, 2);
       WriteInt32(data, 12, 6);
@@ -330,8 +328,8 @@ namespace VE3NEA.Dsp.Tests
       int firstAddress,
       int lastAddress)
     {
-      WriteDouble(data, offset, -86400);
-      WriteDouble(data, offset + 8, 86400);
+      WriteDouble(data, offset, -2_000_000_000);
+      WriteDouble(data, offset + 8, 2_000_000_000);
       WriteInt32(data, offset + 16, target);
       WriteInt32(data, offset + 20, center);
       WriteInt32(data, offset + 24, 1);
@@ -349,14 +347,15 @@ namespace VE3NEA.Dsp.Tests
     {
       // RSIZE=5 -> [MID,RADIUS,X,Y,Z], one coefficient per component.
       WriteDouble(data, offset, 0);
-      WriteDouble(data, offset + 8, 86400);
+      WriteDouble(data, offset + 8, 2_000_000_000);
       WriteDouble(data, offset + 16, x);
       WriteDouble(data, offset + 24, y);
       WriteDouble(data, offset + 32, z);
 
-      // Segment tail: INIT, INTLEN, RSIZE, N.
-      WriteDouble(data, offset + 40, -86400);
-      WriteDouble(data, offset + 48, 172800);
+      // Segment tail: INIT, INTLEN, RSIZE, N. Use a broad synthetic
+      // interval so ConfigureSolarSystem can validate the current UTC date.
+      WriteDouble(data, offset + 40, -2_000_000_000);
+      WriteDouble(data, offset + 48, 4_000_000_000);
       WriteDouble(data, offset + 56, 5);
       WriteDouble(data, offset + 64, 1);
     }
