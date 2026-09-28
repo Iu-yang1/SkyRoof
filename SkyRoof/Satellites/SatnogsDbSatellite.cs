@@ -194,7 +194,11 @@ namespace SkyRoof
 
     [JsonIgnore]
     [Browsable(false)]
-    public bool IsMoon { get; internal set; }
+    internal JplBody? EphemerisBody { get; set; }
+
+    [JsonIgnore]
+    [Browsable(false)]
+    public bool IsEphemerisTarget => EphemerisBody.HasValue;
 
     [Browsable(false)]
     internal SatelliteTracker Tracker { get => tracker ??= new SatelliteTracker(Tle); }
@@ -262,11 +266,16 @@ namespace SkyRoof
       if ((Flags & (SatelliteFlags.Vhf | SatelliteFlags.Uhf)) == SatelliteFlags.None)
         Flags |= SatelliteFlags.OtherBands;
 
-      // tx
-      if (Transmitters.Any(t => t.type == "Transponder")) Flags |= SatelliteFlags.Transponder;
-      if (Transmitters.Any(t => t.type == "Transceiver")) Flags |= SatelliteFlags.Transceiver;
-      if ((Flags & (SatelliteFlags.Transponder | SatelliteFlags.Transceiver)) == SatelliteFlags.None)
-        Flags |= SatelliteFlags.Transmitter;
+      // radio / tracking role
+      if (IsEphemerisTarget)
+        Flags |= SatelliteFlags.TrackingTarget;
+      else
+      {
+        if (Transmitters.Any(t => t.type == "Transponder")) Flags |= SatelliteFlags.Transponder;
+        if (Transmitters.Any(t => t.type == "Transceiver")) Flags |= SatelliteFlags.Transceiver;
+        if ((Flags & (SatelliteFlags.Transponder | SatelliteFlags.Transceiver)) == SatelliteFlags.None)
+          Flags |= SatelliteFlags.Transmitter;
+      }
     }
 
     // status vocabulary changed in SatNOGS DB 1.76: the old future/alive/dead/re-entered became
@@ -288,14 +297,17 @@ namespace SkyRoof
       else if (Flags.HasFlag(SatelliteFlags.Transceiver)) radio = "Transceiver";
       ComputeOrbitDetails();
 
-      string objectId = IsMoon ? "Moon / EME target" : $"NORAD: {norad_cat_id}";
+      string objectId =
+        IsEphemerisTarget
+          ? $"JPL target: {EphemerisBody}"
+          : $"NORAD: {norad_cat_id}";
       string tooltipText = $"{names}\n{objectId}\nstatus: {status}\ncountries: {countries}";
-      if (IsMoon)
-        tooltipText += "\nephemeris: lunar topocentric";
+      if (IsEphemerisTarget)
+        tooltipText += $"\nephemeris: {citation}";
       else if (Tle != null) tooltipText +=
           $"\nTLE: {TleInfo}\nperiod: {Period} min.\ninclination: {Inclination}°\n" +
           $"footprint: {Footprint} km\naltitude: {Altitude}";
-      tooltipText += $"\nradio: {radio}";
+      tooltipText += IsEphemerisTarget ? "\nradio: tracking only" : $"\nradio: {radio}";
       if (!string.IsNullOrEmpty(LotwName)) tooltipText += "\nAccepted by LoTW";
       tooltipText += $"\nupdated: {updated:yyyy-MM-dd}";
 
