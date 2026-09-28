@@ -20,6 +20,12 @@ namespace SkyRoof
 
     public bool Ptt { get; private set; } = false;
     private bool PttChanged = false;
+
+    // Ownership is deliberately separate from the observed PTT state. A second
+    // client (for example WSJT-X) may key the same radio; shutting down SkyRoof
+    // must only release PTT that SkyRoof itself successfully asserted.
+    private volatile bool PttOwnedByApplication;
+    private readonly ManualResetEventSlim PttReleased = new(true);
     private bool DialKnobSpinning = false;
     public long RequestedRxFrequency, LastWrittenRxFrequency, LastReadRxFrequency;
     public long RequestedTxFrequency, LastWrittenTxFrequency, LastReadTxFrequency;
@@ -490,7 +496,20 @@ namespace SkyRoof
 
       Ptt = RequestedPtt.Value;
       PttChanged = true;
-      if (Ptt == true) LastWrittenTxFrequency = NOT_ASSIGNED; else LastWrittenRxFrequency = NOT_ASSIGNED;
+
+      if (Ptt)
+      {
+        PttOwnedByApplication = true;
+        PttReleased.Reset();
+        LastWrittenTxFrequency = NOT_ASSIGNED;
+      }
+      else
+      {
+        PttOwnedByApplication = false;
+        PttReleased.Set();
+        LastWrittenRxFrequency = NOT_ASSIGNED;
+      }
+
       RequestedPtt = null;
     }
 
@@ -588,6 +607,8 @@ namespace SkyRoof
       }
 
       Ptt = true;
+      PttOwnedByApplication = true;
+      PttReleased.Reset();
       LastWrittenTxFrequency = NOT_ASSIGNED;
 
       Thread.Sleep(CtcssTones.ARMING_DURATION_MS);
@@ -595,6 +616,8 @@ namespace SkyRoof
       if (SendWriteCommand(commands.set_ptt_off!))
       {
         Ptt = false;
+        PttOwnedByApplication = false;
+        PttReleased.Set();
         LastWrittenRxFrequency = NOT_ASSIGNED;
       }
       else
@@ -871,6 +894,33 @@ namespace SkyRoof
     private bool IsDiff(long freq1, long freq2)
     {
       return Math.Abs(freq1 - freq2) > 0;
+    }
+
+
+
+
+    //----------------------------------------------------------------------------------------------
+    //                                      shutdown
+    //----------------------------------------------------------------------------------------------
+    public override void Dispose()
+    {
+      // Cancel a not-yet-sent SkyRoof PTT-ON request. If SkyRoof actually keyed
+      // the rig, ask the worker to send PTT OFF and give it a bounded opportunity
+      // to receive the radio acknowledgement before the TCP connection is torn down.
+      if (!PttOwnedByApplication && RequestedPtt == true)
+        RequestedPtt = null;
+
+      if (PttOwnedByApplication)
+      {
+        RequestedPtt = false;
+
+        if (!PttReleased.Wait(4000))
+          Log.Warning(
+            "CAT engine stopped while SkyRoof-owned PTT could not be confirmed OFF.");
+      }
+
+      base.Dispose();
+      PttReleased.Dispose();
     }
 
 
