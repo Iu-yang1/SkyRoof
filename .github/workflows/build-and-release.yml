@@ -84,7 +84,7 @@ jobs:
           Write-Host "WinDivert driver: $($sys.FullName)"
 
       - name: Restore NuGet packages
-        run: nuget restore SkyRoof.sln -UseLockFile
+        run: nuget restore SkyRoof.sln -LockedMode
 
       - name: Build WinForms App
         run: msbuild SkyRoof.sln /p:Configuration=Release /p:Platform=x64
