@@ -545,6 +545,7 @@ namespace SkyRoof
     private void LoadSatelliteData()
     {
       ctx.SatnogsDb = new();
+      ctx.SatnogsDb.ConfigureSources(ctx.Settings.OrbitSources);
       ctx.SatnogsDb.ListUpdated += SatnogsDb_ListUpdated;
       ctx.SatnogsDb.TleUpdated += SatnogsDb_TleUpdated;
 
@@ -640,18 +641,18 @@ namespace SkyRoof
 
     private bool JplBootstrapRunning;
 
-    private async Task EnsureJplEphemerisAvailableAsync()
+    private Task EnsureJplEphemerisAvailableAsync()
     {
       var settings = ctx.Settings.OrbitSources;
       if (JplBootstrapRunning ||
           !settings.ShowSolarSystemTargets ||
           !settings.AutoDownloadJplKernel ||
           settings.JplKernel == JplEphemerisKernel.CustomFile)
-        return;
+        return Task.CompletedTask;
 
       string path = ctx.SatnogsDb.GetJplKernelPath(settings);
       if (File.Exists(path))
-        return;
+        return Task.CompletedTask;
 
       JplBootstrapRunning = true;
 
@@ -660,22 +661,20 @@ namespace SkyRoof
         Log.Information(
           $"JPL ephemeris cache missing; downloading {settings.JplKernel} from the configured source list.");
 
-        await ctx.SatnogsDb.DownloadJplKernelAsync(
-          settings.JplKernel);
+        if (!DownloadDialog.DownloadJpl(
+              this,
+              ctx,
+              settings.JplKernel,
+              out string? downloadedPath))
+          return Task.CompletedTask;
 
         int targets =
-          ctx.SatnogsDb.ConfigureSolarSystem(settings);
-        ctx.Settings.Satellites.EnsureSolarSystemGroup(
-          ctx.SatnogsDb);
-
-        if (targets > 0)
-        {
-          ctx.Settings.SaveToFile();
-          SatnogsDb_ListUpdated(null, EventArgs.Empty);
-        }
+          ActivateJplEphemeris(
+            settings.JplKernel,
+            customFile: null);
 
         Log.Information(
-          $"JPL ephemeris bootstrap complete: {targets} tracking targets.");
+          $"JPL ephemeris bootstrap complete: {targets} tracking targets from {downloadedPath}.");
       }
       catch (Exception ex)
       {
@@ -689,6 +688,8 @@ namespace SkyRoof
       {
         JplBootstrapRunning = false;
       }
+
+      return Task.CompletedTask;
     }
 
 
@@ -744,7 +745,7 @@ namespace SkyRoof
         sourceMenu);
     }
 
-    private async Task DownloadJplEphemerisAsync(
+    private Task DownloadJplEphemerisAsync(
       JplEphemerisKernel kernel)
     {
       string name =
@@ -762,25 +763,21 @@ namespace SkyRoof
         MessageBoxIcon.Question);
 
       if (answer != DialogResult.Yes)
-        return;
+        return Task.CompletedTask;
 
-      UseWaitCursor = true;
+      if (!DownloadDialog.DownloadJpl(
+            this,
+            ctx,
+            kernel,
+            out string? path))
+        return Task.CompletedTask;
 
       try
       {
-        string path =
-          await ctx.SatnogsDb.DownloadJplKernelAsync(kernel);
-
-        ctx.Settings.OrbitSources.JplKernel = kernel;
-        ctx.Settings.OrbitSources.JplKernelFile = string.Empty;
-        ctx.Settings.SaveToFile();
-
         int targets =
-          ctx.SatnogsDb.ConfigureSolarSystem(
-            ctx.Settings.OrbitSources);
-        ctx.Settings.Satellites.EnsureSolarSystemGroup(
-          ctx.SatnogsDb);
-        SatnogsDb_ListUpdated(null, EventArgs.Empty);
+          ActivateJplEphemeris(
+            kernel,
+            customFile: null);
 
         MessageBox.Show(
           $"{name} installed successfully.\r\n\r\n" +
@@ -791,17 +788,42 @@ namespace SkyRoof
       }
       catch (Exception ex)
       {
-        Log.Error(ex, $"Unable to download JPL {name} ephemeris.");
+        Log.Error(ex, $"Unable to activate JPL {name} ephemeris.");
         MessageBox.Show(
-          $"Unable to download or validate {name}.\r\n\r\n{ex.Message}",
+          $"The downloaded {name} file could not be activated.\r\n\r\n{ex.Message}",
           "JPL Ephemeris",
           MessageBoxButtons.OK,
           MessageBoxIcon.Error);
       }
-      finally
-      {
-        UseWaitCursor = false;
-      }
+
+      return Task.CompletedTask;
+    }
+
+    private int ActivateJplEphemeris(
+      JplEphemerisKernel kernel,
+      string? customFile)
+    {
+      ctx.Settings.OrbitSources.JplKernel = kernel;
+      ctx.Settings.OrbitSources.JplKernelFile =
+        kernel == JplEphemerisKernel.CustomFile
+          ? customFile ?? string.Empty
+          : string.Empty;
+
+      int targets =
+        ctx.SatnogsDb.ConfigureSolarSystem(
+          ctx.Settings.OrbitSources);
+
+      // Keep the settings model and every satellite/group UI in sync with the
+      // newly activated kernel. This makes Moon/Sun/Venus immediately visible
+      // in Satellites and Groups rather than only after the next restart.
+      ctx.Settings.Satellites.EnsureSolarSystemGroup(
+        ctx.SatnogsDb);
+      ctx.Settings.SaveToFile();
+      SatnogsDb_ListUpdated(
+        null,
+        EventArgs.Empty);
+
+      return targets;
     }
 
     private void LoadJplEphemerisFromFile()
@@ -821,18 +843,10 @@ namespace SkyRoof
         // Validate before persisting the path.
         _ = new JplSpkKernel(dlg.FileName);
 
-        ctx.Settings.OrbitSources.JplKernel =
-          JplEphemerisKernel.CustomFile;
-        ctx.Settings.OrbitSources.JplKernelFile =
-          dlg.FileName;
-        ctx.Settings.SaveToFile();
-
         int targets =
-          ctx.SatnogsDb.ConfigureSolarSystem(
-            ctx.Settings.OrbitSources);
-        ctx.Settings.Satellites.EnsureSolarSystemGroup(
-          ctx.SatnogsDb);
-        SatnogsDb_ListUpdated(null, EventArgs.Empty);
+          ActivateJplEphemeris(
+            JplEphemerisKernel.CustomFile,
+            dlg.FileName);
 
         MessageBox.Show(
           $"Loaded {targets} solar-system targets from:\r\n{dlg.FileName}",
@@ -1460,6 +1474,7 @@ namespace SkyRoof
       }
 
       ctx.SatnogsDb.Customize(ctx.Settings.Satellites.SatelliteCustomizations);
+      ctx.Settings.Satellites.EnsureSolarSystemGroup(ctx.SatnogsDb);
       ctx.Settings.Satellites.DeleteInvalidData(ctx.SatnogsDb);
 
       SatelliteSelecionWidget.LoadSatelliteGroups();
