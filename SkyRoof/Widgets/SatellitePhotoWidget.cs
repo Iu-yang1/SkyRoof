@@ -18,6 +18,7 @@ namespace SkyRoof
 
     public static readonly Size CacheImageSize = new(160, 160);
     private const int CacheVersion = 2;
+    private const int MaxDownloadBytes = 5 * 1024 * 1024;
 
     public SatellitePhotoWidget()
     {
@@ -70,7 +71,7 @@ namespace SkyRoof
 
         Directory.CreateDirectory(Path.GetDirectoryName(cacheFile)!);
 
-        byte[] bytes = await Http.GetByteArrayAsync(url, ct);
+        byte[] bytes = await DownloadBytesAsync(url, ct);
         ct.ThrowIfCancellationRequested();
 
         using var ms = new MemoryStream(bytes);
