@@ -545,6 +545,8 @@ namespace SkyRoof
       ctx.SatnogsDb.TleUpdated += SatnogsDb_TleUpdated;
 
       ctx.SatnogsDb.LoadFromFile();
+      ctx.SatnogsDb.ConfigureMoon(ctx.Settings.OrbitSources);
+
       if (ctx.SatnogsDb.Loaded)
         SatnogsDb_ListUpdated(null, null);
     }
