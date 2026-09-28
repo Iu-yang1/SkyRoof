@@ -159,8 +159,43 @@ namespace SkyRoof
         previous != null &&
         previous.Elevation.Radians >= 0;
 
-      DateTime? passStart =
-        previousAbove ? previousTime : null;
+      DateTime? passStart = null;
+
+      if (previousAbove)
+      {
+        // Match SGP.NET's clipToStartTime:false semantics. When the search
+        // begins while Moon/Sun/Venus is already above the horizon, recover
+        // the real AOS instead of calling startTime the pass start. A stable
+        // AOS is important for pass identity across periodic rebuilds.
+        DateTime upper = startTime;
+        DateTime lower = upper - step;
+
+        for (int i = 0; i < 8 * 60; i++)
+        {
+          TopocentricObservation? obs =
+            Observe(groundStation, lower);
+
+          if (obs == null ||
+              obs.Elevation.Radians < 0)
+          {
+            passStart =
+              RefineHorizonCrossing(
+                groundStation,
+                lower,
+                upper,
+                rising: true);
+            break;
+          }
+
+          upper = lower;
+          lower -= step;
+        }
+
+        // Circumpolar/polar-day fallback: the body may remain above the
+        // horizon throughout our bounded search. Keep the requested start in
+        // that exceptional case rather than dropping the target entirely.
+        passStart ??= startTime;
+      }
 
       for (DateTime t = startTime + step;
            t <= endTime;
