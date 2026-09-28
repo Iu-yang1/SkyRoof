@@ -1,3 +1,4 @@
+using Serilog;
 ﻿using System.Diagnostics;
 using System.Drawing.Text;
 using System.Security.Cryptography;
@@ -190,47 +191,86 @@ namespace SkyRoof
       }
     }
 
+    private void BeginTransmit(ref bool pttActive)
+    {
+      pttActive = true;
+      BeforeTransmit?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void EndTransmit(ref bool pttActive)
+    {
+      if (!pttActive) return;
+      try { AfterTransmit?.Invoke(this, EventArgs.Empty); }
+      finally { pttActive = false; }
+    }
+
+    private void EndTransmitNoThrow(ref bool pttActive)
+    {
+      if (!pttActive) return;
+      try { EndTransmit(ref pttActive); }
+      catch (Exception ex)
+      {
+        Log.Error(ex, "FT4 release callback failed");
+        pttActive = false;
+      }
+    }
+
     private void TuneThreadProcedure()
     {
-      int samplesNeeded = 0;
-      double sinePhase = 0;
-      double phaseInc = 0;
-
-      BeforeTransmit?.Invoke(this, EventArgs.Empty);
-      Thread.Sleep(PttOnMargin);
-
-      while (!Stopping)
+      bool pttActive = false;
+      try
       {
-        Thread.Sleep(50);
+        int samplesNeeded = 0;
+        double sinePhase = 0;
+        double phaseInc = 0;
 
-        samplesNeeded = Math.Max(0, LeadSampleCount - Soundcard.Buffer.Count);
-        if (samplesNeeded <= 0) continue;
-        phaseInc = 2.0 * Math.PI * (TxAudioFrequency - XitOffset) / NativeFT4Coder.SAMPLING_RATE;
+        BeginTransmit(ref pttActive);
+        Thread.Sleep(PttOnMargin);
 
-        for (int i = 0; i < samplesNeeded; i++)
+        while (!Stopping)
         {
-          TxBuffer[i] = (float)Math.Sin(sinePhase);
-          sinePhase += phaseInc;
-          if (sinePhase > 2 * Math.PI) sinePhase -= 2 * Math.PI;
+          Thread.Sleep(50);
+          samplesNeeded = Math.Max(0, LeadSampleCount - Soundcard.Buffer.Count);
+          if (samplesNeeded <= 0) continue;
+
+          phaseInc = 2.0 * Math.PI * (TxAudioFrequency - XitOffset) / NativeFT4Coder.SAMPLING_RATE;
+          for (int i = 0; i < samplesNeeded; i++)
+          {
+            TxBuffer[i] = (float)Math.Sin(sinePhase);
+            sinePhase += phaseInc;
+            if (sinePhase > 2 * Math.PI) sinePhase -= 2 * Math.PI;
+          }
+
+          Soundcard.AddSamples(TxBuffer, 0, samplesNeeded);
         }
 
-        Soundcard.AddSamples(TxBuffer, 0, samplesNeeded);
+        Soundcard.Buffer.Clear();
+        Thread.Sleep(PttOffMargin);
+        EndTransmit(ref pttActive);
       }
-
-      Soundcard.Buffer.Clear();
-      Thread.Sleep(PttOffMargin);
-      AfterTransmit?.Invoke(this, EventArgs.Empty);
+      catch (Exception ex)
+      {
+        Log.Error(ex, "FT4 tuning worker failed");
+      }
+      finally
+      {
+        try { Soundcard.Buffer.Clear(); } catch { }
+        EndTransmitNoThrow(ref pttActive);
+      }
     }
 
     private void SendThreadProcedure()
     {
-      int sampleCount;
-      DateTime now;
-      SenderPhase = SendingStage.Idle;
-      Soundcard.Buffer.Clear();
-
-      while (!Stopping)
+      bool pttActive = false;
+      try
       {
+        int sampleCount;
+        DateTime now;
+        SenderPhase = SendingStage.Idle;
+        Soundcard.Buffer.Clear();
+
+        while (!Stopping)
+        {
         now = DateTime.UtcNow;
         Slot.Utc = now;
         var startTime = Slot.GetTxStartTime(TxOdd);
@@ -266,7 +306,7 @@ namespace SkyRoof
             if (now > startTime)
             {
               SenderPhase = SendingStage.Sending;
-              BeforeTransmit?.Invoke(this, EventArgs.Empty);
+              BeginTransmit(ref pttActive);
             }
             break;
 
@@ -279,7 +319,7 @@ namespace SkyRoof
             {
               SenderPhase = SendingStage.Idle;
               Thread.Sleep(PttOffMargin);
-              AfterTransmit?.Invoke(this, EventArgs.Empty);
+              EndTransmit(ref pttActive);
             }
 
             // Odd/Even changed, stop sending
@@ -297,10 +337,21 @@ namespace SkyRoof
         RampDown();
         SenderPhase = SendingStage.Idle;
         Thread.Sleep(PttOffMargin);
-        AfterTransmit?.Invoke(this, EventArgs.Empty);
+        EndTransmit(ref pttActive);
       }
 
-      Soundcard.Buffer.Clear();
+        Soundcard.Buffer.Clear();
+      }
+      catch (Exception ex)
+      {
+        Log.Error(ex, "FT4 transmit worker failed");
+      }
+      finally
+      {
+        SenderPhase = SendingStage.Idle;
+        try { Soundcard.Buffer.Clear(); } catch { }
+        EndTransmitNoThrow(ref pttActive);
+      }
     }
 
     private void StartInMiddle(double missedSeconds)
