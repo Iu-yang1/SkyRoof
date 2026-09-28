@@ -59,7 +59,7 @@ namespace SkyRoof
       };
     }
 
-    internal static Keys? Capture(
+    internal static Keys? CaptureKey(
       IWin32Window owner,
       Keys current)
     {
