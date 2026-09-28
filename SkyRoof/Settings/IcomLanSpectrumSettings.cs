@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Newtonsoft.Json;
 
 namespace SkyRoof
 {
@@ -54,7 +55,33 @@ namespace SkyRoof
     [DisplayName("Direct LAN password")]
     [Description("Network password configured in the IC-9700 for RS-BA1/LAN remote access.")]
     [PasswordPropertyText(true)]
+    [JsonIgnore]
     public string DirectLanPassword { get; set; } = "";
+
+    [Browsable(false)]
+    [JsonProperty("DirectLanPasswordProtected")]
+    public string DirectLanPasswordProtected
+    {
+      get => SecretProtector.Protect(DirectLanPassword);
+      set => DirectLanPassword = SecretProtector.Unprotect(value);
+    }
+
+    [Browsable(false)]
+    [JsonProperty("DirectLanPassword", NullValueHandling = NullValueHandling.Ignore)]
+    private string? LegacyDirectLanPassword
+    {
+      get => null;
+      set
+      {
+        if (value == null) return;
+        DirectLanPassword = value;
+        SecretMigrationNeeded = true;
+      }
+    }
+
+    [JsonIgnore]
+    [Browsable(false)]
+    internal bool SecretMigrationNeeded { get; private set; }
 
     [DisplayName("Direct LAN client name")]
     [Description("Client name presented to the Icom LAN server. 'icom-pc' matches the conservative RS-BA1-compatible baseline.")]
