@@ -291,7 +291,7 @@ namespace VE3NEA.Dsp.Tests
       IcomLanTransitionProbe.IsSensitiveIcomControlPayload(login)
         .Should().BeTrue();
 
-      byte[] packet = BuildLanUdpPacket(
+      byte[] packet = BuildUdpPacket(
         source: IPAddress.Parse("192.168.1.20"),
         destination: IPAddress.Parse("192.168.1.4"),
         sourcePort: 54321,
@@ -417,7 +417,22 @@ namespace VE3NEA.Dsp.Tests
       BitConverter.GetBytes((ushort)civ.Length).CopyTo(lanPayload, 17);
       civ.CopyTo(lanPayload, 21);
 
-      int udpLength = 8 + lanPayload.Length;
+      return BuildUdpPacket(
+        source,
+        destination,
+        sourcePort,
+        destinationPort,
+        lanPayload);
+    }
+
+    private static byte[] BuildUdpPacket(
+      IPAddress source,
+      IPAddress destination,
+      int sourcePort,
+      int destinationPort,
+      byte[] payload)
+    {
+      int udpLength = 8 + payload.Length;
       byte[] packet = new byte[20 + udpLength];
 
       packet[0] = 0x45;
@@ -430,7 +445,7 @@ namespace VE3NEA.Dsp.Tests
       WriteUInt16BigEndian(packet, 22, (ushort)destinationPort);
       WriteUInt16BigEndian(packet, 24, (ushort)udpLength);
 
-      lanPayload.CopyTo(packet, 28);
+      payload.CopyTo(packet, 28);
       return packet;
     }
 
