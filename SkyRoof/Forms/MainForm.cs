@@ -33,6 +33,7 @@ namespace SkyRoof
       ctx.SatellitePhotoWidget = SatellitePhotoWidget;
       SatelliteSelecionWidget.ctx = ctx;
       FrequencyWidget.ctx = ctx;
+      FrequencyWidget.AttachTransmitButton(PttHostPanel);
       GainWidget.ctx = ctx;
       Clock.ctx = ctx;
       ctx.Announcer.ctx = ctx;
@@ -45,6 +46,7 @@ namespace SkyRoof
       ctx.UdpStreamSender.ctx = ctx;
 
       var settingsLoadResult = ctx.Settings.LoadFromFile();
+      ctx.SatnogsDb.ConfigureSources(ctx.Settings.OrbitSources);
 
       ApplyThemeSettings();
 
@@ -656,7 +658,7 @@ namespace SkyRoof
       try
       {
         Log.Information(
-          $"JPL ephemeris cache missing; downloading {settings.JplKernel} from NASA/JPL NAIF.");
+          $"JPL ephemeris cache missing; downloading {settings.JplKernel} from the configured source list.");
 
         await ctx.SatnogsDb.DownloadJplKernelAsync(
           settings.JplKernel);
@@ -692,42 +694,54 @@ namespace SkyRoof
 
     private void AddOrbitSourceMenuItems()
     {
-      var jplMenu = new ToolStripMenuItem("JPL &Ephemeris");
+      var sourceMenu =
+        new ToolStripMenuItem("Orbit / TLE &Sources");
 
-      var de440s = new ToolStripMenuItem(
-        "Download DE440&s (recommended)...");
+      var editSources =
+        new ToolStripMenuItem("&Edit Source URLs...");
+      editSources.Click += (_, _) =>
+        new SettingsDialog(
+          ctx,
+          "SkyRoof.Settings.OrbitSources")
+          .ShowDialog(this);
+
+      var reload =
+        new ToolStripMenuItem("&Reload Custom TLE Sources");
+      reload.Click += async (_, _) =>
+        await ReloadCustomTleSourcesAsync();
+
+      var de440s =
+        new ToolStripMenuItem(
+          "Download DE440&s (recommended)...");
       de440s.Click += async (_, _) =>
         await DownloadJplEphemerisAsync(
           JplEphemerisKernel.DE440s);
 
-      var de421 = new ToolStripMenuItem(
-        "Download DE&421...");
+      var de421 =
+        new ToolStripMenuItem(
+          "Download DE&421...");
       de421.Click += async (_, _) =>
         await DownloadJplEphemerisAsync(
           JplEphemerisKernel.DE421);
 
-      var load = new ToolStripMenuItem(
-        "Load SPK/BSP From &File...");
+      var load =
+        new ToolStripMenuItem(
+          "Load SPK/BSP From &File...");
       load.Click += (_, _) =>
         LoadJplEphemerisFromFile();
 
-      var reload = new ToolStripMenuItem(
-        "&Reload Custom TLE Sources");
-      reload.Click += async (_, _) =>
-        await ReloadCustomTleSourcesAsync();
-
-      jplMenu.DropDownItems.Add(de440s);
-      jplMenu.DropDownItems.Add(de421);
-      jplMenu.DropDownItems.Add(
+      sourceMenu.DropDownItems.Add(editSources);
+      sourceMenu.DropDownItems.Add(reload);
+      sourceMenu.DropDownItems.Add(
         new ToolStripSeparator());
-      jplMenu.DropDownItems.Add(load);
-      jplMenu.DropDownItems.Add(
-        new ToolStripSeparator());
-      jplMenu.DropDownItems.Add(reload);
+      sourceMenu.DropDownItems.Add(de440s);
+      sourceMenu.DropDownItems.Add(de421);
+      sourceMenu.DropDownItems.Add(load);
 
       toolsToolStripMenuItem.DropDownItems.Add(
         new ToolStripSeparator());
-      toolsToolStripMenuItem.DropDownItems.Add(jplMenu);
+      toolsToolStripMenuItem.DropDownItems.Add(
+        sourceMenu);
     }
 
     private async Task DownloadJplEphemerisAsync(
@@ -739,7 +753,7 @@ namespace SkyRoof
           : "DE440s";
 
       var answer = MessageBox.Show(
-        $"Download the JPL {name} SPK ephemeris from NASA/JPL NAIF?\r\n\r\n" +
+        $"Download the JPL {name} SPK ephemeris from the configured source list?\r\n\r\n" +
         (kernel == JplEphemerisKernel.DE421
           ? "Approximate size: 16 MB."
           : "Approximate size: 31 MB."),
@@ -1291,6 +1305,7 @@ namespace SkyRoof
         GainWidget.Width +
         panel7.Width +
         RotatorWidget.Width +
+        PttHostPanel.Width +
         panel5.Width +
         ClockPanel.Width;
 

@@ -57,6 +57,23 @@ namespace SkyRoof
       BuildPttMenu();
     }
 
+    internal void AttachTransmitButton(Control host)
+    {
+      if (TxBtn.Parent != host)
+      {
+        TxBtn.Parent?.Controls.Remove(TxBtn);
+        host.Controls.Add(TxBtn);
+      }
+
+      TxBtn.Dock = DockStyle.Fill;
+      TxBtn.Margin = Padding.Empty;
+
+      // The old dedicated arrow button duplicated the CTCSS menu and consumed
+      // scarce frequency-widget space. CTCSS is available again from the
+      // transmit button's right-click menu.
+      CtcssBtn.Visible = false;
+    }
+
     internal string GetBandName(bool uplink)
     {
       var freq = uplink ? RadioLink.CorrectedUplinkFrequency : RadioLink.CorrectedDownlinkFrequency;
@@ -933,6 +950,37 @@ namespace SkyRoof
         ctx.Settings.SaveToFile();
       };
 
+      // Restore the traditional right-click subtone controls on the PTT
+      // button. The separate arrow menu remains internally for compatibility,
+      // but the normal operator path is now one compact transmit control.
+      var ctcssEnabled =
+        new ToolStripMenuItem("Enable CTCSS Encoder");
+      ctcssEnabled.Click += CtcssEnabledMnu_Click;
+
+      var ctcssTone =
+        new ToolStripMenuItem("CTCSS Tone");
+      foreach (double tone in CtcssTones.All)
+        ctcssTone.DropDownItems.Add(
+          MakeToneMenuItem(
+            tone,
+            CtcssToneMnu_Click));
+
+      var armingTone =
+        new ToolStripMenuItem("Send Arming Tone Now");
+      foreach (double tone in CtcssTones.All)
+      {
+        var item =
+          MakeToneMenuItem(
+            tone,
+            ArmingToneMnu_Click);
+        if (tone == CtcssTones.ARMING_TONE)
+          item.Font =
+            new Font(
+              item.Font,
+              FontStyle.Bold);
+        armingTone.DropDownItems.Add(item);
+      }
+
       PttMenu.Opening += (_, _) =>
       {
         Keys key = ctx.Settings.Cat.PttHotkey;
@@ -941,12 +989,52 @@ namespace SkyRoof
           : $"Change Physical PTT Key ({key})...";
         clear.Enabled = key != Keys.None;
         suppress.Checked = ctx.Settings.Cat.SuppressPttHotkey;
+
+        var tx = ctx.CatControl.Tx;
+        bool fmUplink =
+          RadioLink.HasUplink &&
+          RadioLink.TxCust != null &&
+          FmModes.Contains(RadioLink.UplinkMode);
+
+        bool canSetTone =
+          fmUplink &&
+          tx?.CanSetCtcssTone() == true;
+        bool canEnable =
+          fmUplink &&
+          tx?.CanEnableCtcss() == true;
+
+        ctcssEnabled.Enabled = canEnable;
+        ctcssEnabled.Checked =
+          fmUplink &&
+          RadioLink.CtcssEnabled;
+
+        ctcssTone.Enabled = fmUplink;
+        foreach (ToolStripItem item in ctcssTone.DropDownItems)
+        {
+          if (item.Tag is not double tone)
+            continue;
+
+          item.Enabled = canSetTone;
+          item.ToolTipText = canSetTone
+            ? string.Empty
+            : "The radio has no CAT command for the tone frequency.";
+          ((ToolStripMenuItem)item).Checked =
+            fmUplink &&
+            tone == RadioLink.CtcssTone;
+        }
+
+        armingTone.Enabled =
+          fmUplink &&
+          tx?.CanSendArmingTone() == true;
       };
 
       PttMenu.Items.Add(bind);
       PttMenu.Items.Add(clear);
-      PttMenu.Items.Add(new ToolStripSeparator());
       PttMenu.Items.Add(suppress);
+      PttMenu.Items.Add(new ToolStripSeparator());
+      PttMenu.Items.Add(ctcssEnabled);
+      PttMenu.Items.Add(ctcssTone);
+      PttMenu.Items.Add(armingTone);
       TxBtn.ContextMenuStrip = PttMenu;
     }
 
@@ -972,26 +1060,20 @@ namespace SkyRoof
       TxBtn.Visible = ctx.CatControl.Tx?.CanPtt() == true;
       var ptt = ctx.CatControl.Tx?.Ptt == true;
       Keys hotkey = ctx.Settings.Cat.PttHotkey;
-      string binding =
-        hotkey == Keys.None
-          ? string.Empty
-          : $" [{hotkey}]";
 
       TxBtn.Text =
         ptt
-          ? $"Stop TX{binding}"
-          : $"Transmit{binding}";
+          ? "Stop TX"
+          : "Transmit";
       toolTip1.SetToolTip(
         TxBtn,
         "Click to toggle transmit.\r\n" +
         (hotkey == Keys.None
-          ? "Right-click to bind a physical momentary PTT key."
-          : $"{hotkey}: hold for TX, release for RX.\r\nRight-click to change the binding."));
+          ? "Right-click for CTCSS/subtone and physical PTT key options."
+          : $"{hotkey}: hold for TX, release for RX.\r\nRight-click for CTCSS/subtone and key options."));
 
-      // the tone applies to an FM uplink only, and both commands need the encoder on/off switch
-      CtcssBtn.Visible = RadioLink.HasUplink &&
-        RadioLink.TxCust != null && FmModes.Contains(RadioLink.UplinkMode) &&
-        ctx.CatControl.Tx?.CanEnableCtcss() == true;
+      // CTCSS/subtone controls live in the transmit button's right-click menu.
+      CtcssBtn.Visible = false;
     }
 
 

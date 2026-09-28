@@ -64,7 +64,22 @@ SkyRoof updates its bundled definitions.
 ## TLE
 
 The satellite orbit elements ([TLE](https://celestrak.org/columns/v04n03/) data)
-are downloaded from **SatNOGS DB**.
+are downloaded from **SatNOGS DB** by default.
+
+The built-in satellite-list, transmitter-list and primary TLE URLs are exposed in
+**Tools / Orbit / TLE Sources / Edit Source URLs** under **Orbit / Ephemeris Sources**.
+They are normal settings, so you can replace or clear them instead of editing source code.
+
+Additional TLE feeds can be entered in **Custom TLE Sources**. Separate multiple URLs or local
+file paths with semicolons or new lines. Plain 2-line/3-line TLE text and SatNOGS-style JSON are
+supported. For example:
+
+```text
+http://autotle.bi4pym.cn/AutoTLE.txt
+```
+
+Custom TLE feeds are applied after the primary source, so they can override an existing NORAD
+object and can also add tracking-only objects that are not present in the SatNOGS database.
 
 SatNOGS obtains these data from different sources and makes the latest and most reliable data
 available on their web site. The source of TLE and its creation time are shown in the
@@ -76,6 +91,16 @@ or [panel](satellite_details_panel.md):
 and in the mouse tooltip of the satellite:
 
 ![TLE Date](../images/tle_date_tooltip.png)
+
+## JPL Ephemeris Sources
+
+Moon, Sun and Venus tracking uses a JPL/NAIF SPK kernel. **DE440s** is the default. SkyRoof ships
+no large BSP file; it downloads the selected kernel into the user data cache when needed.
+
+The DE440s and DE421 download source lists are editable in the same **Orbit / Ephemeris Sources**
+settings section. Each default list contains two official NASA/JPL endpoints (NAIF first, SSD
+second), and SkyRoof tries them in order. Large-kernel downloads use a 15-minute HTTP timeout.
+You can remove, reorder or replace either URL, or use **Load SPK/BSP From File** for a local copy.
 
 ## Automatic Updates
 

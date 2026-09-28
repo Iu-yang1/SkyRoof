@@ -236,6 +236,9 @@ namespace SkyRoof
       if (ChangedFields.Exists(s => s.StartsWith("SkyRoof.IcomLanSpectrumSettings.")))
         ctx.IcomLanSpectrumPanel?.ApplySettings();
 
+      if (ChangedFields.Exists(s => s.StartsWith("SkyRoof.OrbitSourceSettings.")))
+        ctx.SatnogsDb.ConfigureSources(ctx.Settings.OrbitSources);
+
       if (ChangedFields.Exists(s => s.StartsWith("SkyRoof.AmsatSettings.")))
         if (ctx.Settings.Amsat.Enabled)
           ctx.AmsatStatusLoader.GetStatusesAsync().DoNotAwait();

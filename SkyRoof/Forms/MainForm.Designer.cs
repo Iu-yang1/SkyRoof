@@ -31,6 +31,7 @@
       components = new System.ComponentModel.Container();
       System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(MainForm));
       Toolbar = new Panel();
+      PttHostPanel = new Panel();
       RotatorWidget = new RotatorWidget();
       panel7 = new Panel();
       GainWidget = new GainWidget();
@@ -125,6 +126,7 @@
       // 
       // Toolbar
       // 
+      Toolbar.Controls.Add(PttHostPanel);
       Toolbar.Controls.Add(RotatorWidget);
       Toolbar.Controls.Add(panel7);
       Toolbar.Controls.Add(GainWidget);
@@ -143,6 +145,15 @@
       Toolbar.Size = new Size(1834, 78);
       Toolbar.TabIndex = 0;
       Toolbar.Resize += Toolbar_Resize;
+      // 
+      // PttHostPanel
+      // 
+      PttHostPanel.Dock = DockStyle.Left;
+      PttHostPanel.Location = new Point(1552, 0);
+      PttHostPanel.Name = "PttHostPanel";
+      PttHostPanel.Padding = new Padding(10, 23, 10, 23);
+      PttHostPanel.Size = new Size(112, 78);
+      PttHostPanel.TabIndex = 13;
       // 
       // RotatorWidget
       // 
@@ -870,6 +881,7 @@
     #endregion
 
     private Panel Toolbar;
+    private Panel PttHostPanel;
     public WeifenLuo.WinFormsUI.Docking.DockPanel DockHost;
     private MenuStrip menuStrip1;
     private ToolStripMenuItem fileToolStripMenuItem;
