@@ -1,4 +1,3 @@
-using CSCore.SoundIn;
 using MathNet.Numerics;
 using MultimediaTimer;
 using NAudio.MediaFoundation;
