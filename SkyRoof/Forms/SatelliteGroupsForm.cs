@@ -95,7 +95,7 @@ namespace SkyRoof
     {
       var item = new ListViewItem([
         sat.name,
-        sat.norad_cat_id!.ToString(),
+        sat.norad_cat_id?.ToString() ?? "—",
         $"{sat.launched:yyyy-MM-dd}",
         string.Join(", ", sat.Transmitters.Select(t => t.service).Where(s=>s != "Unknown").Distinct().Order()),
         ]);
@@ -109,7 +109,7 @@ namespace SkyRoof
 
       if (sat.Flags.HasFlag(SatelliteFlags.Ham)) item.Font = ListBoldFont;
       item.ForeColor = Theme.RowText(!sat.IsAlive());
-      if (sat.IsAlive() && sat.Tle == null) item.Font = ListStrikeoutFont;
+      if (sat.IsAlive() && !sat.Tracker.Enabled) item.Font = ListStrikeoutFont;
 
       return item;
     }
@@ -126,7 +126,7 @@ namespace SkyRoof
 
       if (!sat.Flags.HasFlag(SatelliteFlags.Ham)) node.NodeFont = TreeRegularFont;
       node.ForeColor = Theme.RowText(!sat.IsAlive());
-      if (sat.IsAlive() && sat.Tle == null) node.NodeFont = TreeStrikeoutFont;
+      if (sat.IsAlive() && !sat.Tracker.Enabled) node.NodeFont = TreeStrikeoutFont;
 
       return node;
     }
@@ -183,6 +183,7 @@ namespace SkyRoof
         (OtherBandsCheckbox.Checked && sat.Flags.HasFlag(SatelliteFlags.OtherBands));
 
       bool txOk =
+      sat.Flags.HasFlag(SatelliteFlags.TrackingTarget) ||
       (TransponderCheckbox.Checked && sat.Flags.HasFlag(SatelliteFlags.Transponder)) ||
       (TransceiverCheckbox.Checked && sat.Flags.HasFlag(SatelliteFlags.Transceiver)) ||
       (TransmitterCheckbox.Checked && sat.Flags.HasFlag(SatelliteFlags.Transmitter));
