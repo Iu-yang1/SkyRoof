@@ -134,6 +134,16 @@
     <None Include="..\Vendor\SoapySDR\SDR\libiio.dll" Link="lib\SoapySDR\modules0.8\libiio.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <!-- LimeSDR: LMS7Support.dll is the Soapy module and LimeSuite.dll the driver it links against.
+         LimeSuite was built against libusb 1.0.29 but imports only 27 symbols, all of which the 1.0.24
+         copy in the app folder exports, so no second libusb ships here; every USB SDR keeps binding to
+         the one copy in the app folder, as in every release before LimeSDR was added. -->
+    <None Include="..\Vendor\SoapySDR\SDR\LimeSuite.dll" Link="lib\SoapySDR\modules0.8\LimeSuite.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Include="..\Vendor\SoapySDR\SDR\LMS7Support.dll" Link="lib\SoapySDR\modules0.8\LMS7Support.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Include="..\Vendor\SoapySDR\SDR\remoteSupport.dll" Link="lib\SoapySDR\modules0.8\remoteSupport.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>

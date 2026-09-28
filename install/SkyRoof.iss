@@ -63,7 +63,11 @@ Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\lib\SoapySDR\modules0.8\ha
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\lib\SoapySDR\modules0.8\HackRFSupport.dll; DestDir: {app}\lib\SoapySDR\modules0.8; Flags: overwritereadonly ignoreversion
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\lib\SoapySDR\modules0.8\libad9361.dll; DestDir: {app}\lib\SoapySDR\modules0.8; Flags: overwritereadonly ignoreversion
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\lib\SoapySDR\modules0.8\libiio.dll; DestDir: {app}\lib\SoapySDR\modules0.8; Flags: overwritereadonly ignoreversion
+Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\lib\SoapySDR\modules0.8\LimeSuite.dll; DestDir: {app}\lib\SoapySDR\modules0.8; Flags: overwritereadonly ignoreversion
+Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\lib\SoapySDR\modules0.8\LMS7Support.dll; DestDir: {app}\lib\SoapySDR\modules0.8; Flags: overwritereadonly ignoreversion
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\runtimes\win\lib\net10.0\System.Speech.dll; DestDir: {app}\runtimes\win\lib\net10.0; Flags: overwritereadonly ignoreversion
+Source: ..\licenses\*; DestDir: {app}\licenses; Flags: overwritereadonly ignoreversion recursesubdirs createallsubdirs
+Source: ..\LICENSE; DestDir: {app}; DestName: LICENSE.txt; Flags: overwritereadonly ignoreversion
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\codec2.dll; DestDir: {app}; Flags: overwritereadonly ignoreversion
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\CSCore.dll; DestDir: {app}; Flags: overwritereadonly ignoreversion
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\fa-solid-900.ttf; DestDir: {app}; Flags: overwritereadonly ignoreversion
@@ -115,6 +119,7 @@ begin
   Result := True;
 end;
 [Dirs]
+Name: {app}\licenses
 Name: {app}\runtimes
 Name: {app}\runtimes\win
 Name: {app}\runtimes\win\lib

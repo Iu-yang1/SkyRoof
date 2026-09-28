@@ -1,3 +1,4 @@
+using System.Net;
 using FluentAssertions;
 using SkyRoof;
 using Xunit;
@@ -25,6 +26,7 @@ namespace VE3NEA.Dsp.Tests
       civ[^1] = 0xFD;
 
       byte[] packet = new byte[21 + civ.Length];
+      BitConverter.GetBytes(packet.Length).CopyTo(packet, 0);
       packet[16] = 0xC1;
       packet[17] = (byte)(civ.Length & 0xFF);
       packet[18] = (byte)(civ.Length >> 8);
@@ -155,6 +157,225 @@ namespace VE3NEA.Dsp.Tests
       result.Samples.Should().Equal(samples);
     }
 
+
+    [Fact]
+    public void DirectLanControlPackets_UseBigEndianInnerSequenceAtOffset16()
+    {
+      byte[] login = IcomLanDirectSession.BuildLoginPacket(
+        0x11223344, 0xAABBCCDD, 0x1234, 0x5678,
+        "operator", "secret", "icom-pc");
+
+      login[0x16].Should().Be(0x12);
+      login[0x17].Should().Be(0x34);
+      login[0x18].Should().Be(0x00);
+      login[0x19].Should().Be(0x00);
+      login[0x1A].Should().Be(0x78);
+      login[0x1B].Should().Be(0x56);
+
+      byte[] authId = { 0x78, 0x56, 0x44, 0x33, 0x22, 0x11 };
+      byte[] auth = IcomLanDirectSession.BuildAuthPacket(
+        0x11223344, 0xAABBCCDD, 0xABCD, 0x05, authId);
+
+      auth[0x16].Should().Be(0xAB);
+      auth[0x17].Should().Be(0xCD);
+      auth.Skip(0x1A).Take(6).Should().Equal(authId);
+    }
+
+    [Fact]
+    public void DirectLanStreamRequest_UsesCapabilitiesAndReceiveOnlyLpcm()
+    {
+      byte[] authId = { 0x34, 0x12, 0x78, 0x56, 0x34, 0x12 };
+      byte[] guid = Enumerable.Range(0, 16).Select(i => (byte)i).ToArray();
+      byte[] mac = { 1, 2, 3, 4, 5, 6 };
+
+      byte[] packet = IcomLanDirectSession.BuildStreamRequestPacket(
+        0x11223344, 0xAABBCCDD, 0x0102,
+        authId, "IC-9700", "operator",
+        0x8010, guid, mac, 0x018B, 41002, 41003);
+
+      packet[0x16].Should().Be(0x01);
+      packet[0x17].Should().Be(0x02);
+      packet.Skip(0x1A).Take(6).Should().Equal(authId);
+      packet[0x27].Should().Be(0x80);
+      packet[0x28].Should().Be(0x10);
+      packet.Skip(0x2A).Take(6).Should().Equal(mac);
+      packet[0x70].Should().Be(0x01);
+      packet[0x71].Should().Be(0x00);
+      packet[0x72].Should().Be(0x04);
+      packet[0x73].Should().Be(0x00);
+      ReadUInt32BigEndian(packet, 0x74).Should().Be(48000);
+      ReadUInt32BigEndian(packet, 0x78).Should().Be(0);
+      ReadUInt32BigEndian(packet, 0x7C).Should().Be(41002);
+      ReadUInt32BigEndian(packet, 0x80).Should().Be(41003);
+      ReadUInt32BigEndian(packet, 0x84).Should().Be(0);
+      packet[0x88].Should().Be(0x01);
+    }
+
+    [Fact]
+    public void DirectLanCorrelation_RejectsWrongSidSequenceAndAuthId()
+    {
+      const uint localSid = 0x11223344;
+      const uint remoteSid = 0xAABBCCDD;
+      const ushort sequence = 0x0123;
+      byte[] authId = { 0x34, 0x12, 0x78, 0x56, 0x34, 0x12 };
+
+      byte[] status = new byte[0x50];
+      BitConverter.GetBytes(status.Length).CopyTo(status, 0);
+      WriteUInt32BigEndian(status, 0x08, remoteSid);
+      WriteUInt32BigEndian(status, 0x0C, localSid);
+      status[0x14] = 0x02;
+      status[0x15] = 0x03;
+      status[0x16] = 0x01;
+      status[0x17] = 0x23;
+      authId.CopyTo(status, 0x1A);
+
+      IcomLanDirectSession.IsMatchingStreamStatus(
+        status, localSid, remoteSid, sequence, authId).Should().BeTrue();
+
+      byte[] wrongSid = status.ToArray();
+      WriteUInt32BigEndian(wrongSid, 0x0C, 0x01020304);
+      IcomLanDirectSession.IsMatchingStreamStatus(
+        wrongSid, localSid, remoteSid, sequence, authId).Should().BeFalse();
+
+      byte[] wrongSequence = status.ToArray();
+      wrongSequence[0x17] = 0x24;
+      IcomLanDirectSession.IsMatchingStreamStatus(
+        wrongSequence, localSid, remoteSid, sequence, authId).Should().BeFalse();
+
+      byte[] wrongAuth = status.ToArray();
+      wrongAuth[0x1F] ^= 0x01;
+      IcomLanDirectSession.IsMatchingStreamStatus(
+        wrongAuth, localSid, remoteSid, sequence, authId).Should().BeFalse();
+    }
+
+    [Fact]
+    public void PassiveLanClassifier_AcceptsC1ContinuationWithoutCivPreamble()
+    {
+      byte[] continuation = { 0x20, 0x21, 0x22, 0xFD };
+      byte[] packet = new byte[21 + continuation.Length];
+      BitConverter.GetBytes(packet.Length).CopyTo(packet, 0);
+      packet[16] = 0xC1;
+      packet[17] = (byte)continuation.Length;
+      Buffer.BlockCopy(
+        continuation, 0, packet, 21, continuation.Length);
+
+      IcomLanSpectrumCapture.LooksLikeIcomCivTransport(packet)
+        .Should().BeTrue();
+      IcomLanSpectrumCapture.TryGetSerialPayload(
+        packet, out ReadOnlySpan<byte> serial).Should().BeTrue();
+      serial.ToArray().Should().Equal(continuation);
+
+      byte[] withTrailingGarbage =
+        packet.Concat(new byte[] { 0x00 }).ToArray();
+      IcomLanSpectrumCapture.TryGetSerialPayload(
+        withTrailingGarbage, out _).Should().BeFalse();
+    }
+
+
+    [Fact]
+    public void TransitionProbe_IdentifiesCombinedLanScopeFrame()
+    {
+      byte[] samples = Enumerable.Range(0, IcomScopeAssembler.ScopePointCount)
+        .Select(i => (byte)(i % 161))
+        .ToArray();
+
+      byte[] civ = BuildScopeHeaderFrame(
+        receiver: 0,
+        sequence: 1,
+        sequenceMaximum: 1,
+        mode: 0,
+        frequencyAHz: 432_066_500,
+        frequencyBHz: 25_000,
+        outOfRange: false,
+        samples);
+
+      byte[] packet = BuildLanUdpPacket(
+        source: IPAddress.Parse("192.168.1.4"),
+        destination: IPAddress.Parse("192.168.1.20"),
+        sourcePort: 50002,
+        destinationPort: 54321,
+        civ);
+
+      IcomLanTransitionProbe.TryInspectPacket(
+        packet,
+        IPAddress.Parse("192.168.1.4"),
+        out ProbePacketInfo info).Should().BeTrue();
+
+      info.RadioToPc.Should().BeTrue();
+      info.RadioPort.Should().Be(50002);
+      info.CombinedScope.Should().BeTrue();
+      info.ChunkedScope.Should().BeFalse();
+      info.CivSignature.Should().Be("27-00 div=01/01");
+      info.PacketSignature.Should().Contain("RADIO->PC");
+    }
+
+    [Fact]
+    public void TransitionProbe_IdentifiesOutgoingScopeEnableCommand()
+    {
+      byte[] civ =
+      {
+        0xFE, 0xFE, 0xA2, 0xE0,
+        0x27, 0x11, 0x01, 0xFD
+      };
+
+      byte[] packet = BuildLanUdpPacket(
+        source: IPAddress.Parse("192.168.1.20"),
+        destination: IPAddress.Parse("192.168.1.4"),
+        sourcePort: 54321,
+        destinationPort: 50002,
+        civ);
+
+      IcomLanTransitionProbe.TryInspectPacket(
+        packet,
+        IPAddress.Parse("192.168.1.4"),
+        out ProbePacketInfo info).Should().BeTrue();
+
+      info.RadioToPc.Should().BeFalse();
+      info.RadioPort.Should().Be(50002);
+      info.CivSignature.Should().Be("27-11 01");
+      info.CombinedScope.Should().BeFalse();
+      info.PacketSignature.Should().Contain("PC->RADIO");
+    }
+
+    private static byte[] BuildLanUdpPacket(
+      IPAddress source,
+      IPAddress destination,
+      int sourcePort,
+      int destinationPort,
+      byte[] civ)
+    {
+      byte[] lanPayload = new byte[21 + civ.Length];
+      BitConverter.GetBytes(lanPayload.Length).CopyTo(lanPayload, 0);
+      lanPayload[16] = 0xC1;
+      BitConverter.GetBytes((ushort)civ.Length).CopyTo(lanPayload, 17);
+      civ.CopyTo(lanPayload, 21);
+
+      int udpLength = 8 + lanPayload.Length;
+      byte[] packet = new byte[20 + udpLength];
+
+      packet[0] = 0x45;
+      packet[9] = 17;
+
+      source.GetAddressBytes().CopyTo(packet, 12);
+      destination.GetAddressBytes().CopyTo(packet, 16);
+
+      WriteUInt16BigEndian(packet, 20, (ushort)sourcePort);
+      WriteUInt16BigEndian(packet, 22, (ushort)destinationPort);
+      WriteUInt16BigEndian(packet, 24, (ushort)udpLength);
+
+      lanPayload.CopyTo(packet, 28);
+      return packet;
+    }
+
+    private static void WriteUInt16BigEndian(
+      byte[] bytes,
+      int offset,
+      ushort value)
+    {
+      bytes[offset] = (byte)(value >> 8);
+      bytes[offset + 1] = (byte)value;
+    }
+
     private static byte[] BuildScopeHeaderFrame(
       byte receiver,
       int sequence,
@@ -199,6 +420,25 @@ namespace VE3NEA.Dsp.Tests
       frame.AddRange(samples);
       frame.Add(0xFD);
       return frame.ToArray();
+    }
+
+    private static uint ReadUInt32BigEndian(
+      byte[] bytes,
+      int offset) =>
+      ((uint)bytes[offset] << 24) |
+      ((uint)bytes[offset + 1] << 16) |
+      ((uint)bytes[offset + 2] << 8) |
+      bytes[offset + 3];
+
+    private static void WriteUInt32BigEndian(
+      byte[] bytes,
+      int offset,
+      uint value)
+    {
+      bytes[offset] = (byte)(value >> 24);
+      bytes[offset + 1] = (byte)(value >> 16);
+      bytes[offset + 2] = (byte)(value >> 8);
+      bytes[offset + 3] = (byte)value;
     }
 
     private static byte EncodeBcdByte(int value) =>

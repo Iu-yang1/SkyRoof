@@ -12,6 +12,7 @@
   - SDRplay;
   - RTL-SDR;
   - HackRF;
+  - LimeSDR;
 
   Other radios can be used if a SoapySDR driver module is available for them, see
   [Setting Up SDR](setting_up_sdr.md);

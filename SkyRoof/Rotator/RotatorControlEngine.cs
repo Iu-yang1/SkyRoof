@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
 using System.Linq;
+using System.Net.Sockets;
 using System.Reflection;
 using System.Reflection.Metadata.Ecma335;
 using System.Runtime.Intrinsics.X86;
@@ -18,6 +19,7 @@ namespace SkyRoof
   {
     public volatile Bearing? RequestedBearing, LastReadBearing, LastWrittenBearing;
     private volatile bool stopRequested = false;
+    private volatile bool stopNotSupported = false;
 
     public event EventHandler? BearingChanged;
 
@@ -56,13 +58,32 @@ namespace SkyRoof
 
       if (stopRequested)
       {
-        SendWriteCommand("S");
         stopRequested = false;
+        SendStopCommand();
         return;
       }
 
       WriteBearing();
       ReadBearing();
+    }
+
+    // some rotator servers accept the stop command but never reply to it, and the read then times
+    // out. Do not drop the connection when that happens, and do not send the command again until
+    // the rotator settings are re-applied and this engine is re-created
+    private void SendStopCommand()
+    {
+      if (stopNotSupported) return;
+
+      try
+      {
+        SendWriteCommand("S");
+      }
+      catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)
+      {
+        stopNotSupported = true;
+        Log.Warning("The rotator controller does not reply to the Stop command. " +
+          "SkyRoof will not send this command again.");
+      }
     }
 
     private void WriteBearing()
