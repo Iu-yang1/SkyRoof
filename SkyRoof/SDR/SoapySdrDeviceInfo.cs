@@ -38,13 +38,21 @@ namespace VE3NEA
         Device = SoapySdr.CreateDevice(kwArgs);
         ReadCapabilities();
         ReadProperties();
-        SoapySdr.ReleaseDevice(Device);
-
         Present = true;
       }
       catch (Exception ex)
       {
         Log.Error(ex, $"Failed to create SoapySdr device for {JsonConvert.SerializeObject(kwArgs)}");
+      }
+      finally
+      {
+        if (Device != IntPtr.Zero)
+        {
+          IntPtr device = Device;
+          Device = IntPtr.Zero;
+          try { SoapySdr.ReleaseDevice(device); }
+          catch (Exception ex) { Log.Warning(ex, "Failed to release SoapySDR probe device"); }
+        }
       }
     }
 

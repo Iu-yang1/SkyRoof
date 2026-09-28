@@ -15,6 +15,7 @@ namespace VE3NEA
     private IntPtr Device;
     private SoapySdrStream? Stream;
     private Thread? Thread;
+    private readonly object NativeSync = new();
 
     public readonly SoapySdrDeviceInfo Info;
     private bool Started;
@@ -97,8 +98,7 @@ namespace VE3NEA
 
     public bool IsRunning()
     {
-      return Device != IntPtr.Zero; 
-      //Thread?.IsAlive ?? false;
+      return Device != IntPtr.Zero && Thread?.IsAlive == true;
     }
 
 
@@ -113,57 +113,87 @@ namespace VE3NEA
         throw new Exception($"Device {Info.Name} is no longer available");
 
       Device = SoapySdr.CreateDevice(Info.KwArgs);
-      SetAllParams();
+      try
+      {
+        SetAllParams();
 
-      Thread = new Thread(new ThreadStart(ThreadProcedure));
-      Thread.IsBackground = true;
-      Thread.Name = GetType().Name;
-      Stopping = false;
-      Thread.Start();
-      Thread.Priority = ThreadPriority.Highest;
+        Thread = new Thread(new ThreadStart(ThreadProcedure));
+        Thread.IsBackground = true;
+        Thread.Name = GetType().Name;
+        Stopping = false;
+        Thread.Start();
+        Thread.Priority = ThreadPriority.Highest;
+      }
+      catch
+      {
+        Thread = null;
+        ReleaseNativeDevice();
+        throw;
+      }
     }
 
     public void Stop()
     {
-      if (!IsRunning()) return;
-
       Stopping = true;
       Thread?.Join();
       Thread = null;
-      Device = IntPtr.Zero;
+
+      // If startup failed before the worker took ownership, or the worker
+      // exited before its finally block completed, release any remaining handle.
+      ReleaseNativeDevice();
     }
 
     private void ThreadProcedure()
     {
       Log.Information($"Starting SDR Read thread");
 
-      Stream = new(Device);
+      try
+      {
+        Stream = new(Device);
 
-      while (!Stopping)
-        try
-        {
-          Stream.ReadStream();
+        while (!Stopping)
+          try
+          {
+            Stream.ReadStream();
 
-          // a timeout or an overflow yields no samples. an empty block has nothing for the
-          // consumers downstream, so do not pass it on
-          if (Stream.Args.Count == 0) continue;
+            // a timeout or an overflow yields no samples. an empty block has nothing for the
+            // consumers downstream, so do not pass it on
+            if (Stream.Args.Count == 0) continue;
 
-          Stream.Args.Utc = DateTime.UtcNow;
-          DataAvailable?.Invoke(this, Stream.Args);
-        }
-        catch (Exception ex)
-        {
-          Log.Error(ex, $"{Info.Name} read failed");
-          break;
-        }
+            Stream.Args.Utc = DateTime.UtcNow;
+            DataAvailable?.Invoke(this, Stream.Args);
+          }
+          catch (Exception ex)
+          {
+            Log.Error(ex, $"{Info.Name} read failed");
+            break;
+          }
+      }
+      catch (Exception ex)
+      {
+        Log.Error(ex, $"{Info.Name} stream initialization failed");
+      }
+      finally
+      {
+        Log.Information($"Terminating SDR Read thread");
+        try { Stream?.Dispose(); } catch (Exception ex) { Log.Warning(ex, $"{Info.Name} stream cleanup failed"); }
+        Stream = null;
+        ReleaseNativeDevice();
+        StateChanged?.Invoke(this, EventArgs.Empty);
+      }
+    }
 
-      Log.Information($"Terminating SDR Read thread");
-      Stream.Dispose();
-      Stream = null;
-      SoapySdr.ReleaseDevice(Device);
-      Device = IntPtr.Zero;
+    private void ReleaseNativeDevice()
+    {
+      lock (NativeSync)
+      {
+        if (Device == IntPtr.Zero) return;
 
-      StateChanged?.Invoke(this, EventArgs.Empty);
+        IntPtr device = Device;
+        Device = IntPtr.Zero;
+        try { SoapySdr.ReleaseDevice(device); }
+        catch (Exception ex) { Log.Warning(ex, $"{Info.Name} device cleanup failed"); }
+      }
     }
 
 

@@ -25,6 +25,8 @@ namespace SkyRoof
     private readonly int receiveTimeout;
     private readonly int reconnectDelay;
     private readonly ManualResetEventSlim stopEvent = new ManualResetEventSlim(false);
+    private readonly byte[] receiveBuffer = new byte[4096];
+    private readonly StringBuilder receivePending = new();
 
     public event EventHandler? StatusChanged;
     public bool IsRunning {get; private set;}
@@ -185,6 +187,7 @@ namespace SkyRoof
       {
         TcpClient?.Dispose(); // Ensure resources are released
         TcpClient = null; // Reset the TcpClient reference
+        receivePending.Clear();
       }
     }
 
@@ -279,25 +282,46 @@ namespace SkyRoof
       Log.Error($"Unexpected reply from {GetType().Name} ctld: {reply.Trim()}");
     }
 
-    byte[] buffer = new byte[65536];
-
     protected string ReadLine()
     {
-      int totalRead = 0;
+      const int MaxBufferedReply = 65536;
 
-      while (totalRead < buffer.Length)
+      while (true)
       {
-        int bytesRead = TcpClient!.Client.Receive(buffer, totalRead, buffer.Length - totalRead, SocketFlags.None);
-        if (bytesRead == 0) break; // connection closed
-        totalRead += bytesRead;
+        string pending = receivePending.ToString();
+        int newline = pending.IndexOf('\n');
+        if (newline >= 0)
+        {
+          string line = pending[..(newline + 1)];
+          receivePending.Remove(0, newline + 1);
+          return line;
+        }
 
-        for (int i = totalRead - 1; i >= totalRead - bytesRead; i--)
-          if (buffer[i] == (byte)'\n')
-            return Encoding.ASCII.GetString(buffer, 0, i + 1);
+        if (receivePending.Length >= MaxBufferedReply)
+        {
+          string oversized = receivePending.ToString();
+          receivePending.Clear();
+          return oversized;
+        }
+
+        int bytesRead = TcpClient!.Client.Receive(
+          receiveBuffer,
+          0,
+          receiveBuffer.Length,
+          SocketFlags.None);
+
+        if (bytesRead == 0)
+        {
+          string tail = receivePending.ToString();
+          receivePending.Clear();
+          return tail;
+        }
+
+        // TCP is a byte stream: one Receive may contain several rigctld
+        // replies, or only part of one. Keep all bytes after the first newline
+        // for the next command instead of dropping a coalesced reply.
+        receivePending.Append(Encoding.ASCII.GetString(receiveBuffer, 0, bytesRead));
       }
-
-      // If no newline found, return all read bytes
-      return Encoding.ASCII.GetString(buffer, 0, totalRead);
     }
 
 
