@@ -260,13 +260,16 @@ namespace SkyRoof
 
     private void SendThreadProcedure()
     {
-      int sampleCount;
-      DateTime now;
-      SenderPhase = SendingStage.Idle;
-      Soundcard.Buffer.Clear();
-
-      while (!Stopping)
+      bool pttActive = false;
+      try
       {
+        int sampleCount;
+        DateTime now;
+        SenderPhase = SendingStage.Idle;
+        Soundcard.Buffer.Clear();
+
+        while (!Stopping)
+        {
         now = DateTime.UtcNow;
         Slot.Utc = now;
         var startTime = Slot.GetTxStartTime(TxOdd);
@@ -302,7 +305,7 @@ namespace SkyRoof
             if (now > startTime)
             {
               SenderPhase = SendingStage.Sending;
-              BeforeTransmit?.Invoke(this, EventArgs.Empty);
+              BeginTransmit(ref pttActive);
             }
             break;
 
@@ -315,7 +318,7 @@ namespace SkyRoof
             {
               SenderPhase = SendingStage.Idle;
               Thread.Sleep(PttOffMargin);
-              AfterTransmit?.Invoke(this, EventArgs.Empty);
+              EndTransmit(ref pttActive);
             }
 
             // Odd/Even changed, stop sending
@@ -333,10 +336,21 @@ namespace SkyRoof
         RampDown();
         SenderPhase = SendingStage.Idle;
         Thread.Sleep(PttOffMargin);
-        AfterTransmit?.Invoke(this, EventArgs.Empty);
+        EndTransmit(ref pttActive);
       }
 
-      Soundcard.Buffer.Clear();
+        Soundcard.Buffer.Clear();
+      }
+      catch (Exception ex)
+      {
+        Log.Error(ex, "FT4 transmit worker failed");
+      }
+      finally
+      {
+        SenderPhase = SendingStage.Idle;
+        try { Soundcard.Buffer.Clear(); } catch { }
+        EndTransmitNoThrow(ref pttActive);
+      }
     }
 
     private void StartInMiddle(double missedSeconds)
