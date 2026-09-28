@@ -93,7 +93,8 @@ namespace VE3NEA
   public class SdrProperty
   {
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public string Name => ArgInfo.Name;
+    // model-specific settings read from the driver carry a key and often no display name
+    public string Name => string.IsNullOrEmpty(ArgInfo.Name) ? ArgInfo.Key : ArgInfo.Name;
 
     public string Value;
     public SoapySDRArgInfo ArgInfo;

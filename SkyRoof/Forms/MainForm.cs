@@ -43,9 +43,11 @@ namespace SkyRoof
       ctx.AmsatStatusLoader.ctx = ctx;
       ctx.UdpStreamSender.ctx = ctx;
 
-      ctx.Settings.LoadFromFile();
+      var settingsLoadResult = ctx.Settings.LoadFromFile();
 
       ApplyThemeSettings();
+
+      ReportSettingsLoadResult(settingsLoadResult);
 
       EnsureUserDetails();
 
@@ -79,6 +81,9 @@ namespace SkyRoof
       ctx.Settings.Ui.RestoreDockingLayout(this);
       Clock.UtcMode = ctx.Settings.Ui.ClockUtcMode;
 
+      // the layout is back, so the Auto Selection panel exists again if it was open at the last shutdown
+      ctx.AutoSelector.RestoreEnabledIfRequested();
+
       StartSdrIfEnabled();
 
       VersionChecker = new VersionChecker(ctx.Settings.LatestVersion);
@@ -99,8 +104,9 @@ namespace SkyRoof
       timer.Enabled = false;
       if (ctx.Slicer != null) ctx.Slicer.Enabled = false;
 
-      // stop auto-selection and flush any recording segment in progress (plan §1.8)
-      ctx.AutoSelector.SetEnabled(false);
+      // stop auto-selection and flush any recording segment in progress (plan §1.8), keeping the
+      // WasEnabled flag that the save below persists for the restore option
+      ctx.AutoSelector.Shutdown();
 
       // save settings
       ctx.Settings.Ui.StoreDockingLayout(DockHost);
@@ -121,6 +127,25 @@ namespace SkyRoof
       ctx.IqVacSoundcard?.Dispose();
       ctx.KissServer.Dispose();
       Fft<Complex32>.SaveWisdom();
+    }
+
+    // Settings.LoadFromFile recovers from a damaged settings file on its own. Name that file, so that the
+    // settings coming back as they were at the previous shutdown, or as the defaults, does not look like
+    // SkyRoof forgetting them for no reason.
+    private void ReportSettingsLoadResult(SettingsLoadResult result)
+    {
+      if (result == SettingsLoadResult.Loaded) return;
+
+      string text = $"The settings file\r\n\r\n{Settings.GetFileName()}\r\n\r\nis damaged and could not be read.\r\n\r\n";
+
+      if (ctx.Settings.DamagedFileName != null)
+        text += $"The damaged file was kept as {Path.GetFileName(ctx.Settings.DamagedFileName)}.\r\n\r\n";
+
+      text += result == SettingsLoadResult.RestoredFromBackup
+        ? "SkyRoof restored the settings saved at the previous shutdown. Settings changed after that are lost."
+        : "No usable backup was found, SkyRoof reverted to the default settings.";
+
+      MessageBox.Show(text, "SkyRoof Settings", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
     private void EnsureUserDetails()

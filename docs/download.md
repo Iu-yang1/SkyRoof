@@ -4,7 +4,7 @@
 
 ### Current Version
 
-[SkyRoof v.1.53](https://github.com/VE3NEA/SkyRoof/releases/download/v.1.53/SkyRoofSetup-v.1.53.exe)
+[SkyRoof v.1.54](https://github.com/VE3NEA/SkyRoof/releases/download/v.1.54/SkyRoofSetup-v.1.54.exe)
 
 <br>
 
@@ -15,6 +15,12 @@ See [All Releases](https://github.com/VE3NEA/SkyRoof/releases)
 <br>
 
 ### Release Notes
+
+#### v.1.54
+
+- added support of LimeSDR - TNX Daniel M1KKL
+- gracefully handle settings write errors
+- gracefully handle rotator S command failures
 
 #### v.1.53
 

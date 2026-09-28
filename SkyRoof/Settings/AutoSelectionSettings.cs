@@ -12,11 +12,21 @@ namespace SkyRoof
     // over the active pass before the engine switches to it
     public double ElevationHysteresisDeg = 2;
 
+    // NB: the global master on/off is NOT persisted here - Enabled is a runtime-only flag on the
+    // AutoSelector engine, so auto-selection is always off at startup, unless the two fields below
+    // opt into carrying it across a restart
+
+    // hidden option, deliberately absent from the settings dialog: the user turns it on by editing
+    // Settings.json. When true, auto-selection is re-enabled at startup if it was running when the
+    // program was last closed
+    public bool RestoreEnabledOnStartup = false;
+
+    // whether auto-selection was running at the last shutdown, kept in step with the live flag by
+    // AutoSelector.SetEnabled and read back only when RestoreEnabledOnStartup is set
+    public bool WasEnabled = false;
+
     // one schedule per satellite group, keyed by SatelliteGroup.Id (mirrors SatelliteCustomizations)
     public Dictionary<string, GroupSchedule> Schedules = new();
-
-    // NB: the global master on/off is NOT persisted here - Enabled is a runtime-only flag on the
-    // AutoSelector engine, so auto-selection is always off at startup
 
     // reconciles the persisted schedules with the current groups; runs at settings load and save, and
     // (with the db supplied) whenever satellite data is refreshed. db is optional because at settings
