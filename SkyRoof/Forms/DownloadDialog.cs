@@ -1,21 +1,23 @@
-﻿using System;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.Linq;
-using System.Net;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Forms;
 using Serilog;
 
 namespace SkyRoof
 {
   public partial class DownloadDialog : Form
   {
-    private Context ctx;
+    private enum DownloadMode
+    {
+      SatelliteData,
+      JplKernel
+    }
+
+    private Context ctx = null!;
     private SatnogsDb? db;
+    private DownloadMode Mode;
+    private JplEphemerisKernel JplKernel;
+    private CancellationTokenSource? JplCancellation;
+
+    internal string? DownloadedJplPath { get; private set; }
 
     public DownloadDialog()
     {
@@ -30,19 +32,69 @@ namespace SkyRoof
 
     public static bool Download(Form parent, Context ctx)
     {
-      var dlg = new DownloadDialog();
-      dlg.ctx = ctx;
+      using var dlg = new DownloadDialog
+      {
+        ctx = ctx,
+        Mode = DownloadMode.SatelliteData
+      };
 
       var rc = dlg.ShowDialog(parent);
       return rc == DialogResult.OK;
     }
 
-    private void Button_Click(object sender, EventArgs e)
+    internal static bool DownloadJpl(
+      Form parent,
+      Context ctx,
+      JplEphemerisKernel kernel,
+      out string? path)
     {
-      db?.AbortDownload();
+      string name =
+        kernel == JplEphemerisKernel.DE421
+          ? "DE421"
+          : "DE440s";
+
+      using var dlg = new DownloadDialog
+      {
+        ctx = ctx,
+        Mode = DownloadMode.JplKernel,
+        JplKernel = kernel,
+        Text = $"JPL {name}",
+      };
+
+      dlg.label1.Text =
+        $"Downloading JPL {name} ephemeris...";
+      dlg.ErrorLabel.ForeColor =
+        SystemColors.ControlText;
+      dlg.ErrorLabel.Text =
+        "Connecting...";
+
+      var rc = dlg.ShowDialog(parent);
+      path = dlg.DownloadedJplPath;
+      return rc == DialogResult.OK;
     }
 
-    private async void DownloadDialog_Shown(object sender, EventArgs e)
+    private void Button_Click(object sender, EventArgs e)
+    {
+      if (Mode == DownloadMode.JplKernel)
+        JplCancellation?.Cancel();
+      else
+        db?.AbortDownload();
+    }
+
+    private async void DownloadDialog_Shown(
+      object sender,
+      EventArgs e)
+    {
+      if (Mode == DownloadMode.JplKernel)
+      {
+        await DownloadJplKernelAsync();
+        return;
+      }
+
+      await DownloadSatelliteDataAsync();
+    }
+
+    private async Task DownloadSatelliteDataAsync()
     {
       db = new();
       db.ConfigureSources(ctx.Settings.OrbitSources);
@@ -68,9 +120,8 @@ namespace SkyRoof
       {
         db.ImportAll();
 
-        // Custom sources are an overlay on the authoritative SatNOGS database.
-        // Re-apply them after a full database refresh so user-selected TLEs and
-        // custom NORAD objects are not lost when ImportAll rebuilds the list.
+        // Custom sources are the highest-priority orbit layer. Within the list,
+        // the first configured source wins over later sources.
         await db.LoadCustomTleSourcesAsync(
           ctx.Settings.OrbitSources.CustomTleSources,
           raiseEvent: false);
@@ -88,7 +139,112 @@ namespace SkyRoof
       }
     }
 
-    private void SatnogsDb_DownloadProgress(object? sender, ProgressChangedEventArgs e)
+    private async Task DownloadJplKernelAsync()
+    {
+      db = ctx.SatnogsDb;
+      JplCancellation = new CancellationTokenSource();
+
+      var progress =
+        new Progress<JplDownloadProgress>(
+          ShowJplDownloadProgress);
+
+      try
+      {
+        DownloadedJplPath =
+          await db.DownloadJplKernelAsync(
+            JplKernel,
+            progress,
+            JplCancellation.Token);
+
+        progressBar1.Style = ProgressBarStyle.Blocks;
+        progressBar1.Value = 100;
+        ErrorLabel.Text = "Download complete. Validated SPK/BSP file.";
+        DialogResult = DialogResult.OK;
+      }
+      catch (OperationCanceledException)
+      {
+        Log.Information(
+          $"JPL {JplKernel} download cancelled by user.");
+        DialogResult = DialogResult.Cancel;
+      }
+      catch (Exception ex)
+      {
+        progressBar1.Style = ProgressBarStyle.Blocks;
+        progressBar1.Value = 0;
+        ErrorLabel.ForeColor = Color.Red;
+        ErrorLabel.Text = "Download Failed";
+        Button.Text = "Close";
+        Log.Error(
+          ex,
+          $"JPL {JplKernel} download failed.");
+        MessageBox.Show(
+          this,
+          ex.Message,
+          "JPL Ephemeris",
+          MessageBoxButtons.OK,
+          MessageBoxIcon.Error);
+        DialogResult = DialogResult.None;
+      }
+      finally
+      {
+        JplCancellation.Dispose();
+        JplCancellation = null;
+      }
+    }
+
+    private void ShowJplDownloadProgress(
+      JplDownloadProgress progress)
+    {
+      string name =
+        JplKernel == JplEphemerisKernel.DE421
+          ? "DE421"
+          : "DE440s";
+
+      string source =
+        Uri.TryCreate(
+          progress.SourceUrl,
+          UriKind.Absolute,
+          out Uri? uri)
+          ? uri.Host
+          : progress.SourceUrl;
+
+      label1.Text =
+        $"Downloading JPL {name} — source {progress.SourceIndex}/{progress.SourceCount}";
+
+      double receivedMiB =
+        progress.BytesReceived /
+        1024d /
+        1024d;
+
+      if (progress.Percent is int percent &&
+          progress.TotalBytes is long totalBytes)
+      {
+        progressBar1.Style = ProgressBarStyle.Blocks;
+        progressBar1.Value =
+          Math.Clamp(
+            percent,
+            progressBar1.Minimum,
+            progressBar1.Maximum);
+
+        double totalMiB =
+          totalBytes /
+          1024d /
+          1024d;
+
+        ErrorLabel.Text =
+          $"{receivedMiB:F1} / {totalMiB:F1} MiB  ({percent}%)  {source}";
+      }
+      else
+      {
+        progressBar1.Style = ProgressBarStyle.Marquee;
+        ErrorLabel.Text =
+          $"{receivedMiB:F1} MiB received  {source}";
+      }
+    }
+
+    private void SatnogsDb_DownloadProgress(
+      object? sender,
+      ProgressChangedEventArgs e)
     {
       progressBar1.Value = e.ProgressPercentage;
     }
