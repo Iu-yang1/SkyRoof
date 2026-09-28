@@ -67,6 +67,7 @@ namespace SkyRoof
       ApplyKissServerSettings();
       ctx.CatControl.ApplySettings();
       ctx.RotatorControl.ApplySettings();
+      ctx.PttHotkey = new PttHotkeyController(ctx);
 
       UpdateSatellitePhotoVisibility();
     }
@@ -107,6 +108,11 @@ namespace SkyRoof
       // stop auto-selection and flush any recording segment in progress (plan §1.8), keeping the
       // WasEnabled flag that the save below persists for the restore option
       ctx.AutoSelector.Shutdown();
+
+      // Release a held physical PTT key before CAT teardown, then dispose
+      // the global keyboard hook so no new PTT request can race shutdown.
+      ctx.PttHotkey?.Dispose();
+      ctx.PttHotkey = null;
 
       // Dispose CAT engines while the UI and TCP path are still alive. A CAT
       // engine releases PTT here only if SkyRoof itself successfully asserted it;
