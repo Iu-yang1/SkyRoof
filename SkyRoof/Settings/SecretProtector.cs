@@ -50,8 +50,7 @@ namespace SkyRoof
       try
       {
         JToken root = JToken.Parse(File.ReadAllText(fileName));
-        IEnumerable<JToken> tokens = new[] { root }.Concat(root.Descendants());
-        foreach (JProperty property in tokens
+        foreach (JProperty property in EnumerateTokens(root)
           .OfType<JProperty>()
           .Where(p => p.Name is "DirectLanPassword" or "ApiToken")
           .ToArray())
@@ -75,6 +74,18 @@ namespace SkyRoof
       {
         Log.Warning(ex, $"Unable to sanitize legacy secrets in {fileName}.");
       }
+    }
+
+    private static IEnumerable<JToken> EnumerateTokens(JToken token)
+    {
+      yield return token;
+
+      if (token is not JContainer container)
+        yield break;
+
+      foreach (JToken child in container.Children())
+        foreach (JToken descendant in EnumerateTokens(child))
+          yield return descendant;
     }
 
     internal static string RedactLegacySecrets(string text)
