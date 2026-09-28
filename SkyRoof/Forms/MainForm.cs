@@ -17,6 +17,7 @@ namespace SkyRoof
     public MainForm()
     {
       InitializeComponent();
+      AddOrbitSourceMenuItems();
 
       Text = Utils.GetVersionString();
       ctx.MainForm = this;
@@ -632,6 +633,181 @@ namespace SkyRoof
       if (dlg.ShowDialog() != DialogResult.OK) return;
 
       ctx.SatnogsDb.LoadTleFromFile(dlg.FileName);
+    }
+
+    private void AddOrbitSourceMenuItems()
+    {
+      var jplMenu = new ToolStripMenuItem("JPL &Ephemeris");
+
+      var de440s = new ToolStripMenuItem(
+        "Download DE440&s (recommended)...");
+      de440s.Click += async (_, _) =>
+        await DownloadJplEphemerisAsync(
+          JplEphemerisKernel.DE440s);
+
+      var de421 = new ToolStripMenuItem(
+        "Download DE&421...");
+      de421.Click += async (_, _) =>
+        await DownloadJplEphemerisAsync(
+          JplEphemerisKernel.DE421);
+
+      var load = new ToolStripMenuItem(
+        "Load SPK/BSP From &File...");
+      load.Click += (_, _) =>
+        LoadJplEphemerisFromFile();
+
+      var reload = new ToolStripMenuItem(
+        "&Reload Custom TLE Sources");
+      reload.Click += async (_, _) =>
+        await ReloadCustomTleSourcesAsync();
+
+      jplMenu.DropDownItems.Add(de440s);
+      jplMenu.DropDownItems.Add(de421);
+      jplMenu.DropDownItems.Add(
+        new ToolStripSeparator());
+      jplMenu.DropDownItems.Add(load);
+      jplMenu.DropDownItems.Add(
+        new ToolStripSeparator());
+      jplMenu.DropDownItems.Add(reload);
+
+      toolsToolStripMenuItem.DropDownItems.Add(
+        new ToolStripSeparator());
+      toolsToolStripMenuItem.DropDownItems.Add(jplMenu);
+    }
+
+    private async Task DownloadJplEphemerisAsync(
+      JplEphemerisKernel kernel)
+    {
+      string name =
+        kernel == JplEphemerisKernel.DE421
+          ? "DE421"
+          : "DE440s";
+
+      var answer = MessageBox.Show(
+        $"Download the JPL {name} SPK ephemeris from NASA/JPL NAIF?\r\n\r\n" +
+        (kernel == JplEphemerisKernel.DE421
+          ? "Approximate size: 16 MB."
+          : "Approximate size: 31 MB."),
+        "JPL Ephemeris",
+        MessageBoxButtons.YesNo,
+        MessageBoxIcon.Question);
+
+      if (answer != DialogResult.Yes)
+        return;
+
+      UseWaitCursor = true;
+
+      try
+      {
+        string path =
+          await ctx.SatnogsDb.DownloadJplKernelAsync(kernel);
+
+        ctx.Settings.OrbitSources.JplKernel = kernel;
+        ctx.Settings.OrbitSources.JplKernelFile = string.Empty;
+        ctx.Settings.SaveToFile();
+
+        int targets =
+          ctx.SatnogsDb.ConfigureSolarSystem(
+            ctx.Settings.OrbitSources);
+        ctx.Settings.Satellites.EnsureSolarSystemGroup(
+          ctx.SatnogsDb);
+        SatnogsDb_ListUpdated(null, EventArgs.Empty);
+
+        MessageBox.Show(
+          $"{name} installed successfully.\r\n\r\n" +
+          $"Loaded {targets} solar-system targets.\r\n{path}",
+          "JPL Ephemeris",
+          MessageBoxButtons.OK,
+          MessageBoxIcon.Information);
+      }
+      catch (Exception ex)
+      {
+        Log.Error(ex, $"Unable to download JPL {name} ephemeris.");
+        MessageBox.Show(
+          $"Unable to download or validate {name}.\r\n\r\n{ex.Message}",
+          "JPL Ephemeris",
+          MessageBoxButtons.OK,
+          MessageBoxIcon.Error);
+      }
+      finally
+      {
+        UseWaitCursor = false;
+      }
+    }
+
+    private void LoadJplEphemerisFromFile()
+    {
+      using var dlg = new OpenFileDialog
+      {
+        Filter =
+          "NAIF SPK/BSP Files (*.bsp)|*.bsp|All Files (*.*)|*.*",
+        Title = "Load JPL / NAIF Planetary Ephemeris"
+      };
+
+      if (dlg.ShowDialog(this) != DialogResult.OK)
+        return;
+
+      try
+      {
+        // Validate before persisting the path.
+        _ = new JplSpkKernel(dlg.FileName);
+
+        ctx.Settings.OrbitSources.JplKernel =
+          JplEphemerisKernel.CustomFile;
+        ctx.Settings.OrbitSources.JplKernelFile =
+          dlg.FileName;
+        ctx.Settings.SaveToFile();
+
+        int targets =
+          ctx.SatnogsDb.ConfigureSolarSystem(
+            ctx.Settings.OrbitSources);
+        ctx.Settings.Satellites.EnsureSolarSystemGroup(
+          ctx.SatnogsDb);
+        SatnogsDb_ListUpdated(null, EventArgs.Empty);
+
+        MessageBox.Show(
+          $"Loaded {targets} solar-system targets from:\r\n{dlg.FileName}",
+          "JPL Ephemeris",
+          MessageBoxButtons.OK,
+          MessageBoxIcon.Information);
+      }
+      catch (Exception ex)
+      {
+        Log.Error(ex, "Unable to load JPL SPK/BSP ephemeris.");
+        MessageBox.Show(
+          $"The selected file could not be used as a JPL/NAIF SPK ephemeris.\r\n\r\n{ex.Message}",
+          "JPL Ephemeris",
+          MessageBoxButtons.OK,
+          MessageBoxIcon.Error);
+      }
+    }
+
+    private async Task ReloadCustomTleSourcesAsync()
+    {
+      try
+      {
+        int count =
+          await ctx.SatnogsDb.LoadCustomTleSourcesAsync(
+            ctx.Settings.OrbitSources.CustomTleSources);
+
+        if (count > 0)
+          SatnogsDb_ListUpdated(null, EventArgs.Empty);
+
+        MessageBox.Show(
+          $"Applied {count} TLE record(s) from custom sources.",
+          "Custom TLE Sources",
+          MessageBoxButtons.OK,
+          MessageBoxIcon.Information);
+      }
+      catch (Exception ex)
+      {
+        Log.Error(ex, "Custom TLE source reload failed.");
+        MessageBox.Show(
+          ex.Message,
+          "Custom TLE Sources",
+          MessageBoxButtons.OK,
+          MessageBoxIcon.Error);
+      }
     }
 
     private void DataFolderMNU_Click(object sender, EventArgs e)
