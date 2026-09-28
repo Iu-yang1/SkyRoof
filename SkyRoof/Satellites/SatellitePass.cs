@@ -115,9 +115,10 @@ namespace SkyRoof
         // scheduling/rotator code uses this integer as part of pass identity,
         // so use a stable date key derived from the recovered AOS. Moon, Sun
         // and Venus have at most one normal rise window per civil day.
-        return
-          StartTime.Year * 1000 +
-          StartTime.DayOfYear;
+        return checked(
+          (int)Math.Floor(
+            (StartTime.ToUniversalTime() - DateTime.UnixEpoch)
+              .TotalMinutes));
       }
 
       uint revNum = tle.OrbitNumber;
