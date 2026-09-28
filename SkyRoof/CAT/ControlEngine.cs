@@ -206,7 +206,12 @@ namespace SkyRoof
       bool ok = true;
 
       foreach (string cmd in commands!)
-        ok = ok && SendWriteCommand(cmd);
+      {
+        // Do not short-circuit the sequence after one rejected command. Later
+        // setup/cleanup commands can still leave the rig in the intended state.
+        bool commandOk = SendWriteCommand(cmd);
+        ok &= commandOk;
+      }
 
       return ok;
     }
