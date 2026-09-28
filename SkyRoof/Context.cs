@@ -48,6 +48,7 @@ namespace SkyRoof
     public SoapySdrDevice? Sdr;
     public Slicer? Slicer;
     public CatControl CatControl = new();
+    internal PttHotkeyController? PttHotkey;
 
     // soundcards
     public readonly OutputSoundcard<float> SpeakerSoundcard = new();
