@@ -108,6 +108,11 @@ namespace SkyRoof
       // WasEnabled flag that the save below persists for the restore option
       ctx.AutoSelector.Shutdown();
 
+      // Dispose CAT engines while the UI and TCP path are still alive. A CAT
+      // engine releases PTT here only if SkyRoof itself successfully asserted it;
+      // externally owned PTT (for example from WSJT-X) is left untouched.
+      ctx.CatControl.Shutdown();
+
       // save settings
       ctx.Settings.Ui.StoreDockingLayout(DockHost);
       ctx.ClosePanels();

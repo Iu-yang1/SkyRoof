@@ -69,6 +69,12 @@ namespace SkyRoof
       if (stopping) return;
       stopping = true;
       stopEvent.Set();
+
+      // Connect/Receive are synchronous socket calls. Closing the current client
+      // from the stopping thread interrupts either operation so UI shutdown does
+      // not have to wait for an OS/TCP timeout before Join can complete.
+      try { TcpClient?.Close(); } catch { }
+
       processingThread?.Join();
       processingThread = null;
     }
@@ -145,11 +151,16 @@ namespace SkyRoof
       }
       catch (SocketException ex)
       {
-        if (!ErrorLogged)
+        if (!stopping && !ErrorLogged)
         {
           ErrorLogged = true;
           Log.Error(ex, $"Unable to connect to {Host}:{Port}");
         }
+        return false;
+      }
+      catch (ObjectDisposedException) when (stopping)
+      {
+        // StopThread closed the socket to interrupt a blocking Connect.
         return false;
       }
     }
@@ -206,7 +217,12 @@ namespace SkyRoof
       bool ok = true;
 
       foreach (string cmd in commands!)
-        ok = ok && SendWriteCommand(cmd);
+      {
+        // Do not short-circuit the sequence after one rejected command. Later
+        // setup/cleanup commands can still leave the rig in the intended state.
+        bool commandOk = SendWriteCommand(cmd);
+        ok &= commandOk;
+      }
 
       return ok;
     }

@@ -20,6 +20,12 @@ namespace SkyRoof
 
     public bool Ptt { get; private set; } = false;
     private bool PttChanged = false;
+
+    // Ownership is deliberately separate from the observed PTT state. A second
+    // client (for example WSJT-X) may key the same radio; shutting down SkyRoof
+    // must only release PTT that SkyRoof itself successfully asserted.
+    private volatile bool PttOwnedByApplication;
+    private readonly ManualResetEventSlim PttReleased = new(true);
     private bool DialKnobSpinning = false;
     public long RequestedRxFrequency, LastWrittenRxFrequency, LastReadRxFrequency;
     public long RequestedTxFrequency, LastWrittenTxFrequency, LastReadTxFrequency;
@@ -170,8 +176,11 @@ namespace SkyRoof
     {
       ReadPtt();
       if (NeedToWriteTxFreqModeBeforePtt()) TryWriteTxFreqModeBeforePtt();
-      if (NeedToWriteCtcss()) TryWriteCtcss();
-      TryWritePtt();
+
+      // If a requested CTCSS update failed, do not key the transmitter with a
+      // stale/unknown encoder state. Keep the write pending and retry next cycle.
+      bool ctcssReady = !NeedToWriteCtcss() || TryWriteCtcss();
+      if (ctcssReady) TryWritePtt();
 
       if (NeedToReadRxFrequency()) TryReadRxFrequency();
       if (NeedToReadTxFrequency()) TryReadTxFrequency();
@@ -258,7 +267,11 @@ namespace SkyRoof
     {
       string json = SendReadCommand("a") ?? string.Empty;
 
-      if (json == "RPRT -18")
+      // The private "a" capability command exists only in SkyCAT. A generic
+      // rigctld may answer with different RPRT error codes depending on Hamlib
+      // version/backend; any RPRT response means "no SkyCAT capability JSON" and
+      // should fall back to the embedded rigctld capability description.
+      if (json.StartsWith("RPRT ", StringComparison.Ordinal))
         return null;
 
       if (json == string.Empty) 
@@ -279,7 +292,9 @@ namespace SkyRoof
       string command = GetReadRxFrequencyCommand();
       if (command == string.Empty) return;
 
-      long frequency = ReadFrequency(command);
+      long? readFrequency = ReadFrequency(command);
+      if (!readFrequency.HasValue) return;
+      long frequency = readFrequency.Value;
 
       DialKnobSpinning = LastReadRxFrequency != 0 && // first read - ignore, no previous value
         IsDiff(frequency, LastReadRxFrequency) &&    // same freq as before, no change
@@ -305,7 +320,9 @@ namespace SkyRoof
       string command = GetReadTxFrequencyCommand();
       if (command == string.Empty) return;
 
-      long frequency = ReadFrequency(command);
+      long? readFrequency = ReadFrequency(command);
+      if (!readFrequency.HasValue) return;
+      long frequency = readFrequency.Value;
 
       bool changed = LastReadTxFrequency != 0 && LastWrittenTxFrequency != 0 &&
         IsDiff(frequency, LastReadTxFrequency) && IsDiff(frequency, LastWrittenTxFrequency) &&
@@ -315,11 +332,17 @@ namespace SkyRoof
       if (changed) OnTxFrequencyChanged();
     }
 
-    private long ReadFrequency(string command)
+    private long? ReadFrequency(string command)
     {
       var reply = SendReadCommand(command);
-      if (reply == null) return 0;
-      if (!long.TryParse(reply, CultureInfo.InvariantCulture, out long frequency)) BadReply(reply);
+      if (reply == null) return null;
+
+      if (!long.TryParse(reply, CultureInfo.InvariantCulture, out long frequency))
+      {
+        BadReply(reply);
+        return null;
+      }
+
       return RoundToStep(frequency);
     }
 
@@ -336,7 +359,8 @@ namespace SkyRoof
       string command = GetWriteRxFrequencyCommand(frequency);
       if (command == string.Empty) return;
 
-      SendWriteCommand(command);
+      if (!SendWriteCommand(command)) return;
+
       LastWrittenRxFrequency = frequency;
       LogFreqs("Rx frequency written");
     }
@@ -347,7 +371,8 @@ namespace SkyRoof
       string command = GetWriteTxFrequencyCommand(frequency);
       if (command == string.Empty) return;
 
-      SendWriteCommand(command);
+      if (!SendWriteCommand(command)) return;
+
       LastWrittenTxFrequency = frequency;
       LogFreqs("Tx frequency written");
     }
@@ -383,7 +408,8 @@ namespace SkyRoof
       {
         RemoveDataFromMode(ref newMode);
         command = GetWriteRxModeCommand(newMode);
-        SendWriteCommand(command);
+        if (command == string.Empty || !SendWriteCommand(command))
+          return;
       }
 
       LastWrittenRxMode = RequestedRxMode;
@@ -402,7 +428,8 @@ namespace SkyRoof
       {
         RemoveDataFromMode(ref mode);
         command = GetWriteTxModeCommand(mode);
-        SendWriteCommand(command);
+        if (command == string.Empty || !SendWriteCommand(command))
+          return;
       }
 
       LastWrittenTxMode = RequestedTxMode!;
@@ -439,6 +466,12 @@ namespace SkyRoof
       if (commands.read_ptt == null) return;
 
       var reply = SendReadCommand(commands.read_ptt);
+      if (reply != "0" && reply != "1")
+      {
+        if (reply != null) BadReply(reply);
+        return;
+      }
+
       bool newPtt = reply == "1";
 
       PttChanged = newPtt != Ptt;
@@ -447,6 +480,27 @@ namespace SkyRoof
       if (PttChanged)
         if (Ptt == true) LastWrittenTxFrequency = NOT_ASSIGNED; else LastWrittenRxFrequency = NOT_ASSIGNED;
 
+      // A CAT write can time out after the radio already acted on it. Treat a
+      // matching hardware read-back as confirmation of our pending request.
+      // Conversely, any observed RX state proves there is no SkyRoof-owned PTT
+      // left to release.
+      if (!Ptt)
+      {
+        PttOwnedByApplication = false;
+        PttReleased.Set();
+      }
+
+      if (RequestedPtt.HasValue && RequestedPtt.Value == Ptt)
+      {
+        if (Ptt)
+        {
+          PttOwnedByApplication = true;
+          PttReleased.Reset();
+        }
+
+        RequestedPtt = null;
+      }
+
       LogInfo($"ReadPtt: {Ptt} (changed={PttChanged})");
     }
 
@@ -454,15 +508,46 @@ namespace SkyRoof
     {
       if (CatMode == OperatingMode.RxOnly) return;
       if (!RequestedPtt.HasValue) return;
-      if (RequestedPtt == Ptt) return;
+      if (RequestedPtt == Ptt)
+      {
+        // The state is already satisfied. Do not claim ownership of an
+        // externally asserted PTT merely because SkyRoof requested the same
+        // state; only a successful write/read-back can establish ownership.
+        if (!Ptt)
+        {
+          PttOwnedByApplication = false;
+          PttReleased.Set();
+        }
 
-      // Replace these two lines
-      if (RequestedPtt == false && commands.set_ptt_off != null) SendWriteCommand(commands.set_ptt_off);
-      else if (RequestedPtt == true && commands.set_ptt_on != null) SendWriteCommand(commands.set_ptt_on);
+        RequestedPtt = null;
+        return;
+      }
+
+      string? command = RequestedPtt == true
+        ? commands.set_ptt_on
+        : commands.set_ptt_off;
+
+      // Never claim a PTT transition that the radio rejected. In particular,
+      // keep a failed PTT-OFF request pending so the next cycle retries it.
+      if (command == null || !SendWriteCommand(command))
+        return;
 
       Ptt = RequestedPtt.Value;
       PttChanged = true;
-      if (Ptt == true) LastWrittenTxFrequency = NOT_ASSIGNED; else LastWrittenRxFrequency = NOT_ASSIGNED;
+
+      if (Ptt)
+      {
+        PttOwnedByApplication = true;
+        PttReleased.Reset();
+        LastWrittenTxFrequency = NOT_ASSIGNED;
+      }
+      else
+      {
+        PttOwnedByApplication = false;
+        PttReleased.Set();
+        LastWrittenRxFrequency = NOT_ASSIGNED;
+      }
+
       RequestedPtt = null;
     }
 
@@ -499,15 +584,22 @@ namespace SkyRoof
       return CanSetCtcssTone() && CanEnableCtcss() && CanPtt();
     }
 
-    private void TryWriteCtcss()
+    private bool TryWriteCtcss()
     {
+      bool toneOk = true;
+      bool enableOk = true;
+
       if (CanSetCtcssTone())
-        SendWriteCommand(commands.set_ctcss_tone!.Replace("{tone}", $"{CtcssTones.ToTenths(CtcssTone)}"));
+        toneOk = SendWriteCommand(
+          commands.set_ctcss_tone!.Replace("{tone}", $"{CtcssTones.ToTenths(CtcssTone)}"));
 
       if (CanEnableCtcss())
-        SendWriteCommand(CtcssEnabled == true ? commands.enable_ctcss! : commands.disable_ctcss!);
+        enableOk = SendWriteCommand(
+          CtcssEnabled == true ? commands.enable_ctcss! : commands.disable_ctcss!);
 
-      CtcssPending = false;
+      bool ok = toneOk && enableOk;
+      if (ok) CtcssPending = false;
+      return ok;
     }
 
     private void TryReassertCtcssAfterTune()
@@ -521,8 +613,8 @@ namespace SkyRoof
         return;
 
       LogInfo("Reasserting CTCSS after tune");
-      TryWriteCtcss();
-      CtcssReassertAfterTune = false;
+      if (TryWriteCtcss())
+        CtcssReassertAfterTune = false;
     }
 
     private void TrySendArmingTone()
@@ -537,21 +629,45 @@ namespace SkyRoof
 
       Log.Information($"Sending {CtcssTones.ARMING_DURATION_MS} ms arming carrier with a {toneHz} Hz tone");
 
-      SendWriteCommand(commands.set_ctcss_tone!.Replace("{tone}", $"{CtcssTones.ToTenths(toneHz)}"));
-      SendWriteCommand(commands.enable_ctcss!);
+      bool toneOk = SendWriteCommand(
+        commands.set_ctcss_tone!.Replace("{tone}", $"{CtcssTones.ToTenths(toneHz)}"));
+      bool enableOk = SendWriteCommand(commands.enable_ctcss!);
+      if (!toneOk || !enableOk)
+      {
+        Log.Warning("Arming carrier aborted because CTCSS setup was rejected.");
+        return;
+      }
 
-      SendWriteCommand(commands.set_ptt_on!);
+      if (!SendWriteCommand(commands.set_ptt_on!))
+      {
+        Log.Warning("Arming carrier aborted because PTT ON was rejected.");
+        return;
+      }
+
       Ptt = true;
+      PttOwnedByApplication = true;
+      PttReleased.Reset();
       LastWrittenTxFrequency = NOT_ASSIGNED;
 
       Thread.Sleep(CtcssTones.ARMING_DURATION_MS);
 
-      SendWriteCommand(commands.set_ptt_off!);
-      Ptt = false;
-      LastWrittenRxFrequency = NOT_ASSIGNED;
+      if (SendWriteCommand(commands.set_ptt_off!))
+      {
+        Ptt = false;
+        PttOwnedByApplication = false;
+        PttReleased.Set();
+        LastWrittenRxFrequency = NOT_ASSIGNED;
+      }
+      else
+      {
+        // Keep our state at TX and schedule an explicit OFF retry. ReadPtt on
+        // the next cycle can refine the observed hardware state.
+        RequestedPtt = false;
+        Log.Error("Arming carrier PTT OFF was rejected; queued another PTT OFF attempt.");
+      }
 
       // re-apply the tone and the on/off state saved for this transmitter
-      TryWriteCtcss();
+      _ = TryWriteCtcss();
     }
 
 
@@ -816,6 +932,33 @@ namespace SkyRoof
     private bool IsDiff(long freq1, long freq2)
     {
       return Math.Abs(freq1 - freq2) > 0;
+    }
+
+
+
+
+    //----------------------------------------------------------------------------------------------
+    //                                      shutdown
+    //----------------------------------------------------------------------------------------------
+    public override void Dispose()
+    {
+      // Cancel a not-yet-sent SkyRoof PTT-ON request. If SkyRoof actually keyed
+      // the rig, ask the worker to send PTT OFF and give it a bounded opportunity
+      // to receive the radio acknowledgement before the TCP connection is torn down.
+      if (!PttOwnedByApplication && RequestedPtt == true)
+        RequestedPtt = null;
+
+      if (PttOwnedByApplication)
+      {
+        RequestedPtt = false;
+
+        if (!PttReleased.Wait(4000))
+          Log.Warning(
+            "CAT engine stopped while SkyRoof-owned PTT could not be confirmed OFF.");
+      }
+
+      base.Dispose();
+      PttReleased.Dispose();
     }
 
 

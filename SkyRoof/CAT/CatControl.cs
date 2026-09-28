@@ -153,6 +153,11 @@
         Tx = null;
     }
 
+    internal void Shutdown()
+    {
+      DestroyAllEngines();
+    }
+
     private void DestroyAllEngines()
     {
       if (Tx != null && Tx != Rx) Tx.Dispose();
