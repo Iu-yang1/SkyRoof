@@ -267,7 +267,11 @@ namespace SkyRoof
     {
       string json = SendReadCommand("a") ?? string.Empty;
 
-      if (json == "RPRT -18")
+      // The private "a" capability command exists only in SkyCAT. A generic
+      // rigctld may answer with different RPRT error codes depending on Hamlib
+      // version/backend; any RPRT response means "no SkyCAT capability JSON" and
+      // should fall back to the embedded rigctld capability description.
+      if (json.StartsWith("RPRT ", StringComparison.Ordinal))
         return null;
 
       if (json == string.Empty) 
