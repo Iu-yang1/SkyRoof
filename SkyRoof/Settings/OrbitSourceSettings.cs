@@ -29,6 +29,11 @@ namespace SkyRoof
     [DefaultValue(true)]
     public bool ShowSolarSystemTargets { get; set; } = true;
 
+    [DisplayName("Auto-download JPL Kernel")]
+    [Description("When DE440s or DE421 is selected and not cached yet, download it once from the official NASA/JPL NAIF generic-kernels archive. Custom BSP files are never downloaded automatically.")]
+    [DefaultValue(true)]
+    public bool AutoDownloadJplKernel { get; set; } = true;
+
     public override string ToString() => string.Empty;
   }
 }
