@@ -1,5 +1,5 @@
 ﻿using System.ComponentModel;
-using CSCore.CoreAudioAPI;
+using NAudio.CoreAudioApi;
 using VE3NEA;
 
 public enum Ft4AudioSource
