@@ -283,7 +283,13 @@ namespace SkyRoof
     {
       if (ctx.CatControl.Tx == null) return;
 
-      ctx.CatControl.Tx!.SetPtt(ptt);
+      ctx.CatControl.Tx.SetPtt(ptt);
+      UpdateTxButton();
+    }
+
+    internal void ReleaseApplicationPtt()
+    {
+      ctx.CatControl.Tx?.ReleaseApplicationPtt();
       UpdateTxButton();
     }
 
