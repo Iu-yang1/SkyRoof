@@ -29,6 +29,7 @@ namespace SkyRoof
     private JplSpkKernel? PlanetaryKernel;
     private Dictionary<string, SatnogsDbSatellite> SatelliteList = new();
     private readonly HttpClient DownloadHttpClient = new();
+    private OrbitSourceSettings OrbitSources = new();
     private CancellationTokenSource cts;
     private JsonSerializerSettings JsonSettings = new();
 
@@ -53,8 +54,16 @@ namespace SkyRoof
 
       JsonSettings.Converters.Add(new IsoDateTimeConverter { DateTimeFormat = "yyyy'-'MM'-'dd'T'HH':'mm':'ssK" });
 
-      // GitHub's codeload host is happier with an explicit User-Agent.
+      // GitHub's codeload host is happier with an explicit User-Agent. Large
+      // JPL kernels can also take longer than HttpClient's 100-second default
+      // timeout on slow links, so allow a realistic transfer window.
       DownloadHttpClient.DefaultRequestHeaders.UserAgent.ParseAdd("SkyRoof");
+      DownloadHttpClient.Timeout = TimeSpan.FromMinutes(15);
+    }
+
+    internal void ConfigureSources(OrbitSourceSettings settings)
+    {
+      OrbitSources = settings ?? new OrbitSourceSettings();
     }
 
     public void LoadFromFile()
@@ -135,10 +144,15 @@ namespace SkyRoof
           "CustomFile kernels must be selected from disk.",
           nameof(kernel));
 
-      string url =
-        kernel == JplEphemerisKernel.DE421
-          ? De421Url
-          : De440sUrl;
+      string[] urls =
+        SplitSourceList(
+          kernel == JplEphemerisKernel.DE421
+            ? OrbitSources.De421Sources
+            : OrbitSources.De440sSources);
+
+      if (urls.Length == 0)
+        throw new InvalidOperationException(
+          $"No download source is configured for {kernel}.");
 
       string fileName =
         kernel == JplEphemerisKernel.DE421
@@ -158,55 +172,78 @@ namespace SkyRoof
       string temporary =
         destination + ".download";
 
-      try
+      var failures = new List<string>();
+
+      foreach (string url in urls)
       {
-        using HttpResponseMessage response =
-          await DownloadHttpClient.GetAsync(
-            url,
-            HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken);
-        response.EnsureSuccessStatusCode();
+        cancellationToken.ThrowIfCancellationRequested();
 
-        await using (
-          Stream source =
-            await response.Content.ReadAsStreamAsync(cancellationToken))
-        await using (
-          FileStream output =
-            new(
-              temporary,
-              FileMode.Create,
-              FileAccess.Write,
-              FileShare.None,
-              1024 * 1024,
-              useAsync: true))
-        {
-          await source.CopyToAsync(
-            output,
-            1024 * 1024,
-            cancellationToken);
-          await output.FlushAsync(cancellationToken);
-        }
-
-        // Validate only after closing the download handle; FileShare.None is
-        // intentional so incomplete kernels cannot be opened concurrently.
-        _ = new JplSpkKernel(temporary);
-
-        File.Move(
-          temporary,
-          destination,
-          overwrite: true);
-
-        return destination;
-      }
-      finally
-      {
         try
         {
-          if (File.Exists(temporary))
-            File.Delete(temporary);
+          Log.Information(
+            $"Downloading {kernel} ephemeris from {url}");
+
+          using HttpResponseMessage response =
+            await DownloadHttpClient.GetAsync(
+              url,
+              HttpCompletionOption.ResponseHeadersRead,
+              cancellationToken);
+          response.EnsureSuccessStatusCode();
+
+          await using (
+            Stream source =
+              await response.Content.ReadAsStreamAsync(cancellationToken))
+          await using (
+            FileStream output =
+              new(
+                temporary,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None,
+                1024 * 1024,
+                useAsync: true))
+          {
+            await source.CopyToAsync(
+              output,
+              1024 * 1024,
+              cancellationToken);
+            await output.FlushAsync(cancellationToken);
+          }
+
+          // Validate only after closing the download handle; FileShare.None is
+          // intentional so incomplete kernels cannot be opened concurrently.
+          _ = new JplSpkKernel(temporary);
+
+          File.Move(
+            temporary,
+            destination,
+            overwrite: true);
+
+          return destination;
         }
-        catch { }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+          throw;
+        }
+        catch (Exception ex)
+        {
+          failures.Add($"{url}: {ex.Message}");
+          Log.Warning(
+            ex,
+            $"JPL {kernel} source failed: {url}");
+
+          try
+          {
+            if (File.Exists(temporary))
+              File.Delete(temporary);
+          }
+          catch { }
+        }
       }
+
+      throw new IOException(
+        $"All configured {kernel} download sources failed.\r\n" +
+        string.Join("\r\n", failures));
     }
 
     internal int ConfigureSolarSystem(
@@ -337,16 +374,25 @@ namespace SkyRoof
     {
       cts = new CancellationTokenSource();
 
-      await Download("satellites");
-      Log.Information("satellites downloaded");
+      await DownloadConfigured(
+        "satellites",
+        OrbitSources.SatellitesUrl,
+        required: true);
+      Log.Information("satellites download step complete");
       DownloadProgress?.Invoke(this, new(25, null));
 
-      await Download("transmitters");
-      Log.Information("transmitters downloaded");
+      await DownloadConfigured(
+        "transmitters",
+        OrbitSources.TransmittersUrl,
+        required: true);
+      Log.Information("transmitters download step complete");
       DownloadProgress?.Invoke(this, new(50, null));
 
-      await Download("tle");
-      Log.Information("tle downloaded");
+      await DownloadConfigured(
+        "tle",
+        OrbitSources.TleUrl,
+        required: false);
+      Log.Information("primary TLE download step complete");
       DownloadProgress?.Invoke(this, new(70, null));
 
       await DownloadJE9PEL();
@@ -367,7 +413,19 @@ namespace SkyRoof
     public async Task DownloadTle()
     {
       cts = new CancellationTokenSource();
-      await Download("tle");
+
+      bool downloaded =
+        await DownloadConfigured(
+          "tle",
+          OrbitSources.TleUrl,
+          required: false);
+
+      if (!downloaded)
+      {
+        Log.Information(
+          "Primary TLE source is disabled; skipping the primary TLE refresh.");
+        return;
+      }
 
       try
       {
@@ -382,13 +440,43 @@ namespace SkyRoof
       }
     }
 
-    private async Task Download(string name)
+    private async Task<bool> DownloadConfigured(
+      string name,
+      string? sourceUrl,
+      bool required)
     {
-      string url = $"https://db.satnogs.org/api/{name}/?format=json";
-      string json = await DownloadHttpClient.GetStringAsync(url, cts.Token);
+      string destination =
+        Path.Combine(
+          DownloadsFolder,
+          $"{name}.json");
+
+      if (string.IsNullOrWhiteSpace(sourceUrl))
+      {
+        if (File.Exists(destination))
+        {
+          Log.Information(
+            $"{name} source disabled; retaining cached copy.");
+          return false;
+        }
+
+        if (required)
+          throw new InvalidOperationException(
+            $"{name} source URL is empty and no cached copy exists.");
+
+        return false;
+      }
+
+      string content =
+        await DownloadHttpClient.GetStringAsync(
+          sourceUrl.Trim(),
+          cts.Token);
       cts.Token.ThrowIfCancellationRequested();
 
-      File.WriteAllText(Path.Combine(DownloadsFolder, $"{name}.json"), json);
+      File.WriteAllText(
+        destination,
+        content);
+
+      return true;
     }
 
     private async Task DownloadJE9PEL()
@@ -533,12 +621,21 @@ namespace SkyRoof
 
     private void ImportSatnogsTle()
     {
-      string json = File.ReadAllText(Path.Combine(DownloadsFolder, "tle.json"));
-      SatnogsDbTleList tles = JsonConvert.DeserializeObject<SatnogsDbTleList>(json, JsonSettings)!;
+      string content =
+        File.ReadAllText(
+          Path.Combine(
+            DownloadsFolder,
+            "tle.json"));
 
-      foreach (SatnogsDbTle tle in tles)
-        if (SatelliteList.TryGetValue(tle.sat_id, out SatnogsDbSatellite sat))
-          sat.SetTle(tle);
+      SatnogsDbTleList tles =
+        ParseTleContent(
+          content,
+          null,
+          "Primary TLE source");
+
+      ApplyTles(
+        tles,
+        createMissingSatellites: false);
     }
 
     // Match gr-satellites satyaml entries to transmitters by NORAD + nearest baud, attach gr_sats.
@@ -764,7 +861,7 @@ namespace SkyRoof
       bool raiseEvent = true,
       CancellationToken cancellationToken = default)
     {
-      string[] sources = SplitCustomTleSources(sourceList);
+      string[] sources = SplitSourceList(sourceList);
       if (sources.Length == 0) return 0;
 
       int total = 0;
@@ -817,6 +914,9 @@ namespace SkyRoof
     }
 
     internal static string[] SplitCustomTleSources(string? sourceList) =>
+      SplitSourceList(sourceList);
+
+    internal static string[] SplitSourceList(string? sourceList) =>
       string.IsNullOrWhiteSpace(sourceList)
         ? Array.Empty<string>()
         : sourceList
@@ -833,8 +933,7 @@ namespace SkyRoof
     {
       SatnogsDbTleList tles;
 
-      if (string.Equals(extension, ".json", StringComparison.OrdinalIgnoreCase) ||
-          content.TrimStart().StartsWith("["))
+      if (content.TrimStart().StartsWith("["))
       {
         tles =
           JsonConvert.DeserializeObject<SatnogsDbTleList>(content, JsonSettings)
