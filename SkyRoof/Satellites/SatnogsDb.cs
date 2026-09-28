@@ -534,10 +534,12 @@ namespace SkyRoof
     //----------------------------------------------------------------------------------------------
     private bool CheckFilesPresent()
     {
+      // Satellite metadata and transmitter metadata are required to rebuild the
+      // database. The primary TLE feed is deliberately optional: operators may
+      // clear that URL and rely entirely on Custom TLE Sources.
       return
         File.Exists(Path.Combine(DownloadsFolder, "satellites.json")) &&
         File.Exists(Path.Combine(DownloadsFolder, "transmitters.json")) &&
-        File.Exists(Path.Combine(DownloadsFolder, "tle.json")) &&
         File.Exists(Path.Combine(DownloadsFolder, "JE9PEL.csv"));
     }
     public void ImportAll()
@@ -550,7 +552,14 @@ namespace SkyRoof
 
         ImportSatnogsSatellites();
         ImportSatnogsTransmitters();
-        ImportSatnogsTle();
+
+        if (!string.IsNullOrWhiteSpace(OrbitSources.TleUrl) &&
+            File.Exists(Path.Combine(DownloadsFolder, "tle.json")))
+          ImportSatnogsTle();
+        else
+          Log.Information(
+            "Primary TLE source disabled or unavailable; custom TLE overlays will be applied after the base database import.");
+
         ImportJE9PEL();
 
         // enrichment only — never let a satyaml problem abort the import
