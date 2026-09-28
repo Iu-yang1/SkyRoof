@@ -17,8 +17,16 @@ namespace SkyRoof
   public class SatnogsDb
   {
     internal const string MoonSatId = "MOON";
+    internal const string SunSatId = "SUN";
+    internal const string VenusSatId = "VENUS";
+
+    internal const string De440sUrl =
+      "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp";
+    internal const string De421Url =
+      "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/a_old_versions/de421.bsp";
 
     private readonly string DataFolder, DownloadsFolder;
+    private JplSpkKernel? PlanetaryKernel;
     private Dictionary<string, SatnogsDbSatellite> SatelliteList = new();
     private readonly HttpClient DownloadHttpClient = new();
     private CancellationTokenSource cts;
@@ -86,47 +94,218 @@ namespace SkyRoof
     {
       string path = Path.Combine(DataFolder, "Satellites.json");
 
-      // MOON is a synthetic ephemeris object rebuilt from settings at startup.
-      // Do not persist it into the SatNOGS/cache database.
+      // Solar-system ephemeris targets are synthetic objects rebuilt from the
+      // configured JPL SPK kernel at startup. Keep the SatNOGS/cache file free
+      // of transient tracker instances and kernel-specific metadata.
       File.WriteAllText(
         path,
         JsonConvert.SerializeObject(
-          Satellites.Where(s => !s.IsMoon)));
+          Satellites.Where(s => !s.IsEphemerisTarget)));
     }
 
-    internal void ConfigureMoon(OrbitSourceSettings settings)
+    internal string GetJplKernelPath(
+      OrbitSourceSettings settings)
+    {
+      if (settings.JplKernel == JplEphemerisKernel.CustomFile)
+        return Environment.ExpandEnvironmentVariables(
+          settings.JplKernelFile ?? string.Empty);
+
+      string fileName =
+        settings.JplKernel == JplEphemerisKernel.DE421
+          ? "de421.bsp"
+          : "de440s.bsp";
+
+      string folder =
+        Path.Combine(
+          DataFolder,
+          "Ephemeris");
+      Directory.CreateDirectory(folder);
+
+      return Path.Combine(
+        folder,
+        fileName);
+    }
+
+    internal async Task<string> DownloadJplKernelAsync(
+      JplEphemerisKernel kernel,
+      CancellationToken cancellationToken = default)
+    {
+      if (kernel == JplEphemerisKernel.CustomFile)
+        throw new ArgumentException(
+          "CustomFile kernels must be selected from disk.",
+          nameof(kernel));
+
+      string url =
+        kernel == JplEphemerisKernel.DE421
+          ? De421Url
+          : De440sUrl;
+
+      string fileName =
+        kernel == JplEphemerisKernel.DE421
+          ? "de421.bsp"
+          : "de440s.bsp";
+
+      string folder =
+        Path.Combine(
+          DataFolder,
+          "Ephemeris");
+      Directory.CreateDirectory(folder);
+
+      string destination =
+        Path.Combine(
+          folder,
+          fileName);
+      string temporary =
+        destination + ".download";
+
+      try
+      {
+        using HttpResponseMessage response =
+          await DownloadHttpClient.GetAsync(
+            url,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        await using Stream source =
+          await response.Content.ReadAsStreamAsync(cancellationToken);
+        await using FileStream output =
+          new(
+            temporary,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.None,
+            1024 * 1024,
+            useAsync: true);
+
+        await source.CopyToAsync(
+          output,
+          1024 * 1024,
+          cancellationToken);
+        await output.FlushAsync(cancellationToken);
+
+        // Validate the completed file before replacing a known-good kernel.
+        _ = new JplSpkKernel(temporary);
+
+        File.Move(
+          temporary,
+          destination,
+          overwrite: true);
+
+        return destination;
+      }
+      finally
+      {
+        try
+        {
+          if (File.Exists(temporary))
+            File.Delete(temporary);
+        }
+        catch { }
+      }
+    }
+
+    internal int ConfigureSolarSystem(
+      OrbitSourceSettings settings)
     {
       SatelliteList.Remove(MoonSatId);
+      SatelliteList.Remove(SunSatId);
+      SatelliteList.Remove(VenusSatId);
+      PlanetaryKernel = null;
 
-      var moon = new SatnogsDbSatellite
+      if (!settings.ShowSolarSystemTargets)
+        return 0;
+
+      string path =
+        GetJplKernelPath(settings);
+      if (string.IsNullOrWhiteSpace(path) ||
+          !File.Exists(path))
       {
-        sat_id = MoonSatId,
+        Log.Information(
+          $"JPL ephemeris kernel not found: {path}");
+        return 0;
+      }
+
+      try
+      {
+        PlanetaryKernel =
+          new JplSpkKernel(path);
+
+        int count = 0;
+        count += AddEphemerisTarget(
+          MoonSatId,
+          "Moon",
+          "Luna",
+          "Natural satellite / EME",
+          JplBody.Moon);
+        count += AddEphemerisTarget(
+          SunSatId,
+          "Sun",
+          "Sol",
+          "Solar system",
+          JplBody.Sun);
+        count += AddEphemerisTarget(
+          VenusSatId,
+          "Venus",
+          string.Empty,
+          "Planet",
+          JplBody.Venus);
+
+        Log.Information(
+          $"JPL ephemeris loaded: {Path.GetFileName(path)} ({count} targets)");
+        return count;
+      }
+      catch (Exception ex)
+      {
+        PlanetaryKernel = null;
+        Log.Error(
+          ex,
+          $"Unable to load JPL ephemeris kernel: {path}");
+        return 0;
+      }
+    }
+
+    private int AddEphemerisTarget(
+      string id,
+      string name,
+      string alternateNames,
+      string objectType,
+      JplBody body)
+    {
+      if (PlanetaryKernel == null ||
+          !PlanetaryKernel.Supports(
+            body,
+            DateTime.UtcNow))
+        return 0;
+
+      var target = new SatnogsDbSatellite
+      {
+        sat_id = id,
         norad_cat_id = null,
-        name = "Moon",
-        names = "Luna",
+        name = name,
+        names = alternateNames,
         image = string.Empty,
         status = "in orbit",
         website = string.Empty,
-        @operator = "Natural satellite",
+        @operator = objectType,
         countries = string.Empty,
         telemetries = new SatnogsDbSatellite.Telemetries(),
-        citation = "SkyRoof lunar ephemeris",
+        citation =
+          $"JPL/NAIF {Path.GetFileName(PlanetaryKernel.FileName)}",
         associated_satellites = new List<string>(),
-        updated = DateTime.UtcNow,
-        IsMoon = true
+        updated = File.GetLastWriteTimeUtc(PlanetaryKernel.FileName),
+        EphemerisBody = body
       };
 
-      MoonEphemeris? imported =
-        MoonEphemeris.TryLoad(settings.MoonEphemerisFile);
-
-      moon.SetTracker(
+      target.SetTracker(
         new SatelliteTracker(
-          imported,
-          settings.UseBuiltInMoonFallback));
+          PlanetaryKernel,
+          body));
+      target.BuildAllNames();
+      target.SetFlags();
 
-      moon.BuildAllNames();
-      moon.SetFlags();
-      SatelliteList[MoonSatId] = moon;
+      SatelliteList[id] = target;
+      return 1;
     }
 
     internal void ReplaceSatelliteList(SatnogsDb db)
