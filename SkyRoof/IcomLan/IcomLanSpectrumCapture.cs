@@ -133,6 +133,7 @@ namespace SkyRoof
 
     internal void Start()
     {
+      ClearCompletedWorker();
       if (Worker != null) return;
 
       LastError = null;
@@ -165,19 +166,36 @@ namespace SkyRoof
         try { SkyCatClient?.Close(); } catch { }
       }
 
-      if (worker != null && !worker.IsCompleted)
-      {
-        try { worker.Wait(2500); }
-        catch (AggregateException) { }
-      }
-
+      // Dispose the authenticated session before waiting so any blocked socket
+      // operation is interrupted rather than relying on the timeout alone.
       lock (DirectSessionSync)
       {
         try { DirectSession?.Dispose(); } catch { }
         DirectSession = null;
       }
 
-      cancellation?.Dispose();
+      if (worker != null && !worker.IsCompleted)
+      {
+        try { worker.Wait(2500); }
+        catch (AggregateException) { }
+      }
+
+      if (worker != null && !worker.IsCompleted)
+      {
+        LastError = "Icom LAN spectrum worker did not stop within 2.5 seconds; restart is blocked until it exits.";
+        PublishStatus(LastError);
+        return;
+      }
+
+      ClearCompletedWorker();
+    }
+
+    private void ClearCompletedWorker()
+    {
+      if (Worker != null && !Worker.IsCompleted)
+        return;
+
+      Cancellation?.Dispose();
       Cancellation = null;
       Worker = null;
     }
