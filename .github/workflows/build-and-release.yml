@@ -22,7 +22,7 @@ jobs:
           }
 
       - name: Checkout source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Directory.Build.props is the only place the version is maintained. MSBuild applies it
       # to the assemblies by itself, so nothing here patches SkyRoof.csproj any more.
@@ -38,10 +38,10 @@ jobs:
           "version=$version" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
 
       - name: Setup NuGet
-        uses: NuGet/setup-nuget@296fd3ccf8528660c91106efefe2364482f86d6f # v1
+        uses: NuGet/setup-nuget@fd55a6f3b34392fa83fde1454582407d8c714123 # v4.0
 
       # The WinDivert binaries are intentionally not stored in Git. Prepare the
       # same pinned upstream release used by compile-check before MSBuild so the
@@ -109,12 +109,12 @@ jobs:
 
       - name: Upload Unsigned Artifact
         id: upload-unsigned-artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with: 
           path: 'install\Output\SkyRoofSetup.exe'
 
       - name: Sign
-        uses: signpath/github-action-submit-signing-request@3c306158facd969ebdb385c6845dee38afc2ebf9 # v1.1
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
         with:
           api-token: '${{ secrets.SIGNPATH_API_TOKEN }}'
           github-token: '${{ secrets.GITHUB_TOKEN }}'
@@ -139,7 +139,7 @@ jobs:
         shell: pwsh
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           name: SkyRoof v.${{ steps.get_version.outputs.version }}
           tag_name: v.${{ steps.get_version.outputs.version }}
