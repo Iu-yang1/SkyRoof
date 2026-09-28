@@ -483,24 +483,40 @@ namespace SkyRoof
     {
       cts = new CancellationTokenSource();
 
-      bool downloaded =
-        await DownloadConfigured(
-          "tle",
-          OrbitSources.TleUrl,
-          required: false);
-
-      if (!downloaded)
-      {
-        Log.Information(
-          "Primary TLE source is disabled; skipping the primary TLE refresh.");
-        return;
-      }
-
       try
       {
-        ImportSatnogsTle();
-        SaveToFile();
-        TleUpdated?.Invoke(this, EventArgs.Empty);
+        bool primaryDownloaded =
+          await DownloadConfigured(
+            "tle",
+            OrbitSources.TleUrl,
+            required: false);
+
+        if (primaryDownloaded)
+          ImportSatnogsTle();
+        else
+          Log.Information(
+            "Primary TLE source is disabled; refreshing custom TLE sources only.");
+
+        // Custom sources are part of the TLE refresh transaction, not an
+        // optional follow-up performed by the UI. This guarantees the final
+        // in-memory state always obeys:
+        // custom #1 > custom #2 > ... > primary.
+        int customCount =
+          await LoadCustomTleSourcesAsync(
+            OrbitSources.CustomTleSources,
+            raiseEvent: false,
+            cancellationToken: cts.Token);
+
+        if (primaryDownloaded || customCount > 0)
+        {
+          SaveToFile();
+          TleUpdated?.Invoke(
+            this,
+            EventArgs.Empty);
+        }
+
+        Log.Information(
+          $"TLE refresh complete: primary={(primaryDownloaded ? "updated" : "disabled")}, custom={customCount} record(s).");
       }
       catch (Exception ex)
       {
