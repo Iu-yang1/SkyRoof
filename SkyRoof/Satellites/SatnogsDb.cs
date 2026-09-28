@@ -167,24 +167,28 @@ namespace SkyRoof
             cancellationToken);
         response.EnsureSuccessStatusCode();
 
-        await using Stream source =
-          await response.Content.ReadAsStreamAsync(cancellationToken);
-        await using FileStream output =
-          new(
-            temporary,
-            FileMode.Create,
-            FileAccess.Write,
-            FileShare.None,
+        await using (
+          Stream source =
+            await response.Content.ReadAsStreamAsync(cancellationToken))
+        await using (
+          FileStream output =
+            new(
+              temporary,
+              FileMode.Create,
+              FileAccess.Write,
+              FileShare.None,
+              1024 * 1024,
+              useAsync: true))
+        {
+          await source.CopyToAsync(
+            output,
             1024 * 1024,
-            useAsync: true);
+            cancellationToken);
+          await output.FlushAsync(cancellationToken);
+        }
 
-        await source.CopyToAsync(
-          output,
-          1024 * 1024,
-          cancellationToken);
-        await output.FlushAsync(cancellationToken);
-
-        // Validate the completed file before replacing a known-good kernel.
+        // Validate only after closing the download handle; FileShare.None is
+        // intentional so incomplete kernels cannot be opened concurrently.
         _ = new JplSpkKernel(temporary);
 
         File.Move(
