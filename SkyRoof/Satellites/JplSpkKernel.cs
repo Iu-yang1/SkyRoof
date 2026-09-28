@@ -208,15 +208,8 @@ namespace SkyRoof
     {
       utc = EnsureUtc(utc);
 
-      double jdUtc =
-        2440587.5 +
-        (utc - DateTime.UnixEpoch).TotalDays;
-
-      double ttMinusUtc =
-        TaiMinusUtc(utc) + 32.184;
       double jdTt =
-        jdUtc +
-        ttMinusUtc / SecondsPerDay;
+        ToJulianDateTt(utc);
 
       // Fairhead/Bretagnon first-order approximation is more than adequate
       // for antenna pointing: TDB-TT is only ~1.7 ms peak.
@@ -235,6 +228,26 @@ namespace SkyRoof
         tdbMinusTtSeconds / SecondsPerDay;
     }
 
+    private static double ToJulianDateUtc(
+      DateTime utc)
+    {
+      utc = EnsureUtc(utc);
+      return
+        2440587.5 +
+        (utc - DateTime.UnixEpoch).TotalDays;
+    }
+
+    private static double ToJulianDateTt(
+      DateTime utc)
+    {
+      utc = EnsureUtc(utc);
+
+      return
+        ToJulianDateUtc(utc) +
+        (TaiMinusUtc(utc) + 32.184) /
+        SecondsPerDay;
+    }
+
     private readonly record struct TopocentricVector(
       double Azimuth,
       double Elevation,
@@ -245,32 +258,49 @@ namespace SkyRoof
       GroundStation groundStation,
       DateTime utc)
     {
-      double jdTdb = ToJulianDateTdb(utc);
+      utc = EnsureUtc(utc);
 
-      JplVector3 targetEci =
+      double jdTdb = ToJulianDateTdb(utc);
+      double jdTt = ToJulianDateTt(utc);
+      double jdUtc = ToJulianDateUtc(utc);
+
+      // DE planetary kernels are expressed in the J2000/ICRF inertial frame.
+      // Convert the geocentric target vector to the true equator/equinox of
+      // date before applying Earth rotation. Rotating a J2000 vector directly
+      // by GMST would leave ~0.36 degree of accumulated precession in 2026,
+      // which is material for narrow-beam EME pointing.
+      JplVector3 targetJ2000 =
         ComputePosition(
           (int)body,
           (int)JplBody.Earth,
           jdTdb);
 
-      double jdUtc =
-        2440587.5 +
-        (utc - DateTime.UnixEpoch).TotalDays;
+      var nutation = NutationAt(jdTt);
+      JplVector3 targetTrueOfDate =
+        J2000ToTrueOfDate(
+          targetJ2000,
+          jdTt,
+          nutation);
 
-      double theta =
-        GreenwichMeanSiderealTime(jdUtc);
+      double gast =
+        NormalizeRadians(
+          GreenwichMeanSiderealTime(jdUtc) +
+          nutation.DeltaPsi *
+          Math.Cos(
+            nutation.MeanObliquity +
+            nutation.DeltaEpsilon));
 
-      double cosTheta = Math.Cos(theta);
-      double sinTheta = Math.Sin(theta);
+      double cosTheta = Math.Cos(gast);
+      double sinTheta = Math.Sin(gast);
 
-      // J2000/ICRF equatorial inertial -> Earth-fixed.
+      // True-of-date equatorial inertial -> Earth-fixed.
       double x =
-        cosTheta * targetEci.X +
-        sinTheta * targetEci.Y;
+        cosTheta * targetTrueOfDate.X +
+        sinTheta * targetTrueOfDate.Y;
       double y =
-        -sinTheta * targetEci.X +
-        cosTheta * targetEci.Y;
-      double z = targetEci.Z;
+        -sinTheta * targetTrueOfDate.X +
+        cosTheta * targetTrueOfDate.Y;
+      double z = targetTrueOfDate.Z;
 
       double lat = groundStation.ObserverLatRad;
       double lon = groundStation.ObserverLonRad;
@@ -307,6 +337,8 @@ namespace SkyRoof
          altitudeKm) *
         sinLat;
 
+      // Subtract the actual geodetic observer before projecting to ENU. This
+      // is the topocentric parallax correction that matters most for the Moon.
       double dx = x - observerX;
       double dy = y - observerY;
       double dz = z - observerZ;
@@ -353,6 +385,167 @@ namespace SkyRoof
         range);
     }
 
+    private readonly record struct NutationAngles(
+      double DeltaPsi,
+      double DeltaEpsilon,
+      double MeanObliquity);
+
+    private static NutationAngles NutationAt(
+      double jdTt)
+    {
+      double t =
+        (jdTt - J2000) /
+        36525.0;
+
+      double omega =
+        DegreesToRadians(
+          NormalizeDegrees(
+            125.04452 -
+            1934.136261 * t));
+      double meanSun =
+        DegreesToRadians(
+          NormalizeDegrees(
+            280.4665 +
+            36000.7698 * t));
+      double meanMoon =
+        DegreesToRadians(
+          NormalizeDegrees(
+            218.3165 +
+            481267.8813 * t));
+
+      // Meeus' four dominant IAU-1980 nutation terms. Residual error is only
+      // a few tenths of an arcsecond for the modern dates SkyRoof targets.
+      double deltaPsiArcsec =
+        -17.20 * Math.Sin(omega) -
+        1.32 * Math.Sin(2 * meanSun) -
+        0.23 * Math.Sin(2 * meanMoon) +
+        0.21 * Math.Sin(2 * omega);
+
+      double deltaEpsilonArcsec =
+        9.20 * Math.Cos(omega) +
+        0.57 * Math.Cos(2 * meanSun) +
+        0.10 * Math.Cos(2 * meanMoon) -
+        0.09 * Math.Cos(2 * omega);
+
+      double meanObliquityArcsec =
+        84381.448 -
+        46.8150 * t -
+        0.00059 * t * t +
+        0.001813 * t * t * t;
+
+      return new NutationAngles(
+        ArcsecondsToRadians(deltaPsiArcsec),
+        ArcsecondsToRadians(deltaEpsilonArcsec),
+        ArcsecondsToRadians(meanObliquityArcsec));
+    }
+
+    private static JplVector3 J2000ToTrueOfDate(
+      JplVector3 vector,
+      double jdTt,
+      NutationAngles nutation)
+    {
+      double distance = vector.Length;
+      if (distance == 0)
+        return vector;
+
+      double ra =
+        Math.Atan2(vector.Y, vector.X);
+      double dec =
+        Math.Asin(
+          Math.Clamp(
+            vector.Z / distance,
+            -1.0,
+            1.0));
+
+      double t =
+        (jdTt - J2000) /
+        36525.0;
+
+      double zeta =
+        ArcsecondsToRadians(
+          2306.2181 * t +
+          0.30188 * t * t +
+          0.017998 * t * t * t);
+      double z =
+        ArcsecondsToRadians(
+          2306.2181 * t +
+          1.09468 * t * t +
+          0.018203 * t * t * t);
+      double theta =
+        ArcsecondsToRadians(
+          2004.3109 * t -
+          0.42665 * t * t -
+          0.041833 * t * t * t);
+
+      double raZeta = ra + zeta;
+      double cosDec = Math.Cos(dec);
+      double sinDec = Math.Sin(dec);
+
+      double a =
+        cosDec *
+        Math.Sin(raZeta);
+      double b =
+        Math.Cos(theta) *
+        cosDec *
+        Math.Cos(raZeta) -
+        Math.Sin(theta) *
+        sinDec;
+      double cc =
+        Math.Sin(theta) *
+        cosDec *
+        Math.Cos(raZeta) +
+        Math.Cos(theta) *
+        sinDec;
+
+      double meanRa =
+        Math.Atan2(a, b) + z;
+      double meanDec =
+        Math.Asin(
+          Math.Clamp(
+            cc,
+            -1.0,
+            1.0));
+
+      double sinRa = Math.Sin(meanRa);
+      double cosRa = Math.Cos(meanRa);
+      double tanDec = Math.Tan(meanDec);
+      double sinEpsilon =
+        Math.Sin(nutation.MeanObliquity);
+      double cosEpsilon =
+        Math.Cos(nutation.MeanObliquity);
+
+      double deltaRa =
+        (cosEpsilon +
+         sinEpsilon *
+         sinRa *
+         tanDec) *
+        nutation.DeltaPsi -
+        cosRa *
+        tanDec *
+        nutation.DeltaEpsilon;
+
+      double deltaDec =
+        sinEpsilon *
+        cosRa *
+        nutation.DeltaPsi +
+        sinRa *
+        nutation.DeltaEpsilon;
+
+      double trueRa = meanRa + deltaRa;
+      double trueDec = meanDec + deltaDec;
+      double cosTrueDec = Math.Cos(trueDec);
+
+      return new JplVector3(
+        distance *
+        cosTrueDec *
+        Math.Cos(trueRa),
+        distance *
+        cosTrueDec *
+        Math.Sin(trueRa),
+        distance *
+        Math.Sin(trueDec));
+    }
+
     private JplVector3 PositionFromSsb(
       int target,
       double julianDateTdb,
@@ -365,44 +558,55 @@ namespace SkyRoof
         throw new InvalidDataException(
           $"SPK center chain contains a cycle at NAIF body {target}.");
 
-      Segment? direct =
-        FindSegment(
-          target,
-          0,
-          julianDateTdb);
-
-      if (direct.HasValue)
-        return EvaluateSegment(
-          direct.Value,
-          julianDateTdb);
-
-      double seconds =
-        (julianDateTdb - J2000) *
-        SecondsPerDay;
-
-      foreach (Segment segment in Segments)
+      try
       {
-        if (segment.Target != target ||
-            seconds < segment.StartSeconds ||
-            seconds > segment.EndSeconds)
-          continue;
-
-        JplVector3 relative =
-          EvaluateSegment(
-            segment,
+        Segment? direct =
+          FindSegment(
+            target,
+            0,
             julianDateTdb);
-        JplVector3 center =
-          PositionFromSsb(
-            segment.Center,
-            julianDateTdb,
-            visited);
 
-        return center + relative;
+        if (direct.HasValue)
+          return EvaluateSegment(
+            direct.Value,
+            julianDateTdb);
+
+        double seconds =
+          (julianDateTdb - J2000) *
+          SecondsPerDay;
+
+        // Match SPICE segment precedence: later overlapping segments in the
+        // same kernel override earlier ones.
+        for (int i = Segments.Count - 1; i >= 0; i--)
+        {
+          Segment segment = Segments[i];
+
+          if (segment.Target != target ||
+              seconds < segment.StartSeconds ||
+              seconds > segment.EndSeconds)
+            continue;
+
+          JplVector3 relative =
+            EvaluateSegment(
+              segment,
+              julianDateTdb);
+          JplVector3 center =
+            PositionFromSsb(
+              segment.Center,
+              julianDateTdb,
+              visited);
+
+          return center + relative;
+        }
+
+        throw new ArgumentOutOfRangeException(
+          nameof(julianDateTdb),
+          $"No SPK segment chain is available for NAIF body {target} at JD {julianDateTdb:F6}.");
       }
-
-      throw new ArgumentOutOfRangeException(
-        nameof(julianDateTdb),
-        $"No SPK segment chain is available for NAIF body {target} at JD {julianDateTdb:F6}.");
+      finally
+      {
+        visited.Remove(target);
+      }
     }
 
     private Segment? FindSegment(
@@ -742,6 +946,21 @@ namespace SkyRoof
       degrees *
       Math.PI /
       180.0;
+
+    private static double ArcsecondsToRadians(
+      double arcseconds) =>
+      arcseconds *
+      Math.PI /
+      (180.0 * 3600.0);
+
+    private static double NormalizeRadians(
+      double radians)
+    {
+      radians %= 2 * Math.PI;
+      return radians < 0
+        ? radians + 2 * Math.PI
+        : radians;
+    }
 
     private static int TaiMinusUtc(DateTime utc)
     {
