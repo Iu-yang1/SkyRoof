@@ -312,7 +312,7 @@ namespace SkyRoof
 
       foreach (SatnogsDbTle tle in tles)
         if (SatelliteList.TryGetValue(tle.sat_id, out SatnogsDbSatellite sat))
-          sat.Tle = tle;
+          sat.SetTle(tle);
     }
 
     // Match gr-satellites satyaml entries to transmitters by NORAD + nearest baud, attach gr_sats.
@@ -513,25 +513,18 @@ namespace SkyRoof
     {
       Log.Information($"Loading TLE from file: {tleFileName}");
 
-      string tleContent = File.ReadAllText(tleFileName);
-      SatnogsDbTleList tles;
-
       try
       {
-        if (Path.GetExtension(tleFileName).ToLower() == ".json")
-          tles = JsonConvert.DeserializeObject<SatnogsDbTleList>(tleContent, JsonSettings)!;
-        else
-          tles = TlesFromText(tleContent);
+        string tleContent = File.ReadAllText(tleFileName);
+        SatnogsDbTleList tles = ParseTleContent(
+          tleContent,
+          Path.GetExtension(tleFileName),
+          $"File: {Path.GetFileName(tleFileName)}");
 
-        foreach (var tle in tles)
-        {
-          var sat = Satellites.FirstOrDefault(s => s.norad_cat_id == tle.norad_cat_id);
-          if (sat != null) sat.Tle = tle;
-        }
-
+        ApplyTles(tles, createMissingSatellites: true);
         SaveToFile();
         TleUpdated?.Invoke(this, EventArgs.Empty);
-        Log.Information($"TLE loaded");
+        Log.Information($"TLE loaded: {tles.Count} records");
       }
       catch (Exception ex)
       {
@@ -540,31 +533,237 @@ namespace SkyRoof
       }
     }
 
-    private SatnogsDbTleList TlesFromText(string tleContent)
+    internal async Task<int> LoadCustomTleSourcesAsync(
+      string? sourceList,
+      bool raiseEvent = true,
+      CancellationToken cancellationToken = default)
     {
-      string[] lines = tleContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-      if (lines.Length % 3 != 0)
-        throw new ArgumentException("TLE file must have a multiple of 3 lines (name, line1, line2).");
+      string[] sources = SplitCustomTleSources(sourceList);
+      if (sources.Length == 0) return 0;
 
-      for (int i = 0; i < lines.Length; i += 3)
-        if (lines[i].Length < 1 || lines[i + 1].Length < 69 || lines[i + 2].Length < 69 ||
-          !lines[i + 1].StartsWith("1 ") || !lines[i + 2].StartsWith("2 "))
-          throw new ArgumentException("Invalid TLE format detected.");
+      int total = 0;
 
-      SatnogsDbTleList tles = new();
+      foreach (string source in sources)
+      {
+        cancellationToken.ThrowIfCancellationRequested();
 
-      for (int i = 0; i < lines.Length; i += 3)
-        tles.Add(new SatnogsDbTle
+        try
         {
-          tle0 = lines[i].Trim(),
-          tle1 = lines[i + 1].Trim(),
-          tle2 = lines[i + 2].Trim(),
-          tle_source = "Local file",
-          updated = DateTime.Now,
-          norad_cat_id = int.Parse(lines[i + 1].Substring(2, 5).Trim(), CultureInfo.InvariantCulture)
-        });
+          string content;
+          string extension;
+          string label;
+
+          if (Uri.TryCreate(source, UriKind.Absolute, out Uri? uri) &&
+              (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+          {
+            content = await DownloadHttpClient.GetStringAsync(uri, cancellationToken);
+            extension = Path.GetExtension(uri.AbsolutePath);
+            label = $"URL: {uri.Host}";
+          }
+          else
+          {
+            string path = Environment.ExpandEnvironmentVariables(source);
+            content = await File.ReadAllTextAsync(path, cancellationToken);
+            extension = Path.GetExtension(path);
+            label = $"File: {Path.GetFileName(path)}";
+          }
+
+          SatnogsDbTleList tles = ParseTleContent(content, extension, label);
+          total += ApplyTles(tles, createMissingSatellites: true);
+          Log.Information($"Custom TLE source loaded: {source} ({tles.Count} records)");
+        }
+        catch (Exception ex)
+        {
+          // One broken optional source must not suppress the remaining sources or
+          // the authoritative SatNOGS update.
+          Log.Warning(ex, $"Custom TLE source failed: {source}");
+        }
+      }
+
+      if (total > 0)
+      {
+        SaveToFile();
+        loaded = SatelliteList.Count > 0;
+        if (raiseEvent) TleUpdated?.Invoke(this, EventArgs.Empty);
+      }
+
+      return total;
+    }
+
+    internal static string[] SplitCustomTleSources(string? sourceList) =>
+      string.IsNullOrWhiteSpace(sourceList)
+        ? Array.Empty<string>()
+        : sourceList
+          .Split(new[] { ';', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+          .Select(s => s.Trim())
+          .Where(s => s.Length > 0)
+          .Distinct(StringComparer.OrdinalIgnoreCase)
+          .ToArray();
+
+    private SatnogsDbTleList ParseTleContent(
+      string content,
+      string? extension,
+      string sourceLabel)
+    {
+      SatnogsDbTleList tles;
+
+      if (string.Equals(extension, ".json", StringComparison.OrdinalIgnoreCase) ||
+          content.TrimStart().StartsWith("["))
+      {
+        tles =
+          JsonConvert.DeserializeObject<SatnogsDbTleList>(content, JsonSettings)
+          ?? new SatnogsDbTleList();
+      }
+      else
+      {
+        tles = TlesFromText(content, sourceLabel);
+      }
+
+      foreach (SatnogsDbTle tle in tles)
+      {
+        if (tle.norad_cat_id == null && !string.IsNullOrWhiteSpace(tle.tle1))
+          tle.norad_cat_id = ParseNoradId(tle.tle1);
+
+        if (string.IsNullOrWhiteSpace(tle.tle_source))
+          tle.tle_source = sourceLabel;
+
+        if (tle.updated == default)
+          tle.updated = DateTime.UtcNow;
+      }
 
       return tles;
+    }
+
+    private int ApplyTles(
+      IEnumerable<SatnogsDbTle> tles,
+      bool createMissingSatellites)
+    {
+      int applied = 0;
+
+      foreach (SatnogsDbTle tle in tles)
+      {
+        if (tle.norad_cat_id == null) continue;
+
+        SatnogsDbSatellite? sat = Satellites
+          .FirstOrDefault(s => s.norad_cat_id == tle.norad_cat_id);
+
+        if (sat == null && createMissingSatellites)
+        {
+          string satId = $"CUSTOM-{tle.norad_cat_id.Value:00000}";
+          string name = NormalizeTleName(tle.tle0, tle.norad_cat_id.Value);
+
+          sat = new SatnogsDbSatellite
+          {
+            sat_id = satId,
+            norad_cat_id = tle.norad_cat_id,
+            name = name,
+            names = string.Empty,
+            image = string.Empty,
+            status = "in orbit",
+            website = string.Empty,
+            @operator = string.Empty,
+            countries = string.Empty,
+            telemetries = new SatnogsDbSatellite.Telemetries(),
+            citation = tle.tle_source ?? string.Empty,
+            associated_satellites = new List<string>(),
+            updated = tle.updated
+          };
+
+          SatelliteList[satId] = sat;
+        }
+
+        if (sat == null) continue;
+
+        tle.sat_id = sat.sat_id;
+        sat.SetTle(tle);
+        sat.updated = tle.updated;
+        sat.BuildAllNames();
+        sat.SetFlags();
+        applied++;
+      }
+
+      return applied;
+    }
+
+    internal static SatnogsDbTleList TlesFromText(
+      string tleContent,
+      string sourceLabel = "Local file")
+    {
+      string[] lines = tleContent
+        .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+        .Select(line => line.Trim())
+        .Where(line => line.Length > 0)
+        .ToArray();
+
+      SatnogsDbTleList tles = new();
+      int i = 0;
+
+      while (i < lines.Length)
+      {
+        string name;
+        string line1;
+        string line2;
+
+        if (lines[i].StartsWith("1 ") &&
+            i + 1 < lines.Length &&
+            lines[i + 1].StartsWith("2 "))
+        {
+          line1 = lines[i];
+          line2 = lines[i + 1];
+          int norad = ParseNoradId(line1);
+          name = $"NORAD {norad}";
+          i += 2;
+        }
+        else
+        {
+          if (i + 2 >= lines.Length ||
+              !lines[i + 1].StartsWith("1 ") ||
+              !lines[i + 2].StartsWith("2 "))
+            throw new ArgumentException(
+              $"Invalid TLE record near line {i + 1}. Expected name/line1/line2 or line1/line2.");
+
+          name = lines[i].StartsWith("0 ") ? lines[i][2..].Trim() : lines[i];
+          line1 = lines[i + 1];
+          line2 = lines[i + 2];
+          i += 3;
+        }
+
+        if (line1.Length < 69 || line2.Length < 69)
+          throw new ArgumentException("Invalid TLE format: line 1/2 is shorter than 69 characters.");
+
+        int noradId = ParseNoradId(line1);
+        tles.Add(new SatnogsDbTle
+        {
+          tle0 = name,
+          tle1 = line1,
+          tle2 = line2,
+          tle_source = sourceLabel,
+          updated = DateTime.UtcNow,
+          norad_cat_id = noradId
+        });
+      }
+
+      return tles;
+    }
+
+    private static int ParseNoradId(string line1)
+    {
+      if (line1.Length < 7 ||
+          !int.TryParse(
+            line1.Substring(2, 5).Trim(),
+            NumberStyles.Integer,
+            CultureInfo.InvariantCulture,
+            out int noradId))
+        throw new ArgumentException("Unable to parse NORAD catalog number from TLE line 1.");
+
+      return noradId;
+    }
+
+    private static string NormalizeTleName(string? tle0, int noradId)
+    {
+      string? name = tle0?.Trim();
+      if (name?.StartsWith("0 ") == true) name = name[2..].Trim();
+      return string.IsNullOrWhiteSpace(name) ? $"NORAD {noradId}" : name;
     }
   }
 }
