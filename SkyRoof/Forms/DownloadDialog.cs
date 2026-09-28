@@ -45,6 +45,7 @@ namespace SkyRoof
     private async void DownloadDialog_Shown(object sender, EventArgs e)
     {
       db = new();
+      db.ConfigureSources(ctx.Settings.OrbitSources);
       db.DownloadProgress += SatnogsDb_DownloadProgress;
 
       // download files
