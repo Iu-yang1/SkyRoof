@@ -46,8 +46,12 @@ namespace SkyRoof
       ctx.UdpStreamSender.ctx = ctx;
 
       var settingsLoadResult = ctx.Settings.LoadFromFile();
-      ctx.SatnogsDb.ConfigureSources(ctx.Settings.OrbitSources);
 
+      // SatnogsDb is intentionally created later in LoadSatelliteData(), after
+      // the form has entered its Load phase. Do not dereference it here: the
+      // Context field is still null while MainForm itself is being constructed.
+      // LoadSatelliteData() configures the newly-created instance with these
+      // OrbitSources immediately after construction.
       ApplyThemeSettings();
 
       ReportSettingsLoadResult(settingsLoadResult);
