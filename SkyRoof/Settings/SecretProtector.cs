@@ -50,8 +50,8 @@ namespace SkyRoof
       try
       {
         JToken root = JToken.Parse(File.ReadAllText(fileName));
-        foreach (JProperty property in root
-          .DescendantsAndSelf()
+        IEnumerable<JToken> tokens = new[] { root }.Concat(root.Descendants());
+        foreach (JProperty property in tokens
           .OfType<JProperty>()
           .Where(p => p.Name is "DirectLanPassword" or "ApiToken")
           .ToArray())
