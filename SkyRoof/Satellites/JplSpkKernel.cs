@@ -302,9 +302,14 @@ namespace SkyRoof
         cosTheta * targetTrueOfDate.Y;
       double z = targetTrueOfDate.Z;
 
-      double lat = groundStation.ObserverLatRad;
-      double lon = groundStation.ObserverLonRad;
-      double altitudeKm = groundStation.ObserverAltKm;
+      // SkyRoof currently targets SGP.NET 1.4.0. Use the public
+      // GroundStation.Location coordinate rather than newer convenience
+      // properties that are not present in that package version.
+      var observerLocation =
+        groundStation.Location.ToGeodetic();
+      double lat = observerLocation.Latitude.Radians;
+      double lon = observerLocation.Longitude.Radians;
+      double altitudeKm = observerLocation.Altitude;
 
       const double equatorialRadiusKm = 6378.137;
       const double eccentricitySquared =
