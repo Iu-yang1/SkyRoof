@@ -75,6 +75,7 @@ namespace SkyRoof
           raiseEvent: false);
 
         db.ConfigureSolarSystem(ctx.Settings.OrbitSources);
+        ctx.Settings.Satellites.EnsureSolarSystemGroup(db);
         ctx.SatnogsDb.ReplaceSatelliteList(db);
         DialogResult = DialogResult.OK;
       }
