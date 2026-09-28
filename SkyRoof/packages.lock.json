@@ -8,12 +8,6 @@
 "resolved": "1.5.2",
 "contentHash": "LVZ7rrr6GHbhERhTgVDarVygl1e6KwE96pronA90LBOMacDhxR4lB+xYLjn/vlnUu+xbOB2RM9fuCPEx5bdyWA=="
 },
-"CSCore": {
-"type": "Direct",
-"requested": "[1.2.1.2, )",
-"resolved": "1.2.1.2",
-"contentHash": "DoQKUcdZLQawo3mOg8CvujJD9YkvTt6NtEu7S+OCo8+ySl8eCeUw4LFyL2E1OcAkPU918HZM6sUNcvIMcXWg6g=="
-},
 "DockPanelSuite": {
 "type": "Direct",
 "requested": "[3.1.1, )",

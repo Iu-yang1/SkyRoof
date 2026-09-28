@@ -69,7 +69,6 @@ Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\runtimes\win\lib\net10.0\S
 Source: ..\licenses\*; DestDir: {app}\licenses; Flags: overwritereadonly ignoreversion recursesubdirs createallsubdirs
 Source: ..\LICENSE; DestDir: {app}; DestName: LICENSE.txt; Flags: overwritereadonly ignoreversion
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\codec2.dll; DestDir: {app}; Flags: overwritereadonly ignoreversion
-Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\CSCore.dll; DestDir: {app}; Flags: overwritereadonly ignoreversion
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\fa-solid-900.ttf; DestDir: {app}; Flags: overwritereadonly ignoreversion
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\fec.dll; DestDir: {app}; Flags: overwritereadonly ignoreversion
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\libfftw3f-3.dll; DestDir: {app}; Flags: overwritereadonly ignoreversion

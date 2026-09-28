@@ -1,10 +1,8 @@
 ﻿using System.Speech.AudioFormat;
 using System.Speech.Synthesis;
 using System.Text.RegularExpressions;
-using CSCore;
-using CSCore.Codecs.RAW;
-using CSCore.CoreAudioAPI;
-using CSCore.SoundOut;
+using NAudio.CoreAudioApi;
+using NAudio.Wave;
 using Serilog;
 using VE3NEA;
 
@@ -24,7 +22,7 @@ namespace SkyRoof
     private static readonly SpeechAudioFormatInfo SpeechFormat =
       new(SAMPLING_RATE, AudioBitsPerSample.Sixteen, AudioChannel.Mono);
     private static readonly WaveFormat AudioFormat =
-      new(SAMPLING_RATE, 16, 1, AudioEncoding.Pcm);
+      new(SAMPLING_RATE, 16, 1);
 
     public Context? ctx;
 
@@ -36,8 +34,10 @@ namespace SkyRoof
 
     private readonly object PlayerLock = new();
     private readonly Queue<MemoryStream> PlayQueue = new();
-    private RawDataReader? WaveSource;
+    private MemoryStream? PlaybackStream;
+    private RawSourceWaveStream? WaveSource;
     private WasapiOut? WaveOut;
+    private MMDevice? PlaybackDevice;
 
     public Announcer() {
       Synth = new SpeechSynthesizer();
@@ -229,12 +229,15 @@ namespace SkyRoof
 
       try
       {
-        var device = GetAudioDevice();
-        WaveSource = new RawDataReader(stream, AudioFormat);
-        WaveOut = new WasapiOut(false, AudioClientShareMode.Shared, 200);
-        if (device != null) WaveOut.Device = device;
-        WaveOut.Initialize(WaveSource);
-        WaveOut.Stopped += WaveOut_Stopped;
+        PlaybackStream = stream;
+        PlaybackDevice = GetAudioDevice();
+        if (PlaybackDevice == null)
+          throw new InvalidOperationException("No announcement audio device is available.");
+
+        WaveSource = new RawSourceWaveStream(PlaybackStream, AudioFormat);
+        WaveOut = new WasapiOut(PlaybackDevice, AudioClientShareMode.Shared, false, 200);
+        WaveOut.Init(WaveSource);
+        WaveOut.PlaybackStopped += WaveOut_Stopped;
         WaveOut.Play();
       }
       catch (Exception ex)
@@ -244,9 +247,9 @@ namespace SkyRoof
       }
     }
 
-    private void WaveOut_Stopped(object? sender, PlaybackStoppedEventArgs e)
+    private void WaveOut_Stopped(object? sender, StoppedEventArgs e)
     {
-      if (e.HasError) Log.Error(e.Exception, "Error playing voice announcement");
+      if (e.Exception != null) Log.Error(e.Exception, "Error playing voice announcement");
 
       // the player may not be disposed of in its own callback thread
       ThreadPool.QueueUserWorkItem(_ => { lock (PlayerLock) PlayNext(); });
@@ -257,7 +260,7 @@ namespace SkyRoof
     {
       if (WaveOut != null)
       {
-        WaveOut.Stopped -= WaveOut_Stopped;
+        WaveOut.PlaybackStopped -= WaveOut_Stopped;
         try { WaveOut.Dispose(); } catch { }
         WaveOut = null;
       }
@@ -267,23 +270,39 @@ namespace SkyRoof
         WaveSource.Dispose();
         WaveSource = null;
       }
+
+      PlaybackStream?.Dispose();
+      PlaybackStream = null;
+
+      PlaybackDevice?.Dispose();
+      PlaybackDevice = null;
     }
 
     private MMDevice? GetAudioDevice()
     {
       string? deviceId = ctx?.Settings.Announcements.Soundcard;
-      if (deviceId == null) return null;
 
-      using (var deviceEnumerator = new MMDeviceEnumerator())
+      using var deviceEnumerator = new MMDeviceEnumerator();
+
+      if (deviceId != null)
         try
         {
           return deviceEnumerator.GetDevice(deviceId);
         }
         catch (Exception ex)
         {
-          Log.Error(ex, "Announcement audio device not found");
-          return null;
+          Log.Error(ex, "Announcement audio device not found; falling back to the default device");
         }
+
+      try
+      {
+        return deviceEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+      }
+      catch (Exception ex)
+      {
+        Log.Error(ex, "Default announcement audio device not found");
+        return null;
+      }
     }
 
 

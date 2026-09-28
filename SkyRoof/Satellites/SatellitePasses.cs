@@ -6,7 +6,6 @@ using System.Net.NetworkInformation;
 using System.Text;
 using System.Threading.Channels;
 using System.Threading.Tasks;
-using CSCore.Win32;
 using Serilog;
 using SGPdotNET.CoordinateSystem;
 using SGPdotNET.Observation;

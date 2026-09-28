@@ -1,7 +1,5 @@
 ﻿using System.Diagnostics;
 using System.Security.Cryptography;
-using CSCore.DSP;
-using CSCore.Streams;
 using MathNet.Filtering.IIR;
 using MathNet.Numerics;
 using SkyRoof;

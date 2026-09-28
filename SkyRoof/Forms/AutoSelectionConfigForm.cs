@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
-using CSCore.XAudio2;
 using VE3NEA;
 using VE3NEA.Clock;
 
