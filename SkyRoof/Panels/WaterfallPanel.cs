@@ -121,6 +121,12 @@ namespace SkyRoof
       }
     }
 
+    internal void RefreshFrequencyLabels()
+    {
+      ScaleControl.BuildLabels();
+      ScaleControl.Refresh();
+    }
+
     internal void SetPassband()
     {
       ScaleControl.CenterFrequency = SdrCenterFrequency;
