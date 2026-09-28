@@ -74,7 +74,7 @@ namespace SkyRoof
           ctx.Settings.OrbitSources.CustomTleSources,
           raiseEvent: false);
 
-        db.ConfigureMoon(ctx.Settings.OrbitSources);
+        db.ConfigureSolarSystem(ctx.Settings.OrbitSources);
         ctx.SatnogsDb.ReplaceSatelliteList(db);
         DialogResult = DialogResult.OK;
       }
