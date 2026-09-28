@@ -39,6 +39,13 @@ namespace SkyRoof
     public void SetList(Context context)
     {
       ctx = context;
+
+      // Reconcile the synthetic solar-system group every time this dialog is
+      // opened. When a JPL kernel has just been installed, Moon/Sun/Venus must
+      // appear immediately in both the satellite list and the group tree.
+      ctx.Settings.Satellites.EnsureSolarSystemGroup(
+        ctx.SatnogsDb);
+
       ctx.Settings.Ui.RestoreColumnWidths("SatelliteGroupsForm", listView1);
       var updateTime = ctx.Settings.Satellites.LastDownloadTime;
 
@@ -137,10 +144,38 @@ namespace SkyRoof
 
       foreach (var groupNode in treeView1.Nodes.Cast<TreeNode>())
       {
-        var group = new SatelliteGroup();
-        group.Name = groupNode.Text;
-        group.SatelliteIds = groupNode.Nodes.Cast<TreeNode>().Select(n => ((SatnogsDbSatellite)n.Tag).sat_id).ToList();
-        if (group.SatelliteIds.Count > 0) ctx.Settings.Satellites.SatelliteGroups.Add(group);
+        SatelliteGroup? original =
+          groupNode.Tag as SatelliteGroup;
+
+        var group =
+          new SatelliteGroup
+          {
+            // Preserve stable IDs, especially the synthetic
+            // "solar-system-ephemeris" group. Recreating IDs here used to make
+            // a second Solar System group appear after the next JPL refresh.
+            Id =
+              original?.Id ??
+              Guid.NewGuid().ToString(),
+            Name = groupNode.Text,
+            SatelliteIds =
+              groupNode.Nodes
+                .Cast<TreeNode>()
+                .Select(
+                  n =>
+                    ((SatnogsDbSatellite)n.Tag).sat_id)
+                .ToList()
+          };
+
+        if (original?.SelectedSatId != null &&
+            group.SatelliteIds.Contains(original.SelectedSatId))
+          group.SelectedSatId =
+            original.SelectedSatId;
+        else if (group.SatelliteIds.Count > 0)
+          group.SelectedSatId =
+            group.SatelliteIds[0];
+
+        if (group.SatelliteIds.Count > 0)
+          ctx.Settings.Satellites.SatelliteGroups.Add(group);
       }
 
       ctx.Settings.Satellites.Sanitize();
