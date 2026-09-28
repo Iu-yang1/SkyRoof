@@ -112,7 +112,11 @@ namespace SkyRoof
       CoveragePolygon = pass?.GetCoveragePolygon();
 
       PassRadioBtn.Enabled = pass != null;
-      PassRadioBtn.Text = pass == null ? "Selected Pass" : $"Orbit #{pass.OrbitNumber} of {pass.Satellite.name}";
+      PassRadioBtn.Text = pass == null
+        ? "Selected Pass"
+        : pass.HasOrbitNumber
+          ? $"Orbit #{pass.OrbitNumber} of {pass.Satellite.name}"
+          : $"{pass.Satellite.name} visibility window";
 
       // real time mode if the pass is currently active, otherwise pass mode for the upcoming pass
       if (pass != null && !pass.IsActive())
