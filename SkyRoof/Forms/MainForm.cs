@@ -1,6 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Runtime;
-using CSCore.CoreAudioAPI;
+using NAudio.CoreAudioApi;
 using MathNet.Numerics;
 using Serilog;
 using SGPdotNET.Observation;
