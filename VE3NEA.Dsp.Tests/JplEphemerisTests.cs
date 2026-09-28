@@ -116,6 +116,34 @@ namespace VE3NEA.Dsp.Tests
         "C:\\tle\\local.txt");
     }
 
+    [Fact]
+    public void OrbitSourceSettings_ExposePrimaryUrlsAndJplFallbacks()
+    {
+      var settings =
+        new OrbitSourceSettings();
+
+      settings.SatellitesUrl.Should()
+        .Be(OrbitSourceSettings.DefaultSatellitesUrl);
+      settings.TransmittersUrl.Should()
+        .Be(OrbitSourceSettings.DefaultTransmittersUrl);
+      settings.TleUrl.Should()
+        .Be(OrbitSourceSettings.DefaultTleUrl);
+
+      SatnogsDb.SplitSourceList(settings.De440sSources)
+        .Should().HaveCount(2)
+        .And.Contain(
+          "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp")
+        .And.Contain(
+          "https://ssd.jpl.nasa.gov/ftp/eph/planets/bsp/de440s.bsp");
+
+      SatnogsDb.SplitSourceList(settings.De421Sources)
+        .Should().HaveCount(2)
+        .And.Contain(
+          "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/a_old_versions/de421.bsp")
+        .And.Contain(
+          "https://ssd.jpl.nasa.gov/ftp/eph/planets/bsp/de421.bsp");
+    }
+
     private static byte[] BuildSyntheticKernel()
     {
       byte[] data = new byte[3 * 1024];
