@@ -643,6 +643,10 @@ namespace SkyRoof
       Segment segment,
       double julianDateTdb)
     {
+      if (segment.Frame != 1)
+        throw new NotSupportedException(
+          $"SPK reference frame {segment.Frame} is not supported. SkyRoof currently accepts J2000/ICRF (NAIF frame 1) planetary segments.");
+
       if (segment.Type != 2 &&
           segment.Type != 3)
         throw new NotSupportedException(
