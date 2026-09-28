@@ -1060,21 +1060,17 @@ namespace SkyRoof
       TxBtn.Visible = ctx.CatControl.Tx?.CanPtt() == true;
       var ptt = ctx.CatControl.Tx?.Ptt == true;
       Keys hotkey = ctx.Settings.Cat.PttHotkey;
-      string binding =
-        hotkey == Keys.None
-          ? string.Empty
-          : $" [{hotkey}]";
 
       TxBtn.Text =
         ptt
-          ? $"Stop TX{binding}"
-          : $"Transmit{binding}";
+          ? "Stop TX"
+          : "Transmit";
       toolTip1.SetToolTip(
         TxBtn,
         "Click to toggle transmit.\r\n" +
         (hotkey == Keys.None
-          ? "Right-click to bind a physical momentary PTT key."
-          : $"{hotkey}: hold for TX, release for RX.\r\nRight-click to change the binding."));
+          ? "Right-click for CTCSS/subtone and physical PTT key options."
+          : $"{hotkey}: hold for TX, release for RX.\r\nRight-click for CTCSS/subtone and key options."));
 
       // CTCSS/subtone controls live in the transmit button's right-click menu.
       CtcssBtn.Visible = false;
