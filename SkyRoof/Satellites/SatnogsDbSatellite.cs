@@ -196,6 +196,17 @@ namespace SkyRoof
     internal SatelliteTracker Tracker { get => tracker ??= new SatelliteTracker(Tle); }
     private SatelliteTracker? tracker;
 
+    internal void SetTle(SatnogsDbTle? tle)
+    {
+      Tle = tle;
+      tracker = null;
+      TleInfo = null;
+      Period = null;
+      Inclination = null;
+      Altitude = null;
+      Footprint = null;
+    }
+
 
     private List<string> FormatTransmitters()
     {
