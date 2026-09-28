@@ -1305,6 +1305,7 @@ namespace SkyRoof
         GainWidget.Width +
         panel7.Width +
         RotatorWidget.Width +
+        PttHostPanel.Width +
         panel5.Width +
         ClockPanel.Width;
 
