@@ -17,11 +17,22 @@
 
 
     public TransmitterLabel(SatellitePass pass, long freq)
+      : this(
+          pass,
+          freq,
+          pass.Satellite.Transmitters.Where(tx => tx.downlink_low == freq))
+    {
+    }
+
+    internal TransmitterLabel(
+      SatellitePass pass,
+      long freq,
+      IEnumerable<SatnogsDbTransmitter> transmitters)
     {
       Pass = pass;
       Frequency = freq;
+      Transmitters = transmitters.ToList();
 
-      Transmitters = pass.Satellite.Transmitters.Where(tx => tx.downlink_low == freq).ToList();
       Tooltip = string
         .Join("\n", Transmitters.Select(tx => $"  - {tx.service}   {tx.type}   {tx.description}")
         .Distinct());

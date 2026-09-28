@@ -363,11 +363,22 @@ namespace SkyRoof
       foreach (var pass in passes.Passes)
         if (pass.StartTime < now.AddMinutes(6) && pass.EndTime > now.AddMinutes(-25))
         {
-          var transmitters = pass.Satellite.Transmitters.Where(tx => tx.alive);
-          var freqs = transmitters.Select(tx => tx.DownlinkLow).Distinct();
+          var transmitters = pass.Satellite.Transmitters
+            .Where(tx => tx.alive && tx.downlink_low.HasValue);
 
-          foreach (var freq in freqs)
-            Labels.Add(new TransmitterLabel(pass, freq));
+          // Saved Base corrections are transmitter-specific. Two transmitters
+          // that share the same SatNOGS downlink_low may no longer occupy the
+          // same frequency after independent Base edits, so group by the
+          // effective Base rather than by the raw database value.
+          var frequencyGroups = transmitters.GroupBy(
+            tx => checked((long)Math.Round(EffectiveDownlinkBase(tx))));
+
+          foreach (var group in frequencyGroups)
+            Labels.Add(
+              new TransmitterLabel(
+                pass,
+                group.Key,
+                group));
         }
     }
 

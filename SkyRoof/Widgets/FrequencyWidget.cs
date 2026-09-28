@@ -111,6 +111,7 @@ namespace SkyRoof
       if (RadioLink.IsTerrestrial || RadioLink.TxCust == null) return;
       RadioLink.SetDownlinkBaseFrequency(frequency);
       ctx.Settings.SaveToFile();
+      ctx.WaterfallPanel?.RefreshFrequencyLabels();
       RadioLinkToRadio();
       RadioLinkToUi();
     }
@@ -862,6 +863,7 @@ namespace SkyRoof
       if (RadioLink.IsTerrestrial || RadioLink.TxCust == null) return;
       RadioLink.ResetDownlinkBaseFrequency();
       ctx.Settings.SaveToFile();
+      ctx.WaterfallPanel?.RefreshFrequencyLabels();
       RadioLinkToRadio();
       RadioLinkToUi();
     }
