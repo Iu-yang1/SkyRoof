@@ -1,4 +1,4 @@
-﻿using CSCore.CoreAudioAPI;
+﻿using NAudio.CoreAudioApi;
 using System.ComponentModel;
 using System.Globalization;
 
@@ -35,9 +35,9 @@ namespace VE3NEA
     /// <exclude />
     protected void ListDevices()
     {
-      using (var deviceEnumerator = new MMDeviceEnumerator())
-      using (var deviceCollection = deviceEnumerator.EnumAudioEndpoints(Direction(), DeviceState.Active))
-        soundcards = deviceCollection.Select(s => new SoundcardEntry(s.DeviceID, s.FriendlyName)).ToArray();
+      soundcards = Soundcard.ListDevices(Direction())
+        .Select(s => new SoundcardEntry(s.Id, s.Name))
+        .ToArray();
     }
 
     /// <exclude />
