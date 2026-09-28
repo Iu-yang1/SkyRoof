@@ -97,6 +97,21 @@ namespace SkyRoof
     {
       var result = ReadSettingsFile();
       SetDefaults();
+
+      if (IcomLanSpectrum.SecretMigrationNeeded ||
+          Telemetry.SatnogsUploader.SecretMigrationNeeded)
+      {
+        try
+        {
+          SaveToFile();
+          Log.Information("Migrated plaintext settings secrets to Windows DPAPI.");
+        }
+        catch (Exception ex)
+        {
+          Log.Error(ex, "Failed to migrate settings secrets to Windows DPAPI.");
+        }
+      }
+
       return result;
     }
 
@@ -148,7 +163,9 @@ namespace SkyRoof
       try
       {
         string damagedFileName = Path.ChangeExtension(fileName, $".damaged-{DateTime.Now:yyyyMMdd-HHmmss}.json");
-        File.Move(fileName, damagedFileName, true);
+        string raw = File.ReadAllText(fileName);
+        File.WriteAllText(damagedFileName, SecretProtector.RedactLegacySecrets(raw));
+        File.Delete(fileName);
         return damagedFileName;
       }
       catch (Exception ex)
@@ -181,6 +198,11 @@ namespace SkyRoof
         File.Replace(tempFileName, fileName, GetBackupFileName(), true);
       else
         File.Move(tempFileName, fileName);
+
+      // The first save after upgrading may have moved a legacy plaintext
+      // Settings.json into .bak. Convert those legacy fields in-place so the
+      // backup cannot retain credentials after the main file is encrypted.
+      SecretProtector.SanitizeLegacySecretsFile(GetBackupFileName());
     }
 
     private void SetDefaults()
