@@ -72,7 +72,7 @@ namespace SkyRoof
 
       Sender?.Dispose();
       Sender = null;
-      ctx.FrequencyControl.SetPtt(false);
+      ctx.FrequencyControl.ReleaseApplicationPtt();
       ctx.FrequencyControl.SetXit(0);
       Soundcard?.Dispose();
       Soundcard = null;
@@ -503,7 +503,7 @@ namespace SkyRoof
 
       BeginInvoke(() =>
       {
-        ctx.MainForm.FrequencyWidget.SetPtt(false);
+        ctx.MainForm.FrequencyWidget.ReleaseApplicationPtt();
         ctx.MainForm.FrequencyWidget.SetXit(0);
 
         if (Sender.Mode == SenderMode.Sending) // and not tuning
