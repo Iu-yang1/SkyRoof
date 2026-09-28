@@ -946,7 +946,7 @@ namespace SkyRoof
 
     private void BindPhysicalPttKey()
     {
-      Keys? key = PttKeyCaptureForm.Capture(
+      Keys? key = PttKeyCaptureForm.CaptureKey(
         this,
         ctx.Settings.Cat.PttHotkey);
       if (!key.HasValue)
