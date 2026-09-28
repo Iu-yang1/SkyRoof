@@ -266,8 +266,10 @@ namespace SkyRoof
       if ((Flags & (SatelliteFlags.Vhf | SatelliteFlags.Uhf)) == SatelliteFlags.None)
         Flags |= SatelliteFlags.OtherBands;
 
-      // radio / tracking role
-      if (IsEphemerisTarget)
+      // radio / tracking role. A custom TLE may intentionally describe
+      // an object that SkyRoof tracks but has no radio data; do not invent a
+      // transmitter role merely to make it visible in the selector.
+      if (IsEphemerisTarget || Transmitters.Count == 0)
         Flags |= SatelliteFlags.TrackingTarget;
       else
       {
@@ -307,7 +309,9 @@ namespace SkyRoof
       else if (Tle != null) tooltipText +=
           $"\nTLE: {TleInfo}\nperiod: {Period} min.\ninclination: {Inclination}°\n" +
           $"footprint: {Footprint} km\naltitude: {Altitude}";
-      tooltipText += IsEphemerisTarget ? "\nradio: tracking only" : $"\nradio: {radio}";
+      tooltipText += Flags.HasFlag(SatelliteFlags.TrackingTarget)
+        ? "\nradio: tracking only"
+        : $"\nradio: {radio}";
       if (!string.IsNullOrEmpty(LotwName)) tooltipText += "\nAccepted by LoTW";
       tooltipText += $"\nupdated: {updated:yyyy-MM-dd}";
 
