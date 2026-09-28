@@ -546,6 +546,7 @@ namespace SkyRoof
 
       ctx.SatnogsDb.LoadFromFile();
       ctx.SatnogsDb.ConfigureSolarSystem(ctx.Settings.OrbitSources);
+      ctx.Settings.Satellites.EnsureSolarSystemGroup(ctx.SatnogsDb);
 
       if (ctx.SatnogsDb.Loaded)
         SatnogsDb_ListUpdated(null, null);
@@ -1290,6 +1291,15 @@ namespace SkyRoof
 
     private void SatelliteSelector_SelectedTransmitterChanged(object sender, EventArgs e)
     {
+      // JPL Moon/Sun/Venus and custom tracking-only objects intentionally have
+      // no fake radio transmitter. Selecting one must not retune CAT/SDR.
+      if (ctx.SatelliteSelector.SelectedTransmitter == null)
+      {
+        ctx.TransmittersPanel?.ShowSelectedTransmitter();
+        ctx.WaterfallPanel?.ScaleControl?.BuildLabels();
+        return;
+      }
+
       FrequencyWidget.SetTransmitter(returnToBase: true);
       ctx.TransmittersPanel?.ShowSelectedTransmitter();
       ctx.WaterfallPanel?.BringInView(ctx.FrequencyControl.RadioLink.CorrectedDownlinkFrequency);
