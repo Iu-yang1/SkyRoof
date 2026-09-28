@@ -910,7 +910,7 @@ namespace SkyRoof
       var clear = new ToolStripMenuItem("Clear Physical PTT Key");
       clear.Click += (_, _) =>
       {
-        SetPtt(false);
+        ctx.PttHotkey?.UpdateSettings();
         ctx.Settings.Cat.PttHotkey = Keys.None;
         ctx.Settings.SaveToFile();
         ctx.PttHotkey?.UpdateSettings();
@@ -952,8 +952,7 @@ namespace SkyRoof
       if (!key.HasValue)
         return;
 
-      // Release any old hotkey-owned PTT before changing the binding.
-      SetPtt(false);
+      // Release only a PTT state actually initiated by the old physical key.
       ctx.PttHotkey?.UpdateSettings();
 
       ctx.Settings.Cat.PttHotkey = key.Value;
