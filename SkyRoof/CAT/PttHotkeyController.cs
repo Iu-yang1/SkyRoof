@@ -101,7 +101,7 @@ namespace SkyRoof
               KeyHeld = false;
 
               if (HotkeyAssertedPtt)
-                DispatchPtt(false);
+                DispatchPttRelease();
 
               HotkeyAssertedPtt = false;
             }
@@ -134,7 +134,7 @@ namespace SkyRoof
           }
           else
           {
-            Ctx.FrequencyControl.SetPtt(false);
+            Ctx.FrequencyControl.ReleaseApplicationPtt();
           }
         });
       }
@@ -144,14 +144,34 @@ namespace SkyRoof
       }
     }
 
-    private void ReleaseOwnedPtt()
+    private void DispatchPttRelease()
     {
-      if (!KeyHeld || !HotkeyAssertedPtt)
+      MainForm? form = Ctx.MainForm;
+      if (form == null || form.IsDisposed)
         return;
 
       try
       {
-        Ctx.FrequencyControl.SetPtt(false);
+        form.BeginInvoke(() =>
+        {
+          if (Disposed) return;
+          Ctx.FrequencyControl.ReleaseApplicationPtt();
+        });
+      }
+      catch (InvalidOperationException)
+      {
+        // Dispose() performs the synchronous final release path.
+      }
+    }
+
+    private void ReleaseOwnedPtt()
+    {
+      if (!HotkeyAssertedPtt)
+        return;
+
+      try
+      {
+        Ctx.FrequencyControl.ReleaseApplicationPtt();
       }
       catch (Exception ex)
       {
