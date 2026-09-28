@@ -480,6 +480,27 @@ namespace SkyRoof
       if (PttChanged)
         if (Ptt == true) LastWrittenTxFrequency = NOT_ASSIGNED; else LastWrittenRxFrequency = NOT_ASSIGNED;
 
+      // A CAT write can time out after the radio already acted on it. Treat a
+      // matching hardware read-back as confirmation of our pending request.
+      // Conversely, any observed RX state proves there is no SkyRoof-owned PTT
+      // left to release.
+      if (!Ptt)
+      {
+        PttOwnedByApplication = false;
+        PttReleased.Set();
+      }
+
+      if (RequestedPtt.HasValue && RequestedPtt.Value == Ptt)
+      {
+        if (Ptt)
+        {
+          PttOwnedByApplication = true;
+          PttReleased.Reset();
+        }
+
+        RequestedPtt = null;
+      }
+
       LogInfo($"ReadPtt: {Ptt} (changed={PttChanged})");
     }
 
@@ -487,7 +508,20 @@ namespace SkyRoof
     {
       if (CatMode == OperatingMode.RxOnly) return;
       if (!RequestedPtt.HasValue) return;
-      if (RequestedPtt == Ptt) return;
+      if (RequestedPtt == Ptt)
+      {
+        // The state is already satisfied. Do not claim ownership of an
+        // externally asserted PTT merely because SkyRoof requested the same
+        // state; only a successful write/read-back can establish ownership.
+        if (!Ptt)
+        {
+          PttOwnedByApplication = false;
+          PttReleased.Set();
+        }
+
+        RequestedPtt = null;
+        return;
+      }
 
       string? command = RequestedPtt == true
         ? commands.set_ptt_on
