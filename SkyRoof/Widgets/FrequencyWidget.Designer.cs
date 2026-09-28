@@ -339,9 +339,10 @@
       // 
       // TxBtn
       // 
-      TxBtn.Location = new Point(524, 51);
+      TxBtn.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
+      TxBtn.Location = new Point(524, 38);
       TxBtn.Name = "TxBtn";
-      TxBtn.Size = new Size(133, 21);
+      TxBtn.Size = new Size(119, 35);
       TxBtn.TabIndex = 49;
       TxBtn.Text = "Transmit";
       TxBtn.UseVisualStyleBackColor = true;
@@ -349,10 +350,10 @@
       // 
       // CtcssBtn
       // 
-      CtcssBtn.Font = new Font("Wingdings 3", 8.25F);
-      CtcssBtn.Location = new Point(655, 51);
+      CtcssBtn.Font = new Font("Wingdings 3", 9F);
+      CtcssBtn.Location = new Point(646, 38);
       CtcssBtn.Name = "CtcssBtn";
-      CtcssBtn.Size = new Size(16, 21);
+      CtcssBtn.Size = new Size(25, 35);
       CtcssBtn.TabIndex = 50;
       CtcssBtn.Text = "q";
       CtcssBtn.UseVisualStyleBackColor = true;
