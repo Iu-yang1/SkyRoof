@@ -6,7 +6,6 @@ using System.Linq;
 using System.Speech.Synthesis;
 using System.Text;
 using System.Threading.Tasks;
-using CSCore.CoreAudioAPI;
 using VE3NEA;
 
 namespace SkyRoof
