@@ -28,6 +28,10 @@ namespace SkyRoof
       // Unconditional - under visual styles the light theme draws its own trough and ignores
       // BackColor, so this changes nothing there.
       progressBar1.BackColor = SystemColors.ControlDark;
+
+      // Keep the form open until the async operation has actually stopped.
+      // This avoids disposing controls while a cancellation is still unwinding.
+      Button.DialogResult = DialogResult.None;
     }
 
     public static bool Download(Form parent, Context ctx)
@@ -75,6 +79,16 @@ namespace SkyRoof
 
     private void Button_Click(object sender, EventArgs e)
     {
+      if (Button.Text == "Close")
+      {
+        DialogResult = DialogResult.Cancel;
+        Close();
+        return;
+      }
+
+      Button.Enabled = false;
+      Button.Text = "Cancelling...";
+
       if (Mode == DownloadMode.JplKernel)
         JplCancellation?.Cancel();
       else
@@ -104,6 +118,11 @@ namespace SkyRoof
       try
       {
         await db.DownloadAll();
+      }
+      catch (OperationCanceledException)
+      {
+        DialogResult = DialogResult.Cancel;
+        return;
       }
       catch (Exception ex)
       {
