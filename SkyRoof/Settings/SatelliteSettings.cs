@@ -72,7 +72,11 @@ namespace SkyRoof
     {
       // remove deleted sats
       foreach (var group in SatelliteGroups)
-        group.SatelliteIds.RemoveAll(id => db.GetSatellite(id)?.Tle == null);
+        group.SatelliteIds.RemoveAll(id =>
+        {
+          SatnogsDbSatellite? sat = db.GetSatellite(id);
+          return sat == null || !sat.Tracker.Enabled;
+        });
 
       Sanitize();
 
