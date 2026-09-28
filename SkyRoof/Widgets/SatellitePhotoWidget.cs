@@ -94,6 +94,33 @@ namespace SkyRoof
       }
     }
 
+    private static async Task<byte[]> DownloadBytesAsync(string url, CancellationToken ct)
+    {
+      using HttpResponseMessage response =
+        await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
+      response.EnsureSuccessStatusCode();
+
+      if (response.Content.Headers.ContentLength is long length &&
+          length > MaxDownloadBytes)
+        throw new InvalidDataException($"Satellite image is too large ({length} bytes).");
+
+      await using Stream input = await response.Content.ReadAsStreamAsync(ct);
+      using var output = new MemoryStream();
+      byte[] buffer = new byte[81920];
+
+      while (true)
+      {
+        int read = await input.ReadAsync(buffer.AsMemory(), ct);
+        if (read == 0) break;
+        if (output.Length + read > MaxDownloadBytes)
+          throw new InvalidDataException($"Satellite image exceeded {MaxDownloadBytes} bytes.");
+
+        await output.WriteAsync(buffer.AsMemory(0, read), ct);
+      }
+
+      return output.ToArray();
+    }
+
     private static string GetCacheFilePath(string satId)
     {
       string dir = Path.Combine(Utils.GetUserDataFolder(), "sat_images");
