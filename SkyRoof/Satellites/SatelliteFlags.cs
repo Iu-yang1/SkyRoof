@@ -24,5 +24,6 @@ namespace SkyRoof
     Transmitter = 256,
     Transceiver = 512,
     Transponder = 1024,
+    TrackingTarget = 2048,
   }
 }
