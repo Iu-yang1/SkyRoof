@@ -62,17 +62,7 @@ jobs:
           Write-Host "WinDivert driver: $($sys.FullName)"
 
       - name: Restore NuGet packages
-        run: nuget restore SkyRoof.sln -UseLockFile
-
-      - name: Dump NuGet lock files
-        shell: pwsh
-        run: |
-          Get-ChildItem -Path . -Filter packages.lock.json -Recurse | ForEach-Object {
-            $relative = $_.FullName.Substring($env:GITHUB_WORKSPACE.Length + 1).Replace('\','/')
-            Write-Host "LOCKFILE_BEGIN=$relative"
-            Get-Content $_.FullName -Raw
-            Write-Host "LOCKFILE_END"
-          }
+        run: nuget restore SkyRoof.sln -LockedMode
 
       - name: Build solution
         run: msbuild SkyRoof.sln /m /p:Configuration=Release /p:Platform=x64
