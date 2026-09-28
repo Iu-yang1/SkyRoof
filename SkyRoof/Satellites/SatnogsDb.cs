@@ -16,6 +16,8 @@ namespace SkyRoof
 {
   public class SatnogsDb
   {
+    internal const string MoonSatId = "MOON";
+
     private readonly string DataFolder, DownloadsFolder;
     private Dictionary<string, SatnogsDbSatellite> SatelliteList = new();
     private readonly HttpClient DownloadHttpClient = new();
@@ -83,7 +85,48 @@ namespace SkyRoof
     public void SaveToFile()
     {
       string path = Path.Combine(DataFolder, "Satellites.json");
-      File.WriteAllText(path, JsonConvert.SerializeObject(Satellites));
+
+      // MOON is a synthetic ephemeris object rebuilt from settings at startup.
+      // Do not persist it into the SatNOGS/cache database.
+      File.WriteAllText(
+        path,
+        JsonConvert.SerializeObject(
+          Satellites.Where(s => !s.IsMoon)));
+    }
+
+    internal void ConfigureMoon(OrbitSourceSettings settings)
+    {
+      SatelliteList.Remove(MoonSatId);
+
+      var moon = new SatnogsDbSatellite
+      {
+        sat_id = MoonSatId,
+        norad_cat_id = null,
+        name = "Moon",
+        names = "Luna",
+        image = string.Empty,
+        status = "in orbit",
+        website = string.Empty,
+        @operator = "Natural satellite",
+        countries = string.Empty,
+        telemetries = new SatnogsDbSatellite.Telemetries(),
+        citation = "SkyRoof lunar ephemeris",
+        associated_satellites = new List<string>(),
+        updated = DateTime.UtcNow,
+        IsMoon = true
+      };
+
+      MoonEphemeris? imported =
+        MoonEphemeris.TryLoad(settings.MoonEphemerisFile);
+
+      moon.SetTracker(
+        new SatelliteTracker(
+          imported,
+          settings.UseBuiltInMoonFallback));
+
+      moon.BuildAllNames();
+      moon.SetFlags();
+      SatelliteList[MoonSatId] = moon;
     }
 
     internal void ReplaceSatelliteList(SatnogsDb db)
