@@ -949,7 +949,8 @@ namespace SkyRoof
       // collision. A failed high-priority source simply lets the next source
       // provide that object's TLE.
       var loadedSources =
-        new List<(string Source, SatnogsDbTleList Tles)>();
+        new Dictionary<string, SatnogsDbTleList>(
+          StringComparer.OrdinalIgnoreCase);
 
       foreach (string source in sources)
       {
@@ -977,7 +978,7 @@ namespace SkyRoof
           }
 
           SatnogsDbTleList tles = ParseTleContent(content, extension, label);
-          loadedSources.Add((source, tles));
+          loadedSources[source] = tles;
           Log.Information(
             $"Custom TLE source fetched: {source} ({tles.Count} records)");
         }
@@ -994,17 +995,25 @@ namespace SkyRoof
       }
 
       int total = 0;
-      for (int i = loadedSources.Count - 1; i >= 0; i--)
+      foreach (string source in GetCustomTleApplyOrder(sourceList))
       {
-        var entry = loadedSources[i];
+        if (!loadedSources.TryGetValue(
+              source,
+              out SatnogsDbTleList? tles))
+          continue;
+
         int applied =
           ApplyTles(
-            entry.Tles,
+            tles,
             createMissingSatellites: true);
         total += applied;
 
+        int priority =
+          Array.IndexOf(
+            sources,
+            source) + 1;
         Log.Information(
-          $"Custom TLE source applied at priority {i + 1}: {entry.Source} ({applied} records)");
+          $"Custom TLE source applied at priority {priority}: {source} ({applied} records)");
       }
 
       if (total > 0)
@@ -1019,6 +1028,14 @@ namespace SkyRoof
 
     internal static string[] SplitCustomTleSources(string? sourceList) =>
       SplitSourceList(sourceList);
+
+    // Apply low priority first so the first configured custom source is applied
+    // last and wins collisions. This helper is deliberately testable because
+    // source order is part of the user-visible orbit-data contract.
+    internal static string[] GetCustomTleApplyOrder(string? sourceList) =>
+      SplitSourceList(sourceList)
+        .Reverse()
+        .ToArray();
 
     internal static string[] SplitSourceList(string? sourceList) =>
       string.IsNullOrWhiteSpace(sourceList)
