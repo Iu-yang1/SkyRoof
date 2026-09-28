@@ -25,6 +25,13 @@ namespace SkyRoof
     // client (for example WSJT-X) may key the same radio; shutting down SkyRoof
     // must only release PTT that SkyRoof itself successfully asserted.
     private volatile bool PttOwnedByApplication;
+    // A PTT-ON write can time out after the radio has already acted. Keep the
+    // attempt separate from confirmed ownership so shutdown/key release can
+    // still fail safe until hardware readback resolves the ambiguity.
+    private volatile bool PttOnAttempted;
+    internal bool PttMayBeOwnedByApplication =>
+      PttOwnedByApplication || PttOnAttempted;
+
     private readonly ManualResetEventSlim PttReleased = new(true);
     private bool DialKnobSpinning = false;
     public long RequestedRxFrequency, LastWrittenRxFrequency, LastReadRxFrequency;
@@ -487,15 +494,29 @@ namespace SkyRoof
       if (!Ptt)
       {
         PttOwnedByApplication = false;
+        PttOnAttempted = false;
         PttReleased.Set();
+      }
+      else if (PttOnAttempted)
+      {
+        // We attempted PTT ON and the next hardware read says TX. Even if the
+        // write reply was lost, treat the transmission as ours for fail-safe
+        // release purposes.
+        PttOwnedByApplication = true;
+        PttOnAttempted = false;
+        PttReleased.Reset();
       }
 
       if (RequestedPtt.HasValue && RequestedPtt.Value == Ptt)
       {
-        if (Ptt)
+        // Merely requesting ON while another client already has the rig keyed
+        // does not establish ownership. Ownership is granted only by a
+        // successful write or by readback after an actual ON attempt.
+        if (!Ptt)
         {
-          PttOwnedByApplication = true;
-          PttReleased.Reset();
+          PttOwnedByApplication = false;
+          PttOnAttempted = false;
+          PttReleased.Set();
         }
 
         RequestedPtt = null;
@@ -527,9 +548,19 @@ namespace SkyRoof
         ? commands.set_ptt_on
         : commands.set_ptt_off;
 
-      // Never claim a PTT transition that the radio rejected. In particular,
-      // keep a failed PTT-OFF request pending so the next cycle retries it.
-      if (command == null || !SendWriteCommand(command))
+      if (command == null)
+        return;
+
+      if (RequestedPtt == true)
+      {
+        PttOnAttempted = true;
+        PttReleased.Reset();
+      }
+
+      // Never claim a PTT transition that the radio rejected. A failed ON
+      // remains "possibly owned" because the reply may have been lost after
+      // the radio keyed; a failed OFF remains pending for retry.
+      if (!SendWriteCommand(command))
         return;
 
       Ptt = RequestedPtt.Value;
@@ -538,12 +569,14 @@ namespace SkyRoof
       if (Ptt)
       {
         PttOwnedByApplication = true;
+        PttOnAttempted = false;
         PttReleased.Reset();
         LastWrittenTxFrequency = NOT_ASSIGNED;
       }
       else
       {
         PttOwnedByApplication = false;
+        PttOnAttempted = false;
         PttReleased.Set();
         LastWrittenRxFrequency = NOT_ASSIGNED;
       }
@@ -945,16 +978,16 @@ namespace SkyRoof
       // Cancel a not-yet-sent SkyRoof PTT-ON request. If SkyRoof actually keyed
       // the rig, ask the worker to send PTT OFF and give it a bounded opportunity
       // to receive the radio acknowledgement before the TCP connection is torn down.
-      if (!PttOwnedByApplication && RequestedPtt == true)
+      if (!PttMayBeOwnedByApplication && RequestedPtt == true)
         RequestedPtt = null;
 
-      if (PttOwnedByApplication)
+      if (PttMayBeOwnedByApplication)
       {
         RequestedPtt = false;
 
         if (!PttReleased.Wait(4000))
           Log.Warning(
-            "CAT engine stopped while SkyRoof-owned PTT could not be confirmed OFF.");
+            "CAT engine stopped while SkyRoof-owned or possibly-owned PTT could not be confirmed OFF.");
       }
 
       base.Dispose();
