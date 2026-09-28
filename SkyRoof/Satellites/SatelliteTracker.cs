@@ -3,19 +3,18 @@ using SGPdotNET.CoordinateSystem;
 using SGPdotNET.Observation;
 using SGPdotNET.TLE;
 using SGPdotNET.Util;
-using VE3NEA;
 
 namespace SkyRoof
 {
   public class SatelliteTracker
   {
     private Satellite? Satellite;
-    private readonly MoonEphemeris? MoonFileEphemeris;
-    private readonly bool UseBuiltInMoonFallback;
+    private readonly JplSpkKernel? JplKernel;
+    private readonly JplBody? EphemerisBody;
 
     public Tle? Tle;
     public bool Enabled { get; private set; }
-    public bool IsMoon { get; }
+    internal bool IsJplEphemeris => EphemerisBody.HasValue;
 
     public SatelliteTracker(SatnogsDbTle? tle)
     {
@@ -29,13 +28,12 @@ namespace SkyRoof
     }
 
     internal SatelliteTracker(
-      MoonEphemeris? moonFileEphemeris,
-      bool useBuiltInMoonFallback)
+      JplSpkKernel kernel,
+      JplBody body)
     {
-      IsMoon = true;
-      MoonFileEphemeris = moonFileEphemeris;
-      UseBuiltInMoonFallback = useBuiltInMoonFallback;
-      Enabled = moonFileEphemeris != null || useBuiltInMoonFallback;
+      JplKernel = kernel;
+      EphemerisBody = body;
+      Enabled = kernel.Supports(body, DateTime.UtcNow);
     }
 
     public Tle? CreateTle(SatnogsDbTle tle)
@@ -55,7 +53,7 @@ namespace SkyRoof
 
     public GeodeticCoordinate? Predict(DateTime? utc = null)
     {
-      if (!Enabled || IsMoon) return null;
+      if (!Enabled || IsJplEphemeris) return null;
 
       try
       {
@@ -79,12 +77,29 @@ namespace SkyRoof
     {
       if (!Enabled) return null;
 
-      if (IsMoon)
-        return ObserveMoon(groundStation, utc);
+      if (EphemerisBody is JplBody body)
+      {
+        try
+        {
+          return JplKernel!.Observe(
+            body,
+            groundStation,
+            utc);
+        }
+        catch (Exception ex)
+        {
+          Log.Error(
+            ex,
+            $"JPL ephemeris observation failed for {body}.");
+          return null;
+        }
+      }
 
       try
       {
-        return groundStation.Observe(Satellite!, utc);
+        return groundStation.Observe(
+          Satellite!,
+          utc);
       }
       catch (Exception ex)
       {
@@ -96,34 +111,6 @@ namespace SkyRoof
       }
     }
 
-    private TopocentricObservation? ObserveMoon(
-      GroundStation groundStation,
-      DateTime utc)
-    {
-      Bearing? bearing = MoonFileEphemeris?.GetBearing(utc);
-
-      if (bearing == null && UseBuiltInMoonFallback)
-      {
-        var observer = new GeoPoint(
-          groundStation.ObserverLatRad * Geo.DinR,
-          groundStation.ObserverLonRad * Geo.DinR);
-
-        bearing = MoonEphemeris.GetBuiltInMoonBearing(
-          utc,
-          observer,
-          groundStation.ObserverAltKm * 1000.0);
-      }
-
-      if (bearing == null) return null;
-
-      return new TopocentricObservation(
-        Angle.FromRadians(bearing.Az),
-        Angle.FromRadians(bearing.El),
-        384400.0,
-        0.0,
-        groundStation.Location);
-    }
-
     internal List<SatelliteVisibilityPeriod> ComputePasses(
       GroundStation groundStation,
       DateTime startTime,
@@ -131,8 +118,8 @@ namespace SkyRoof
     {
       if (!Enabled) return new();
 
-      if (IsMoon)
-        return ComputeMoonPasses(
+      if (IsJplEphemeris)
+        return ComputeEphemerisPasses(
           groundStation,
           startTime,
           endTime);
@@ -156,7 +143,7 @@ namespace SkyRoof
       }
     }
 
-    private List<SatelliteVisibilityPeriod> ComputeMoonPasses(
+    private List<SatelliteVisibilityPeriod> ComputeEphemerisPasses(
       GroundStation groundStation,
       DateTime startTime,
       DateTime endTime)
@@ -167,40 +154,45 @@ namespace SkyRoof
       TimeSpan step = TimeSpan.FromMinutes(2);
       DateTime previousTime = startTime;
       TopocentricObservation? previous =
-        ObserveMoon(groundStation, previousTime);
+        Observe(groundStation, previousTime);
       bool previousAbove =
-        previous != null && previous.Elevation.Radians >= 0;
+        previous != null &&
+        previous.Elevation.Radians >= 0;
 
       DateTime? passStart =
         previousAbove ? previousTime : null;
 
-      DateTime t = startTime + step;
-
-      while (t <= endTime)
+      for (DateTime t = startTime + step;
+           t <= endTime;
+           t += step)
       {
         TopocentricObservation? current =
-          ObserveMoon(groundStation, t);
+          Observe(groundStation, t);
         bool currentAbove =
-          current != null && current.Elevation.Radians >= 0;
+          current != null &&
+          current.Elevation.Radians >= 0;
 
         if (!previousAbove && currentAbove)
         {
-          passStart = RefineMoonHorizonCrossing(
+          passStart = RefineHorizonCrossing(
             groundStation,
             previousTime,
             t,
             rising: true);
         }
-        else if (previousAbove && !currentAbove && passStart != null)
+        else if (previousAbove &&
+                 !currentAbove &&
+                 passStart != null)
         {
-          DateTime passEnd = RefineMoonHorizonCrossing(
-            groundStation,
-            previousTime,
-            t,
-            rising: false);
+          DateTime passEnd =
+            RefineHorizonCrossing(
+              groundStation,
+              previousTime,
+              t,
+              rising: false);
 
           result.Add(
-            BuildMoonVisibilityPeriod(
+            BuildVisibilityPeriod(
               groundStation,
               passStart.Value,
               passEnd));
@@ -209,30 +201,29 @@ namespace SkyRoof
         }
 
         previousTime = t;
-        previous = current;
         previousAbove = currentAbove;
-        t += step;
       }
 
       if (passStart != null && previousAbove)
       {
-        DateTime searchEnd = endTime;
         DateTime probe = endTime;
+        DateTime passEnd = endTime;
 
-        // Match SGP.NET's non-clipped pass behavior closely enough for the
-        // existing pass/rotator UI: if the Moon is still up at the requested
-        // horizon, continue until LOS (or one sidereal-day bound).
-        for (int i = 0; i < 12 * 60 / 2; i++)
+        // Continue at most 16 hours so a pass that crosses the caller's end
+        // remains a complete rise/set interval like SGP.NET visibility periods.
+        for (int i = 0; i < 8 * 60; i++)
         {
-          DateTime next = probe + step;
+          DateTime next =
+            probe + step;
           TopocentricObservation? obs =
-            ObserveMoon(groundStation, next);
+            Observe(groundStation, next);
           bool above =
-            obs != null && obs.Elevation.Radians >= 0;
+            obs != null &&
+            obs.Elevation.Radians >= 0;
 
           if (!above)
           {
-            searchEnd = RefineMoonHorizonCrossing(
+            passEnd = RefineHorizonCrossing(
               groundStation,
               probe,
               next,
@@ -241,39 +232,44 @@ namespace SkyRoof
           }
 
           probe = next;
-          searchEnd = probe;
+          passEnd = probe;
         }
 
         result.Add(
-          BuildMoonVisibilityPeriod(
+          BuildVisibilityPeriod(
             groundStation,
             passStart.Value,
-            searchEnd));
+            passEnd));
       }
 
       return result;
     }
 
-    private SatelliteVisibilityPeriod BuildMoonVisibilityPeriod(
+    private SatelliteVisibilityPeriod BuildVisibilityPeriod(
       GroundStation groundStation,
       DateTime start,
       DateTime end)
     {
-      if (end <= start) end = start + TimeSpan.FromSeconds(1);
+      if (end <= start)
+        end =
+          start + TimeSpan.FromSeconds(1);
 
       TimeSpan duration = end - start;
-      TimeSpan step =
+      TimeSpan coarseStep =
         duration > TimeSpan.FromHours(2)
           ? TimeSpan.FromMinutes(5)
           : TimeSpan.FromMinutes(1);
 
       DateTime maxTime = start;
-      double maxElevation = double.NegativeInfinity;
+      double maxElevation =
+        double.NegativeInfinity;
 
-      for (DateTime t = start; t <= end; t += step)
+      for (DateTime t = start;
+           t <= end;
+           t += coarseStep)
       {
         double elevation =
-          ObserveMoon(groundStation, t)?
+          Observe(groundStation, t)?
             .Elevation.Radians
           ?? double.NegativeInfinity;
 
@@ -285,32 +281,47 @@ namespace SkyRoof
       }
 
       DateTime before =
-        maxTime - step < start ? start : maxTime - step;
+        maxTime - coarseStep < start
+          ? start
+          : maxTime - coarseStep;
       DateTime after =
-        maxTime + step > end ? end : maxTime + step;
+        maxTime + coarseStep > end
+          ? end
+          : maxTime + coarseStep;
 
       for (int i = 0; i < 20; i++)
       {
         TimeSpan span = after - before;
-        DateTime t1 = before + TimeSpan.FromTicks(span.Ticks / 3);
-        DateTime t2 = after - TimeSpan.FromTicks(span.Ticks / 3);
+        DateTime t1 =
+          before +
+          TimeSpan.FromTicks(
+            span.Ticks / 3);
+        DateTime t2 =
+          after -
+          TimeSpan.FromTicks(
+            span.Ticks / 3);
 
         double e1 =
-          ObserveMoon(groundStation, t1)?
+          Observe(groundStation, t1)?
             .Elevation.Radians
           ?? double.NegativeInfinity;
         double e2 =
-          ObserveMoon(groundStation, t2)?
+          Observe(groundStation, t2)?
             .Elevation.Radians
           ?? double.NegativeInfinity;
 
-        if (e1 < e2) before = t1;
-        else after = t2;
+        if (e1 < e2)
+          before = t1;
+        else
+          after = t2;
       }
 
-      maxTime = before + TimeSpan.FromTicks((after - before).Ticks / 2);
+      maxTime =
+        before +
+        TimeSpan.FromTicks(
+          (after - before).Ticks / 2);
       maxElevation =
-        ObserveMoon(groundStation, maxTime)?
+        Observe(groundStation, maxTime)?
           .Elevation.Radians
         ?? 0;
 
@@ -323,39 +334,37 @@ namespace SkyRoof
         groundStation.Location);
     }
 
-    private DateTime RefineMoonHorizonCrossing(
+    private DateTime RefineHorizonCrossing(
       GroundStation groundStation,
       DateTime a,
       DateTime b,
       bool rising)
     {
-      double ea =
-        ObserveMoon(groundStation, a)?
-          .Elevation.Radians
-        ?? -Math.PI / 2;
-      double eb =
-        ObserveMoon(groundStation, b)?
-          .Elevation.Radians
-        ?? -Math.PI / 2;
-
       for (int i = 0; i < 28; i++)
       {
-        DateTime m =
-          a + TimeSpan.FromTicks((b - a).Ticks / 2);
-        double em =
-          ObserveMoon(groundStation, m)?
+        DateTime midpoint =
+          a +
+          TimeSpan.FromTicks(
+            (b - a).Ticks / 2);
+
+        double elevation =
+          Observe(groundStation, midpoint)?
             .Elevation.Radians
           ?? -Math.PI / 2;
 
         if (rising)
         {
-          if (em >= 0) b = m;
-          else a = m;
+          if (elevation >= 0)
+            b = midpoint;
+          else
+            a = midpoint;
         }
         else
         {
-          if (em >= 0) a = m;
-          else b = m;
+          if (elevation >= 0)
+            a = midpoint;
+          else
+            b = midpoint;
         }
       }
 
@@ -364,15 +373,24 @@ namespace SkyRoof
 
     internal bool IsGeoStationary()
     {
-      if (!Enabled || IsMoon) return false;
-      return Math.Abs(Tle!.MeanMotionRevPerDay - 1) < 0.1f;
+      if (!Enabled || IsJplEphemeris)
+        return false;
+
+      return
+        Math.Abs(
+          Tle!.MeanMotionRevPerDay -
+          1) <
+        0.1f;
     }
 
     internal List<SatelliteVisibilityPeriod> ComputeGeostationaryPasses(
       GroundStation groundStation)
     {
       var observation =
-        Observe(groundStation, DateTime.UtcNow);
+        Observe(
+          groundStation,
+          DateTime.UtcNow);
+
       if (observation == null ||
           observation.Elevation.Radians < 0)
         return new();
