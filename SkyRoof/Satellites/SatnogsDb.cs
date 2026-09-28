@@ -14,6 +14,22 @@ using VE3NEA.SkyTlm.Core;   // SignalParams / Framing, for the save-to-overrides
 
 namespace SkyRoof
 {
+  internal readonly record struct JplDownloadProgress(
+    int SourceIndex,
+    int SourceCount,
+    string SourceUrl,
+    long BytesReceived,
+    long? TotalBytes)
+  {
+    internal int? Percent =>
+      TotalBytes is > 0
+        ? (int)Math.Clamp(
+            BytesReceived * 100L / TotalBytes.Value,
+            0,
+            100)
+        : null;
+  }
+
   public class SatnogsDb
   {
     internal const string MoonSatId = "MOON";
@@ -130,8 +146,17 @@ namespace SkyRoof
         fileName);
     }
 
+    internal Task<string> DownloadJplKernelAsync(
+      JplEphemerisKernel kernel,
+      CancellationToken cancellationToken = default) =>
+      DownloadJplKernelAsync(
+        kernel,
+        progress: null,
+        cancellationToken);
+
     internal async Task<string> DownloadJplKernelAsync(
       JplEphemerisKernel kernel,
+      IProgress<JplDownloadProgress>? progress,
       CancellationToken cancellationToken = default)
     {
       if (kernel == JplEphemerisKernel.CustomFile)
@@ -185,6 +210,18 @@ namespace SkyRoof
               cancellationToken);
           response.EnsureSuccessStatusCode();
 
+          long? totalBytes =
+            response.Content.Headers.ContentLength;
+          long bytesReceived = 0;
+
+          progress?.Report(
+            new JplDownloadProgress(
+              Array.IndexOf(urls, url) + 1,
+              urls.Length,
+              url,
+              bytesReceived,
+              totalBytes));
+
           await using (
             Stream source =
               await response.Content.ReadAsStreamAsync(cancellationToken))
@@ -198,10 +235,32 @@ namespace SkyRoof
                 1024 * 1024,
                 useAsync: true))
           {
-            await source.CopyToAsync(
-              output,
-              1024 * 1024,
-              cancellationToken);
+            byte[] buffer =
+              new byte[1024 * 1024];
+
+            while (true)
+            {
+              int read =
+                await source.ReadAsync(
+                  buffer.AsMemory(0, buffer.Length),
+                  cancellationToken);
+              if (read == 0)
+                break;
+
+              await output.WriteAsync(
+                buffer.AsMemory(0, read),
+                cancellationToken);
+              bytesReceived += read;
+
+              progress?.Report(
+                new JplDownloadProgress(
+                  Array.IndexOf(urls, url) + 1,
+                  urls.Length,
+                  url,
+                  bytesReceived,
+                  totalBytes));
+            }
+
             await output.FlushAsync(cancellationToken);
           }
 
@@ -213,6 +272,14 @@ namespace SkyRoof
             temporary,
             destination,
             overwrite: true);
+
+          progress?.Report(
+            new JplDownloadProgress(
+              Array.IndexOf(urls, url) + 1,
+              urls.Length,
+              url,
+              new FileInfo(destination).Length,
+              new FileInfo(destination).Length));
 
           return destination;
         }
@@ -875,7 +942,14 @@ namespace SkyRoof
       string[] sources = SplitSourceList(sourceList);
       if (sources.Length == 0) return 0;
 
-      int total = 0;
+      // Priority is intentionally explicit:
+      //   Custom source #1 > custom source #2 > ... > primary TLE.
+      // Fetch in the user's visible order, then apply in reverse order so the
+      // first configured source is written last and therefore wins any NORAD
+      // collision. A failed high-priority source simply lets the next source
+      // provide that object's TLE.
+      var loadedSources =
+        new List<(string Source, SatnogsDbTleList Tles)>();
 
       foreach (string source in sources)
       {
@@ -903,15 +977,34 @@ namespace SkyRoof
           }
 
           SatnogsDbTleList tles = ParseTleContent(content, extension, label);
-          total += ApplyTles(tles, createMissingSatellites: true);
-          Log.Information($"Custom TLE source loaded: {source} ({tles.Count} records)");
+          loadedSources.Add((source, tles));
+          Log.Information(
+            $"Custom TLE source fetched: {source} ({tles.Count} records)");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+          throw;
         }
         catch (Exception ex)
         {
-          // One broken optional source must not suppress the remaining sources or
-          // the authoritative SatNOGS update.
+          // One broken optional source must not suppress the remaining sources
+          // or the lower-priority primary TLE.
           Log.Warning(ex, $"Custom TLE source failed: {source}");
         }
+      }
+
+      int total = 0;
+      for (int i = loadedSources.Count - 1; i >= 0; i--)
+      {
+        var entry = loadedSources[i];
+        int applied =
+          ApplyTles(
+            entry.Tles,
+            createMissingSatellites: true);
+        total += applied;
+
+        Log.Information(
+          $"Custom TLE source applied at priority {i + 1}: {entry.Source} ({applied} records)");
       }
 
       if (total > 0)
