@@ -38,6 +38,7 @@ namespace SkyRoof
       AntennaElevationLabel = new Label();
       AntennaAzimuthLabel = new Label();
       StopBtn = new Button();
+      TargetBtn = new Button();
       toolTip1 = new VE3NEA.ToolTipEx(components);
       SuspendLayout();
       // 
@@ -124,19 +125,31 @@ namespace SkyRoof
       // 
       // StopBtn
       // 
-      StopBtn.Location = new Point(146, 44);
+      StopBtn.Location = new Point(204, 41);
       StopBtn.Name = "StopBtn";
-      StopBtn.Size = new Size(53, 22);
+      StopBtn.Size = new Size(55, 27);
       StopBtn.TabIndex = 35;
       StopBtn.Text = "STOP";
       StopBtn.UseVisualStyleBackColor = true;
       StopBtn.Click += StopBtn_Click;
+      // 
+      // TargetBtn
+      // 
+      TargetBtn.Location = new Point(144, 41);
+      TargetBtn.Name = "TargetBtn";
+      TargetBtn.Size = new Size(55, 27);
+      TargetBtn.TabIndex = 36;
+      TargetBtn.Text = "SAT";
+      toolTip1.SetToolTip(TargetBtn, "Rotator tracking target: selected satellite or Moon/EME ephemeris");
+      TargetBtn.UseVisualStyleBackColor = true;
+      TargetBtn.Click += TargetBtn_Click;
       // 
       // RotatorControl
       // 
       AutoScaleDimensions = new SizeF(7F, 15F);
       AutoScaleMode = AutoScaleMode.Font;
       BorderStyle = BorderStyle.FixedSingle;
+      Controls.Add(TargetBtn);
       Controls.Add(StopBtn);
       Controls.Add(AntennaElevationLabel);
       Controls.Add(AntennaAzimuthLabel);
@@ -146,7 +159,7 @@ namespace SkyRoof
       Controls.Add(label1);
       Controls.Add(SatelliteAzimuthLabel);
       Name = "RotatorControl";
-      Size = new Size(210, 73);
+      Size = new Size(268, 73);
       ResumeLayout(false);
       PerformLayout();
     }
@@ -160,6 +173,7 @@ namespace SkyRoof
     private Label AntennaElevationLabel;
     private Label AntennaAzimuthLabel;
     private Button StopBtn;
+    private Button TargetBtn;
     public CheckBox TrackCheckbox;
     private VE3NEA.ToolTipEx toolTip1;
   }
