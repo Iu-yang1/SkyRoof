@@ -192,9 +192,33 @@ namespace SkyRoof
     public List<string> TransmittersHint { get => transmittersHint ??= FormatTransmitters(); } // build on demand
     private List<string>? transmittersHint;
 
+    [JsonIgnore]
+    [Browsable(false)]
+    internal JplBody? EphemerisBody { get; set; }
+
+    [JsonIgnore]
+    [Browsable(false)]
+    public bool IsEphemerisTarget => EphemerisBody.HasValue;
+
     [Browsable(false)]
     internal SatelliteTracker Tracker { get => tracker ??= new SatelliteTracker(Tle); }
     private SatelliteTracker? tracker;
+
+    internal void SetTracker(SatelliteTracker customTracker)
+    {
+      tracker = customTracker;
+    }
+
+    internal void SetTle(SatnogsDbTle? tle)
+    {
+      Tle = tle;
+      tracker = null;
+      TleInfo = null;
+      Period = null;
+      Inclination = null;
+      Altitude = null;
+      Footprint = null;
+    }
 
 
     private List<string> FormatTransmitters()
@@ -242,11 +266,18 @@ namespace SkyRoof
       if ((Flags & (SatelliteFlags.Vhf | SatelliteFlags.Uhf)) == SatelliteFlags.None)
         Flags |= SatelliteFlags.OtherBands;
 
-      // tx
-      if (Transmitters.Any(t => t.type == "Transponder")) Flags |= SatelliteFlags.Transponder;
-      if (Transmitters.Any(t => t.type == "Transceiver")) Flags |= SatelliteFlags.Transceiver;
-      if ((Flags & (SatelliteFlags.Transponder | SatelliteFlags.Transceiver)) == SatelliteFlags.None)
-        Flags |= SatelliteFlags.Transmitter;
+      // radio / tracking role. A custom TLE may intentionally describe
+      // an object that SkyRoof tracks but has no radio data; do not invent a
+      // transmitter role merely to make it visible in the selector.
+      if (IsEphemerisTarget || Transmitters.Count == 0)
+        Flags |= SatelliteFlags.TrackingTarget;
+      else
+      {
+        if (Transmitters.Any(t => t.type == "Transponder")) Flags |= SatelliteFlags.Transponder;
+        if (Transmitters.Any(t => t.type == "Transceiver")) Flags |= SatelliteFlags.Transceiver;
+        if ((Flags & (SatelliteFlags.Transponder | SatelliteFlags.Transceiver)) == SatelliteFlags.None)
+          Flags |= SatelliteFlags.Transmitter;
+      }
     }
 
     // status vocabulary changed in SatNOGS DB 1.76: the old future/alive/dead/re-entered became
@@ -268,11 +299,19 @@ namespace SkyRoof
       else if (Flags.HasFlag(SatelliteFlags.Transceiver)) radio = "Transceiver";
       ComputeOrbitDetails();
 
-      string tooltipText = $"{names}\nNORAD: {norad_cat_id}\nstatus: {status}\ncountries: {countries}";
-      if (Tle != null) tooltipText +=
+      string objectId =
+        IsEphemerisTarget
+          ? $"JPL target: {EphemerisBody}"
+          : $"NORAD: {norad_cat_id}";
+      string tooltipText = $"{names}\n{objectId}\nstatus: {status}\ncountries: {countries}";
+      if (IsEphemerisTarget)
+        tooltipText += $"\nephemeris: {citation}";
+      else if (Tle != null) tooltipText +=
           $"\nTLE: {TleInfo}\nperiod: {Period} min.\ninclination: {Inclination}°\n" +
           $"footprint: {Footprint} km\naltitude: {Altitude}";
-      tooltipText += $"\nradio: {radio}";
+      tooltipText += Flags.HasFlag(SatelliteFlags.TrackingTarget)
+        ? "\nradio: tracking only"
+        : $"\nradio: {radio}";
       if (!string.IsNullOrEmpty(LotwName)) tooltipText += "\nAccepted by LoTW";
       tooltipText += $"\nupdated: {updated:yyyy-MM-dd}";
 

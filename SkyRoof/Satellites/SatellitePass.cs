@@ -25,6 +25,7 @@ namespace SkyRoof
     public DateTime StartTime, CulminationTime, EndTime;
     public double MaxElevation;
     public int OrbitNumber;
+    public bool HasOrbitNumber => Satellite.Tracker.Tle != null;
     public bool Geostationary { get; private set; }
     private SatelliteVisibilityPeriod SatelliteVisibilityPeriod;
 
@@ -90,7 +91,9 @@ namespace SkyRoof
       tooltip[2] = $"LOS azimuth {los?.Azimuth.Degrees:F0}º at {ClockWidget.Stamp(EndTime, "yyyy-MM-dd HH:mm:ss")}";
       tooltip[3] = $"Duration: {Utils.TimespanToString(EndTime - StartTime, false)}";
       tooltip[4] = $"Elevation: {obs1?.Elevation.Degrees:F0}º {upDpwn}  (Max {MaxElevation:F0}º at {ClockWidget.Stamp(CulminationTime, "HH:mm")})";
-      tooltip[5] = $"Orbit: #{OrbitNumber}";
+      tooltip[5] = HasOrbitNumber
+        ? $"Orbit: #{OrbitNumber}"
+        : $"Ephemeris window: {ClockWidget.Stamp(StartTime, "yyyy-MM-dd")}";
 
       return tooltip;
     }
@@ -104,7 +107,19 @@ namespace SkyRoof
     private int ComputeOrbitNumber()
     {
       if (!Satellite.Tracker.Enabled) return 0;
-      Tle tle = Satellite.Tracker.Tle!;
+
+      Tle? tle = Satellite.Tracker.Tle;
+      if (tle == null)
+      {
+        // Solar-system targets do not have a TLE revolution number. Existing
+        // scheduling/rotator code uses this integer as part of pass identity,
+        // so use a stable date key derived from the recovered AOS. Moon, Sun
+        // and Venus have at most one normal rise window per civil day.
+        return checked(
+          (int)Math.Floor(
+            (StartTime.ToUniversalTime() - DateTime.UnixEpoch)
+              .TotalMinutes));
+      }
 
       uint revNum = tle.OrbitNumber;
       var timeSinceOrbit = (SatelliteVisibilityPeriod.MaxElevationTime - tle.Epoch).TotalDays;

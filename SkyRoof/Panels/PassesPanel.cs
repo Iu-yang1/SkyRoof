@@ -195,8 +195,9 @@ namespace SkyRoof
       e.Graphics.FillRectangle(brush, rect);
       e.Graphics.DrawString(text, BoldFont, Theme.RowTextBrush(false), rect);
 
-      // orbit number
-      text = $"#{pass.OrbitNumber}";
+      // TLE satellites have a real revolution number. JPL ephemeris
+      // targets use an internal pass key only; do not expose it as an orbit.
+      text = pass.HasOrbitNumber ? $"#{pass.OrbitNumber}" : "JPL";
       size = e.Graphics.MeasureString(text, listViewEx1.Font);
       rect = new RectangleF(rect.Right + 10, rect.Y, size.Width, size.Height);
       e.Graphics.DrawString(text, listViewEx1.Font, SystemBrushes.WindowText, rect);

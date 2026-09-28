@@ -66,6 +66,16 @@ namespace SkyRoof
       try
       {
         db.ImportAll();
+
+        // Custom sources are an overlay on the authoritative SatNOGS database.
+        // Re-apply them after a full database refresh so user-selected TLEs and
+        // custom NORAD objects are not lost when ImportAll rebuilds the list.
+        await db.LoadCustomTleSourcesAsync(
+          ctx.Settings.OrbitSources.CustomTleSources,
+          raiseEvent: false);
+
+        db.ConfigureSolarSystem(ctx.Settings.OrbitSources);
+        ctx.Settings.Satellites.EnsureSolarSystemGroup(db);
         ctx.SatnogsDb.ReplaceSatelliteList(db);
         DialogResult = DialogResult.OK;
       }

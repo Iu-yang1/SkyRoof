@@ -29,6 +29,7 @@ namespace SkyRoof
 
     // cached so the Terrestrial/normal toggle does not allocate (and leak) a new font each update
     private readonly Font DownlinkRegularFont, DownlinkBoldFont;
+    private readonly ContextMenuStrip PttMenu = new();
     private long SuppressCatTuneFeedbackUntil;
 
     public FrequencyWidget()
@@ -53,6 +54,7 @@ namespace SkyRoof
       UplinkManualSpinner.Maximum = WideTuningLimitKhz;
 
       BuildCtcssMenu();
+      BuildPttMenu();
     }
 
     internal string GetBandName(bool uplink)
@@ -74,6 +76,16 @@ namespace SkyRoof
     //----------------------------------------------------------------------------------------------
     public void SetTransmitter(bool returnToBase = false)
     {
+      // Tracking-only ephemeris objects (Moon/Sun/Venus) intentionally do not
+      // own radio frequencies. Selecting one must leave the current rig state.
+      if (ctx.SatelliteSelector.SelectedTransmitter == null)
+      {
+        ctx.RotatorControl.SetSatellite(
+          ctx.SatelliteSelector.SelectedSatellite);
+        UpdateTxButton();
+        return;
+      }
+
       SettingsToRadioLink(false);
       if (returnToBase)
       {
@@ -271,7 +283,13 @@ namespace SkyRoof
     {
       if (ctx.CatControl.Tx == null) return;
 
-      ctx.CatControl.Tx!.SetPtt(ptt);
+      ctx.CatControl.Tx.SetPtt(ptt);
+      UpdateTxButton();
+    }
+
+    internal void ReleaseApplicationPtt()
+    {
+      ctx.CatControl.Tx?.ReleaseApplicationPtt();
       UpdateTxButton();
     }
 
@@ -311,13 +329,17 @@ namespace SkyRoof
 
       if (!isTerrestrial)
       {
+        SatnogsDbTransmitter? selectedTx =
+          ctx.SatelliteSelector.SelectedTransmitter;
+        if (selectedTx == null)
+          return;
+
         RadioLink.Sat = ctx.SatelliteSelector.SelectedSatellite;
-        RadioLink.Tx = ctx.SatelliteSelector.SelectedTransmitter;
+        RadioLink.Tx = selectedTx;
         RadioLink.SatCust = ctx.Settings.Satellites.SatelliteCustomizations.GetOrCreate(RadioLink.Sat.sat_id);
-        RadioLink.TxCust = ctx.Settings.Satellites.GetOrCreateTransmitterCustomization(RadioLink.Tx);
+        RadioLink.TxCust = ctx.Settings.Satellites.GetOrCreateTransmitterCustomization(selectedTx);
         RadioLink.ObserveSatellite(ctx.SdrPasses);
         isTerrestrial = RadioLink.IsTerrestrial; 
-
       }
 
       if (!isTerrestrial)
@@ -879,15 +901,92 @@ namespace SkyRoof
 
     private void TxBtn_Click(object sender, EventArgs e)
     {
-      var ptt = ctx.CatControl.Tx!.Ptt == true;
+      if (ctx.CatControl.Tx?.CanPtt() != true)
+        return;
+
+      var ptt = ctx.CatControl.Tx.Ptt == true;
       SetPtt(!ptt);
+    }
+
+    private void BuildPttMenu()
+    {
+      var bind = new ToolStripMenuItem("Bind Physical PTT Key...");
+      bind.Click += (_, _) => BindPhysicalPttKey();
+
+      var clear = new ToolStripMenuItem("Clear Physical PTT Key");
+      clear.Click += (_, _) =>
+      {
+        ctx.PttHotkey?.UpdateSettings();
+        ctx.Settings.Cat.PttHotkey = Keys.None;
+        ctx.Settings.SaveToFile();
+        ctx.PttHotkey?.UpdateSettings();
+        UpdateTxButton();
+      };
+
+      var suppress = new ToolStripMenuItem("Suppress Bound Key")
+      {
+        CheckOnClick = true
+      };
+      suppress.Click += (_, _) =>
+      {
+        ctx.Settings.Cat.SuppressPttHotkey = suppress.Checked;
+        ctx.Settings.SaveToFile();
+      };
+
+      PttMenu.Opening += (_, _) =>
+      {
+        Keys key = ctx.Settings.Cat.PttHotkey;
+        bind.Text = key == Keys.None
+          ? "Bind Physical PTT Key..."
+          : $"Change Physical PTT Key ({key})...";
+        clear.Enabled = key != Keys.None;
+        suppress.Checked = ctx.Settings.Cat.SuppressPttHotkey;
+      };
+
+      PttMenu.Items.Add(bind);
+      PttMenu.Items.Add(clear);
+      PttMenu.Items.Add(new ToolStripSeparator());
+      PttMenu.Items.Add(suppress);
+      TxBtn.ContextMenuStrip = PttMenu;
+    }
+
+    private void BindPhysicalPttKey()
+    {
+      Keys? key = PttKeyCaptureForm.CaptureKey(
+        this,
+        ctx.Settings.Cat.PttHotkey);
+      if (!key.HasValue)
+        return;
+
+      // Release only a PTT state actually initiated by the old physical key.
+      ctx.PttHotkey?.UpdateSettings();
+
+      ctx.Settings.Cat.PttHotkey = key.Value;
+      ctx.Settings.SaveToFile();
+      ctx.PttHotkey?.UpdateSettings();
+      UpdateTxButton();
     }
 
     private void UpdateTxButton()
     {
       TxBtn.Visible = ctx.CatControl.Tx?.CanPtt() == true;
       var ptt = ctx.CatControl.Tx?.Ptt == true;
-      TxBtn.Text = ptt ? "Stop Transmitting" : "Transmit";
+      Keys hotkey = ctx.Settings.Cat.PttHotkey;
+      string binding =
+        hotkey == Keys.None
+          ? string.Empty
+          : $" [{hotkey}]";
+
+      TxBtn.Text =
+        ptt
+          ? $"Stop TX{binding}"
+          : $"Transmit{binding}";
+      toolTip1.SetToolTip(
+        TxBtn,
+        "Click to toggle transmit.\r\n" +
+        (hotkey == Keys.None
+          ? "Right-click to bind a physical momentary PTT key."
+          : $"{hotkey}: hold for TX, release for RX.\r\nRight-click to change the binding."));
 
       // the tone applies to an FM uplink only, and both commands need the encoder on/off switch
       CtcssBtn.Visible = RadioLink.HasUplink &&

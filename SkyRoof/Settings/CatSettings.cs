@@ -54,6 +54,16 @@ namespace SkyRoof
     [Description("The frequencies sent to the radio will be rounded to this step.")]
     public int TuningStep { get; set; } = 10;
 
+    [DefaultValue(Keys.None)]
+    [DisplayName("Physical PTT Key")]
+    [Description("Global keyboard/HID key used as momentary PTT: key down transmits and key up returns to receive. Use a dedicated key such as F13-F24 for a USB foot switch when available.")]
+    public Keys PttHotkey { get; set; } = Keys.None;
+
+    [DefaultValue(true)]
+    [DisplayName("Suppress PTT Key")]
+    [Description("Prevent the bound physical PTT key from also being delivered to the foreground application.")]
+    public bool SuppressPttHotkey { get; set; } = true;
+
     [DisplayName("RX CAT")]
     [Description("RX CAT Control via rigctld.exe")]
     [TypeConverter(typeof(ExpandableObjectConverter))]

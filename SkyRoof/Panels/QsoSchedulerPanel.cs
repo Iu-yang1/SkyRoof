@@ -263,8 +263,11 @@ namespace SkyRoof
       e.Graphics.FillRectangle(brush, rect);
       e.Graphics.DrawString(text, BoldFont, Theme.RowTextBrush(false), rect);
 
-      // orbit number
-      text = $"#{overlap.OrbitNumber}";
+      // JPL tracking targets use an internal pass key rather than a
+      // physical revolution number.
+      text = overlap.Satellite.IsEphemerisTarget
+        ? "JPL"
+        : $"#{overlap.OrbitNumber}";
       size = e.Graphics.MeasureString(text, PredictionList.Font);
       rect = new RectangleF(rect.Right + 10, rect.Y, size.Width, size.Height);
       e.Graphics.DrawString(text, PredictionList.Font, SystemBrushes.WindowText, rect);

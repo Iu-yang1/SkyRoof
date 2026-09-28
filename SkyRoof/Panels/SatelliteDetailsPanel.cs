@@ -51,6 +51,7 @@ namespace SkyRoof
 
       ImageLabel.Visible = !string.IsNullOrEmpty(sat.image);
       WebsiteLabel.Visible = !string.IsNullOrEmpty(sat.website);
+      SatnogsLabel.Visible = !sat.IsEphemerisTarget;
 
       SatellitePropertyGrid.SelectedObject = sat;
     }

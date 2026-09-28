@@ -68,11 +68,57 @@ namespace SkyRoof
     public string SelectedGroupId;
     public string SelectedSatelliteId;
 
+    internal void EnsureSolarSystemGroup(SatnogsDb db)
+    {
+      const string groupId = "solar-system-ephemeris";
+      string[] ids =
+      {
+        SatnogsDb.MoonSatId,
+        SatnogsDb.SunSatId,
+        SatnogsDb.VenusSatId
+      };
+
+      var available =
+        ids
+          .Where(id => db.GetSatellite(id)?.Tracker.Enabled == true)
+          .ToList();
+
+      SatelliteGroup? group =
+        SatelliteGroups.FirstOrDefault(g => g.Id == groupId);
+
+      if (available.Count == 0)
+      {
+        if (group != null)
+          SatelliteGroups.Remove(group);
+        return;
+      }
+
+      if (group == null)
+      {
+        group = new SatelliteGroup
+        {
+          Id = groupId,
+          Name = "Solar System"
+        };
+        SatelliteGroups.Add(group);
+      }
+
+      group.SatelliteIds = available;
+
+      if (string.IsNullOrWhiteSpace(group.SelectedSatId) ||
+          !available.Contains(group.SelectedSatId))
+        group.SelectedSatId = available[0];
+    }
+
     public void DeleteInvalidData(SatnogsDb db)
     {
       // remove deleted sats
       foreach (var group in SatelliteGroups)
-        group.SatelliteIds.RemoveAll(id => db.GetSatellite(id)?.Tle == null);
+        group.SatelliteIds.RemoveAll(id =>
+        {
+          SatnogsDbSatellite? sat = db.GetSatellite(id);
+          return sat == null || !sat.Tracker.Enabled;
+        });
 
       Sanitize();
 
