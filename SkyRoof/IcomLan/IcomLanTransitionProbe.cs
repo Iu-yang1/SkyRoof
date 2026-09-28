@@ -400,9 +400,14 @@ namespace SkyRoof
         transportMarker,
         civSignature);
 
+      bool redactPayload =
+        IsSensitiveIcomControlPayload(payload);
+
       string? payloadHex =
         payloadLength <= 192
-          ? Convert.ToHexString(payload)
+          ? redactPayload
+            ? "<redacted Icom LAN authentication/control payload>"
+            : Convert.ToHexString(payload)
           : null;
 
       info = new ProbePacketInfo(
@@ -421,6 +426,31 @@ namespace SkyRoof
         chunkedScope);
 
       return true;
+    }
+
+    internal static bool IsSensitiveIcomControlPayload(
+      ReadOnlySpan<byte> payload)
+    {
+      // Authenticated RS-BA1-compatible control messages use a self-describing
+      // envelope. Login packets contain the encoded username/passcode; auth and
+      // connection packets contain session/authentication identifiers and may
+      // also contain the username. Transition reports are intended to be shared
+      // for scope-flow diagnostics, so never serialize these raw bytes.
+      const int minimumLength = 0x18;
+      if (payload.Length < minimumLength)
+        return false;
+
+      uint outerLength =
+        BinaryPrimitives.ReadUInt32LittleEndian(
+          payload.Slice(0, 4));
+      uint innerLength =
+        BinaryPrimitives.ReadUInt32BigEndian(
+          payload.Slice(0x10, 4));
+
+      return
+        outerLength == payload.Length &&
+        innerLength == payload.Length - 0x10 &&
+        payload[0x14] == 0x01;
     }
 
     private static bool TryFindFirstCompleteCivFrame(

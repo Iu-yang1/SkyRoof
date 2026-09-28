@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Net;
 using FluentAssertions;
 using SkyRoof;
@@ -273,6 +274,72 @@ namespace VE3NEA.Dsp.Tests
 
 
     [Fact]
+    public void TransitionProbe_RedactsAuthenticatedIcomControlPayloads()
+    {
+      const string username = "operator";
+      const string password = "secret";
+
+      byte[] login = IcomLanDirectSession.BuildLoginPacket(
+        0x11223344,
+        0xAABBCCDD,
+        0x0123,
+        0x4567,
+        username,
+        password,
+        "icom-pc");
+
+      IcomLanTransitionProbe.IsSensitiveIcomControlPayload(login)
+        .Should().BeTrue();
+
+      byte[] packet = BuildUdpPacket(
+        source: IPAddress.Parse("192.168.1.20"),
+        destination: IPAddress.Parse("192.168.1.4"),
+        sourcePort: 54321,
+        destinationPort: 50001,
+        login);
+
+      IcomLanTransitionProbe.TryInspectPacket(
+        packet,
+        IPAddress.Parse("192.168.1.4"),
+        out ProbePacketInfo info).Should().BeTrue();
+
+      info.PayloadHex.Should().Be(
+        "<redacted Icom LAN authentication/control payload>");
+      info.PayloadHex.Should().NotContain(
+        Convert.ToHexString(
+          IcomLanDirectSession.EncodePasscode(username)));
+      info.PayloadHex.Should().NotContain(
+        Convert.ToHexString(
+          IcomLanDirectSession.EncodePasscode(password)));
+
+      byte[] auth = IcomLanDirectSession.BuildAuthPacket(
+        0x11223344,
+        0xAABBCCDD,
+        0x0124,
+        0x05,
+        new byte[] { 1, 2, 3, 4, 5, 6 });
+
+      IcomLanTransitionProbe.IsSensitiveIcomControlPayload(auth)
+        .Should().BeTrue();
+
+      byte[] serial = new byte[25];
+      BinaryPrimitives.WriteUInt32LittleEndian(
+        serial.AsSpan(0, 4),
+        (uint)serial.Length);
+      serial[16] = 0xC1;
+      BinaryPrimitives.WriteUInt16LittleEndian(
+        serial.AsSpan(17, 2),
+        4);
+      serial[21] = 0xFE;
+      serial[22] = 0xFE;
+      serial[23] = 0xFD;
+      serial[24] = 0x00;
+
+      IcomLanTransitionProbe.IsSensitiveIcomControlPayload(serial)
+        .Should().BeFalse();
+    }
+
+    [Fact]
     public void TransitionProbe_IdentifiesCombinedLanScopeFrame()
     {
       byte[] samples = Enumerable.Range(0, IcomScopeAssembler.ScopePointCount)
@@ -350,7 +417,22 @@ namespace VE3NEA.Dsp.Tests
       BitConverter.GetBytes((ushort)civ.Length).CopyTo(lanPayload, 17);
       civ.CopyTo(lanPayload, 21);
 
-      int udpLength = 8 + lanPayload.Length;
+      return BuildUdpPacket(
+        source,
+        destination,
+        sourcePort,
+        destinationPort,
+        lanPayload);
+    }
+
+    private static byte[] BuildUdpPacket(
+      IPAddress source,
+      IPAddress destination,
+      int sourcePort,
+      int destinationPort,
+      byte[] payload)
+    {
+      int udpLength = 8 + payload.Length;
       byte[] packet = new byte[20 + udpLength];
 
       packet[0] = 0x45;
@@ -363,7 +445,7 @@ namespace VE3NEA.Dsp.Tests
       WriteUInt16BigEndian(packet, 22, (ushort)destinationPort);
       WriteUInt16BigEndian(packet, 24, (ushort)udpLength);
 
-      lanPayload.CopyTo(packet, 28);
+      payload.CopyTo(packet, 28);
       return packet;
     }
 
