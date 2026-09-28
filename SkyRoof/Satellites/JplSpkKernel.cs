@@ -18,12 +18,12 @@ namespace SkyRoof
     double Y,
     double Z)
   {
-    internal static JplVector3 operator +(
+    public static JplVector3 operator +(
       JplVector3 a,
       JplVector3 b) =>
       new(a.X + b.X, a.Y + b.Y, a.Z + b.Z);
 
-    internal static JplVector3 operator -(
+    public static JplVector3 operator -(
       JplVector3 a,
       JplVector3 b) =>
       new(a.X - b.X, a.Y - b.Y, a.Z - b.Z);
