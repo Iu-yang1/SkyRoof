@@ -151,8 +151,8 @@
       PttHostPanel.Dock = DockStyle.Left;
       PttHostPanel.Location = new Point(1552, 0);
       PttHostPanel.Name = "PttHostPanel";
-      PttHostPanel.Padding = new Padding(10, 22, 10, 22);
-      PttHostPanel.Size = new Size(132, 78);
+      PttHostPanel.Padding = new Padding(10, 23, 10, 23);
+      PttHostPanel.Size = new Size(112, 78);
       PttHostPanel.TabIndex = 13;
       // 
       // RotatorWidget
