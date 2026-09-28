@@ -192,9 +192,18 @@ namespace SkyRoof
     public List<string> TransmittersHint { get => transmittersHint ??= FormatTransmitters(); } // build on demand
     private List<string>? transmittersHint;
 
+    [JsonIgnore]
+    [Browsable(false)]
+    public bool IsMoon { get; internal set; }
+
     [Browsable(false)]
     internal SatelliteTracker Tracker { get => tracker ??= new SatelliteTracker(Tle); }
     private SatelliteTracker? tracker;
+
+    internal void SetTracker(SatelliteTracker customTracker)
+    {
+      tracker = customTracker;
+    }
 
     internal void SetTle(SatnogsDbTle? tle)
     {
@@ -279,8 +288,11 @@ namespace SkyRoof
       else if (Flags.HasFlag(SatelliteFlags.Transceiver)) radio = "Transceiver";
       ComputeOrbitDetails();
 
-      string tooltipText = $"{names}\nNORAD: {norad_cat_id}\nstatus: {status}\ncountries: {countries}";
-      if (Tle != null) tooltipText +=
+      string objectId = IsMoon ? "Moon / EME target" : $"NORAD: {norad_cat_id}";
+      string tooltipText = $"{names}\n{objectId}\nstatus: {status}\ncountries: {countries}";
+      if (IsMoon)
+        tooltipText += "\nephemeris: lunar topocentric";
+      else if (Tle != null) tooltipText +=
           $"\nTLE: {TleInfo}\nperiod: {Period} min.\ninclination: {Inclination}°\n" +
           $"footprint: {Footprint} km\naltitude: {Altitude}";
       tooltipText += $"\nradio: {radio}";
