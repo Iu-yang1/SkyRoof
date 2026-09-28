@@ -11,6 +11,10 @@ namespace SkyRoof
     private AzElEntryDialog Dialog = new();
     private OptimizedRotationPath? Path;
     private Bearing? SatBearing;
+    private MoonEphemeris? MoonFileEphemeris;
+
+    private bool IsMoonTarget =>
+      ctx?.Settings.OrbitSources.RotatorTarget == RotatorTrackingTarget.Moon;
 
     // set while auto-selection programmatically engages tracking for a specific pass, so the checkbox
     // handler keeps that exact pass instead of rebuilding the path from GetNextPass
@@ -46,9 +50,17 @@ namespace SkyRoof
         engine.BearingChanged += Engine_BearingChanged;
       }
 
-      ResetUi();
+      ReloadOrbitSources();
 
-      SetSatellite(ctx.SatelliteSelector.SelectedSatellite);
+      if (IsMoonTarget)
+      {
+        Path = null;
+        ResetUi();
+      }
+      else
+      {
+        SetSatellite(ctx.SatelliteSelector.SelectedSatellite);
+      }
 
       TrackCheckbox.Checked = track;
       Advance();
@@ -58,6 +70,7 @@ namespace SkyRoof
 
     public void SetSatellite(SatnogsDbSatellite? sat)
     {
+      if (IsMoonTarget) return;
       if (sat == Path?.Satellite) return;
 
       engine?.StopRotation();
@@ -70,6 +83,8 @@ namespace SkyRoof
 
     public void SetPass(SatellitePass? pass)
     {
+      if (IsMoonTarget) return;
+
       // re-selecting the same pass must not disturb tracking (mirrors the SetSatellite guard); passes are
       // recomputed objects, so compare by identity (sat + orbit), not reference
       if (pass != null && Path?.Pass != null
@@ -89,6 +104,12 @@ namespace SkyRoof
 
     internal void Advance()
     {
+      if (IsMoonTarget)
+      {
+        AdvanceMoon();
+        return;
+      }
+
       if (Path == null) return;
 
       SatBearing = Path.GetSatelliteBearing()?.Normalize();
@@ -104,6 +125,49 @@ namespace SkyRoof
         if (AntBearing == null || AngleBetween(bearing, AntBearing) >= maxError)
           RotateTo(Path.GetNextAntennaBearing());
       }
+    }
+
+    private void AdvanceMoon()
+    {
+      SatBearing = GetMoonBearing(DateTime.UtcNow)?.Normalize();
+
+      if (SatBearing == null)
+      {
+        if (TrackCheckbox.Checked) StopRotation();
+        BearingToUi();
+        return;
+      }
+
+      BearingToUi();
+      ctx.Announcer.AnnouncePosition(SatBearing);
+
+      if (engine == null || !TrackCheckbox.Checked)
+        return;
+
+      double maxError =
+        0.5 * ctx.Settings.Rotator.StepSize * Geo.RinD;
+      Bearing requested = Sanitize(SatBearing);
+
+      if (AntBearing == null ||
+          AngleBetween(requested, AntBearing) >= maxError)
+        RotateTo(requested);
+    }
+
+    private Bearing? GetMoonBearing(DateTime utc)
+    {
+      Bearing? imported = MoonFileEphemeris?.GetBearing(utc);
+      if (imported != null) return imported;
+
+      if (!ctx.Settings.OrbitSources.UseBuiltInMoonFallback)
+        return null;
+
+      GeoPoint observer =
+        GridSquare.ToGeoPoint(ctx.Settings.User.Square);
+
+      return MoonEphemeris.GetBuiltInMoonBearing(
+        utc,
+        observer,
+        ctx.Settings.User.Altitude);
     }
 
     public void Retry()
@@ -133,7 +197,7 @@ namespace SkyRoof
     // so the schedule's tracking option is harmless while the rotator is off
     public void TrackPass(SatellitePass? pass)
     {
-      if (engine == null || pass == null) return;
+      if (IsMoonTarget || engine == null || pass == null) return;
 
       Path = new(pass, ctx.Settings.Rotator, AntBearing);
       TrackCheckbox.Enabled = true;
@@ -168,7 +232,8 @@ namespace SkyRoof
       if (!ctx.Settings.Rotator.Enabled) return "Rotator control disabled";
       else if (!IsRunning()) return "No connection";
       else if (!TrackCheckbox.Checked) return "Connected, tracking disabled";
-      else return "Connected and tracking";
+      else if (IsMoonTarget) return "Connected and tracking Moon / EME target";
+      else return "Connected and tracking selected satellite";
     }
 
     //----------------------------------------------------------------------------------------------
@@ -185,8 +250,12 @@ namespace SkyRoof
 
       if (TrackCheckbox.Checked)
       {
+        if (IsMoonTarget)
+        {
+          RotateTo(GetMoonBearing(DateTime.UtcNow));
+        }
         // auto-selection already set the exact pass in TrackPass; only rebuild for a manual check
-        if (!settingTrack && Path != null)
+        else if (!settingTrack && Path != null)
         {
           // re-optimize the path from the current antenna position, but keep the pass we already have while
           // it is still live: it is the exact pass the operator is tracking, and re-deriving it costs a full
@@ -216,6 +285,116 @@ namespace SkyRoof
       StopRotation();
     }
 
+    private void TargetBtn_Click(object sender, EventArgs e)
+    {
+      var menu = new ContextMenuStrip();
+
+      var satelliteItem = new ToolStripMenuItem("Selected Satellite")
+      {
+        Checked = !IsMoonTarget
+      };
+      satelliteItem.Click += (_, _) => SelectSatelliteTarget();
+
+      var moonItem = new ToolStripMenuItem("Moon / EME")
+      {
+        Checked = IsMoonTarget
+      };
+      moonItem.Click += (_, _) => SelectMoonTarget();
+
+      var loadItem = new ToolStripMenuItem("Load Moon Ephemeris CSV...");
+      loadItem.Click += (_, _) => LoadMoonEphemerisFile();
+
+      menu.Items.Add(satelliteItem);
+      menu.Items.Add(moonItem);
+      menu.Items.Add(new ToolStripSeparator());
+      menu.Items.Add(loadItem);
+      menu.Closed += (_, _) => menu.Dispose();
+      menu.Show(
+        TargetBtn,
+        new Point(0, TargetBtn.Height),
+        ToolStripDropDownDirection.BelowRight);
+    }
+
+    internal void ReloadOrbitSources()
+    {
+      MoonFileEphemeris = MoonEphemeris.TryLoad(
+        ctx.Settings.OrbitSources.MoonEphemerisFile);
+
+      TargetBtn.Text = IsMoonTarget ? "MOON" : "SAT";
+      toolTip1.SetToolTip(
+        TargetBtn,
+        IsMoonTarget
+          ? "Tracking target: Moon / EME"
+          : "Tracking target: selected satellite");
+    }
+
+    private void SelectSatelliteTarget()
+    {
+      if (!IsMoonTarget) return;
+
+      StopRotation();
+      ctx.Settings.OrbitSources.RotatorTarget =
+        RotatorTrackingTarget.Satellite;
+      ctx.Settings.SaveToFile();
+
+      Path = null;
+      ReloadOrbitSources();
+      SetSatellite(ctx.SatelliteSelector.SelectedSatellite);
+      ResetUi();
+      Advance();
+      ctx.MainForm.ShowRotatorStatus();
+    }
+
+    private void SelectMoonTarget()
+    {
+      if (IsMoonTarget) return;
+
+      StopRotation();
+      ctx.Settings.OrbitSources.RotatorTarget =
+        RotatorTrackingTarget.Moon;
+      ctx.Settings.SaveToFile();
+
+      Path = null;
+      engine?.StopRotation();
+      ReloadOrbitSources();
+      ResetUi();
+      Advance();
+      toolTip1.SetToolTip(
+        TrackCheckbox,
+        "Track Moon using imported ephemeris or built-in topocentric lunar position");
+      ctx.MainForm.ShowRotatorStatus();
+    }
+
+    private void LoadMoonEphemerisFile()
+    {
+      using var dlg = new OpenFileDialog
+      {
+        Filter =
+          "Ephemeris CSV/Text (*.csv;*.txt)|*.csv;*.txt|All Files (*.*)|*.*",
+        Title = "Load Moon / EME Observer Ephemeris"
+      };
+
+      if (!string.IsNullOrWhiteSpace(
+            ctx.Settings.OrbitSources.MoonEphemerisFile))
+        dlg.FileName =
+          ctx.Settings.OrbitSources.MoonEphemerisFile;
+
+      if (dlg.ShowDialog(this) != DialogResult.OK)
+        return;
+
+      ctx.Settings.OrbitSources.MoonEphemerisFile = dlg.FileName;
+      ctx.Settings.OrbitSources.RotatorTarget =
+        RotatorTrackingTarget.Moon;
+      ctx.Settings.SaveToFile();
+
+      StopRotation();
+      Path = null;
+      ReloadOrbitSources();
+      ResetUi();
+      Advance();
+      ctx.MainForm.ShowRotatorStatus();
+    }
+
     private void ResetUi()
     {
       SatelliteAzimuthLabel.ForeColor = Color.Gray;
@@ -227,13 +406,28 @@ namespace SkyRoof
       AntennaElevationLabel.Text = "---";
 
       TrackCheckbox.Checked = false;
-      TrackCheckbox.Enabled = ctx.Settings.Rotator.Enabled && Path != null;
+      TrackCheckbox.Enabled =
+        ctx.Settings.Rotator.Enabled &&
+        (IsMoonTarget || Path != null);
+
+      TargetBtn.Text = IsMoonTarget ? "MOON" : "SAT";
     }
 
     private void BearingToUi()
     {
-      var realSatBearing = Path?.GetRealSatelliteBearing();
-      if (realSatBearing == null || SatBearing == null) { ResetUi(); return; }
+      var realSatBearing =
+        IsMoonTarget
+          ? SatBearing
+          : Path?.GetRealSatelliteBearing();
+
+      if (realSatBearing == null || SatBearing == null)
+      {
+        SatelliteAzimuthLabel.ForeColor = Color.Gray;
+        SatelliteElevationLabel.ForeColor = Color.Gray;
+        SatelliteAzimuthLabel.Text = "---";
+        SatelliteElevationLabel.Text = "---";
+        return;
+      }
 
       Color satColor = TrackCheckbox.Checked ? Color.Aqua : Color.Teal;
 
