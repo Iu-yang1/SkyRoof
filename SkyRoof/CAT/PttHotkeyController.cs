@@ -16,6 +16,7 @@ namespace SkyRoof
     private readonly LowLevelKeyboardProc Proc;
     private IntPtr Hook;
     private bool KeyHeld;
+    private bool HotkeyAssertedPtt;
     private bool Disposed;
 
     internal PttHotkeyController(Context ctx)
@@ -84,13 +85,25 @@ namespace SkyRoof
                 !KeyHeld)
             {
               KeyHeld = true;
-              DispatchPtt(true);
+
+              // If another client already has the rig keyed, the physical key
+              // did not create this transmission and must not release it later.
+              HotkeyAssertedPtt =
+                Ctx.CatControl.Tx?.CanPtt() == true &&
+                Ctx.CatControl.Tx.Ptt != true;
+
+              if (HotkeyAssertedPtt)
+                DispatchPtt(true);
             }
             else if ((message == WmKeyUp || message == WmSysKeyUp) &&
                      KeyHeld)
             {
               KeyHeld = false;
-              DispatchPtt(false);
+
+              if (HotkeyAssertedPtt)
+                DispatchPtt(false);
+
+              HotkeyAssertedPtt = false;
             }
 
             if (Ctx.Settings.Cat.SuppressPttHotkey)
@@ -133,7 +146,8 @@ namespace SkyRoof
 
     private void ReleaseOwnedPtt()
     {
-      if (!KeyHeld) return;
+      if (!KeyHeld || !HotkeyAssertedPtt)
+        return;
 
       try
       {
@@ -143,6 +157,10 @@ namespace SkyRoof
       {
         Log.Warning(ex, "Unable to release physical-key PTT.");
       }
+      finally
+      {
+        HotkeyAssertedPtt = false;
+      }
     }
 
     public void Dispose()
@@ -150,7 +168,7 @@ namespace SkyRoof
       if (Disposed) return;
       Disposed = true;
 
-      if (KeyHeld)
+      if (KeyHeld && HotkeyAssertedPtt)
       {
         try
         {
@@ -160,9 +178,10 @@ namespace SkyRoof
         {
           Log.Warning(ex, "Unable to release physical-key PTT during shutdown.");
         }
-
-        KeyHeld = false;
       }
+
+      KeyHeld = false;
+      HotkeyAssertedPtt = false;
 
       if (Hook != IntPtr.Zero)
       {
