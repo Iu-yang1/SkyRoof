@@ -135,6 +135,24 @@ namespace SkyRoof
       RequestedPtt = ptt;
     }
 
+    internal void ReleaseApplicationPtt()
+    {
+      // A momentary control must never unkey a transmission that it did not
+      // create. If its ON request is still only queued, cancel it. Once an ON
+      // write was attempted (including a timeout) or confirmed, request OFF
+      // and let the normal readback/retry path verify release.
+      if (PttMayBeOwnedByApplication)
+      {
+        LogInfo("ReleaseApplicationPtt: requesting PTT OFF");
+        RequestedPtt = false;
+      }
+      else if (RequestedPtt == true)
+      {
+        LogInfo("ReleaseApplicationPtt: canceling unsent PTT ON");
+        RequestedPtt = null;
+      }
+    }
+
     // called whenever the transmitter settings are applied, including on every Doppler update,
     // so the radio is written to only when the tone or the on/off state actually changes
     public void SetCtcssTone(double toneHz, bool enabled)
