@@ -587,11 +587,6 @@ namespace SkyRoof
 
         await ctx.SatnogsDb.DownloadTle();
 
-        int customCount = await ctx.SatnogsDb.LoadCustomTleSourcesAsync(
-          ctx.Settings.OrbitSources.CustomTleSources);
-        if (customCount > 0)
-          Log.Information($"Custom TLE overlay applied: {customCount} records");
-
         DownloadOk = true;
         Log.Information("TLE downloaded");
         return true;
