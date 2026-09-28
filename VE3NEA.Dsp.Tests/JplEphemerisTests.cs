@@ -117,6 +117,85 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void CustomTleSources_FirstEntryHasHighestPriority()
+    {
+      SatnogsDb.GetCustomTleApplyOrder(
+          "first.txt;second.txt;third.txt")
+        .Should().Equal(
+          "third.txt",
+          "second.txt",
+          "first.txt");
+    }
+
+    [Fact]
+    public void JplDownloadProgress_ComputesPercentageWhenLengthIsKnown()
+    {
+      new JplDownloadProgress(
+          1,
+          2,
+          "https://example.invalid/de440s.bsp",
+          25,
+          100)
+        .Percent.Should().Be(25);
+
+      new JplDownloadProgress(
+          1,
+          2,
+          "https://example.invalid/de440s.bsp",
+          25,
+          null)
+        .Percent.Should().BeNull();
+    }
+
+    [Fact]
+    public void SolarSystemGroup_ContainsMoonSunAndVenusAfterKernelActivation()
+    {
+      string path =
+        Path.Combine(
+          Path.GetTempPath(),
+          $"skyroof-jpl-solar-{Guid.NewGuid():N}.bsp");
+
+      try
+      {
+        File.WriteAllBytes(
+          path,
+          BuildSyntheticKernel());
+
+        var settings =
+          new OrbitSourceSettings
+          {
+            JplKernel = JplEphemerisKernel.CustomFile,
+            JplKernelFile = path,
+            ShowSolarSystemTargets = true
+          };
+        var db = new SatnogsDb();
+        db.ConfigureSources(settings);
+
+        db.ConfigureSolarSystem(settings)
+          .Should().Be(3);
+
+        var satelliteSettings =
+          new SatelliteSettings();
+        satelliteSettings.EnsureSolarSystemGroup(db);
+
+        SatelliteGroup group =
+          satelliteSettings.SatelliteGroups
+            .Single(
+              g =>
+                g.Id == "solar-system-ephemeris");
+
+        group.SatelliteIds.Should().Equal(
+          SatnogsDb.MoonSatId,
+          SatnogsDb.SunSatId,
+          SatnogsDb.VenusSatId);
+      }
+      finally
+      {
+        try { File.Delete(path); } catch { }
+      }
+    }
+
+    [Fact]
     public void OrbitSourceSettings_ExposePrimaryUrlsAndJplFallbacks()
     {
       var settings =
@@ -147,8 +226,6 @@ namespace VE3NEA.Dsp.Tests
     private static byte[] BuildSyntheticKernel()
     {
       byte[] data = new byte[3 * 1024];
-      bool littleEndian = true;
-
       WriteAscii(data, 0, 8, "DAF/SPK ");
       WriteInt32(data, 8, 2);
       WriteInt32(data, 12, 6);
@@ -160,7 +237,7 @@ namespace VE3NEA.Dsp.Tests
       int summaryRecord = 1024;
       WriteDouble(data, summaryRecord, 0);
       WriteDouble(data, summaryRecord + 8, 0);
-      WriteDouble(data, summaryRecord + 16, 3);
+      WriteDouble(data, summaryRecord + 16, 5);
 
       int firstAddress = 257;
 
@@ -188,6 +265,22 @@ namespace VE3NEA.Dsp.Tests
         firstAddress + 18,
         firstAddress + 26);
 
+      WriteSummary(
+        data,
+        summaryRecord + 24 + 120,
+        target: 10,
+        center: 0,
+        firstAddress + 27,
+        firstAddress + 35);
+
+      WriteSummary(
+        data,
+        summaryRecord + 24 + 160,
+        target: 2,
+        center: 0,
+        firstAddress + 36,
+        firstAddress + 44);
+
       int offset = 2048;
       WriteType2ConstantRecord(
         data,
@@ -210,6 +303,20 @@ namespace VE3NEA.Dsp.Tests
         500,
         600);
 
+      WriteType2ConstantRecord(
+        data,
+        offset + 27 * 8,
+        149_600_000,
+        0,
+        0);
+
+      WriteType2ConstantRecord(
+        data,
+        offset + 36 * 8,
+        108_200_000,
+        1_000,
+        2_000);
+
       return data;
     }
 
@@ -221,8 +328,8 @@ namespace VE3NEA.Dsp.Tests
       int firstAddress,
       int lastAddress)
     {
-      WriteDouble(data, offset, -86400);
-      WriteDouble(data, offset + 8, 86400);
+      WriteDouble(data, offset, -2_000_000_000);
+      WriteDouble(data, offset + 8, 2_000_000_000);
       WriteInt32(data, offset + 16, target);
       WriteInt32(data, offset + 20, center);
       WriteInt32(data, offset + 24, 1);
@@ -240,14 +347,15 @@ namespace VE3NEA.Dsp.Tests
     {
       // RSIZE=5 -> [MID,RADIUS,X,Y,Z], one coefficient per component.
       WriteDouble(data, offset, 0);
-      WriteDouble(data, offset + 8, 86400);
+      WriteDouble(data, offset + 8, 2_000_000_000);
       WriteDouble(data, offset + 16, x);
       WriteDouble(data, offset + 24, y);
       WriteDouble(data, offset + 32, z);
 
-      // Segment tail: INIT, INTLEN, RSIZE, N.
-      WriteDouble(data, offset + 40, -86400);
-      WriteDouble(data, offset + 48, 172800);
+      // Segment tail: INIT, INTLEN, RSIZE, N. Use a broad synthetic
+      // interval so ConfigureSolarSystem can validate the current UTC date.
+      WriteDouble(data, offset + 40, -2_000_000_000);
+      WriteDouble(data, offset + 48, 4_000_000_000);
       WriteDouble(data, offset + 56, 5);
       WriteDouble(data, offset + 64, 1);
     }

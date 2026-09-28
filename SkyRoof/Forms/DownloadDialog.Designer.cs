@@ -62,11 +62,11 @@
       // 
       // ErrorLabel
       // 
-      ErrorLabel.AutoSize = true;
+      ErrorLabel.AutoEllipsis = true;
       ErrorLabel.ForeColor = Color.Red;
       ErrorLabel.Location = new Point(12, 68);
       ErrorLabel.Name = "ErrorLabel";
-      ErrorLabel.Size = new Size(58, 15);
+      ErrorLabel.Size = new Size(340, 20);
       ErrorLabel.TabIndex = 3;
       ErrorLabel.Text = "                 ";
       // 

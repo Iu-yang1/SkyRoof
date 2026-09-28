@@ -78,8 +78,11 @@ supported. For example:
 http://autotle.bi4pym.cn/AutoTLE.txt
 ```
 
-Custom TLE feeds are applied after the primary source, so they can override an existing NORAD
-object and can also add tracking-only objects that are not present in the SatNOGS database.
+Custom TLE feeds are the highest-priority orbit source and are applied after the primary source,
+so they override an existing NORAD object's current TLE and can also add tracking-only objects
+that are not present in the SatNOGS database. Within **Custom TLE Sources**, entries are ordered
+from highest to lowest priority: the first source wins over the second, the second over the third,
+and so on.
 
 SatNOGS obtains these data from different sources and makes the latest and most reliable data
 available on their web site. The source of TLE and its creation time are shown in the
@@ -99,8 +102,14 @@ no large BSP file; it downloads the selected kernel into the user data cache whe
 
 The DE440s and DE421 download source lists are editable in the same **Orbit / Ephemeris Sources**
 settings section. Each default list contains two official NASA/JPL endpoints (NAIF first, SSD
-second), and SkyRoof tries them in order. Large-kernel downloads use a 15-minute HTTP timeout.
-You can remove, reorder or replace either URL, or use **Load SPK/BSP From File** for a local copy.
+second), and SkyRoof tries them in order. Large-kernel downloads use a 15-minute HTTP timeout and
+show the same modal progress style as the satellite-data updater, including source number, bytes,
+percentage, and cancellation. You can remove, reorder or replace either URL, or use
+**Load SPK/BSP From File** for a local copy.
+
+After a compatible DE440s/DE421 kernel is activated, **Moon**, **Sun**, and **Venus** are added as
+tracking-only objects and the managed **Solar System** group is immediately available in
+**Satellites and Groups**.
 
 ## Automatic Updates
 

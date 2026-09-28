@@ -46,7 +46,7 @@ namespace SkyRoof
 
     [Category("TLE")]
     [DisplayName("Custom TLE Sources")]
-    [Description("Additional TLE URLs or local file paths, separated by semicolons or new lines. These are applied after the primary TLE update and may add NORAD objects not present in SatNOGS. Plain 2-line/3-line TLE text and SatNOGS-style JSON are supported.")]
+    [Description("Highest-priority TLE overlay. Enter URLs or local file paths separated by semicolons or new lines. Earlier entries have higher priority than later entries, and all custom sources override the Primary TLE URL for matching NORAD objects. Plain 2-line/3-line TLE text and SatNOGS-style JSON are supported.")]
     public string CustomTleSources { get; set; } = string.Empty;
 
     [Category("JPL ephemeris")]
