@@ -4,7 +4,7 @@
 
 ### Current Version
 
-[SkyRoof v.1.54](https://github.com/VE3NEA/SkyRoof/releases/download/v.1.54/SkyRoofSetup-v.1.54.exe)
+[SkyRoof v.1.55](https://github.com/VE3NEA/SkyRoof/releases/download/v.1.55/SkyRoofSetup-v.1.55.exe)
 
 <br>
 
@@ -15,6 +15,11 @@ See [All Releases](https://github.com/VE3NEA/SkyRoof/releases)
 <br>
 
 ### Release Notes
+
+#### v.1.55
+
+- QSO structure updated for interface with ACLog by Keith KV5J
+- Auto Selection tunes to next satellite 30 s after LOS
 
 #### v.1.54
 
