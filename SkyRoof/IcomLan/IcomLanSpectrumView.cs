@@ -36,6 +36,8 @@ namespace SkyRoof
     private bool WaterfallVisible = true;
     private int WaterfallBrightness;
     private int WaterfallContrast = 100;
+    // Display-only noise floor, never changes the raw IC-9700 waveform.
+    private int DisplayNoiseFloor;
     private IcomScopeWaterfallPalette WaterfallPalette =
       IcomScopeWaterfallPalette.Classic;
 
@@ -356,6 +358,14 @@ namespace SkyRoof
 
         LatestFrame = frame;
 
+        if (frame.SweepComplete)
+        {
+          int observedFloor = EstimateNoiseFloor(frame.Samples);
+          DisplayNoiseFloor = observedFloor == 0 || DisplayNoiseFloor == 0
+            ? observedFloor
+            : (3 * DisplayNoiseFloor + observedFloor + 2) / 4;
+        }
+
         if (AverageSweepCount <= 1)
         {
           Buffer.BlockCopy(
@@ -459,6 +469,7 @@ namespace SkyRoof
       Array.Clear(PeakSamples);
       PeakValid = false;
       HistoryShiftResidualBins = 0;
+      DisplayNoiseFloor = 0;
       ResetAveragingLocked();
       WaterfallDirty = true;
     }
@@ -847,6 +858,7 @@ namespace SkyRoof
       byte[] peakSamples =
         new byte[ScopePoints];
       bool peakVisible;
+      int displayNoiseFloor;
 
       lock (DataSync)
       {
@@ -866,6 +878,7 @@ namespace SkyRoof
         peakVisible =
           PeakEnabled &&
           PeakValid;
+        displayNoiseFloor = DisplayNoiseFloor;
         RebuildWaterfallBitmapIfNeeded();
       }
 
@@ -902,6 +915,7 @@ namespace SkyRoof
         samples,
         peakSamples,
         peakVisible,
+        displayNoiseFloor,
         frame,
         scopeBack,
         textColor);
@@ -1883,6 +1897,7 @@ namespace SkyRoof
       byte[] samples,
       byte[] peakSamples,
       bool peakVisible,
+      int displayNoiseFloor,
       IcomScopeFrame? frame,
       Color background,
       Color textColor)
@@ -1942,7 +1957,8 @@ namespace SkyRoof
         plot,
         samples,
         HorizontalZoomFactor,
-        HorizontalZoomCenter);
+        HorizontalZoomCenter,
+        displayNoiseFloor);
 
       if (peakVisible)
         DrawPeakTrace(
@@ -1950,7 +1966,8 @@ namespace SkyRoof
           plot,
           peakSamples,
           HorizontalZoomFactor,
-          HorizontalZoomCenter);
+          HorizontalZoomCenter,
+          displayNoiseFloor);
 
       DrawFrequencyMarker(
         graphics,
@@ -2114,7 +2131,8 @@ namespace SkyRoof
       Rectangle plot,
       byte[] samples,
       double zoomFactor,
-      double zoomCenter)
+      double zoomCenter,
+      int noiseFloor)
     {
       DrawSampleTrace(
         graphics,
@@ -2122,6 +2140,7 @@ namespace SkyRoof
         samples,
         zoomFactor,
         zoomCenter,
+        noiseFloor,
         Theme.SpectrumTrace,
         1.25f,
         DashStyle.Solid);
@@ -2140,6 +2159,7 @@ namespace SkyRoof
         samples,
         zoomFactor,
         zoomCenter,
+        noiseFloor,
         Theme.SpectrumPeak,
         1.0f,
         DashStyle.Dot);
@@ -2151,6 +2171,7 @@ namespace SkyRoof
       byte[] samples,
       double zoomFactor,
       double zoomCenter,
+      int noiseFloor,
       Color color,
       float width,
       DashStyle dashStyle)
@@ -2213,10 +2234,7 @@ namespace SkyRoof
             (plot.Width - 1));
 
         float normalized =
-          Math.Clamp(
-            samples[i] / 160f,
-            0f,
-            1f);
+          MapSpectrumLevel(samples[i], noiseFloor) / 160f;
 
         float y =
           plot.Bottom -
@@ -2702,9 +2720,9 @@ namespace SkyRoof
         WaterfallArgbRow[x] =
           Palette[
             MapWaterfallLevel(
-              row[x],
-              WaterfallBrightness,
-              WaterfallContrast)];
+                MapAdaptiveWaterfallLevel(row[x], DisplayNoiseFloor),
+                WaterfallBrightness,
+                WaterfallContrast)];
 
       Rectangle rect =
         new(
@@ -2756,7 +2774,7 @@ namespace SkyRoof
           WaterfallArgb[index++] =
             Palette[
               MapWaterfallLevel(
-                row[x],
+                MapAdaptiveWaterfallLevel(row[x], DisplayNoiseFloor),
                 WaterfallBrightness,
                 WaterfallContrast)];
       }
@@ -2918,6 +2936,41 @@ namespace SkyRoof
           GraphicsUnit.Pixel);
       }
     }
+
+    // Raw CI-V levels are not calibrated dBm. Only the display is remapped.
+    // A 40th-percentile baseline resists narrowband signal peaks.
+    internal static int EstimateNoiseFloor(ReadOnlySpan<byte> samples)
+    {
+      Span<int> histogram = stackalloc int[161];
+      int validCount = 0;
+      foreach (byte sample in samples)
+      {
+        if (sample > 160) continue;
+        histogram[sample]++;
+        validCount++;
+      }
+
+      if (validCount == 0) return 0;
+
+      int target = (validCount * 40 + 99) / 100;
+      int count = 0;
+      for (int i = 0; i < histogram.Length; i++)
+      {
+        count += histogram[i];
+        if (count >= target) return i;
+      }
+      return 0;
+    }
+
+    internal static int MapSpectrumLevel(int level, int noiseFloor) =>
+      noiseFloor <= 0
+        ? Math.Clamp(level, 0, 160)
+        : Math.Clamp((int)Math.Round(62 + (level - noiseFloor) * 2.25), 0, 160);
+
+    internal static int MapAdaptiveWaterfallLevel(int level, int noiseFloor) =>
+      noiseFloor <= 0
+        ? Math.Clamp(level, 0, 160)
+        : Math.Clamp((int)Math.Round(30 + (level - noiseFloor) * 3.2), 0, 160);
 
     internal static int MapWaterfallLevel(
       int level,
