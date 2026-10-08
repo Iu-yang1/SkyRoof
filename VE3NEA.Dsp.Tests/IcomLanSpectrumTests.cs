@@ -888,6 +888,110 @@ namespace VE3NEA.Dsp.Tests
     }
 
 
+    [Fact]
+    public void ScopeHistoryShift_MovingCenterUpShiftsHistoryLeft()
+    {
+      var previous =
+        new IcomScopeFrame
+        {
+          Mode =
+            (byte)IcomScopeMode.Center,
+          FrequencyAHz =
+            435_600_000,
+          FrequencyBHz =
+            474_000
+        };
+
+      var current =
+        new IcomScopeFrame
+        {
+          Mode =
+            (byte)IcomScopeMode.Center,
+          FrequencyAHz =
+            435_601_000,
+          FrequencyBHz =
+            474_000
+        };
+
+      int shift =
+        IcomLanSpectrumView
+          .CalculateHistoryShiftBins(
+            previous.Geometry,
+            current.Geometry,
+            0,
+            out double residual);
+
+      shift.Should().Be(-1);
+      residual.Should()
+        .BeApproximately(
+          0,
+          1e-12);
+    }
+
+    [Fact]
+    public void ScopeHistoryShift_AccumulatesSubBinDopplerMotion()
+    {
+      var first =
+        new IcomScopeFrame
+        {
+          Mode =
+            (byte)IcomScopeMode.Center,
+          FrequencyAHz =
+            435_600_000,
+          FrequencyBHz =
+            474_000
+        };
+
+      var second =
+        new IcomScopeFrame
+        {
+          Mode =
+            (byte)IcomScopeMode.Center,
+          FrequencyAHz =
+            435_600_400,
+          FrequencyBHz =
+            474_000
+        };
+
+      var third =
+        new IcomScopeFrame
+        {
+          Mode =
+            (byte)IcomScopeMode.Center,
+          FrequencyAHz =
+            435_600_800,
+          FrequencyBHz =
+            474_000
+        };
+
+      IcomLanSpectrumView
+        .CalculateHistoryShiftBins(
+          first.Geometry,
+          second.Geometry,
+          0,
+          out double residual1)
+        .Should().Be(0);
+
+      residual1.Should()
+        .BeApproximately(
+          -0.4,
+          1e-12);
+
+      IcomLanSpectrumView
+        .CalculateHistoryShiftBins(
+          second.Geometry,
+          third.Geometry,
+          residual1,
+          out double residual2)
+        .Should().Be(-1);
+
+      residual2.Should()
+        .BeApproximately(
+          0.2,
+          1e-12);
+    }
+
+
     [Theory]
     [InlineData(0, 0, 100, 0)]
     [InlineData(80, 0, 100, 80)]
