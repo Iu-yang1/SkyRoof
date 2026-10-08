@@ -103,6 +103,12 @@ namespace SkyRoof
     public IcomScopeVbw ScopeVbw { get; set; } =
       IcomScopeVbw.Wide;
 
+    [DisplayName("Scope RBW")]
+    [Description("IC-9700 scope resolution bandwidth. The current SkyRoof UI treats this as one operator preference and applies it to MAIN and SUB.")]
+    [DefaultValue(IcomScopeRbw.Wide)]
+    public IcomScopeRbw ScopeRbw { get; set; } =
+      IcomScopeRbw.Wide;
+
     [DisplayName("Fixed/scroll marker position")]
     [Description("IC-9700 marker reference for FIXED and SCROLL modes.")]
     [DefaultValue(IcomScopeMarkerPosition.FilterCenter)]
