@@ -148,14 +148,18 @@ namespace SkyRoof
 
       return verb switch
       {
-        "SCOPE_SELECT" =>
-          "SCOPE_SELECT",
+        "SCOPE_SELECT" or
+        "SCOPE_TX" or
+        "SCOPE_CENTER_TYPE" or
+        "SCOPE_MARKER" =>
+          verb,
 
         "SCOPE_MODE" or
         "SCOPE_SPAN" or
         "SCOPE_EDGE" or
         "SCOPE_REF" or
-        "SCOPE_SPEED"
+        "SCOPE_SPEED" or
+        "SCOPE_VBW"
           when parts.Length >= 3 =>
             $"{verb} {parts[2]}",
 
