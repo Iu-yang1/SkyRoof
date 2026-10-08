@@ -124,6 +124,95 @@ public sealed class CustomTransmitterTests
     }
 
     [Fact]
+    public void RemovingLocalDefinitionOnlyDeletesMatchingUuid()
+    {
+        var definitions =
+            new CustomTransmitterDefinitionList
+            {
+                new()
+                {
+                    uuid = "local-a",
+                    description = "A",
+                    downlink_hz = 145900000
+                },
+                new()
+                {
+                    uuid = "local-b",
+                    description = "B",
+                    uplink_hz = 435250000
+                }
+            };
+
+        Assert.True(
+            SatnogsDb.RemoveCustomTransmitterDefinition(
+                definitions,
+                "LOCAL-A"));
+
+        Assert.Single(definitions);
+        Assert.Equal(
+            "local-b",
+            definitions[0].uuid);
+    }
+
+    [Fact]
+    public void RemovingUnknownLocalDefinitionDoesNothing()
+    {
+        var definitions =
+            new CustomTransmitterDefinitionList
+            {
+                new()
+                {
+                    uuid = "local-a",
+                    description = "A",
+                    downlink_hz = 145900000
+                }
+            };
+
+        Assert.False(
+            SatnogsDb.RemoveCustomTransmitterDefinition(
+                definitions,
+                "local-missing"));
+
+        Assert.Single(definitions);
+    }
+
+    [Fact]
+    public void RemovingTransmitterCustomizationClearsSelectedLocalId()
+    {
+        var satellite =
+            new SatnogsDbSatellite
+            {
+                sat_id = "TEST-SAT",
+                norad_cat_id = 12345,
+                name = "TEST"
+            };
+
+        var settings =
+            new SatelliteSettings();
+        settings.TransmitterCustomizations["local-a"] =
+            new TransmitterCustomization
+            {
+                uuid = "local-a"
+            };
+        settings.SatelliteCustomizations["TEST-SAT"] =
+            new SatelliteCustomization
+            {
+                SelectedTransmitterId = "local-a"
+            };
+
+        settings.RemoveTransmitterCustomization(
+            satellite,
+            "local-a");
+
+        Assert.False(
+            settings.TransmitterCustomizations.ContainsKey(
+                "local-a"));
+        Assert.Null(
+            settings.SatelliteCustomizations["TEST-SAT"]
+                .SelectedTransmitterId);
+    }
+
+    [Fact]
     public void BothDirectionsArePreserved()
     {
         var satellite =
