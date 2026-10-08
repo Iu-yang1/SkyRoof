@@ -51,6 +51,7 @@ namespace SkyRoof
     private bool UpdatingScopeControlUi;
     private bool SpanEdgeShowsSpan = true;
     private int PendingEdgeSyncScope = -1;
+    private bool ScopeControlDefaultsAppliedForSession;
 
     public IcomLanSpectrumPanel(Context ctx)
     {
@@ -689,6 +690,7 @@ namespace SkyRoof
       DisplayFps = 0;
       LastRenderedScopeFrameTicks = 0;
       LastStatsUsedNativeLan = false;
+      ScopeControlDefaultsAppliedForSession = false;
 
       StartStopBtn.Text = "Stop";
       StatusLabel.Text = settings.Source switch
@@ -741,6 +743,7 @@ namespace SkyRoof
       // rate-limit state into a later source/session.
       ScopeController.Reset();
       PendingEdgeSyncScope = -1;
+      ScopeControlDefaultsAppliedForSession = false;
       ScopeState.Clear();
       LastRenderedScopeFrameTicks = 0;
 
@@ -1067,7 +1070,7 @@ namespace SkyRoof
       return false;
     }
 
-    private bool CanUseSkyCatScopeControl()
+    private bool IsSkyCatScopeControlConfigured()
     {
       IcomLanSpectrumSettings settings =
         ctx.Settings.IcomLanSpectrum;
@@ -1081,6 +1084,10 @@ namespace SkyRoof
           settings.ControlPath) ==
           IcomScopeControlPath.SkyCat;
     }
+
+    private bool CanUseSkyCatScopeControl() =>
+      IsSkyCatScopeControlConfigured() &&
+      ctx.CatControl.HasIcomScopeControlBackend;
 
     private void UpdateScopeControlAvailability()
     {
@@ -1292,6 +1299,15 @@ namespace SkyRoof
       IcomLanSpectrumCapture? capture = Capture;
       if (capture == null)
         return;
+
+      if (!ScopeControlDefaultsAppliedForSession &&
+          IsSkyCatScopeControlConfigured() &&
+          CanUseSkyCatScopeControl())
+      {
+        RequestScopeOutputIfDue(
+          force: true);
+        QueueSavedScopeControlsIfWritable();
+      }
 
       DateTime now = DateTime.UtcNow;
       IcomLanSpectrumCapture? nativeLan = NativeLanAssistCapture;
@@ -1550,6 +1566,7 @@ namespace SkyRoof
               4)));
         PendingEdgeSyncScope = -1;
       }
+      ScopeControlDefaultsAppliedForSession = true;
     }
 
     internal void ApplyDisplaySettings()
@@ -1559,6 +1576,8 @@ namespace SkyRoof
 
     internal void ApplyControlSettings()
     {
+      ScopeControlDefaultsAppliedForSession = false;
+
       // HOLD is an atomic display snapshot. Settings may be edited while the
       // snapshot is frozen, but do not swap the displayed scope/geometry under
       // the frozen trace. The saved values are applied when HOLD is released.
