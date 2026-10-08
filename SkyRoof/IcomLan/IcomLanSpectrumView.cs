@@ -2151,7 +2151,8 @@ namespace SkyRoof
       Rectangle plot,
       byte[] samples,
       double zoomFactor,
-      double zoomCenter)
+      double zoomCenter,
+      int noiseFloor)
     {
       DrawSampleTrace(
         graphics,
