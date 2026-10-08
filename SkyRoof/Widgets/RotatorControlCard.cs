@@ -282,7 +282,6 @@ namespace SkyRoof
     }
 
     private void Wheel_JogRequested(
-      object? sender,
       RotatorJogDirection direction)
     {
       if (rotator == null) return;
@@ -379,7 +378,7 @@ namespace SkyRoof
     internal Bearing? TargetBearing { get; set; }
     internal Bearing? SatelliteBearing { get; set; }
 
-    internal event EventHandler<RotatorJogDirection>? JogRequested;
+    internal event Action<RotatorJogDirection>? JogRequested;
     internal event EventHandler? StopRequested;
 
     internal RotatorDirectionWheel()
@@ -560,7 +559,6 @@ namespace SkyRoof
       }
 
       JogRequested?.Invoke(
-        this,
         PressedDirection);
 
       RepeatTimer.Interval = 350;
@@ -607,7 +605,6 @@ namespace SkyRoof
       RepeatTimer.Interval = 130;
 
       JogRequested?.Invoke(
-        this,
         PressedDirection);
     }
 
