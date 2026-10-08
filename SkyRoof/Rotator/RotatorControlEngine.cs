@@ -30,6 +30,10 @@ namespace SkyRoof
 
     protected override bool Setup()
     {
+      // A reconnect may be to a restarted rotctld/controller. Its actual position
+      // and the last accepted target are no longer known; resend any pending target.
+      LastReadBearing = null;
+      LastWrittenBearing = null;
       return true;
     }
 
@@ -88,49 +92,51 @@ namespace SkyRoof
 
     private void WriteBearing()
     {
-      if (RequestedBearing == LastWrittenBearing) return;
+      // Snapshot the target: a UI request may change while a TCP write is pending.
+      var requested = RequestedBearing;
+      if (requested == null || requested == LastWrittenBearing) return;
 
-      try
-      {
-        SendWriteCommand($"P {RequestedBearing!.AzDeg.ToString("F1", CultureInfo.InvariantCulture)} " + 
-          $"{RequestedBearing.ElDeg.ToString("F1", CultureInfo.InvariantCulture)}");
-      }
-      catch (Exception ex)
-      {
-        Log.Error(ex, $"Error sending rotator position command.");
-      }
-
-      LastWrittenBearing = RequestedBearing;
+      // A rejected command must remain pending for the next cycle. Transport
+      // exceptions propagate to ControlEngine so it can reconnect.
+      if (SendWriteCommand($"P {requested.AzDeg.ToString("F1", CultureInfo.InvariantCulture)} " +
+        $"{requested.ElDeg.ToString("F1", CultureInfo.InvariantCulture)}"))
+        LastWrittenBearing = requested;
     }
 
     private void ReadBearing()
     {
-      string? reply = null;
-      try
+      // Hamlib rotctld's 'p' reply consists of TWO newline-terminated lines:
+      // azimuth followed by elevation. SendReadCommand consumes only the first
+      // line, and ReadLine retains any already-received second line in its buffer.
+      string? azimuthLine = SendReadCommand("p");
+      if (azimuthLine == null) return;
+
+      // A failed query returns a single "RPRT <code>" line; do not block waiting
+      // for an elevation that will never arrive.
+      if (azimuthLine.StartsWith("RPRT ", StringComparison.Ordinal))
       {
-        reply = SendReadCommand("p");
+        BadReply(azimuthLine);
+        return;
       }
-      catch (Exception ex)
+
+      string elevationLine = ReadLine().Trim();
+      if (log) Log.Information("Rotator position reply: {Azimuth} / {Elevation}",
+        azimuthLine, elevationLine);
+
+      if (!double.TryParse(azimuthLine.Trim(), NumberStyles.Float,
+            CultureInfo.InvariantCulture, out double azimuth) ||
+          !double.TryParse(elevationLine, NumberStyles.Float,
+            CultureInfo.InvariantCulture, out double elevation) ||
+          !double.IsFinite(azimuth) || !double.IsFinite(elevation))
       {
-        Log.Error(ex, $"Error sending rotator position read command.");
+        BadReply($"{azimuthLine} / {elevationLine}");
+        return;
       }
-      if (reply == null) return;
 
-      var parts = reply.Trim().Split('\n');
-      if(parts.Length == 1) 
-        parts = (reply + ReadLine()).Trim().Split('\n');
-      if (log) Log.Information($"Rotator reply parsed: {string.Join('|', parts)}");
-      if (parts.Length != 2) { BadReply(reply); return; }
-
-      if (!double.TryParse(parts[0], CultureInfo.InvariantCulture, out double azimuth)) { BadReply(reply); return; }
-      if (!double.TryParse(parts[1], CultureInfo.InvariantCulture, out double elevation)) { BadReply(reply); return; }
-
-      // Convert degrees from the protocol to radians for our Bearing class
       var bearing = new Bearing(
-        azimuth * Math.PI / 180.0, 
-        elevation * Math.PI / 180.0
-      );
-      
+        azimuth * Math.PI / 180.0,
+        elevation * Math.PI / 180.0);
+
       if (bearing == LastReadBearing) return;
 
       LastReadBearing = bearing;
