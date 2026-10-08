@@ -99,7 +99,7 @@ namespace SkyRoof
       // JE9PEL transmitters
       foreach (var t in Satellite.JE9PELtransmitters.OrderBy(t => t.Mode))
       {
-        var item = new ListViewItem([t.Name, t.Downlink, t.Uplink, t.Mode]);
+        var item = new ListViewItem([t.Mode, t.Downlink, t.Uplink, ""]);
         item.Group = listView1.Groups[2];
         item.ToolTipText = t.GetTooltipText();
 
