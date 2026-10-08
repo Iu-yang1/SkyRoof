@@ -31,6 +31,7 @@ namespace SkyRoof
     private readonly Button HoldBtn = new();
     private readonly Button PeakBtn = new();
     private readonly Button WaterfallBtn = new();
+    private readonly Button ReadbackBtn = new();
     private readonly ComboBox AverageBox = new();
     private readonly ComboBox ZoomBox = new();
     private readonly Button SettingsBtn = new();
@@ -56,6 +57,9 @@ namespace SkyRoof
     private bool SpanEdgeShowsSpan = true;
     private int PendingEdgeSyncScope = -1;
     private bool ScopeControlDefaultsAppliedForSession;
+    private bool ScopeReadbackRequestedForSession;
+    private IcomScopeReadbackState? LastScopeReadback;
+    private DateTime? LastScopeReadbackUtc;
     private CatControlEngine? LastScopeControlBackend;
 
     public IcomLanSpectrumPanel(Context ctx)
@@ -67,6 +71,9 @@ namespace SkyRoof
           request =>
             ctx.CatControl.RequestIcomScopeControl(
               request));
+
+      ctx.CatControl.IcomScopeReadbackReceived +=
+        CatControl_IcomScopeReadbackReceived;
 
       Text = "Icom LAN Spectrum";
       Name = "IcomLanSpectrumPanel";
@@ -590,6 +597,15 @@ namespace SkyRoof
         };
       toolbar.Controls.Add(ZoomBox);
 
+      ReadbackBtn.Text = "SYNC";
+      ReadbackBtn.AutoSize = true;
+      ReadbackBtn.Margin =
+        new Padding(0, 2, 6, 2);
+      ReadbackBtn.Click +=
+        (_, _) => RequestScopeReadback();
+      toolbar.Controls.Add(
+        ReadbackBtn);
+
       SettingsBtn.Text = "Settings…";
       SettingsBtn.AutoSize = true;
       SettingsBtn.Margin = new Padding(0, 2, 0, 2);
@@ -907,6 +923,9 @@ namespace SkyRoof
       LastRenderedScopeFrameTicks = 0;
       LastStatsUsedNativeLan = false;
       ScopeControlDefaultsAppliedForSession = false;
+      ScopeReadbackRequestedForSession = false;
+      LastScopeReadback = null;
+      LastScopeReadbackUtc = null;
       LastScopeControlBackend = null;
 
       StartStopBtn.Text = "Stop";
@@ -967,6 +986,9 @@ namespace SkyRoof
       ScopeController.Reset();
       PendingEdgeSyncScope = -1;
       ScopeControlDefaultsAppliedForSession = false;
+      ScopeReadbackRequestedForSession = false;
+      LastScopeReadback = null;
+      LastScopeReadbackUtc = null;
       LastScopeControlBackend = null;
       ScopeState.Clear();
       LastRenderedScopeFrameTicks = 0;
@@ -1349,6 +1371,132 @@ namespace SkyRoof
         enabled;
       VbwBox.Enabled =
         enabled;
+      ReadbackBtn.Enabled =
+        !LocalHold &&
+        CanUseSkyCatScopeControl();
+    }
+
+    private void RequestScopeReadback()
+    {
+      if (LocalHold ||
+          !CanUseSkyCatScopeControl())
+        return;
+
+      if (ctx.CatControl
+          .RequestIcomScopeReadback())
+      {
+        ScopeReadbackRequestedForSession =
+          true;
+        StatusLabel.Text =
+          "Reading IC-9700 scope settings through SkyCAT…";
+      }
+    }
+
+    private void CatControl_IcomScopeReadbackReceived(
+      IcomScopeReadbackState state)
+    {
+      if (IsDisposed ||
+          Disposing)
+        return;
+
+      try
+      {
+        BeginInvoke(
+          (Action)(() =>
+          {
+            if (!IsDisposed &&
+                !LocalHold)
+              ApplyScopeReadback(
+                state);
+          }));
+      }
+      catch (InvalidOperationException)
+      {
+        // Panel is closing.
+      }
+    }
+
+    private void ApplyScopeReadback(
+      IcomScopeReadbackState state)
+    {
+      LastScopeReadback =
+        state;
+      LastScopeReadbackUtc =
+        DateTime.UtcNow;
+
+      IcomLanSpectrumSettings settings =
+        ctx.Settings.IcomLanSpectrum;
+
+      byte activeScope;
+      if (!TryGetControlScope(
+            out activeScope))
+        activeScope =
+          state.SelectedScope;
+
+      if (activeScope == 1)
+      {
+        settings.ScopeEdgeNumber =
+          state.SubEdge;
+        settings.ScopeReferenceLevelDb =
+          state.SubReferenceDb;
+        settings.ScopeSweepSpeed =
+          state.SubSpeed;
+        settings.ScopeVbw =
+          state.SubVbw;
+      }
+      else
+      {
+        settings.ScopeEdgeNumber =
+          state.MainEdge;
+        settings.ScopeReferenceLevelDb =
+          state.MainReferenceDb;
+        settings.ScopeSweepSpeed =
+          state.MainSpeed;
+        settings.ScopeVbw =
+          state.MainVbw;
+      }
+
+      settings.ScopeDuringTx =
+        state.ScopeDuringTx;
+      settings.ScopeCenterType =
+        state.CenterType;
+      settings.ScopeMarkerPosition =
+        state.MarkerPosition;
+
+      ctx.Settings.SaveToFile();
+
+      UpdatingScopeControlUi = true;
+      try
+      {
+        ReferenceBox.Value =
+          (decimal)NormalizeReferenceLevel(
+            settings.ScopeReferenceLevelDb);
+        SweepSpeedBox.SelectedIndex =
+          Math.Clamp(
+            (int)settings.ScopeSweepSpeed,
+            0,
+            2);
+        VbwBox.SelectedIndex =
+          Math.Clamp(
+            (int)settings.ScopeVbw,
+            0,
+            1);
+
+        if (!SpanEdgeShowsSpan)
+          SpanEdgeBox.SelectedIndex =
+            Math.Clamp(
+              settings.ScopeEdgeNumber,
+              1,
+              4) -
+            1;
+      }
+      finally
+      {
+        UpdatingScopeControlUi = false;
+      }
+
+      StatusLabel.Text =
+        $"IC-9700 scope readback synchronized ({(activeScope == 1 ? "SUB" : "MAIN")}).";
     }
 
     private void SendScopeControlToBothReceivers(
@@ -1725,6 +1873,10 @@ namespace SkyRoof
           scopeBackend;
         ScopeControlDefaultsAppliedForSession =
           false;
+        ScopeReadbackRequestedForSession =
+          false;
+        LastScopeReadback = null;
+        LastScopeReadbackUtc = null;
         PendingEdgeSyncScope = -1;
         ScopeController.Reset();
       }
@@ -1805,6 +1957,18 @@ namespace SkyRoof
       (int Pending, long Dropped, long Rejected)? queueStats =
         ctx.CatControl.GetIcomScopeControlQueueStats();
 
+      if (!LocalHold &&
+          ScopeControlDefaultsAppliedForSession &&
+          !ScopeReadbackRequestedForSession &&
+          queueStats.HasValue &&
+          queueStats.Value.Pending == 0 &&
+          CanUseSkyCatScopeControl() &&
+          ctx.CatControl.RequestIcomScopeReadback())
+      {
+        ScopeReadbackRequestedForSession =
+          true;
+      }
+
       string controlQueue =
         queueStats.HasValue
           ? $" · Q {queueStats.Value.Pending:N0}" +
@@ -1816,6 +1980,9 @@ namespace SkyRoof
         $"Data {FormatSpectrumSource(spectrumSettings.Source)} · " +
         $"Transport {radio} · Ctrl {FormatControlPath(resolvedControlPath)}" +
         controlQueue +
+        (LastScopeReadbackUtc.HasValue
+          ? $" · RB {LastScopeReadbackUtc.Value:HH:mm:ss}Z"
+          : "") +
         $" · Frames {effectiveCapture.PacketCount:N0} · " +
         $"CI-V {effectiveCapture.CivFrameCount:N0} · Sweeps {scopeFrames:N0} · " +
         $"{ScopeFps:0.0}/s · Display {DisplayFps:0.0} fps · " +
@@ -2057,6 +2224,7 @@ namespace SkyRoof
     internal void ApplyControlSettings()
     {
       ScopeControlDefaultsAppliedForSession = false;
+      ScopeReadbackRequestedForSession = false;
 
       // HOLD is an atomic display snapshot. Settings may be edited while the
       // snapshot is frozen, but do not swap the displayed scope/geometry under
@@ -2094,6 +2262,8 @@ namespace SkyRoof
 
     private void IcomLanSpectrumPanel_FormClosing(object? sender, FormClosingEventArgs e)
     {
+      ctx.CatControl.IcomScopeReadbackReceived -=
+        CatControl_IcomScopeReadbackReceived;
       UiTimer.Stop();
       StopCapture();
 
