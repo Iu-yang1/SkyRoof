@@ -334,10 +334,17 @@ namespace SkyRoof
         Cursor.Position);
     }
 
-    private void AzEl_Click(object sender, EventArgs e)
+    private void AzEl_MouseClick(
+      object? sender,
+      MouseEventArgs e)
     {
-      if (ModifierKeys == (Keys.Control | Keys.Shift))  ShowRotatorDebugInfo();
-      else Dialog.Open(ctx);
+      if (e.Button != MouseButtons.Left)
+        return;
+
+      if (ModifierKeys == (Keys.Control | Keys.Shift))
+        ShowRotatorDebugInfo();
+      else
+        Dialog.Open(ctx);
     }
 
     private void TrackCheckbox_CheckedChanged(object sender, EventArgs e)
