@@ -29,6 +29,8 @@ namespace SkyRoof
     private readonly Button HoldBtn = new();
     private readonly Button PeakBtn = new();
     private readonly Button WaterfallBtn = new();
+    private readonly ComboBox AverageBox = new();
+    private readonly ComboBox ZoomBox = new();
     private readonly Button SettingsBtn = new();
     private readonly Label StatusLabel = new();
     private readonly Label StatsLabel = new();
@@ -449,6 +451,89 @@ namespace SkyRoof
       };
       toolbar.Controls.Add(WaterfallBtn);
 
+      toolbar.Controls.Add(
+        new Label
+        {
+          AutoSize = true,
+          Text = "AVG:",
+          Margin = new Padding(2, 7, 3, 0)
+        });
+
+      AverageBox.DropDownStyle =
+        ComboBoxStyle.DropDownList;
+      AverageBox.Width = 58;
+      AverageBox.Items.AddRange(
+        new object[]
+        {
+          "OFF",
+          "2",
+          "4",
+          "8"
+        });
+      AverageBox.Margin =
+        new Padding(0, 3, 6, 3);
+      AverageBox.SelectedIndexChanged +=
+        (_, _) =>
+        {
+          if (UpdatingScopeControlUi ||
+              AverageBox.SelectedIndex < 0)
+            return;
+
+          int sweeps =
+            AverageBox.SelectedIndex switch
+            {
+              0 => 1,
+              1 => 2,
+              2 => 4,
+              _ => 8
+            };
+
+          ctx.Settings.IcomLanSpectrum
+            .SpectrumAverageSweeps =
+            sweeps;
+          SpectrumView.SetAverageSweeps(
+            sweeps);
+          ctx.Settings.SaveToFile();
+        };
+      toolbar.Controls.Add(AverageBox);
+
+      toolbar.Controls.Add(
+        new Label
+        {
+          AutoSize = true,
+          Text = "ZOOM:",
+          Margin = new Padding(2, 7, 3, 0)
+        });
+
+      ZoomBox.DropDownStyle =
+        ComboBoxStyle.DropDownList;
+      ZoomBox.Width = 58;
+      ZoomBox.Items.AddRange(
+        new object[]
+        {
+          "1×",
+          "2×",
+          "4×",
+          "8×",
+          "16×"
+        });
+      ZoomBox.Margin =
+        new Padding(0, 3, 6, 3);
+      ZoomBox.SelectedIndexChanged +=
+        (_, _) =>
+        {
+          if (UpdatingScopeControlUi ||
+              ZoomBox.SelectedIndex < 0)
+            return;
+
+          int factor =
+            1 << ZoomBox.SelectedIndex;
+
+          SpectrumView.SetZoomFactor(
+            factor);
+        };
+      toolbar.Controls.Add(ZoomBox);
+
       SettingsBtn.Text = "Settings…";
       SettingsBtn.AutoSize = true;
       SettingsBtn.Margin = new Padding(0, 2, 0, 2);
@@ -468,6 +553,34 @@ namespace SkyRoof
         ctx.Settings.IcomLanSpectrum.SpectrumHeightPercent =
           percent;
         ctx.Settings.SaveToFile();
+      };
+
+      SpectrumView.ZoomChanged += factor =>
+      {
+        int index =
+          factor switch
+          {
+            1 => 0,
+            2 => 1,
+            4 => 2,
+            8 => 3,
+            _ => 4
+          };
+
+        if (ZoomBox.SelectedIndex ==
+            index)
+          return;
+
+        UpdatingScopeControlUi = true;
+        try
+        {
+          ZoomBox.SelectedIndex =
+            index;
+        }
+        finally
+        {
+          UpdatingScopeControlUi = false;
+        }
       };
 
       SpectrumView.TuneFrequencyRequested +=
@@ -543,6 +656,38 @@ namespace SkyRoof
           settings.WaterfallBrightness,
           settings.WaterfallContrast,
           settings.WaterfallPalette);
+
+        int averageSweeps =
+          settings.SpectrumAverageSweeps switch
+          {
+            <= 1 => 1,
+            <= 2 => 2,
+            <= 4 => 4,
+            _ => 8
+          };
+
+        settings.SpectrumAverageSweeps =
+          averageSweeps;
+        SpectrumView.SetAverageSweeps(
+          averageSweeps);
+        AverageBox.SelectedIndex =
+          averageSweeps switch
+          {
+            1 => 0,
+            2 => 1,
+            4 => 2,
+            _ => 3
+          };
+
+        ZoomBox.SelectedIndex =
+          SpectrumView.ZoomFactor switch
+          {
+            1 => 0,
+            2 => 1,
+            4 => 2,
+            8 => 3,
+            _ => 4
+          };
 
         double referenceDb =
           NormalizeReferenceLevel(
