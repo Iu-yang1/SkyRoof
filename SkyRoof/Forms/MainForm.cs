@@ -17,11 +17,18 @@ namespace SkyRoof
     private ToolStripControlHost? RotatorControlHost;
     private ToolStripDropDown? RotatorControlPopup;
     private MouseButtons LastRotatorStatusMouseButton;
-    private ToolStripProfessionalRenderer? LightThemeRenderer;
+    private ToolStripProfessionalRenderer? ThemeRenderer;
+    private readonly ToolStripSeparator ThemeGitHubSeparator =
+      new();
+    private readonly ToolStripMenuItem ThemeGitHubLightMNU =
+      new();
+    private readonly ToolStripMenuItem ThemeGitHubDarkMNU =
+      new();
 
     public MainForm()
     {
       InitializeComponent();
+      ConfigureGitHubThemeMenuItems();
       AddOrbitSourceMenuItems();
 
       Text = Utils.GetVersionString();
@@ -145,7 +152,7 @@ namespace SkyRoof
 
       ctx.Settings.SaveToFile();
 
-      LightThemeRenderer = null;
+      ThemeRenderer = null;
 
       // dispose sdr and dsp
       ctx.Sdr?.Dispose();
@@ -1108,86 +1115,206 @@ namespace SkyRoof
     //----------------------------------------------------------------------------------------------
     //                                       theme
     //----------------------------------------------------------------------------------------------
+    private void ConfigureGitHubThemeMenuItems()
+    {
+      ThemeGitHubSeparator.Name =
+        "ThemeGitHubSeparator";
+
+      ThemeGitHubLightMNU.Name =
+        "ThemeGitHubLightMNU";
+      ThemeGitHubLightMNU.Text =
+        "GitHub &Light";
+      ThemeGitHubLightMNU.Click +=
+        ThemeGitHubLightMNU_Click;
+
+      ThemeGitHubDarkMNU.Name =
+        "ThemeGitHubDarkMNU";
+      ThemeGitHubDarkMNU.Text =
+        "GitHub D&ark";
+      ThemeGitHubDarkMNU.Click +=
+        ThemeGitHubDarkMNU_Click;
+
+      ThemeMNU.DropDownItems.Add(
+        ThemeGitHubSeparator);
+      ThemeMNU.DropDownItems.Add(
+        ThemeGitHubLightMNU);
+      ThemeMNU.DropDownItems.Add(
+        ThemeGitHubDarkMNU);
+    }
+
     private void ApplyThemeSettings()
     {
-      // the DockPanelSuite theme must be selected before any DockContent is created: its setter
-      // throws when dock content exists, which is one reason the theme is a startup setting.
-      // Application.SetColorMode has already been called in Program.Main.
-      if (Theme.IsDark)
+      // The DockPanelSuite theme must be selected before any DockContent is
+      // created. Application.SetColorMode has already been called in
+      // Program.Main using the same startup ThemeMode.
+      switch (Theme.Mode)
       {
-        DockHost.Theme =
-          new VS2015DarkTheme();
-      }
-      else
-      {
-        DockHost.Theme =
-          new PinkBlueLightDockTheme();
+        case ThemeMode.GitHubLight:
+          ApplyGitHubTheme(
+            GitHubThemeColors.Light,
+            new GitHubLightDockTheme());
+          break;
 
-        // The main menu and status bar are outside DockPanelSuite, so give
-        // them the same pink / blue / white light-theme chrome explicitly.
-        LightThemeRenderer =
-          new ToolStripProfessionalRenderer(
-            new PinkBlueToolStripColorTable())
-          {
-            RoundedEdges = false
-          };
+        case ThemeMode.GitHubDark:
+          ApplyGitHubTheme(
+            GitHubThemeColors.Dark,
+            new GitHubDarkDockTheme());
+          break;
 
-        menuStrip1.Renderer =
-          LightThemeRenderer;
-        StatusStrip.Renderer =
-          LightThemeRenderer;
+        case ThemeMode.Dark:
+          DockHost.Theme =
+            new VS2015DarkTheme();
+          break;
 
-        Toolbar.BackColor =
-          Theme.BrandWhite;
-        menuStrip1.BackColor =
-          Theme.BrandWhite;
-        menuStrip1.ForeColor =
-          Theme.LightInk;
-        StatusStrip.BackColor =
-          Theme.BrandPink;
-        StatusStrip.ForeColor =
-          Theme.LightInk;
+        case ThemeMode.Light:
+          ApplyPinkBlueLightTheme();
+          break;
+
+        case ThemeMode.System:
+        default:
+          if (Theme.IsDark)
+            DockHost.Theme =
+              new VS2015DarkTheme();
+          else
+            ApplyPinkBlueLightTheme();
+          break;
       }
 
       ShowThemeMenuChecks();
+    }
+
+    private void ApplyPinkBlueLightTheme()
+    {
+      DockHost.Theme =
+        new PinkBlueLightDockTheme();
+
+      ThemeRenderer =
+        new ToolStripProfessionalRenderer(
+          new PinkBlueToolStripColorTable())
+        {
+          RoundedEdges = false
+        };
+
+      menuStrip1.Renderer =
+        ThemeRenderer;
+      StatusStrip.Renderer =
+        ThemeRenderer;
+
+      Toolbar.BackColor =
+        Theme.BrandWhite;
+      menuStrip1.BackColor =
+        Theme.BrandWhite;
+      menuStrip1.ForeColor =
+        Theme.LightInk;
+      StatusStrip.BackColor =
+        Theme.BrandPink;
+      StatusStrip.ForeColor =
+        Theme.LightInk;
+    }
+
+    private void ApplyGitHubTheme(
+      GitHubPalette palette,
+      ThemeBase dockTheme)
+    {
+      DockHost.Theme =
+        dockTheme;
+
+      ThemeRenderer =
+        new GitHubToolStripRenderer(
+          palette);
+
+      menuStrip1.Renderer =
+        ThemeRenderer;
+      StatusStrip.Renderer =
+        ThemeRenderer;
+
+      Toolbar.BackColor =
+        palette.CanvasSubtle;
+      menuStrip1.BackColor =
+        palette.CanvasInset;
+      menuStrip1.ForeColor =
+        palette.TextPrimary;
+      StatusStrip.BackColor =
+        palette.CanvasSubtle;
+      StatusStrip.ForeColor =
+        palette.TextPrimary;
     }
 
     private void ShowThemeMenuChecks()
     {
-      var mode = ctx.Settings.Ui.Theme;
-      ThemeSystemMNU.Checked = mode == ThemeMode.System;
-      ThemeLightMNU.Checked = mode == ThemeMode.Light;
-      ThemeDarkMNU.Checked = mode == ThemeMode.Dark;
+      ThemeMode mode =
+        ctx.Settings.Ui.Theme;
+
+      ThemeSystemMNU.Checked =
+        mode == ThemeMode.System;
+      ThemeLightMNU.Checked =
+        mode == ThemeMode.Light;
+      ThemeDarkMNU.Checked =
+        mode == ThemeMode.Dark;
+      ThemeGitHubLightMNU.Checked =
+        mode == ThemeMode.GitHubLight;
+      ThemeGitHubDarkMNU.Checked =
+        mode == ThemeMode.GitHubDark;
     }
 
-    private void ThemeSystemMNU_Click(object sender, EventArgs e)
+    private void ThemeSystemMNU_Click(
+      object sender,
+      EventArgs e)
     {
-      SelectTheme(ThemeMode.System);
+      SelectTheme(
+        ThemeMode.System);
     }
 
-    private void ThemeLightMNU_Click(object sender, EventArgs e)
+    private void ThemeLightMNU_Click(
+      object sender,
+      EventArgs e)
     {
-      SelectTheme(ThemeMode.Light);
+      SelectTheme(
+        ThemeMode.Light);
     }
 
-    private void ThemeDarkMNU_Click(object sender, EventArgs e)
+    private void ThemeDarkMNU_Click(
+      object sender,
+      EventArgs e)
     {
-      SelectTheme(ThemeMode.Dark);
+      SelectTheme(
+        ThemeMode.Dark);
     }
 
-    private void SelectTheme(ThemeMode mode)
+    private void ThemeGitHubLightMNU_Click(
+      object? sender,
+      EventArgs e)
     {
-      if (mode == ctx.Settings.Ui.Theme) return;
+      SelectTheme(
+        ThemeMode.GitHubLight);
+    }
 
-      ctx.Settings.Ui.Theme = mode;
+    private void ThemeGitHubDarkMNU_Click(
+      object? sender,
+      EventArgs e)
+    {
+      SelectTheme(
+        ThemeMode.GitHubDark);
+    }
+
+    private void SelectTheme(
+      ThemeMode mode)
+    {
+      if (mode ==
+          ctx.Settings.Ui.Theme)
+        return;
+
+      ctx.Settings.Ui.Theme =
+        mode;
       ctx.Settings.SaveToFile();
       ShowThemeMenuChecks();
 
-      MessageBox.Show("The new theme will be applied the next time SkyRoof starts.",
-        "Theme", MessageBoxButtons.OK, MessageBoxIcon.Information);
+      MessageBox.Show(
+        "The new theme will be applied the next time SkyRoof starts.",
+        "Theme",
+        MessageBoxButtons.OK,
+        MessageBoxIcon.Information);
     }
-
-
 
 
 
