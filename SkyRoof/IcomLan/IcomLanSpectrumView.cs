@@ -829,13 +829,9 @@ namespace SkyRoof
       base.OnPaint(e);
 
       Color scopeBack =
-        Theme.IsDark
-          ? Color.FromArgb(12, 16, 20)
-          : Theme.BrandWhite;
+        Theme.SpectrumBackground;
       Color textColor =
-        Theme.IsDark
-          ? Color.Gainsboro
-          : Theme.LightInk;
+        Theme.SpectrumText;
 
       e.Graphics.Clear(scopeBack);
       e.Graphics.SmoothingMode =
@@ -1991,9 +1987,7 @@ namespace SkyRoof
             : 3;
 
       Color gridColor =
-        Theme.IsDark
-          ? Color.FromArgb(65, 105, 112, 118)
-          : Color.FromArgb(90, Theme.BrandBlue);
+        Theme.SpectrumGrid;
 
       using var gridPen =
         new Pen(gridColor);
@@ -2093,9 +2087,7 @@ namespace SkyRoof
       Rectangle plot)
     {
       Color gridColor =
-        Theme.IsDark
-          ? Color.FromArgb(50, 95, 95, 95)
-          : Color.FromArgb(45, Theme.BrandPink);
+        Theme.SpectrumSubGrid;
 
       using var gridPen =
         new Pen(gridColor);
@@ -2130,9 +2122,7 @@ namespace SkyRoof
         samples,
         zoomFactor,
         zoomCenter,
-        Theme.IsDark
-          ? Theme.BrandBlue
-          : Theme.BlueDark,
+        Theme.SpectrumTrace,
         1.25f,
         DashStyle.Solid);
     }
@@ -2150,7 +2140,7 @@ namespace SkyRoof
         samples,
         zoomFactor,
         zoomCenter,
-        Theme.BrandPink,
+        Theme.SpectrumPeak,
         1.0f,
         DashStyle.Dot);
     }
@@ -2358,9 +2348,7 @@ namespace SkyRoof
 
       using var brush =
         new SolidBrush(
-          Color.FromArgb(
-            Theme.IsDark ? 44 : 54,
-            Theme.BrandPink));
+          Theme.SpectrumTxFill);
 
       graphics.FillRectangle(
         brush,
@@ -2412,7 +2400,7 @@ namespace SkyRoof
 
       using var pen =
         new Pen(
-          Theme.BrandPink,
+          Theme.SpectrumTxMarker,
           1.4f);
 
       graphics.DrawLine(
@@ -2436,9 +2424,7 @@ namespace SkyRoof
         label,
         SystemFonts.MessageBoxFont,
         labelBounds,
-        Theme.IsDark
-          ? Color.White
-          : Theme.PinkDark,
+        Theme.SpectrumTxText,
         TextFormatFlags.HorizontalCenter |
         TextFormatFlags.NoPrefix |
         TextFormatFlags.NoPadding);
@@ -2511,9 +2497,7 @@ namespace SkyRoof
 
       using var cursorPen =
         new Pen(
-          Theme.IsDark
-            ? Color.FromArgb(185, 235, 235, 235)
-            : Theme.BlueDark,
+          Theme.SpectrumCursor,
           1f)
         {
           DashStyle =
@@ -2574,9 +2558,7 @@ namespace SkyRoof
 
       using var boxPen =
         new Pen(
-          Theme.IsDark
-            ? Color.Gray
-            : Theme.BrandBlue);
+          Theme.SpectrumReadoutBorder);
 
       graphics.FillRectangle(
         boxBrush,
@@ -2642,14 +2624,10 @@ namespace SkyRoof
         return;
 
       Color back =
-        Theme.IsDark
-          ? Color.FromArgb(36, 42, 48)
-          : Theme.BlueWash;
+        Theme.SpectrumHoldBack;
 
       Color line =
-        Theme.IsDark
-          ? Color.FromArgb(105, 115, 125)
-          : Theme.BlueDark;
+        Theme.SpectrumHoldLine;
 
       using var brush =
         new SolidBrush(back);
