@@ -13,6 +13,8 @@ namespace SkyRoof
   public partial class MainForm : Form
   {
     internal Context ctx = new();
+    private RotatorControlCard? RotatorControlCard;
+    private ToolStripControlHost? RotatorControlHost;
 
     public MainForm()
     {
@@ -46,6 +48,8 @@ namespace SkyRoof
       ctx.UdpStreamSender.ctx = ctx;
 
       var settingsLoadResult = ctx.Settings.LoadFromFile();
+
+      AddRotatorControlCard();
 
       // SatnogsDb is intentionally created later in LoadSatelliteData(), after
       // the form has entered its Load phase. Do not dereference it here: the
@@ -1289,6 +1293,50 @@ namespace SkyRoof
       TxCatLedLabel.ToolTipText = txTip;
     }
 
+    private void AddRotatorControlCard()
+    {
+      RotatorControlCard = new RotatorControlCard();
+      RotatorControlCard.Attach(
+        ctx,
+        ctx.RotatorControl);
+
+      RotatorControlHost =
+        new ToolStripControlHost(
+          RotatorControlCard)
+        {
+          AutoSize = false,
+          Margin = Padding.Empty,
+          Padding = Padding.Empty,
+          Size = RotatorControlCard.Size
+        };
+
+      RotatorDropdownBtn.DropDownItems.Insert(
+        0,
+        RotatorControlHost);
+      RotatorDropdownBtn.DropDownItems.Insert(
+        1,
+        new ToolStripSeparator());
+
+      RotatorDropdownBtn.DropDownOpening += (_, _) =>
+        RotatorControlCard?.RefreshState();
+
+      // Keep the existing small arrow button for normal left-click use, but
+      // make the status area itself useful as the requested right-click card.
+      RotatorLedLabel.MouseUp += RotatorStatus_MouseUp;
+      RotatorStatusLabel.MouseUp += RotatorStatus_MouseUp;
+    }
+
+    private void RotatorStatus_MouseUp(
+      object? sender,
+      MouseEventArgs e)
+    {
+      if (e.Button != MouseButtons.Right)
+        return;
+
+      RotatorControlCard?.RefreshState();
+      RotatorDropdownBtn.ShowDropDown();
+    }
+
     public void ShowRotatorStatus()
     {
       if (!ctx.Settings.Rotator.Enabled) RotatorLedLabel.ForeColor = SystemColors.GrayText;
@@ -1300,6 +1348,7 @@ namespace SkyRoof
       TrackRotatorMNU.Checked = ctx.RotatorControl.TrackCheckbox.Checked;
 
       RotatorStatusLabel.ToolTipText = ctx.RotatorControl.GetStatusString();
+      RotatorControlCard?.RefreshState();
     }
 
 
