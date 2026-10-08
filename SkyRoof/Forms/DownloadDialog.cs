@@ -139,11 +139,13 @@ namespace SkyRoof
       {
         db.ImportAll();
 
-        // Custom sources are the highest-priority orbit layer. Within the list,
-        // the first configured source wins over later sources.
-        await db.LoadCustomTleSourcesAsync(
-          ctx.Settings.OrbitSources.CustomTleSources,
-          raiseEvent: false);
+        // Preserve any still-valid manual file override across a full SatNOGS
+        // database rebuild. Automatic sources are then refreshed underneath it.
+        db.CopyActiveManualOrbitOverridesFrom(
+          ctx.SatnogsDb,
+          DateTime.UtcNow);
+
+        await db.LoadAutomaticOrbitOverlaysAsync();
 
         db.ConfigureSolarSystem(ctx.Settings.OrbitSources);
         ctx.Settings.Satellites.EnsureSolarSystemGroup(db);
