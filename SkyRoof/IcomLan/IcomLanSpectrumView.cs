@@ -43,6 +43,7 @@ namespace SkyRoof
     private bool FrequencyTuning;
     private bool TuneUsingRit;
     private IcomScopeGeometry TuneGestureGeometry;
+    private long TuneGestureDisplayFrequencyOffsetHz;
     private long? PendingTuneFrequencyHz;
     private readonly System.Windows.Forms.Timer TuneCommitTimer =
       new() { Interval = 40 };
@@ -478,6 +479,7 @@ namespace SkyRoof
             e.Location,
             plot,
             geometry,
+            DisplayFrequencyOffsetHz,
             out long frequencyHz))
         return;
 
@@ -485,6 +487,8 @@ namespace SkyRoof
       FrequencyTuning = true;
       TuneGestureGeometry =
         geometry;
+      TuneGestureDisplayFrequencyOffsetHz =
+        DisplayFrequencyOffsetHz;
       TuneUsingRit =
         ModifierKeys.HasFlag(
           Keys.Control);
@@ -509,6 +513,7 @@ namespace SkyRoof
       {
         FrequencyTuning = false;
         TuneGestureGeometry = default;
+        TuneGestureDisplayFrequencyOffsetHz = 0;
         TuneCommitTimer.Stop();
         FlushPendingTune();
         Capture = false;
@@ -559,6 +564,7 @@ namespace SkyRoof
               e.Location,
               tuningPlot,
               TuneGestureGeometry,
+              TuneGestureDisplayFrequencyOffsetHz,
               out long frequencyHz))
           PendingTuneFrequencyHz =
             frequencyHz;
@@ -665,6 +671,7 @@ namespace SkyRoof
 
       FrequencyTuning = false;
       TuneGestureGeometry = default;
+      TuneGestureDisplayFrequencyOffsetHz = 0;
       TuneCommitTimer.Stop();
       FlushPendingTune();
       TuningCompleted?.Invoke();
@@ -691,6 +698,7 @@ namespace SkyRoof
       Point point,
       Rectangle plot,
       IcomScopeGeometry geometry,
+      long displayFrequencyOffsetHz,
       out long frequencyHz)
     {
       frequencyHz = 0;
@@ -704,7 +712,7 @@ namespace SkyRoof
           geometry,
           plot,
           point.X,
-          DisplayFrequencyOffsetHz);
+          displayFrequencyOffsetHz);
 
       return true;
     }
@@ -1455,10 +1463,16 @@ namespace SkyRoof
           1,
           plot.Width - 1);
 
+      long cursorDisplayOffsetHz =
+        FrequencyTuning
+          ? TuneGestureDisplayFrequencyOffsetHz
+          : DisplayFrequencyOffsetHz;
+
       long frequency =
-        ToDisplayFrequency(
+        checked(
           cursorGeometry.FrequencyAtFraction(
-            fraction));
+            fraction) +
+          cursorDisplayOffsetHz);
 
       int x =
         Math.Clamp(
