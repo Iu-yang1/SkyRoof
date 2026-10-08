@@ -850,8 +850,9 @@ namespace SkyRoof
     private void SynchronizePendingEdgeIfNeeded(
       IcomScopeFrame frame)
     {
-      if (PendingEdgeSyncScope !=
-          frame.Scope)
+      if (PendingEdgeSyncScope != -2 &&
+          PendingEdgeSyncScope !=
+            frame.Scope)
         return;
 
       PendingEdgeSyncScope = -1;
@@ -1546,7 +1547,14 @@ namespace SkyRoof
 
       if (!TryGetControlScope(
             out byte scope))
+      {
+        // AUTO has no selected receiver until the first displayable frame.
+        // SPEED/REF are already synchronized globally; defer only the
+        // receiver-specific fixed-edge write to whichever scope appears first.
+        PendingEdgeSyncScope = -2;
+        ScopeControlDefaultsAppliedForSession = true;
         return;
+      }
 
       IcomScopeFrame? frame =
         ScopeState.LatestSelectedFrame;
@@ -1566,6 +1574,11 @@ namespace SkyRoof
               4)));
         PendingEdgeSyncScope = -1;
       }
+      else if (frame == null)
+      {
+        PendingEdgeSyncScope = scope;
+      }
+
       ScopeControlDefaultsAppliedForSession = true;
     }
 
