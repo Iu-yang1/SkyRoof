@@ -50,6 +50,7 @@ namespace SkyRoof
     private Point PointerLocation = new(-1, -1);
 
     private long ReceiveFrequencyHz;
+    private long DisplayFrequencyOffsetHz;
     private Slicer.Mode? ReceiveMode;
 
     internal event Action<int>? SpectrumPercentChanged;
@@ -158,14 +159,18 @@ namespace SkyRoof
 
     internal void SetTuningOverlay(
       long receiveFrequencyHz,
-      Slicer.Mode? mode)
+      Slicer.Mode? mode,
+      long displayFrequencyOffsetHz = 0)
     {
       if (ReceiveFrequencyHz == receiveFrequencyHz &&
+          DisplayFrequencyOffsetHz == displayFrequencyOffsetHz &&
           ReceiveMode == mode)
         return;
 
       ReceiveFrequencyHz =
         receiveFrequencyHz;
+      DisplayFrequencyOffsetHz =
+        displayFrequencyOffsetHz;
       ReceiveMode =
         mode;
       Invalidate();
@@ -698,7 +703,8 @@ namespace SkyRoof
         FrequencyForX(
           geometry,
           plot,
-          point.X);
+          point.X,
+          DisplayFrequencyOffsetHz);
 
       return true;
     }
@@ -706,7 +712,8 @@ namespace SkyRoof
     internal static long FrequencyForX(
       IcomScopeGeometry geometry,
       Rectangle plot,
-      int x)
+      int x,
+      long displayFrequencyOffsetHz = 0)
     {
       if (!geometry.IsValid ||
           plot.Width < 2)
@@ -722,9 +729,23 @@ namespace SkyRoof
           1,
           plot.Width - 1);
 
-      return geometry.FrequencyAtFraction(
-        fraction);
+      return checked(
+        geometry.FrequencyAtFraction(
+          fraction) +
+        displayFrequencyOffsetHz);
     }
+
+    private long ToDisplayFrequency(
+      long rawScopeFrequencyHz) =>
+      checked(
+        rawScopeFrequencyHz +
+        DisplayFrequencyOffsetHz);
+
+    private long ToRawScopeFrequency(
+      long displayFrequencyHz) =>
+      checked(
+        displayFrequencyHz -
+        DisplayFrequencyOffsetHz);
 
     private void FlushPendingTune()
     {
@@ -892,10 +913,10 @@ namespace SkyRoof
           right =
             frame.Mode ==
               (byte)IcomScopeMode.Center
-              ? $"{FormatFrequency(geometry.CenterFrequencyHz)} · " +
+              ? $"{FormatFrequency(ToDisplayFrequency(geometry.CenterFrequencyHz))} · " +
                 $"{FormatSpan(geometry.SpanHz)}"
-              : $"{FormatFrequency(geometry.LowerFrequencyHz)} – " +
-                $"{FormatFrequency(geometry.UpperFrequencyHz)}";
+              : $"{FormatFrequency(ToDisplayFrequency(geometry.LowerFrequencyHz))} – " +
+                $"{FormatFrequency(ToDisplayFrequency(geometry.UpperFrequencyHz))}";
         }
         else
         {
@@ -1074,8 +1095,9 @@ namespace SkyRoof
           continue;
 
         long frequency =
-          geometry.FrequencyAtFraction(
-            fraction);
+          ToDisplayFrequency(
+            geometry.FrequencyAtFraction(
+              fraction));
 
         string label =
           FormatAxisFrequency(
@@ -1297,10 +1319,10 @@ namespace SkyRoof
 
       double lowFraction =
         geometry.FractionForFrequency(
-          low);
+          ToRawScopeFrequency(low));
       double highFraction =
         geometry.FractionForFrequency(
-          high);
+          ToRawScopeFrequency(high));
 
       if (double.IsNaN(lowFraction) ||
           double.IsNaN(highFraction) ||
@@ -1356,13 +1378,17 @@ namespace SkyRoof
       Rectangle plot,
       IcomScopeGeometry geometry)
     {
+      long rawReceiveFrequency =
+        ToRawScopeFrequency(
+          ReceiveFrequencyHz);
+
       if (!geometry.ContainsFrequency(
-            ReceiveFrequencyHz))
+            rawReceiveFrequency))
         return;
 
       double fraction =
         geometry.FractionForFrequency(
-          ReceiveFrequencyHz);
+          rawReceiveFrequency);
 
       int x =
         plot.Left +
@@ -1430,8 +1456,9 @@ namespace SkyRoof
           plot.Width - 1);
 
       long frequency =
-        cursorGeometry.FrequencyAtFraction(
-          fraction);
+        ToDisplayFrequency(
+          cursorGeometry.FrequencyAtFraction(
+            fraction));
 
       int x =
         Math.Clamp(
