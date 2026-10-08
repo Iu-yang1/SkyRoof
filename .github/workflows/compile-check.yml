@@ -62,7 +62,16 @@ jobs:
           Write-Host "WinDivert driver: $($sys.FullName)"
 
       - name: Restore NuGet packages
-        run: nuget restore SkyRoof.sln -LockedMode
+        run: nuget restore SkyRoof.sln -ForceEvaluate
+
+      # Temporary on this feature branch only: surface the regenerated SGP.NET
+      # lock entry so it can be committed before restoring LockedMode.
+      - name: Show regenerated SGP.NET lock entry
+        shell: powershell
+        run: |
+          $lock = Get-Content "SkyRoof\packages.lock.json" -Raw | ConvertFrom-Json
+          $entry = $lock.dependencies.'net10.0-windows7.0'.'SGP.NET'
+          Write-Host ("SGP_LOCK=" + ($entry | ConvertTo-Json -Compress))
 
       - name: Build solution
         run: msbuild SkyRoof.sln /m /p:Configuration=Release /p:Platform=x64
