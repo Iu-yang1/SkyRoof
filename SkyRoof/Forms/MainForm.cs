@@ -15,6 +15,7 @@ namespace SkyRoof
     internal Context ctx = new();
     private RotatorControlCard? RotatorControlCard;
     private ToolStripControlHost? RotatorControlHost;
+    private MouseButtons LastRotatorStatusMouseButton;
 
     public MainForm()
     {
@@ -1253,6 +1254,16 @@ namespace SkyRoof
 
     private void RotLedLabel_Click(object sender, EventArgs e)
     {
+      // The status labels retain their existing left-click enable/disable
+      // shortcut. Right-click belongs to the manual control card and must not
+      // accidentally toggle the rotator engine.
+      if (LastRotatorStatusMouseButton == MouseButtons.Right)
+      {
+        LastRotatorStatusMouseButton = MouseButtons.None;
+        return;
+      }
+
+      LastRotatorStatusMouseButton = MouseButtons.None;
       ctx.Settings.Rotator.Enabled = !ctx.Settings.Rotator.Enabled;
       ctx.RotatorControl.ApplySettings();
     }
@@ -1322,14 +1333,16 @@ namespace SkyRoof
 
       // Keep the existing small arrow button for normal left-click use, but
       // make the status area itself useful as the requested right-click card.
-      RotatorLedLabel.MouseUp += RotatorStatus_MouseUp;
-      RotatorStatusLabel.MouseUp += RotatorStatus_MouseUp;
+      RotatorLedLabel.MouseDown += RotatorStatus_MouseDown;
+      RotatorStatusLabel.MouseDown += RotatorStatus_MouseDown;
     }
 
-    private void RotatorStatus_MouseUp(
+    private void RotatorStatus_MouseDown(
       object? sender,
       MouseEventArgs e)
     {
+      LastRotatorStatusMouseButton = e.Button;
+
       if (e.Button != MouseButtons.Right)
         return;
 
