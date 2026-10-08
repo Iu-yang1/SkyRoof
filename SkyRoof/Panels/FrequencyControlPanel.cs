@@ -336,15 +336,30 @@ namespace SkyRoof
         SelectionLabel.Text =
           "Terrestrial tuning — select a satellite transmitter to edit saved Base frequencies";
 
-      DownlinkGroup.Enabled = satellite;
-      UplinkGroup.Enabled = satellite && link.HasUplink;
-      BackToBaseBtn.Enabled = satellite;
+      DownlinkGroup.Enabled =
+        satellite &&
+        link.HasDownlink;
+      UplinkGroup.Enabled =
+        satellite &&
+        link.HasUplink;
+      BackToBaseBtn.Enabled =
+        satellite &&
+        (link.HasDownlink || link.HasUplink);
 
       if (satellite)
       {
-        DownlinkBaseValue.Text = $"{link.BaseDownlinkFrequency:n0}";
-        DownlinkDatabaseValue.Text = $"{link.DatabaseDownlinkBaseFrequency:n0} Hz";
-        DownlinkCorrectionValue.Text = $"{link.DownlinkBaseOffset:+0;-0;0} Hz";
+        if (link.HasDownlink)
+        {
+          DownlinkBaseValue.Text = $"{link.BaseDownlinkFrequency:n0}";
+          DownlinkDatabaseValue.Text = $"{link.DatabaseDownlinkBaseFrequency:n0} Hz";
+          DownlinkCorrectionValue.Text = $"{link.DownlinkBaseOffset:+0;-0;0} Hz";
+        }
+        else
+        {
+          DownlinkBaseValue.Text = "No Downlink";
+          DownlinkDatabaseValue.Text = "—";
+          DownlinkCorrectionValue.Text = "—";
+        }
 
         if (link.HasUplink)
         {
@@ -376,11 +391,22 @@ namespace SkyRoof
         link.UplinkFrequencyWithoutDoppler,
         ctx.CatControl.Tx?.IsRunning == true);
 
-      DownlinkBaseValue.ForeColor = satellite ? rxColor : Color.Gray;
+      DownlinkBaseValue.ForeColor =
+        satellite && link.HasDownlink
+          ? rxColor
+          : Color.Gray;
       UplinkBaseValue.ForeColor = satellite && link.HasUplink ? txColor : Color.Gray;
 
-      NoDopplerDownlinkValue.Text = $"{link.DownlinkFrequencyWithoutDoppler:n0} Hz";
-      NoDopplerDownlinkValue.ForeColor = rxColor;
+      if (link.HasDownlink)
+      {
+        NoDopplerDownlinkValue.Text = $"{link.DownlinkFrequencyWithoutDoppler:n0} Hz";
+        NoDopplerDownlinkValue.ForeColor = rxColor;
+      }
+      else
+      {
+        NoDopplerDownlinkValue.Text = "No Downlink";
+        NoDopplerDownlinkValue.ForeColor = Color.Gray;
+      }
 
       if (link.HasUplink)
       {
@@ -395,10 +421,18 @@ namespace SkyRoof
 
       // The ruler represents operator tuning in the transponder/channel before Doppler is applied.
       // The top toolbar remains the place to read the actual Doppler-corrected radio frequency.
-      TuningBar.ForeColor = rxColor;
-      TuningBar.SetFrequency(link.DownlinkFrequencyWithoutDoppler);
+      TuningBar.ForeColor =
+        link.HasDownlink
+          ? rxColor
+          : Color.Gray;
+      TuningBar.Enabled =
+        link.HasDownlink;
+      TuningBar.SetFrequency(
+        link.DownlinkFrequencyWithoutDoppler);
 
-      if (link.RitEnabled)
+      if (!link.HasDownlink)
+        TuningModeLabel.Text = "No downlink — RX tuning unchanged";
+      else if (link.RitEnabled)
         TuningModeLabel.Text = $"RIT: {link.RitOffset:+0;-0;0} Hz";
       else if (link.IsTerrestrial)
         TuningModeLabel.Text = "Terrestrial frequency";
