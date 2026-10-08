@@ -46,6 +46,9 @@ namespace SkyRoof
     private double HorizontalZoomFactor = 1.0;
     private double HorizontalZoomCenter = 0.5;
     private bool SplitterDragging;
+    private bool HorizontalPanning;
+    private int PanStartX;
+    private double PanStartCenter;
     private bool FrequencyTuning;
     private bool TuneUsingRit;
     private IcomScopeGeometry TuneGestureGeometry;
@@ -547,6 +550,12 @@ namespace SkyRoof
         AverageSums,
         shiftBins);
 
+      if (AverageSweepCount > 1 &&
+          AverageFrames.Count > 0)
+        ShiftSamples(
+          LatestSamples,
+          shiftBins);
+
       if (PeakValid)
         ShiftSamples(
           PeakSamples,
@@ -934,6 +943,19 @@ namespace SkyRoof
         out Rectangle splitter,
         out _);
 
+      if (e.Button ==
+            MouseButtons.Middle &&
+          HorizontalZoomFactor > 1.0)
+      {
+        HorizontalPanning = true;
+        PanStartX = e.X;
+        PanStartCenter =
+          HorizontalZoomCenter;
+        Capture = true;
+        Cursor = Cursors.Hand;
+        return;
+      }
+
       if (e.Button != MouseButtons.Left)
         return;
 
@@ -994,6 +1016,17 @@ namespace SkyRoof
     {
       base.OnMouseUp(e);
 
+      if (HorizontalPanning &&
+          e.Button ==
+            MouseButtons.Middle)
+      {
+        HorizontalPanning = false;
+        Capture = false;
+        UpdatePointerCursor(
+          e.Location);
+        return;
+      }
+
       if (FrequencyTuning &&
           e.Button ==
             MouseButtons.Left)
@@ -1033,6 +1066,54 @@ namespace SkyRoof
 
       PointerInside = true;
       PointerLocation = e.Location;
+
+      if (HorizontalPanning &&
+          Capture &&
+          e.Button ==
+            MouseButtons.Middle)
+      {
+        GetLayout(
+          out _,
+          out Rectangle panSpectrum,
+          out _,
+          out Rectangle panWaterfall);
+
+        Rectangle panArea =
+          panSpectrum.Contains(
+            e.Location)
+            ? panSpectrum
+            : panWaterfall.Contains(
+                e.Location)
+              ? panWaterfall
+              : panSpectrum;
+
+        if (panArea.Width > 1)
+        {
+          double visibleWidth =
+            1.0 /
+            HorizontalZoomFactor;
+
+          double deltaFraction =
+            (e.X -
+             PanStartX) /
+            (double)(
+              panArea.Width -
+              1);
+
+          HorizontalZoomCenter =
+            Math.Clamp(
+              PanStartCenter -
+              deltaFraction *
+              visibleWidth,
+              visibleWidth / 2.0,
+              1.0 -
+              visibleWidth / 2.0);
+
+          Invalidate();
+        }
+
+        return;
+      }
 
       if (FrequencyTuning &&
           Capture &&
@@ -1128,6 +1209,12 @@ namespace SkyRoof
         return;
       }
 
+      if (HorizontalPanning)
+      {
+        Cursor = Cursors.Hand;
+        return;
+      }
+
       if (FrequencyTuning)
       {
         Cursor = Cursors.SizeWE;
@@ -1156,8 +1243,17 @@ namespace SkyRoof
     {
       base.OnMouseCaptureChanged(e);
 
-      if (Capture ||
-          !FrequencyTuning)
+      if (Capture)
+        return;
+
+      if (HorizontalPanning)
+      {
+        HorizontalPanning = false;
+        UpdatePointerCursor(
+          PointerLocation);
+      }
+
+      if (!FrequencyTuning)
         return;
 
       FrequencyTuning = false;
