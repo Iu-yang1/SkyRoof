@@ -202,6 +202,7 @@ namespace SkyRoof
           ConfigureSpanEdgeControl(
             mode is IcomScopeMode.Center or
               IcomScopeMode.ScrollCenter);
+          UpdateScopeControlAvailability();
 
           if (!TryGetControlScope(
                 out byte scope))
@@ -798,6 +799,17 @@ namespace SkyRoof
 
       if (frame == null)
       {
+        UpdatingScopeControlUi = true;
+        try
+        {
+          ScopeModeBox.SelectedIndex = -1;
+          SpanEdgeBox.SelectedIndex = -1;
+        }
+        finally
+        {
+          UpdatingScopeControlUi = false;
+        }
+
         GeometryLabel.Text =
           "Waiting for scope";
         UpdateScopeControlAvailability();
@@ -1001,7 +1013,8 @@ namespace SkyRoof
       ScopeModeBox.Enabled =
         enabled;
       SpanEdgeBox.Enabled =
-        enabled;
+        enabled &&
+        ScopeModeBox.SelectedIndex >= 0;
       ReferenceBox.Enabled =
         enabled;
       SweepSpeedBox.Enabled =
