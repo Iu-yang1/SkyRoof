@@ -197,6 +197,14 @@ namespace SkyRoof
             targetFrequency))
         return;
 
+      // Lock the gesture semantics before calculating the delta. This matters
+      // when an earlier gesture left RIT enabled: disabling RIT changes the
+      // corrected RX frequency, so calculating against the old corrected value
+      // would miss the requested spectrum frequency by the previous RIT offset.
+      RadioLink.RitEnabled =
+        useRit;
+      RadioLink.ComputeFrequencies();
+
       double deltaExact =
         targetFrequency -
         RadioLink.CorrectedDownlinkFrequency;
@@ -216,11 +224,6 @@ namespace SkyRoof
           deltaRounded,
           int.MinValue,
           int.MaxValue);
-
-      // Lock the gesture semantics: ordinary scope tuning moves the normal
-      // downlink/transponder position; Ctrl-started gestures move RIT instead.
-      RadioLink.RitEnabled =
-        useRit;
 
       // CAT polling reads before writes. Ignore the old dial readback while
       // the spectrum gesture is actively driving the new RX target.
