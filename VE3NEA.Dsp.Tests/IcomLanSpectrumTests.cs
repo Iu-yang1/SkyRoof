@@ -896,6 +896,38 @@ namespace VE3NEA.Dsp.Tests
 
 
     [Fact]
+    public void FixedEdgeReadbackParserParsesSelectedPreset()
+    {
+      IcomFixedEdgeReadbackState state =
+        IcomFixedEdgeReadbackState.Parse(
+          "RANGE=2;EDGE=3;LOWER=435000000;UPPER=436000000");
+
+      state.FrequencyRange.Should().Be(2);
+      state.EdgeNumber.Should().Be(3);
+      state.LowerHz.Should().Be(435_000_000);
+      state.UpperHz.Should().Be(436_000_000);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("RANGE=2;EDGE=3;LOWER=435000000")]
+    [InlineData("RANGE=4;EDGE=1;LOWER=435000000;UPPER=436000000")]
+    [InlineData("RANGE=2;EDGE=5;LOWER=435000000;UPPER=436000000")]
+    [InlineData("RANGE=2;EDGE=1;LOWER=436000000;UPPER=435000000")]
+    public void FixedEdgeReadbackParserRejectsInvalidSnapshots(
+      string text)
+    {
+      Action parse =
+        () =>
+          IcomFixedEdgeReadbackState.Parse(
+            text);
+
+      parse.Should()
+        .Throw<FormatException>();
+    }
+
+
+    [Fact]
     public void ScopeView_FrequencyForXRejectsInvalidGeometry()
     {
       IcomLanSpectrumView.FrequencyForX(
