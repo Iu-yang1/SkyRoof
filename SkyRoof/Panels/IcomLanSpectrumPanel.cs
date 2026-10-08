@@ -1036,16 +1036,38 @@ namespace SkyRoof
               link.CorrectedDownlinkFrequency))
           : 0;
 
-      Slicer.Mode? mode = null;
+      long transmitHz =
+        double.IsFinite(
+          link.CorrectedUplinkFrequency) &&
+        link.CorrectedUplinkFrequency > 0
+          ? checked((long)Math.Round(
+              link.CorrectedUplinkFrequency))
+          : 0;
+
+      Slicer.Mode? receiveMode = null;
+      Slicer.Mode? transmitMode = null;
 
       if (link.TxCust != null)
-        mode = link.DownlinkMode;
+      {
+        if (link.HasDownlink)
+          receiveMode =
+            link.DownlinkMode;
+
+        if (link.HasUplink)
+          transmitMode =
+            link.UplinkMode;
+      }
       else if (ctx.Slicer != null)
-        mode = ctx.Slicer.CurrentMode;
+      {
+        receiveMode =
+          ctx.Slicer.CurrentMode;
+      }
 
       SpectrumView.SetTuningOverlay(
         receiveHz,
-        mode,
+        receiveMode,
+        transmitHz,
+        transmitMode,
         GetScopeDisplayFrequencyOffsetHz(
           0),
         GetScopeDisplayFrequencyOffsetHz(
