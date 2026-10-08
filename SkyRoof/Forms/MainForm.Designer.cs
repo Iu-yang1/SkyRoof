@@ -522,7 +522,7 @@
       // 
       DownloadTleMNU.Name = "DownloadTleMNU";
       DownloadTleMNU.Size = new Size(216, 22);
-      DownloadTleMNU.Text = "Download &TLE Only";
+      DownloadTleMNU.Text = "Download &Orbit Elements";
       DownloadTleMNU.Click += DownloadTleMNU_Click;
       // 
       // DownloadAmsatMNU
