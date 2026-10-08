@@ -98,7 +98,10 @@ namespace SkyRoof
       if (Path == null) return;
 
       SatBearing = Path.GetSatelliteBearing()?.Normalize();
-      if (SatBearing == null) StopRotation();
+      // A missing/expired pass ends *automatic* tracking only. If Track is
+      // unchecked, the operator may be moving the rotator manually and a
+      // one-second tick must not issue an unsolicited STOP.
+      if (SatBearing == null && TrackCheckbox.Checked) StopRotation();
 
       BearingToUi();
       ctx.Announcer.AnnouncePosition(SatBearing);
