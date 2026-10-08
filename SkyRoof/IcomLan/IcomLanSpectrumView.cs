@@ -221,8 +221,9 @@ namespace SkyRoof
 
           if (previousGeometry.IsValid &&
               currentGeometry.IsValid &&
-              currentGeometry.ModeName is
-                "CENTER" or "SCROLL-C" &&
+              frame.Mode is
+                (byte)IcomScopeMode.Center or
+                (byte)IcomScopeMode.ScrollCenter &&
               previousGeometry.SpanHz ==
                 currentGeometry.SpanHz)
           {
@@ -239,6 +240,11 @@ namespace SkyRoof
             if (shiftBins != 0)
               ShiftMappedHistoryLocked(
                 shiftBins);
+          }
+          else if (!previousGeometry.IsValid ||
+                   !currentGeometry.IsValid)
+          {
+            HistoryShiftResidualBins = 0;
           }
         }
 
