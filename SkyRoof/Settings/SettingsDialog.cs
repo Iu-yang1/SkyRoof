@@ -293,8 +293,20 @@ namespace SkyRoof
                 "SkyRoof.IcomLanSpectrumSettings.DirectLanPassword" or
                 "SkyRoof.IcomLanSpectrumSettings.DirectLanClientName");
 
+        bool controlChanged =
+          ChangedFields.Exists(
+            s =>
+              s is
+                "SkyRoof.IcomLanSpectrumSettings.ControlPath" or
+                "SkyRoof.IcomLanSpectrumSettings.ScopeBand" or
+                "SkyRoof.IcomLanSpectrumSettings.ScopeEdgeNumber" or
+                "SkyRoof.IcomLanSpectrumSettings.ScopeReferenceLevelDb" or
+                "SkyRoof.IcomLanSpectrumSettings.ScopeSweepSpeed");
+
         if (transportChanged)
           ctx.IcomLanSpectrumPanel?.ApplySettings();
+        else if (controlChanged)
+          ctx.IcomLanSpectrumPanel?.ApplyControlSettings();
         else
           ctx.IcomLanSpectrumPanel?.ApplyDisplaySettings();
       }
