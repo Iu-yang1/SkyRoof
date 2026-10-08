@@ -184,6 +184,10 @@ namespace SkyRoof
 
     internal void CompleteDownlinkTuning()
     {
+      // Continuous spectrum gestures may update persistent transponder/manual
+      // corrections many times per second. Persist once at gesture completion
+      // instead of writing the settings file on every drag sample.
+      ctx.Settings.SaveToFile();
       RadioLinkToUi();
     }
 
