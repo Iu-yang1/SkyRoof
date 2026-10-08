@@ -1272,6 +1272,36 @@ namespace VE3NEA.Dsp.Tests
 
 
     [Fact]
+    public void AdaptiveScopeMappingUsesRobustNoiseFloorWithoutChangingRawSamples()
+    {
+      byte[] raw = Enumerable.Repeat((byte)30, 475).ToArray();
+      raw[10] = 5;
+      raw[80] = 140;
+      raw[81] = 160;
+
+      IcomLanSpectrumView.EstimateNoiseFloor(raw).Should().Be(30);
+      raw[80].Should().Be(140);
+      raw[81].Should().Be(160);
+
+      IcomLanSpectrumView.MapSpectrumLevel(30, 30).Should().Be(62);
+      IcomLanSpectrumView.MapSpectrumLevel(100, 30).Should().Be(160);
+      IcomLanSpectrumView.MapAdaptiveWaterfallLevel(30, 30).Should().Be(30);
+      IcomLanSpectrumView.MapAdaptiveWaterfallLevel(35, 30).Should().Be(46);
+      IcomLanSpectrumView.MapAdaptiveWaterfallLevel(0, 0).Should().Be(0);
+    }
+
+    [Fact]
+    public void AdaptiveScopeMappingHandlesEmptyAndOutOfRangeValues()
+    {
+      IcomLanSpectrumView.EstimateNoiseFloor(Array.Empty<byte>())
+        .Should().Be(0);
+      IcomLanSpectrumView.MapSpectrumLevel(-10, 0).Should().Be(0);
+      IcomLanSpectrumView.MapSpectrumLevel(200, 0).Should().Be(160);
+      IcomLanSpectrumView.MapAdaptiveWaterfallLevel(200, 30)
+        .Should().Be(160);
+    }
+
+    [Fact]
     public void ScopeCommandQueue_CoalescedReplacementMovesToLatestEventPosition()
     {
       var queue =
