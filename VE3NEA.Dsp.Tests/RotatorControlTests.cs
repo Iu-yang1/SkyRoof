@@ -86,6 +86,40 @@ public sealed class RotatorControlTests
         Assert.True(server.ConnectionCount >= 2);
     }
 
+    [Fact]
+    public async Task FragmentedPositionReplyIsReassembled()
+    {
+        await using var server = new FakeRotctld((command, _) =>
+            command == "p" ? "225.25\n12.75\n" : "RPRT 0\n",
+            fragmentPositionReply: true);
+        using var engine = StartEngine(server.Port);
+
+        await WaitUntilAsync(() => engine.LastReadBearing != null);
+        Assert.Equal(225.25, engine.LastReadBearing!.AzDeg, 2);
+        Assert.Equal(12.75, engine.LastReadBearing.ElDeg, 2);
+    }
+
+    [Fact]
+    public async Task StopCancelsTargetAndSendsOneStopCommand()
+    {
+        await using var server = new FakeRotctld((command, _) =>
+            command == "p" ? "90.0\n30.0\n" : "RPRT 0\n");
+        using var engine = StartEngine(server.Port);
+
+        engine.RotateTo(new SkyRoof.Bearing(Math.PI / 2, Math.PI / 6));
+        await WaitUntilAsync(() => server.Commands.Any(command =>
+            command.StartsWith("P ", StringComparison.Ordinal)));
+        engine.StopRotation();
+        await WaitUntilAsync(() => server.Count("S") >= 1);
+        await Task.Delay(150);
+
+        Assert.Equal(1, server.Count("S"));
+        Assert.Null(engine.RequestedBearing);
+        Assert.Null(engine.LastWrittenBearing);
+        Assert.Equal(1, server.Commands.Count(command =>
+            command.StartsWith("P ", StringComparison.Ordinal)));
+    }
+
     private static RotatorControlEngine StartEngine(ushort port)
     {
         var previous = SynchronizationContext.Current;
@@ -123,6 +157,7 @@ public sealed class RotatorControlTests
         private readonly CancellationTokenSource stop = new();
         private readonly Task worker;
         private readonly Func<string, int, string?> respond;
+        private readonly bool fragmentPositionReply;
         private int commandNumber;
         private int connectionCount;
 
@@ -130,9 +165,11 @@ public sealed class RotatorControlTests
         public ushort Port { get; }
         public int ConnectionCount => Volatile.Read(ref connectionCount);
 
-        public FakeRotctld(Func<string, int, string?> respond)
+        public FakeRotctld(Func<string, int, string?> respond,
+            bool fragmentPositionReply = false)
         {
             this.respond = respond;
+            this.fragmentPositionReply = fragmentPositionReply;
             listener = new TcpListener(IPAddress.Loopback, 0);
             listener.Start();
             Port = checked((ushort)((IPEndPoint)listener.LocalEndpoint).Port);
@@ -171,6 +208,19 @@ public sealed class RotatorControlTests
                             string? reply = respond(command, Interlocked.Increment(ref commandNumber));
                             if (reply == null) break; // drop the socket to simulate a reboot
 
+                            if (fragmentPositionReply && command == "p")
+                            {
+                                int firstLineLength = reply.IndexOf('\n') + 1;
+                                if (firstLineLength > 0 && firstLineLength < reply.Length)
+                                {
+                                    await stream.WriteAsync(
+                                        Encoding.ASCII.GetBytes(reply[..firstLineLength]), stop.Token);
+                                    await Task.Delay(30, stop.Token);
+                                    await stream.WriteAsync(
+                                        Encoding.ASCII.GetBytes(reply[firstLineLength..]), stop.Token);
+                                    continue;
+                                }
+                            }
                             await stream.WriteAsync(Encoding.ASCII.GetBytes(reply), stop.Token);
                         }
                     }
