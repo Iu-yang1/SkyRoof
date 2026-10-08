@@ -120,5 +120,32 @@ namespace SkyRoof
         frame.FrequencyBHz,
         true);
     }
+
+    internal bool ContainsFrequency(long frequencyHz) =>
+      IsValid &&
+      frequencyHz >= LowerFrequencyHz &&
+      frequencyHz <= UpperFrequencyHz;
+
+    internal long FrequencyAtFraction(double fraction)
+    {
+      if (!IsValid || SpanHz <= 0)
+        return 0;
+
+      double clamped =
+        Math.Clamp(fraction, 0.0, 1.0);
+
+      return LowerFrequencyHz +
+        checked((long)Math.Round(SpanHz * clamped));
+    }
+
+    internal double FractionForFrequency(long frequencyHz)
+    {
+      if (!IsValid || SpanHz <= 0)
+        return double.NaN;
+
+      return
+        (frequencyHz - LowerFrequencyHz) /
+        (double)SpanHz;
+    }
   }
 }

@@ -425,6 +425,28 @@ namespace VE3NEA.Dsp.Tests
     }
 
 
+    [Fact]
+    public void ScopeGeometry_MapsFractionsToAbsoluteFrequency()
+    {
+      var frame = new IcomScopeFrame
+      {
+        Mode = (byte)IcomScopeMode.Center,
+        FrequencyAHz = 435_600_000,
+        FrequencyBHz = 200_000
+      };
+
+      IcomScopeGeometry geometry =
+        frame.Geometry;
+
+      geometry.FrequencyAtFraction(0).Should().Be(435_500_000);
+      geometry.FrequencyAtFraction(0.5).Should().Be(435_600_000);
+      geometry.FrequencyAtFraction(1).Should().Be(435_700_000);
+      geometry.FractionForFrequency(435_650_000).Should().BeApproximately(0.75, 1e-9);
+      geometry.ContainsFrequency(435_600_000).Should().BeTrue();
+      geometry.ContainsFrequency(435_800_000).Should().BeFalse();
+    }
+
+
     private static byte[] BuildLanUdpPacket(
       IPAddress source,
       IPAddress destination,

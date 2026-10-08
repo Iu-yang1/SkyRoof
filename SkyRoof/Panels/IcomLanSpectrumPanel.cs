@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using WeifenLuo.WinFormsUI.Docking;
 
 namespace SkyRoof
@@ -7,15 +6,14 @@ namespace SkyRoof
   {
     private readonly Context ctx;
 
-    private readonly TextBox RadioAddressBox = new();
-    private readonly NumericUpDown SerialPortBox = new();
     private readonly ComboBox ScopeBandBox = new();
-    private readonly Button SourceBtn = new();
+    private readonly Label ModeLabel = new();
+    private readonly Label GeometryLabel = new();
     private readonly Button StartStopBtn = new();
     private readonly Button ClearBtn = new();
+    private readonly Button SettingsBtn = new();
     private readonly Label StatusLabel = new();
     private readonly Label StatsLabel = new();
-    private readonly Label TransportLabel = new();
     private readonly IcomLanSpectrumView SpectrumView = new();
     private readonly System.Windows.Forms.Timer UiTimer = new() { Interval = 500 };
     private readonly IcomScopeState ScopeState = new();
@@ -70,6 +68,8 @@ namespace SkyRoof
 
       UiTimer.Tick += (_, _) =>
       {
+        RefreshTuningOverlay();
+        RefreshScopeGeometryUi();
         RefreshUiStatus();
       };
       UiTimer.Start();
@@ -86,9 +86,9 @@ namespace SkyRoof
       };
       root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
       root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+      root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
       root.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
       root.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
-      root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
       var toolbar = new FlowLayoutPanel
       {
@@ -99,124 +99,127 @@ namespace SkyRoof
         Margin = new Padding(0, 0, 0, 6)
       };
 
-      toolbar.Controls.Add(new Label
-      {
-        AutoSize = true,
-        Text = "Radio IP:",
-        Margin = new Padding(0, 7, 4, 0)
-      });
-
-      RadioAddressBox.Width = 135;
-      RadioAddressBox.PlaceholderText = "Auto";
-      RadioAddressBox.Margin = new Padding(0, 3, 8, 3);
-      RadioAddressBox.Leave += (_, _) => SaveUiSettings();
-      toolbar.Controls.Add(RadioAddressBox);
-
-      toolbar.Controls.Add(new Label
-      {
-        AutoSize = true,
-        Text = "CI-V UDP:",
-        Margin = new Padding(0, 7, 4, 0)
-      });
-
-      SerialPortBox.Minimum = 1;
-      SerialPortBox.Maximum = 65535;
-      SerialPortBox.Width = 78;
-      SerialPortBox.Margin = new Padding(0, 3, 8, 3);
-      SerialPortBox.ValueChanged += (_, _) =>
-      {
-        if (!SerialPortBox.Focused) return;
-        SaveUiSettings();
-      };
-      toolbar.Controls.Add(SerialPortBox);
-
-      toolbar.Controls.Add(new Label
-      {
-        AutoSize = true,
-        Text = "Scope:",
-        Margin = new Padding(0, 7, 4, 0)
-      });
-
       ScopeBandBox.DropDownStyle = ComboBoxStyle.DropDownList;
-      ScopeBandBox.Width = 90;
-      ScopeBandBox.Items.AddRange(new object[] { "Auto", "MAIN", "SUB" });
+      ScopeBandBox.Width = 84;
+      ScopeBandBox.Items.AddRange(new object[] { "AUTO", "MAIN", "SUB" });
       ScopeBandBox.Margin = new Padding(0, 3, 8, 3);
       ScopeBandBox.SelectedIndexChanged += (_, _) =>
       {
         ScopeState.SelectedBand =
-          (IcomLanScopeBand)Math.Clamp(ScopeBandBox.SelectedIndex, 0, 2);
+          (IcomLanScopeBand)Math.Clamp(
+            ScopeBandBox.SelectedIndex,
+            0,
+            2);
         SaveUiSettings();
+        RefreshScopeGeometryUi();
       };
       toolbar.Controls.Add(ScopeBandBox);
 
-      SourceBtn.AutoSize = true;
-      SourceBtn.Margin = new Padding(0, 2, 8, 2);
-      SourceBtn.Click += (_, _) => ToggleScopeSource();
-      toolbar.Controls.Add(SourceBtn);
+      ModeLabel.AutoSize = true;
+      ModeLabel.Text = "—";
+      ModeLabel.Font =
+        new Font(
+          Font,
+          FontStyle.Bold);
+      ModeLabel.Margin = new Padding(2, 7, 10, 0);
+      toolbar.Controls.Add(ModeLabel);
+
+      GeometryLabel.AutoSize = true;
+      GeometryLabel.Text = "Waiting for scope";
+      GeometryLabel.ForeColor = SystemColors.GrayText;
+      GeometryLabel.Margin = new Padding(0, 7, 12, 0);
+      toolbar.Controls.Add(GeometryLabel);
 
       StartStopBtn.Text = "Start";
       StartStopBtn.AutoSize = true;
       StartStopBtn.Margin = new Padding(0, 2, 6, 2);
       StartStopBtn.Click += (_, _) =>
       {
-        if (Capture == null) StartCapture();
-        else StopCapture();
+        if (Capture == null)
+          StartCapture();
+        else
+          StopCapture();
       };
       toolbar.Controls.Add(StartStopBtn);
 
       ClearBtn.Text = "Clear";
       ClearBtn.AutoSize = true;
-      ClearBtn.Margin = new Padding(0, 2, 8, 2);
-      ClearBtn.Click += (_, _) => SpectrumView.Clear();
+      ClearBtn.Margin = new Padding(0, 2, 6, 2);
+      ClearBtn.Click += (_, _) =>
+      {
+        ScopeState.Clear();
+        SpectrumView.Clear();
+        RefreshScopeGeometryUi();
+      };
       toolbar.Controls.Add(ClearBtn);
 
-      TransportLabel.AutoSize = true;
-      TransportLabel.ForeColor = SystemColors.GrayText;
-      TransportLabel.Margin = new Padding(4, 7, 0, 0);
-      toolbar.Controls.Add(TransportLabel);
+      SettingsBtn.Text = "Settings…";
+      SettingsBtn.AutoSize = true;
+      SettingsBtn.Margin = new Padding(0, 2, 0, 2);
+      SettingsBtn.Click += (_, _) =>
+        new SettingsDialog(
+          ctx,
+          "SkyRoof.Settings.IcomLanSpectrum")
+          .ShowDialog(this);
+      toolbar.Controls.Add(SettingsBtn);
 
       root.Controls.Add(toolbar, 0, 0);
+
+      SpectrumView.Dock = DockStyle.Fill;
+      SpectrumView.Margin = new Padding(0);
+      SpectrumView.SpectrumPercentChanged += percent =>
+      {
+        ctx.Settings.IcomLanSpectrum.SpectrumHeightPercent =
+          percent;
+        ctx.Settings.SaveToFile();
+      };
+      root.Controls.Add(SpectrumView, 0, 1);
 
       StatusLabel.Dock = DockStyle.Fill;
       StatusLabel.TextAlign = ContentAlignment.MiddleLeft;
       StatusLabel.ForeColor = SystemColors.GrayText;
       StatusLabel.Text =
-        "Stopped. Select SkyCAT or RS-BA1 as the spectrum source, then start capture.";
-      root.Controls.Add(StatusLabel, 0, 1);
+        "Stopped. Configure the spectrum source in Settings, then start capture.";
+      root.Controls.Add(StatusLabel, 0, 2);
 
       StatsLabel.Dock = DockStyle.Fill;
       StatsLabel.TextAlign = ContentAlignment.MiddleLeft;
       StatsLabel.ForeColor = SystemColors.GrayText;
       StatsLabel.Text = "Packets 0 · CI-V 0 · Scope 0 · 0.0 fps";
-      root.Controls.Add(StatsLabel, 0, 2);
-
-      SpectrumView.Dock = DockStyle.Fill;
-      SpectrumView.Margin = new Padding(0);
-      root.Controls.Add(SpectrumView, 0, 3);
+      root.Controls.Add(StatsLabel, 0, 3);
 
       Controls.Add(root);
     }
 
     private void LoadSettingsToUi()
     {
-      IcomLanSpectrumSettings settings = ctx.Settings.IcomLanSpectrum;
+      IcomLanSpectrumSettings settings =
+        ctx.Settings.IcomLanSpectrum;
 
-      RadioAddressBox.Text = settings.RadioAddress ?? string.Empty;
-      SerialPortBox.Value = Math.Clamp(settings.SerialPort, 1, 65535);
-      ScopeBandBox.SelectedIndex = Math.Clamp((int)settings.ScopeBand, 0, 2);
+      ScopeBandBox.SelectedIndex =
+        Math.Clamp(
+          (int)settings.ScopeBand,
+          0,
+          2);
       ScopeState.SelectedBand =
         (IcomLanScopeBand)ScopeBandBox.SelectedIndex;
-      UpdateSourceButton();
-      SpectrumView.SetHistoryRows(settings.WaterfallRows);
+
+      SpectrumView.SetHistoryRows(
+        settings.WaterfallRows);
+      SpectrumView.SetSpectrumPercent(
+        settings.SpectrumHeightPercent);
+
+      RefreshTuningOverlay();
+      RefreshScopeGeometryUi();
     }
 
     private void SaveUiSettings()
     {
-      IcomLanSpectrumSettings settings = ctx.Settings.IcomLanSpectrum;
-      settings.RadioAddress = RadioAddressBox.Text.Trim();
-      settings.SerialPort = (int)SerialPortBox.Value;
-      settings.ScopeBand =
-        (IcomLanScopeBand)Math.Clamp(ScopeBandBox.SelectedIndex, 0, 2);
+      ctx.Settings.IcomLanSpectrum.ScopeBand =
+        (IcomLanScopeBand)Math.Clamp(
+          ScopeBandBox.SelectedIndex,
+          0,
+          2);
       ctx.Settings.SaveToFile();
     }
 
@@ -226,72 +229,9 @@ namespace SkyRoof
     private bool UsingDirectLanSource =>
       ctx.Settings.IcomLanSpectrum.Source == IcomLanSpectrumSource.DirectLan;
 
-    private void UpdateSourceButton()
-    {
-      IcomLanSpectrumSettings settings = ctx.Settings.IcomLanSpectrum;
-
-      SourceBtn.Text = settings.Source switch
-      {
-        IcomLanSpectrumSource.DirectLan => "Source: Direct LAN",
-        IcomLanSpectrumSource.RsBa1 => "Source: RS-BA1",
-        _ => "Source: SkyCAT"
-      };
-
-      TransportLabel.Text = settings.Source switch
-      {
-        IcomLanSpectrumSource.DirectLan =>
-          $"Experimental authenticated Icom LAN · manual start · control UDP/{settings.DirectLanControlPort}",
-        IcomLanSpectrumSource.RsBa1 =>
-          "Passive RS-BA1 LAN sniff · WinDivert RECV_ONLY",
-        _ =>
-          $"SkyCAT control · native LAN assist · TCP/{settings.SkyCatScopePort} fallback"
-      };
-    }
-
-    private void ToggleScopeSource()
-    {
-      bool wasRunning = Capture != null;
-
-      if (wasRunning)
-        StopCapture();
-
-      IcomLanSpectrumSettings settings = ctx.Settings.IcomLanSpectrum;
-      settings.Source = settings.Source switch
-      {
-        IcomLanSpectrumSource.SkyCat => IcomLanSpectrumSource.DirectLan,
-        IcomLanSpectrumSource.DirectLan => IcomLanSpectrumSource.RsBa1,
-        _ => IcomLanSpectrumSource.SkyCat
-      };
-
-      ctx.Settings.SaveToFile();
-      UpdateSourceButton();
-
-      ScopeController.Reset();
-      ScopeState.Clear();
-      SpectrumView.Clear();
-
-      if (wasRunning)
-      {
-        StartCapture();
-        return;
-      }
-
-      StatusLabel.Text = settings.Source switch
-      {
-        IcomLanSpectrumSource.DirectLan =>
-          "Direct LAN selected (experimental/manual). Close RS-BA1/other remote clients, configure credentials, then click Start.",
-        IcomLanSpectrumSource.RsBa1 =>
-          "RS-BA1 selected. Open/enable the RS-BA1 Spectrum Scope, then start passive LAN capture.",
-        _ =>
-          $"SkyCAT selected. Start capture to use scope TCP/{settings.SkyCatScopePort}."
-      };
-    }
-
     private void StartCapture()
     {
       if (Capture != null) return;
-
-      SaveUiSettings();
 
       IcomLanSpectrumSettings settings = ctx.Settings.IcomLanSpectrum;
       SpectrumView.SetHistoryRows(settings.WaterfallRows);
@@ -348,7 +288,6 @@ namespace SkyRoof
       LastRenderedScopeFrameTicks = 0;
       LastStatsUsedNativeLan = false;
 
-      SetCaptureInputsEnabled(false);
       StartStopBtn.Text = "Stop";
       StatusLabel.Text = settings.Source switch
       {
@@ -386,15 +325,8 @@ namespace SkyRoof
       capture.StatusChanged -= Capture_StatusChanged;
       capture.Dispose();
 
-      SetCaptureInputsEnabled(true);
       StartStopBtn.Text = "Start";
       StatusLabel.Text = "Spectrum capture stopped.";
-    }
-
-    private void SetCaptureInputsEnabled(bool enabled)
-    {
-      RadioAddressBox.Enabled = enabled;
-      SerialPortBox.Enabled = enabled;
     }
 
     private void Capture_ScopeFrameReceived(IcomScopeFrame frame)
@@ -452,6 +384,84 @@ namespace SkyRoof
 
       SpectrumView.PushFrame(frame);
       LastRenderedScopeFrameTicks = ticks;
+      RefreshScopeGeometryUi();
+    }
+
+    private void RefreshScopeGeometryUi()
+    {
+      IcomScopeFrame? frame =
+        ScopeState.LatestSelectedFrame;
+
+      if (frame == null)
+      {
+        ModeLabel.Text = "—";
+        GeometryLabel.Text = "Waiting for scope";
+        return;
+      }
+
+      IcomScopeGeometry geometry =
+        frame.Geometry;
+
+      ModeLabel.Text =
+        frame.ModeName;
+
+      if (!geometry.IsValid)
+      {
+        GeometryLabel.Text =
+          "Frequency geometry unavailable";
+        return;
+      }
+
+      GeometryLabel.Text =
+        frame.Mode == (byte)IcomScopeMode.Center
+          ? FormatHalfSpan(geometry.SpanHz)
+          : $"{FormatToolbarFrequency(geometry.LowerFrequencyHz)} — " +
+            $"{FormatToolbarFrequency(geometry.UpperFrequencyHz)}";
+    }
+
+    private void RefreshTuningOverlay()
+    {
+      RadioLink link =
+        ctx.FrequencyControl.RadioLink;
+
+      long receiveHz =
+        double.IsFinite(
+          link.CorrectedDownlinkFrequency) &&
+        link.CorrectedDownlinkFrequency > 0
+          ? checked((long)Math.Round(
+              link.CorrectedDownlinkFrequency))
+          : 0;
+
+      Slicer.Mode? mode = null;
+
+      if (link.TxCust != null)
+        mode = link.DownlinkMode;
+      else if (ctx.Slicer != null)
+        mode = ctx.Slicer.CurrentMode;
+
+      SpectrumView.SetTuningOverlay(
+        receiveHz,
+        mode);
+    }
+
+    private static string FormatHalfSpan(long spanHz)
+    {
+      if (spanHz <= 0)
+        return "Span unknown";
+
+      double half = spanHz / 2.0;
+
+      return half >= 1_000_000
+        ? $"±{half / 1_000_000.0:0.###} MHz"
+        : $"±{half / 1_000.0:0.###} kHz";
+    }
+
+    private static string FormatToolbarFrequency(
+      long frequencyHz)
+    {
+      return frequencyHz > 0
+        ? $"{frequencyHz / 1_000_000.0:0.000000} MHz"
+        : "—";
     }
 
     private void Capture_StatusChanged(string message)
@@ -475,7 +485,8 @@ namespace SkyRoof
     private void RefreshUiStatus()
     {
       IcomLanSpectrumCapture? capture = Capture;
-      if (capture == null) return;
+      if (capture == null)
+        return;
 
       DateTime now = DateTime.UtcNow;
       IcomLanSpectrumCapture? nativeLan = NativeLanAssistCapture;

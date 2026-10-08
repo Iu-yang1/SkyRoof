@@ -114,6 +114,11 @@ namespace SkyRoof
     [DefaultValue(240)]
     public int WaterfallRows { get; set; } = 240;
 
+    [DisplayName("Spectrum height")]
+    [Description("Percentage of the spectrum/waterfall display allocated to the spectrum trace. Drag the divider in the spectrum view to change it.")]
+    [DefaultValue(36)]
+    public int SpectrumHeightPercent { get; set; } = 36;
+
     public override string ToString() => string.Empty;
   }
 }

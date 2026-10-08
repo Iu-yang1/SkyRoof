@@ -7,23 +7,32 @@ namespace SkyRoof
   internal sealed class IcomLanSpectrumView : Control
   {
     private const int ScopePoints = 475;
+    private const int SplitterHeight = 6;
+    private const int MinimumSpectrumHeight = 80;
+    private const int MinimumWaterfallHeight = 60;
+    private const int AxisHeight = 20;
 
     private readonly object DataSync = new();
+    private readonly int[] Palette = BuildPalette();
+
     private byte[] LatestSamples = new byte[ScopePoints];
     private IcomScopeFrame? LatestFrame;
 
     private byte[][] WaterfallRows = Array.Empty<byte[]>();
     private int WaterfallHead = -1;
     private bool WaterfallDirty = true;
-
     private Bitmap? WaterfallBitmap;
     private int[] WaterfallArgb = Array.Empty<int>();
-    private readonly int[] Palette = BuildPalette();
 
-    internal void SetHistoryRows(int rows)
-    {
-      ConfigureHistory(Math.Clamp(rows, 40, 800));
-    }
+    private double SpectrumFraction = 0.36;
+    private bool SplitterDragging;
+    private bool PointerInside;
+    private Point PointerLocation = new(-1, -1);
+
+    private long ReceiveFrequencyHz;
+    private Slicer.Mode? ReceiveMode;
+
+    internal event Action<int>? SpectrumPercentChanged;
 
     internal IcomLanSpectrumView()
     {
@@ -35,22 +44,59 @@ namespace SkyRoof
       ConfigureHistory(240);
     }
 
+    internal void SetHistoryRows(int rows)
+    {
+      ConfigureHistory(
+        Math.Clamp(rows, 40, 800));
+    }
+
+    internal void SetSpectrumPercent(int percent)
+    {
+      SpectrumFraction =
+        Math.Clamp(percent, 20, 80) / 100.0;
+      Invalidate();
+    }
+
+    internal void SetTuningOverlay(
+      long receiveFrequencyHz,
+      Slicer.Mode? mode)
+    {
+      if (ReceiveFrequencyHz == receiveFrequencyHz &&
+          ReceiveMode == mode)
+        return;
+
+      ReceiveFrequencyHz =
+        receiveFrequencyHz;
+      ReceiveMode =
+        mode;
+      Invalidate();
+    }
+
     internal void PushFrame(IcomScopeFrame frame)
     {
-      if (frame.Samples.Length < ScopePoints) return;
+      if (frame.Samples.Length < ScopePoints)
+        return;
 
       lock (DataSync)
       {
         LatestFrame = frame;
-        Buffer.BlockCopy(frame.Samples, 0, LatestSamples, 0, ScopePoints);
+        Buffer.BlockCopy(
+          frame.Samples,
+          0,
+          LatestSamples,
+          0,
+          ScopePoints);
 
-        // Partial USB/virtual-COM divisions update the live spectrum trace
-        // immediately, but the waterfall advances only when all 475 bins for the
-        // sweep have arrived. Otherwise one serial sweep would create 10-11
-        // misleading waterfall rows containing a mixture of old and new bins.
-        if (frame.SweepComplete && WaterfallRows.Length > 0)
+        // Serial/Remote Utility scope data may arrive as 10-11 divisions.
+        // Update the trace for every partial division, but advance waterfall
+        // history only after the complete 475-bin sweep has arrived.
+        if (frame.SweepComplete &&
+            WaterfallRows.Length > 0)
         {
-          WaterfallHead = (WaterfallHead + 1) % WaterfallRows.Length;
+          WaterfallHead =
+            (WaterfallHead + 1) %
+            WaterfallRows.Length;
+
           Buffer.BlockCopy(
             frame.Samples,
             0,
@@ -70,8 +116,10 @@ namespace SkyRoof
       {
         LatestFrame = null;
         Array.Clear(LatestSamples);
+
         foreach (byte[] row in WaterfallRows)
           Array.Clear(row);
+
         WaterfallHead = -1;
         WaterfallDirty = true;
       }
@@ -94,185 +142,1021 @@ namespace SkyRoof
     {
       base.OnPaint(e);
 
-      e.Graphics.Clear(BackColor);
-      e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+      Color scopeBack =
+        Theme.IsDark
+          ? Color.FromArgb(12, 16, 20)
+          : Theme.BrandWhite;
+      Color textColor =
+        Theme.IsDark
+          ? Color.Gainsboro
+          : Theme.LightInk;
 
-      if (ClientSize.Width < 20 || ClientSize.Height < 20)
+      e.Graphics.Clear(scopeBack);
+      e.Graphics.SmoothingMode =
+        SmoothingMode.AntiAlias;
+
+      if (ClientSize.Width < 20 ||
+          ClientSize.Height < 20)
         return;
 
       IcomScopeFrame? frame;
-      byte[] samples = new byte[ScopePoints];
+      byte[] samples =
+        new byte[ScopePoints];
 
       lock (DataSync)
       {
         frame = LatestFrame;
-        Buffer.BlockCopy(LatestSamples, 0, samples, 0, ScopePoints);
+        Buffer.BlockCopy(
+          LatestSamples,
+          0,
+          samples,
+          0,
+          ScopePoints);
         RebuildWaterfallBitmapIfNeeded();
       }
 
-      int headerHeight = Math.Max(24, Font.Height + 8);
-      int spectrumHeight = Math.Max(80, (ClientSize.Height - headerHeight) * 36 / 100);
-      int waterfallTop = headerHeight + spectrumHeight;
-      int waterfallHeight = Math.Max(0, ClientSize.Height - waterfallTop);
+      GetLayout(
+        out Rectangle headerRect,
+        out Rectangle spectrumRect,
+        out Rectangle splitterRect,
+        out Rectangle waterfallRect);
 
-      var headerRect = new Rectangle(0, 0, ClientSize.Width, headerHeight);
-      var spectrumRect = new Rectangle(0, headerHeight, ClientSize.Width, spectrumHeight);
-      var waterfallRect = new Rectangle(0, waterfallTop, ClientSize.Width, waterfallHeight);
+      DrawHeader(
+        e.Graphics,
+        headerRect,
+        frame,
+        scopeBack,
+        textColor);
 
-      DrawHeader(e.Graphics, headerRect, frame);
-      DrawSpectrum(e.Graphics, spectrumRect, samples);
+      DrawSpectrum(
+        e.Graphics,
+        spectrumRect,
+        samples,
+        frame,
+        scopeBack,
+        textColor);
 
-      if (waterfallHeight > 0 && WaterfallBitmap != null)
+      DrawSplitter(
+        e.Graphics,
+        splitterRect);
+
+      if (waterfallRect.Height > 0 &&
+          WaterfallBitmap != null)
       {
-        // The radio provides 475 horizontal bins. Bilinear scaling is much easier to
-        // read than nearest-neighbour when the dock panel is 2x-3x wider than that.
-        e.Graphics.InterpolationMode = InterpolationMode.Bilinear;
-        e.Graphics.PixelOffsetMode = PixelOffsetMode.Half;
+        e.Graphics.InterpolationMode =
+          InterpolationMode.Bilinear;
+        e.Graphics.PixelOffsetMode =
+          PixelOffsetMode.Half;
+
         e.Graphics.DrawImage(
           WaterfallBitmap,
           waterfallRect,
-          new Rectangle(0, 0, WaterfallBitmap.Width, WaterfallBitmap.Height),
+          new Rectangle(
+            0,
+            0,
+            WaterfallBitmap.Width,
+            WaterfallBitmap.Height),
           GraphicsUnit.Pixel);
       }
 
-      using var borderPen = new Pen(Color.FromArgb(90, 90, 90));
-      e.Graphics.DrawRectangle(
-        borderPen,
-        0,
-        headerHeight,
-        Math.Max(0, ClientSize.Width - 1),
-        Math.Max(0, spectrumHeight - 1));
+      Color borderColor =
+        Theme.IsDark
+          ? Color.FromArgb(90, 90, 90)
+          : Color.FromArgb(170, 190, 202);
 
-      if (waterfallHeight > 0)
-      {
+      using var borderPen =
+        new Pen(borderColor);
+
+      if (spectrumRect.Width > 1 &&
+          spectrumRect.Height > 1)
         e.Graphics.DrawRectangle(
           borderPen,
-          0,
-          waterfallTop,
-          Math.Max(0, ClientSize.Width - 1),
-          Math.Max(0, waterfallHeight - 1));
+          spectrumRect.Left,
+          spectrumRect.Top,
+          spectrumRect.Width - 1,
+          spectrumRect.Height - 1);
+
+      if (waterfallRect.Width > 1 &&
+          waterfallRect.Height > 1)
+        e.Graphics.DrawRectangle(
+          borderPen,
+          waterfallRect.Left,
+          waterfallRect.Top,
+          waterfallRect.Width - 1,
+          waterfallRect.Height - 1);
+    }
+
+    protected override void OnMouseDown(
+      MouseEventArgs e)
+    {
+      base.OnMouseDown(e);
+
+      GetLayout(
+        out _,
+        out _,
+        out Rectangle splitter,
+        out _);
+
+      if (e.Button == MouseButtons.Left &&
+          splitter.Contains(e.Location))
+      {
+        SplitterDragging = true;
+        Capture = true;
+        Cursor = Cursors.HSplit;
       }
     }
 
-    private void DrawHeader(Graphics graphics, Rectangle bounds, IcomScopeFrame? frame)
+    protected override void OnMouseUp(
+      MouseEventArgs e)
     {
+      base.OnMouseUp(e);
+
+      if (!SplitterDragging)
+        return;
+
+      SplitterDragging = false;
+      Capture = false;
+
+      SpectrumPercentChanged?.Invoke(
+        (int)Math.Round(
+          SpectrumFraction * 100));
+
+      UpdatePointerCursor(e.Location);
+    }
+
+    protected override void OnMouseMove(
+      MouseEventArgs e)
+    {
+      base.OnMouseMove(e);
+
+      PointerInside = true;
+      PointerLocation = e.Location;
+
+      if (SplitterDragging)
+      {
+        int headerHeight =
+          Math.Max(24, Font.Height + 8);
+        int available =
+          Math.Max(
+            1,
+            ClientSize.Height -
+            headerHeight -
+            SplitterHeight);
+
+        int desired =
+          e.Y - headerHeight;
+
+        int maxSpectrum =
+          Math.Max(
+            MinimumSpectrumHeight,
+            available -
+            MinimumWaterfallHeight);
+
+        desired =
+          Math.Clamp(
+            desired,
+            MinimumSpectrumHeight,
+            maxSpectrum);
+
+        SpectrumFraction =
+          Math.Clamp(
+            desired / (double)available,
+            0.20,
+            0.80);
+      }
+
+      UpdatePointerCursor(e.Location);
+      Invalidate();
+    }
+
+    protected override void OnMouseLeave(
+      EventArgs e)
+    {
+      base.OnMouseLeave(e);
+
+      if (!SplitterDragging)
+      {
+        PointerInside = false;
+        PointerLocation = new Point(-1, -1);
+        Cursor = Cursors.Default;
+        Invalidate();
+      }
+    }
+
+    private void UpdatePointerCursor(Point point)
+    {
+      GetLayout(
+        out _,
+        out Rectangle spectrum,
+        out Rectangle splitter,
+        out _);
+
+      if (SplitterDragging ||
+          splitter.Contains(point))
+      {
+        Cursor = Cursors.HSplit;
+        return;
+      }
+
+      Rectangle plot =
+        GetSpectrumPlotRectangle(
+          spectrum);
+
+      Cursor =
+        plot.Contains(point)
+          ? Cursors.Cross
+          : Cursors.Default;
+    }
+
+    private void GetLayout(
+      out Rectangle header,
+      out Rectangle spectrum,
+      out Rectangle splitter,
+      out Rectangle waterfall)
+    {
+      int headerHeight =
+        Math.Max(24, Font.Height + 8);
+      int available =
+        Math.Max(
+          0,
+          ClientSize.Height -
+          headerHeight -
+          SplitterHeight);
+
+      int spectrumHeight =
+        available == 0
+          ? 0
+          : Math.Clamp(
+              (int)Math.Round(
+                available *
+                SpectrumFraction),
+              Math.Min(
+                MinimumSpectrumHeight,
+                available),
+              Math.Max(
+                Math.Min(
+                  MinimumSpectrumHeight,
+                  available),
+                available -
+                Math.Min(
+                  MinimumWaterfallHeight,
+                  available)));
+
+      int waterfallHeight =
+        Math.Max(
+          0,
+          available -
+          spectrumHeight);
+
+      header =
+        new Rectangle(
+          0,
+          0,
+          ClientSize.Width,
+          headerHeight);
+
+      spectrum =
+        new Rectangle(
+          0,
+          header.Bottom,
+          ClientSize.Width,
+          spectrumHeight);
+
+      splitter =
+        new Rectangle(
+          0,
+          spectrum.Bottom,
+          ClientSize.Width,
+          SplitterHeight);
+
+      waterfall =
+        new Rectangle(
+          0,
+          splitter.Bottom,
+          ClientSize.Width,
+          waterfallHeight);
+    }
+
+    private Rectangle GetSpectrumPlotRectangle(
+      Rectangle spectrumBounds)
+    {
+      int axisHeight =
+        spectrumBounds.Height > AxisHeight + 20
+          ? AxisHeight
+          : 0;
+
+      return new Rectangle(
+        spectrumBounds.Left,
+        spectrumBounds.Top,
+        spectrumBounds.Width,
+        Math.Max(
+          0,
+          spectrumBounds.Height -
+          axisHeight));
+    }
+
+    private void DrawHeader(
+      Graphics graphics,
+      Rectangle bounds,
+      IcomScopeFrame? frame,
+      Color background,
+      Color textColor)
+    {
+      using var back =
+        new SolidBrush(background);
+      graphics.FillRectangle(
+        back,
+        bounds);
+
       string left;
       string right;
 
       if (frame == null)
       {
-        left = "Waiting for CI-V 27 00 scope data...";
+        left =
+          "Waiting for CI-V 27 00 scope data...";
         right = "";
       }
       else
       {
         left =
-          frame.SweepComplete || frame.DivisionMaximum <= 1
+          frame.SweepComplete ||
+          frame.DivisionMaximum <= 1
             ? $"{frame.ScopeName} · {frame.ModeName}"
-            : $"{frame.ScopeName} · {frame.ModeName} · LIVE {frame.DivisionCurrent}/{frame.DivisionMaximum}";
+            : $"{frame.ScopeName} · {frame.ModeName} · " +
+              $"LIVE {frame.DivisionCurrent}/{frame.DivisionMaximum}";
 
-        if (frame.Mode == 0)
+        IcomScopeGeometry geometry =
+          frame.Geometry;
+
+        if (geometry.IsValid)
         {
-          string center = FormatFrequency(frame.CenterFrequencyHz);
-          string span = FormatSpan(frame.SpanHz);
-          right = frame.OutOfRange
-            ? $"{center} · {span} · OUT OF RANGE"
-            : $"{center} · {span}";
+          right =
+            frame.Mode ==
+              (byte)IcomScopeMode.Center
+              ? $"{FormatFrequency(geometry.CenterFrequencyHz)} · " +
+                $"{FormatSpan(geometry.SpanHz)}"
+              : $"{FormatFrequency(geometry.LowerFrequencyHz)} – " +
+                $"{FormatFrequency(geometry.UpperFrequencyHz)}";
         }
         else
         {
           right =
-            $"{FormatFrequency(frame.FrequencyAHz)} – " +
-            $"{FormatFrequency(frame.FrequencyBHz)}";
-          if (frame.OutOfRange) right += " · OUT OF RANGE";
+            "frequency geometry unavailable";
         }
+
+        if (frame.OutOfRange)
+          right += " · OUT OF RANGE";
       }
 
-      using var brush = new SolidBrush(ForeColor);
       var flagsLeft =
         TextFormatFlags.Left |
         TextFormatFlags.VerticalCenter |
         TextFormatFlags.EndEllipsis |
         TextFormatFlags.NoPrefix;
+
       var flagsRight =
         TextFormatFlags.Right |
         TextFormatFlags.VerticalCenter |
         TextFormatFlags.EndEllipsis |
         TextFormatFlags.NoPrefix;
 
-      var leftRect = new Rectangle(
-        bounds.Left + 6,
-        bounds.Top,
-        Math.Max(1, bounds.Width / 2 - 8),
-        bounds.Height);
-      var rightRect = new Rectangle(
-        bounds.Left + bounds.Width / 2,
-        bounds.Top,
-        Math.Max(1, bounds.Width / 2 - 6),
-        bounds.Height);
+      var leftRect =
+        new Rectangle(
+          bounds.Left + 6,
+          bounds.Top,
+          Math.Max(
+            1,
+            bounds.Width / 2 - 8),
+          bounds.Height);
 
-      TextRenderer.DrawText(graphics, left, Font, leftRect, ForeColor, flagsLeft);
-      TextRenderer.DrawText(graphics, right, Font, rightRect, ForeColor, flagsRight);
+      var rightRect =
+        new Rectangle(
+          bounds.Left +
+          bounds.Width / 2,
+          bounds.Top,
+          Math.Max(
+            1,
+            bounds.Width / 2 - 6),
+          bounds.Height);
+
+      TextRenderer.DrawText(
+        graphics,
+        left,
+        Font,
+        leftRect,
+        textColor,
+        flagsLeft);
+
+      TextRenderer.DrawText(
+        graphics,
+        right,
+        Font,
+        rightRect,
+        textColor,
+        flagsRight);
     }
 
-    private static void DrawSpectrum(Graphics graphics, Rectangle bounds, byte[] samples)
+    private void DrawSpectrum(
+      Graphics graphics,
+      Rectangle bounds,
+      byte[] samples,
+      IcomScopeFrame? frame,
+      Color background,
+      Color textColor)
     {
-      graphics.FillRectangle(Brushes.Black, bounds);
+      using var backgroundBrush =
+        new SolidBrush(background);
+      graphics.FillRectangle(
+        backgroundBrush,
+        bounds);
 
-      using var gridPen = new Pen(Color.FromArgb(55, 90, 90, 90));
-      for (int i = 1; i < 5; i++)
+      Rectangle plot =
+        GetSpectrumPlotRectangle(
+          bounds);
+
+      if (plot.Width < 2 ||
+          plot.Height < 2)
+        return;
+
+      IcomScopeGeometry geometry =
+        frame?.Geometry ?? default;
+
+      DrawPassband(
+        graphics,
+        plot,
+        geometry);
+
+      DrawFrequencyGrid(
+        graphics,
+        bounds,
+        plot,
+        geometry,
+        textColor);
+
+      DrawLevelGrid(
+        graphics,
+        plot);
+
+      DrawTrace(
+        graphics,
+        plot,
+        samples);
+
+      DrawReceiveMarker(
+        graphics,
+        plot,
+        geometry);
+
+      DrawCursorReadout(
+        graphics,
+        plot,
+        geometry,
+        textColor);
+    }
+
+    private void DrawFrequencyGrid(
+      Graphics graphics,
+      Rectangle spectrumBounds,
+      Rectangle plot,
+      IcomScopeGeometry geometry,
+      Color textColor)
+    {
+      int intervals =
+        plot.Width >= 900
+          ? 5
+          : plot.Width >= 600
+            ? 4
+            : 3;
+
+      Color gridColor =
+        Theme.IsDark
+          ? Color.FromArgb(65, 105, 112, 118)
+          : Color.FromArgb(90, Theme.BrandBlue);
+
+      using var gridPen =
+        new Pen(gridColor);
+
+      for (int i = 0;
+           i <= intervals;
+           i++)
       {
-        int x = bounds.Left + bounds.Width * i / 5;
-        graphics.DrawLine(gridPen, x, bounds.Top, x, bounds.Bottom);
-      }
+        double fraction =
+          i / (double)intervals;
 
-      for (int i = 1; i < 4; i++)
+        int x =
+          plot.Left +
+          (int)Math.Round(
+            fraction *
+            Math.Max(
+              0,
+              plot.Width - 1));
+
+        graphics.DrawLine(
+          gridPen,
+          x,
+          plot.Top,
+          x,
+          plot.Bottom);
+
+        if (!geometry.IsValid ||
+            spectrumBounds.Height <=
+              plot.Height)
+          continue;
+
+        long frequency =
+          geometry.FrequencyAtFraction(
+            fraction);
+
+        string label =
+          FormatAxisFrequency(
+            frequency);
+
+        Size textSize =
+          TextRenderer.MeasureText(
+            graphics,
+            label,
+            Font,
+            Size.Empty,
+            TextFormatFlags.NoPadding);
+
+        int labelX =
+          Math.Clamp(
+            x - textSize.Width / 2,
+            spectrumBounds.Left + 2,
+            Math.Max(
+              spectrumBounds.Left + 2,
+              spectrumBounds.Right -
+              textSize.Width -
+              2));
+
+        var labelBounds =
+          new Rectangle(
+            labelX,
+            plot.Bottom,
+            textSize.Width + 2,
+            Math.Max(
+              1,
+              spectrumBounds.Bottom -
+              plot.Bottom));
+
+        TextRenderer.DrawText(
+          graphics,
+          label,
+          Font,
+          labelBounds,
+          textColor,
+          TextFormatFlags.HorizontalCenter |
+          TextFormatFlags.VerticalCenter |
+          TextFormatFlags.NoPrefix |
+          TextFormatFlags.NoPadding);
+      }
+    }
+
+    private static void DrawLevelGrid(
+      Graphics graphics,
+      Rectangle plot)
+    {
+      Color gridColor =
+        Theme.IsDark
+          ? Color.FromArgb(50, 95, 95, 95)
+          : Color.FromArgb(45, Theme.BrandPink);
+
+      using var gridPen =
+        new Pen(gridColor);
+
+      for (int i = 1;
+           i < 4;
+           i++)
       {
-        int y = bounds.Top + bounds.Height * i / 4;
-        graphics.DrawLine(gridPen, bounds.Left, y, bounds.Right, y);
+        int y =
+          plot.Top +
+          plot.Height * i / 4;
+
+        graphics.DrawLine(
+          gridPen,
+          plot.Left,
+          y,
+          plot.Right,
+          y);
       }
+    }
 
-      if (samples.Length < 2) return;
+    private static void DrawTrace(
+      Graphics graphics,
+      Rectangle plot,
+      byte[] samples)
+    {
+      if (samples.Length < 2)
+        return;
 
-      var points = new PointF[samples.Length];
-      float usableHeight = Math.Max(1, bounds.Height - 4);
+      var points =
+        new PointF[samples.Length];
 
-      for (int i = 0; i < samples.Length; i++)
+      float usableHeight =
+        Math.Max(
+          1,
+          plot.Height - 4);
+
+      for (int i = 0;
+           i < samples.Length;
+           i++)
       {
         float x =
-          bounds.Left +
-          i * (bounds.Width - 1f) /
+          plot.Left +
+          i *
+          (plot.Width - 1f) /
           (samples.Length - 1f);
 
-        float normalized = Math.Clamp(samples[i] / 160f, 0f, 1f);
-        float y =
-          bounds.Bottom - 2 -
-          normalized * usableHeight;
+        float normalized =
+          Math.Clamp(
+            samples[i] / 160f,
+            0f,
+            1f);
 
-        points[i] = new PointF(x, y);
+        float y =
+          plot.Bottom -
+          2 -
+          normalized *
+          usableHeight;
+
+        points[i] =
+          new PointF(
+            x,
+            y);
       }
 
-      using var tracePen = new Pen(Color.Cyan, 1.2f);
-      graphics.DrawLines(tracePen, points);
+      Color traceColor =
+        Theme.IsDark
+          ? Theme.BrandBlue
+          : Theme.BlueDark;
+
+      using var tracePen =
+        new Pen(
+          traceColor,
+          1.25f);
+
+      graphics.DrawLines(
+        tracePen,
+        points);
+    }
+
+    private void DrawPassband(
+      Graphics graphics,
+      Rectangle plot,
+      IcomScopeGeometry geometry)
+    {
+      if (!geometry.IsValid ||
+          ReceiveFrequencyHz <= 0 ||
+          ReceiveMode == null)
+        return;
+
+      int bandwidth =
+        Slicer.GetBandwidth(
+          ReceiveMode.Value);
+
+      int offset =
+        Slicer.GetModeOffset(
+          ReceiveMode.Value);
+
+      long center =
+        ReceiveFrequencyHz +
+        offset;
+
+      long low =
+        center -
+        bandwidth / 2;
+
+      long high =
+        low +
+        bandwidth;
+
+      double lowFraction =
+        geometry.FractionForFrequency(
+          low);
+      double highFraction =
+        geometry.FractionForFrequency(
+          high);
+
+      if (double.IsNaN(lowFraction) ||
+          double.IsNaN(highFraction) ||
+          highFraction < 0 ||
+          lowFraction > 1)
+        return;
+
+      lowFraction =
+        Math.Clamp(
+          lowFraction,
+          0,
+          1);
+      highFraction =
+        Math.Clamp(
+          highFraction,
+          0,
+          1);
+
+      int left =
+        plot.Left +
+        (int)Math.Round(
+          lowFraction *
+          (plot.Width - 1));
+
+      int right =
+        plot.Left +
+        (int)Math.Round(
+          highFraction *
+          (plot.Width - 1));
+
+      if (right <= left)
+        right = left + 1;
+
+      using var brush =
+        new SolidBrush(
+          Color.FromArgb(
+            Theme.IsDark ? 44 : 54,
+            Theme.BrandPink));
+
+      graphics.FillRectangle(
+        brush,
+        Rectangle.FromLTRB(
+          left,
+          plot.Top,
+          Math.Min(
+            plot.Right,
+            right),
+          plot.Bottom));
+    }
+
+    private void DrawReceiveMarker(
+      Graphics graphics,
+      Rectangle plot,
+      IcomScopeGeometry geometry)
+    {
+      if (!geometry.ContainsFrequency(
+            ReceiveFrequencyHz))
+        return;
+
+      double fraction =
+        geometry.FractionForFrequency(
+          ReceiveFrequencyHz);
+
+      int x =
+        plot.Left +
+        (int)Math.Round(
+          fraction *
+          (plot.Width - 1));
+
+      using var pen =
+        new Pen(
+          Theme.BrandPink,
+          1.4f);
+
+      graphics.DrawLine(
+        pen,
+        x,
+        plot.Top,
+        x,
+        plot.Bottom);
+
+      var labelBounds =
+        new Rectangle(
+          Math.Max(
+            plot.Left,
+            x - 18),
+          plot.Top + 2,
+          36,
+          Font.Height + 4);
+
+      TextRenderer.DrawText(
+        graphics,
+        "RX",
+        Font,
+        labelBounds,
+        Theme.IsDark
+          ? Color.White
+          : Theme.PinkDark,
+        TextFormatFlags.HorizontalCenter |
+        TextFormatFlags.NoPrefix |
+        TextFormatFlags.NoPadding);
+    }
+
+    private void DrawCursorReadout(
+      Graphics graphics,
+      Rectangle plot,
+      IcomScopeGeometry geometry,
+      Color textColor)
+    {
+      if (!PointerInside ||
+          !geometry.IsValid ||
+          !plot.Contains(
+            PointerLocation))
+        return;
+
+      double fraction =
+        (PointerLocation.X -
+         plot.Left) /
+        (double)Math.Max(
+          1,
+          plot.Width - 1);
+
+      long frequency =
+        geometry.FrequencyAtFraction(
+          fraction);
+
+      int x =
+        Math.Clamp(
+          PointerLocation.X,
+          plot.Left,
+          plot.Right - 1);
+
+      using var cursorPen =
+        new Pen(
+          Theme.IsDark
+            ? Color.FromArgb(185, 235, 235, 235)
+            : Theme.BlueDark,
+          1f)
+        {
+          DashStyle =
+            DashStyle.Dash
+        };
+
+      graphics.DrawLine(
+        cursorPen,
+        x,
+        plot.Top,
+        x,
+        plot.Bottom);
+
+      string text =
+        FormatCursorText(
+          frequency);
+
+      Size textSize =
+        TextRenderer.MeasureText(
+          graphics,
+          text,
+          Font,
+          Size.Empty,
+          TextFormatFlags.NoPadding);
+
+      int left =
+        Math.Clamp(
+          x + 8,
+          plot.Left + 3,
+          Math.Max(
+            plot.Left + 3,
+            plot.Right -
+            textSize.Width -
+            9));
+
+      int top =
+        plot.Top + 22;
+
+      var box =
+        new Rectangle(
+          left,
+          top,
+          textSize.Width + 8,
+          textSize.Height + 6);
+
+      using var boxBrush =
+        new SolidBrush(
+          Theme.IsDark
+            ? Color.FromArgb(
+                220,
+                24,
+                28,
+                32)
+            : Color.FromArgb(
+                238,
+                Theme.BrandWhite));
+
+      using var boxPen =
+        new Pen(
+          Theme.IsDark
+            ? Color.Gray
+            : Theme.BrandBlue);
+
+      graphics.FillRectangle(
+        boxBrush,
+        box);
+
+      graphics.DrawRectangle(
+        boxPen,
+        box);
+
+      TextRenderer.DrawText(
+        graphics,
+        text,
+        Font,
+        new Rectangle(
+          box.Left + 4,
+          box.Top + 3,
+          textSize.Width,
+          textSize.Height),
+        textColor,
+        TextFormatFlags.NoPrefix |
+        TextFormatFlags.NoPadding);
+    }
+
+    private string FormatCursorText(
+      long frequencyHz)
+    {
+      string frequency =
+        $"{frequencyHz / 1_000_000.0:0.000000} MHz";
+
+      if (ReceiveFrequencyHz <= 0)
+        return frequency;
+
+      long delta =
+        frequencyHz -
+        ReceiveFrequencyHz;
+
+      string sign =
+        delta >= 0
+          ? "+"
+          : "−";
+
+      double magnitude =
+        Math.Abs(
+          (double)delta);
+
+      string deltaText =
+        magnitude >= 1_000_000
+          ? $"{magnitude / 1_000_000.0:0.###} MHz"
+          : magnitude >= 1_000
+            ? $"{magnitude / 1_000.0:0.###} kHz"
+            : $"{magnitude:0} Hz";
+
+      return
+        $"{frequency}   Δ {sign}{deltaText}";
+    }
+
+    private static void DrawSplitter(
+      Graphics graphics,
+      Rectangle bounds)
+    {
+      if (bounds.Height <= 0)
+        return;
+
+      Color back =
+        Theme.IsDark
+          ? Color.FromArgb(36, 42, 48)
+          : Theme.BlueWash;
+
+      Color line =
+        Theme.IsDark
+          ? Color.FromArgb(105, 115, 125)
+          : Theme.BlueDark;
+
+      using var brush =
+        new SolidBrush(back);
+      using var pen =
+        new Pen(line);
+
+      graphics.FillRectangle(
+        brush,
+        bounds);
+
+      int y =
+        bounds.Top +
+        bounds.Height / 2;
+
+      graphics.DrawLine(
+        pen,
+        bounds.Left,
+        y,
+        bounds.Right,
+        y);
     }
 
     private void ConfigureHistory(int rows)
     {
       lock (DataSync)
       {
-        WaterfallRows = new byte[rows][];
-        for (int i = 0; i < rows; i++)
-          WaterfallRows[i] = new byte[ScopePoints];
+        WaterfallRows =
+          new byte[rows][];
+
+        for (int i = 0;
+             i < rows;
+             i++)
+          WaterfallRows[i] =
+            new byte[ScopePoints];
 
         WaterfallHead = -1;
         WaterfallDirty = true;
 
         WaterfallBitmap?.Dispose();
-        WaterfallBitmap = new Bitmap(
-          ScopePoints,
-          rows,
-          PixelFormat.Format32bppArgb);
-        WaterfallArgb = new int[ScopePoints * rows];
+        WaterfallBitmap =
+          new Bitmap(
+            ScopePoints,
+            rows,
+            PixelFormat.Format32bppArgb);
+
+        WaterfallArgb =
+          new int[
+            ScopePoints *
+            rows];
       }
 
       Invalidate();
@@ -285,34 +1169,56 @@ namespace SkyRoof
           WaterfallRows.Length == 0)
         return;
 
-      int rows = WaterfallRows.Length;
+      int rows =
+        WaterfallRows.Length;
       int index = 0;
 
-      for (int y = 0; y < rows; y++)
+      for (int y = 0;
+           y < rows;
+           y++)
       {
         int rowIndex =
           WaterfallHead < 0
             ? 0
-            : (WaterfallHead - y + rows) % rows;
+            : (WaterfallHead -
+               y +
+               rows) %
+              rows;
 
-        byte[] row = WaterfallRows[rowIndex];
+        byte[] row =
+          WaterfallRows[rowIndex];
 
-        for (int x = 0; x < ScopePoints; x++)
+        for (int x = 0;
+             x < ScopePoints;
+             x++)
         {
-          int level = Math.Clamp((int)row[x], 0, 160);
-          WaterfallArgb[index++] = Palette[level];
+          int level =
+            Math.Clamp(
+              (int)row[x],
+              0,
+              160);
+          WaterfallArgb[index++] =
+            Palette[level];
         }
       }
 
-      Rectangle rect = new(0, 0, WaterfallBitmap.Width, WaterfallBitmap.Height);
-      BitmapData data = WaterfallBitmap.LockBits(
-        rect,
-        ImageLockMode.WriteOnly,
-        PixelFormat.Format32bppArgb);
+      Rectangle rect =
+        new(
+          0,
+          0,
+          WaterfallBitmap.Width,
+          WaterfallBitmap.Height);
+
+      BitmapData data =
+        WaterfallBitmap.LockBits(
+          rect,
+          ImageLockMode.WriteOnly,
+          PixelFormat.Format32bppArgb);
 
       try
       {
-        if (data.Stride == ScopePoints * 4)
+        if (data.Stride ==
+            ScopePoints * 4)
         {
           Marshal.Copy(
             WaterfallArgb,
@@ -322,20 +1228,26 @@ namespace SkyRoof
         }
         else
         {
-          int rowInts = ScopePoints;
-          for (int y = 0; y < rows; y++)
+          int rowInts =
+            ScopePoints;
+
+          for (int y = 0;
+               y < rows;
+               y++)
           {
             Marshal.Copy(
               WaterfallArgb,
               y * rowInts,
-              data.Scan0 + y * data.Stride,
+              data.Scan0 +
+              y * data.Stride,
               rowInts);
           }
         }
       }
       finally
       {
-        WaterfallBitmap.UnlockBits(data);
+        WaterfallBitmap.UnlockBits(
+          data);
       }
 
       WaterfallDirty = false;
@@ -343,65 +1255,101 @@ namespace SkyRoof
 
     private static int[] BuildPalette()
     {
-      var palette = new int[161];
+      var palette =
+        new int[161];
 
-      for (int i = 0; i < palette.Length; i++)
+      for (int i = 0;
+           i < palette.Length;
+           i++)
       {
-        double t = i / 160.0;
+        double t =
+          i / 160.0;
         Color color;
 
         if (t < 0.25)
         {
-          double u = t / 0.25;
-          color = Color.FromArgb(
-            255,
-            0,
-            0,
-            (int)Math.Round(25 + 180 * u));
+          double u =
+            t / 0.25;
+          color =
+            Color.FromArgb(
+              255,
+              0,
+              0,
+              (int)Math.Round(
+                25 +
+                180 * u));
         }
         else if (t < 0.5)
         {
-          double u = (t - 0.25) / 0.25;
-          color = Color.FromArgb(
-            255,
-            0,
-            (int)Math.Round(210 * u),
-            255);
+          double u =
+            (t - 0.25) /
+            0.25;
+          color =
+            Color.FromArgb(
+              255,
+              0,
+              (int)Math.Round(
+                210 * u),
+              255);
         }
         else if (t < 0.75)
         {
-          double u = (t - 0.5) / 0.25;
-          color = Color.FromArgb(
-            255,
-            (int)Math.Round(255 * u),
-            255,
-            (int)Math.Round(255 * (1 - u)));
+          double u =
+            (t - 0.5) /
+            0.25;
+          color =
+            Color.FromArgb(
+              255,
+              (int)Math.Round(
+                255 * u),
+              255,
+              (int)Math.Round(
+                255 *
+                (1 - u)));
         }
         else
         {
-          double u = (t - 0.75) / 0.25;
-          color = Color.FromArgb(
-            255,
-            255,
-            255,
-            (int)Math.Round(255 * u));
+          double u =
+            (t - 0.75) /
+            0.25;
+          color =
+            Color.FromArgb(
+              255,
+              255,
+              255,
+              (int)Math.Round(
+                255 * u));
         }
 
-        palette[i] = color.ToArgb();
+        palette[i] =
+          color.ToArgb();
       }
 
       return palette;
     }
 
-    private static string FormatFrequency(long hz)
+    private static string FormatAxisFrequency(
+      long hz)
     {
-      if (hz <= 0) return "frequency unknown";
-      return $"{hz / 1_000_000.0:0.000000} MHz";
+      return hz > 0
+        ? $"{hz / 1_000_000.0:0.000000}"
+        : "—";
     }
 
-    private static string FormatSpan(long hz)
+    private static string FormatFrequency(
+      long hz)
     {
-      if (hz <= 0) return "span unknown";
+      return hz > 0
+        ? $"{hz / 1_000_000.0:0.000000} MHz"
+        : "frequency unknown";
+    }
+
+    private static string FormatSpan(
+      long hz)
+    {
+      if (hz <= 0)
+        return "span unknown";
+
       return hz >= 1_000_000
         ? $"Span {hz / 1_000_000.0:0.###} MHz"
         : $"Span {hz / 1_000.0:0.###} kHz";
