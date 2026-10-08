@@ -145,7 +145,6 @@ namespace SkyRoof
 
       ctx.Settings.SaveToFile();
 
-      LightThemeRenderer?.Dispose();
       LightThemeRenderer = null;
 
       // dispose sdr and dsp
