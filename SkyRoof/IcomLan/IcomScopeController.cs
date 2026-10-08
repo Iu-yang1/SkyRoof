@@ -11,7 +11,6 @@ namespace SkyRoof
     ScopeDuringTx,
     CenterType,
     Vbw,
-    Rbw,
     MarkerPosition,
     FixedEdge
   }
@@ -36,13 +35,6 @@ namespace SkyRoof
     Wide = 1
   }
 
-  public enum IcomScopeRbw : byte
-  {
-    Wide = 0,
-    Mid = 1,
-    Narrow = 2
-  }
-
   public enum IcomScopeMarkerPosition : byte
   {
     FilterCenter = 0,
@@ -61,7 +53,6 @@ namespace SkyRoof
     internal bool Enabled { get; init; }
     internal IcomScopeCenterType CenterType { get; init; }
     internal IcomScopeVbw Vbw { get; init; }
-    internal IcomScopeRbw Rbw { get; init; }
     internal IcomScopeMarkerPosition MarkerPosition { get; init; }
     internal int FrequencyRange { get; init; }
     internal long LowerFrequencyHz { get; init; }
@@ -150,16 +141,6 @@ namespace SkyRoof
         Kind = IcomScopeControlKind.Vbw,
         Scope = scope,
         Vbw = vbw
-      };
-
-    internal static IcomScopeControlRequest ForRbw(
-      byte scope,
-      IcomScopeRbw rbw) =>
-      new()
-      {
-        Kind = IcomScopeControlKind.Rbw,
-        Scope = scope,
-        Rbw = rbw
       };
 
     internal static IcomScopeControlRequest ForMarkerPosition(
