@@ -27,9 +27,7 @@ namespace SkyRoof
 
     private void ParkBtn_Click(object sender, EventArgs e)
     {
-      AzimuthSpinner.Value = ctx.Settings.Rotator.ParkAzimuth;
-      ElevationSpinner.Value = ctx.Settings.Rotator.ParkElevation;
-      StartRotation();
+      ctx.RotatorControl.ManualPark();
       Close();
     }
 
@@ -39,13 +37,26 @@ namespace SkyRoof
       AzimuthSpinner.Maximum = ctx.Settings.Rotator.MaxAzimuth;
       ElevationSpinner.Minimum = ctx.Settings.Rotator.MinElevation;
       ElevationSpinner.Maximum = ctx.Settings.Rotator.MaxElevation;
+
+      bool manualEnabled =
+        !ctx.RotatorControl.IsManualControlLocked;
+
+      AzimuthSpinner.Enabled = manualEnabled;
+      ElevationSpinner.Enabled = manualEnabled;
+      OkBtn.Enabled = manualEnabled;
+      ParkBtn.Enabled = manualEnabled;
+
+      Text =
+        manualEnabled
+          ? "Manual Rotator Control"
+          : "Manual Rotator Control — locked during live tracking";
     }
 
     private void StartRotation()
     {
-      ctx.RotatorControl.TrackCheckbox.Checked = false;
-      var bearing = new Bearing((double)AzimuthSpinner.Value * Trig.RinD, (double)ElevationSpinner.Value * Trig.RinD);
-      ctx.RotatorControl.RotateTo(bearing);
+      ctx.RotatorControl.ManualMoveToDegrees(
+        (double)AzimuthSpinner.Value,
+        (double)ElevationSpinner.Value);
     }
   }
 }
