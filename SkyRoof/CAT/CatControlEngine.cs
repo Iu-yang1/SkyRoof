@@ -58,6 +58,12 @@ namespace SkyRoof
     private readonly IcomScopeCommandQueue IcomScopeControlCommands =
       new(capacity: 24);
 
+    internal int PendingIcomScopeControlCount =>
+      IcomScopeControlCommands.Count;
+
+    internal long DroppedIcomScopeControlCount =>
+      IcomScopeControlCommands.DroppedCount;
+
     public event EventHandler? RxTuned;
     public event EventHandler? TxTuned;
 
