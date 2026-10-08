@@ -222,6 +222,10 @@ namespace SkyRoof
       };
       layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
       layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+      // The frequency readouts must occupy their entire two-column cells.
+      // Auto-sized labels can collapse to their preferred text width after
+      // repeated mouse-wheel CAT refreshes, leaving clipped colored fragments.
+      layout.AutoSize = false;
 
       layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));          // captions
       layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));     // no-Doppler values
@@ -307,6 +311,12 @@ namespace SkyRoof
 
     private static void ConfigureCompactTuningValue(Label value)
     {
+      // A dock-filled WinForms Label must not also participate in AutoSize.
+      // Otherwise TableLayoutPanel may lay it out at the original text's
+      // preferred width while the frequency is changing rapidly.
+      value.AutoSize = false;
+      value.MinimumSize = Size.Empty;
+      value.MaximumSize = Size.Empty;
       value.Dock = DockStyle.Fill;
       value.BackColor = Color.Black;
       value.ForeColor = Color.Aqua;
@@ -314,6 +324,7 @@ namespace SkyRoof
       value.Text = "000,000,000 Hz";
       value.TextAlign = ContentAlignment.MiddleCenter;
       value.AutoEllipsis = false;
+      value.UseCompatibleTextRendering = false;
       value.Margin = new Padding(3, 0, 3, 4);
     }
 
