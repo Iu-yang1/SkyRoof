@@ -55,9 +55,13 @@ namespace SkyRoof
               key,
               out LinkedListNode<Entry>? existing))
         {
-          existing.Value.Command =
-            command;
-          return;
+          // A replacement is a newer operator action. Move it to the tail so
+          // dependencies across command kinds preserve the most recent event
+          // order (for example MODE FIXED followed by EDGE 2).
+          Queue.Remove(
+            existing);
+          ByKey.Remove(
+            key);
         }
 
         if (Queue.Count >=
