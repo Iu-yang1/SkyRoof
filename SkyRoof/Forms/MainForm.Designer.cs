@@ -541,7 +541,7 @@
       // 
       LoadTleMNU.Name = "LoadTleMNU";
       LoadTleMNU.Size = new Size(216, 22);
-      LoadTleMNU.Text = "Load TLE From &File...";
+      LoadTleMNU.Text = "Load Orbit Elements From &File...";
       LoadTleMNU.Click += LoadTleMNU_Click;
       // 
       // helpToolStripMenuItem
