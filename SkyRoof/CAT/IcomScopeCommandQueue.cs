@@ -20,7 +20,7 @@ namespace SkyRoof
     private readonly Dictionary<string, LinkedListNode<Entry>> ByKey =
       new(StringComparer.Ordinal);
 
-    internal IcomScopeCommandQueue(int capacity = 24)
+    internal IcomScopeCommandQueue(int capacity = 32)
     {
       if (capacity < 1)
         throw new ArgumentOutOfRangeException(
@@ -159,7 +159,8 @@ namespace SkyRoof
         "SCOPE_EDGE" or
         "SCOPE_REF" or
         "SCOPE_SPEED" or
-        "SCOPE_VBW"
+        "SCOPE_VBW" or
+        "SCOPE_RBW"
           when parts.Length >= 3 =>
             $"{verb} {parts[2]}",
 
