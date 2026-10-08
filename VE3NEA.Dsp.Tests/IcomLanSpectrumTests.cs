@@ -345,6 +345,120 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void ScopeState_AutoPrefersFreshMainOverInterleavedSub()
+    {
+      var state =
+        new IcomScopeState();
+
+      var main =
+        new IcomScopeFrame
+        {
+          Scope = 0,
+          TimestampUtc =
+            new DateTime(
+              2026, 10, 8,
+              1, 0, 0, 500,
+              DateTimeKind.Utc)
+        };
+
+      var sub =
+        new IcomScopeFrame
+        {
+          Scope = 1,
+          TimestampUtc =
+            new DateTime(
+              2026, 10, 8,
+              1, 0, 0, 700,
+              DateTimeKind.Utc)
+        };
+
+      state.Update(main);
+      state.Update(sub);
+
+      state.ShouldDisplay(main).Should().BeTrue();
+      state.ShouldDisplay(sub).Should().BeFalse();
+      state.LatestSelectedFrame.Should().BeSameAs(main);
+    }
+
+    [Fact]
+    public void ScopeState_AutoFailsOverToSubAfterMainGoesStale()
+    {
+      var state =
+        new IcomScopeState();
+
+      var main =
+        new IcomScopeFrame
+        {
+          Scope = 0,
+          TimestampUtc =
+            new DateTime(
+              2026, 10, 8,
+              1, 0, 0,
+              DateTimeKind.Utc)
+        };
+
+      var sub =
+        new IcomScopeFrame
+        {
+          Scope = 1,
+          TimestampUtc =
+            new DateTime(
+              2026, 10, 8,
+              1, 0, 1,
+              DateTimeKind.Utc)
+        };
+
+      state.Update(main);
+      state.Update(sub);
+
+      state.ShouldDisplay(main).Should().BeFalse();
+      state.ShouldDisplay(sub).Should().BeTrue();
+      state.LatestSelectedFrame.Should().BeSameAs(sub);
+    }
+
+    [Fact]
+    public void ScopeState_ReturningToAutoReevaluatesCachedFrames()
+    {
+      var state =
+        new IcomScopeState
+        {
+          SelectedBand =
+            IcomLanScopeBand.Sub
+        };
+
+      var main =
+        new IcomScopeFrame
+        {
+          Scope = 0,
+          TimestampUtc =
+            new DateTime(
+              2026, 10, 8,
+              1, 0, 0, 500,
+              DateTimeKind.Utc)
+        };
+
+      var sub =
+        new IcomScopeFrame
+        {
+          Scope = 1,
+          TimestampUtc =
+            new DateTime(
+              2026, 10, 8,
+              1, 0, 0, 700,
+              DateTimeKind.Utc)
+        };
+
+      state.Update(main);
+      state.Update(sub);
+
+      state.SelectedBand =
+        IcomLanScopeBand.Auto;
+
+      state.LatestSelectedFrame.Should().BeSameAs(main);
+    }
+
+
+    [Fact]
     public void ScopeController_AutoPreservesLegacySourceRouting()
     {
       IcomScopeController.ResolveControlPath(
