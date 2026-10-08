@@ -448,6 +448,157 @@ namespace VE3NEA.Dsp.Tests
 
 
     [Fact]
+    public void CorrectedTuning_TerrestrialSetsAbsoluteReceiveFrequency()
+    {
+      var link =
+        new RadioLink
+        {
+          IsTerrestrial = true,
+          DownlinkFrequency = 145_900_000
+        };
+
+      link.ComputeFrequencies();
+
+      link.SetCorrectedDownlinkFrequency(
+        145_925_000,
+        useRit: false).Should().BeTrue();
+
+      link.DownlinkFrequency.Should().Be(
+        145_925_000);
+      link.CorrectedDownlinkFrequency.Should().Be(
+        145_925_000);
+      link.RitEnabled.Should().BeFalse();
+    }
+
+    [Fact]
+    public void CorrectedTuning_TransponderSolvesDopplerAndPreservesInvertingPair()
+    {
+      var link =
+        BuildTransponderLink(
+          invert: true);
+
+      link.DopplerFactor =
+        0.00002;
+      link.SatCust!.DownlinkManualCorrection =
+        120;
+      link.ComputeFrequencies();
+
+      double previousCorrected =
+        link.CorrectedDownlinkFrequency;
+      double previousUplink =
+        link.UplinkFrequency;
+      double previousOffset =
+        link.TransponderOffset;
+      double target =
+        previousCorrected +
+        25_000;
+
+      link.SetCorrectedDownlinkFrequency(
+        target,
+        useRit: false).Should().BeTrue();
+
+      link.CorrectedDownlinkFrequency
+        .Should().BeApproximately(
+          target,
+          0.51);
+
+      double modelDelta =
+        link.TransponderOffset -
+        previousOffset;
+
+      modelDelta.Should().BeApproximately(
+        25_000 /
+        (1.0 - link.DopplerFactor),
+        0.01);
+
+      // In an inverting linear transponder, moving the downlink position upward
+      // moves the paired nominal uplink downward by the same transponder offset.
+      link.UplinkFrequency.Should()
+        .BeApproximately(
+          previousUplink -
+          modelDelta,
+          0.01);
+    }
+
+    [Fact]
+    public void CorrectedTuning_RitDoesNotMoveTransponderPair()
+    {
+      var link =
+        BuildTransponderLink(
+          invert: false);
+
+      link.DopplerFactor =
+        -0.000015;
+      link.ComputeFrequencies();
+
+      double previousOffset =
+        link.TransponderOffset;
+      double previousUplink =
+        link.UplinkFrequency;
+      double target =
+        link.CorrectedDownlinkFrequency -
+        7_500;
+
+      link.SetCorrectedDownlinkFrequency(
+        target,
+        useRit: true).Should().BeTrue();
+
+      link.CorrectedDownlinkFrequency
+        .Should().BeApproximately(
+          target,
+          0.01);
+      link.TransponderOffset.Should().Be(
+        previousOffset);
+      link.UplinkFrequency.Should().Be(
+        previousUplink);
+      link.RitEnabled.Should().BeTrue();
+    }
+
+    [Fact]
+    public void CorrectedTuning_FixedSatelliteRespectsDisabledManualCorrection()
+    {
+      var link =
+        new RadioLink
+        {
+          IsTerrestrial = false,
+          Tx =
+            new SatnogsDbTransmitter
+            {
+              downlink_low =
+                145_825_000
+            },
+          TxCust =
+            new TransmitterCustomization
+            {
+              uuid = "fixed"
+            },
+          SatCust =
+            new SatelliteCustomization
+            {
+              DownlinkDopplerCorrectionEnabled =
+                true,
+              DownlinkManualCorrectionEnabled =
+                false
+            },
+          DopplerFactor =
+            0.00001
+        };
+
+      link.ComputeFrequencies();
+      double before =
+        link.CorrectedDownlinkFrequency;
+
+      link.SetCorrectedDownlinkFrequency(
+        before + 2_000,
+        useRit: false).Should().BeFalse();
+
+      link.ComputeFrequencies();
+      link.CorrectedDownlinkFrequency.Should().Be(
+        before);
+    }
+
+
+    [Fact]
     public void ScopeView_FrequencyForXUsesCurrentSpectrumGeometry()
     {
       var frame =
@@ -764,6 +915,50 @@ namespace VE3NEA.Dsp.Tests
       CatControl.FormatIcomScopeCommand(
         request).Should().Be(
           expected);
+    }
+
+
+    private static RadioLink BuildTransponderLink(
+      bool invert)
+    {
+      var link =
+        new RadioLink
+        {
+          IsTerrestrial = false,
+          Tx =
+            new SatnogsDbTransmitter
+            {
+              downlink_low =
+                435_500_000,
+              downlink_high =
+                435_600_000,
+              uplink_low =
+                145_900_000,
+              uplink_high =
+                146_000_000,
+              invert =
+                invert
+            },
+          TxCust =
+            new TransmitterCustomization
+            {
+              uuid =
+                "linear",
+              TransponderOffset =
+                20_000
+            },
+          SatCust =
+            new SatelliteCustomization
+            {
+              DownlinkDopplerCorrectionEnabled =
+                true,
+              DownlinkManualCorrectionEnabled =
+                true
+            }
+        };
+
+      link.ComputeFrequencies();
+      return link;
     }
 
 
