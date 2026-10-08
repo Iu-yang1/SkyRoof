@@ -12,7 +12,6 @@ namespace SkyRoof
     internal double MainReferenceDb { get; init; }
     internal IcomScopeSweepSpeed MainSpeed { get; init; }
     internal IcomScopeVbw MainVbw { get; init; }
-    internal IcomScopeRbw MainRbw { get; init; }
 
     internal IcomScopeMode SubMode { get; init; }
     internal long SubSpanHz { get; init; }
@@ -20,7 +19,6 @@ namespace SkyRoof
     internal double SubReferenceDb { get; init; }
     internal IcomScopeSweepSpeed SubSpeed { get; init; }
     internal IcomScopeVbw SubVbw { get; init; }
-    internal IcomScopeRbw SubRbw { get; init; }
 
     internal bool ScopeDuringTx { get; init; }
     internal IcomScopeCenterType CenterType { get; init; }
@@ -90,9 +88,6 @@ namespace SkyRoof
         MainVbw =
           ParseVbw(
             Get(values, "MAIN.VBW")),
-        MainRbw =
-          ParseRbw(
-            Get(values, "MAIN.RBW")),
 
         SubMode =
           ParseMode(
@@ -115,9 +110,6 @@ namespace SkyRoof
         SubVbw =
           ParseVbw(
             Get(values, "SUB.VBW")),
-        SubRbw =
-          ParseRbw(
-            Get(values, "SUB.RBW")),
 
         ScopeDuringTx =
           ParseBoolean01(
@@ -260,21 +252,6 @@ namespace SkyRoof
         _ =>
           throw new FormatException(
             $"Invalid scope VBW '{value}'.")
-      };
-
-    private static IcomScopeRbw ParseRbw(
-      string value) =>
-      value.ToUpperInvariant() switch
-      {
-        "WIDE" =>
-          IcomScopeRbw.Wide,
-        "MID" =>
-          IcomScopeRbw.Mid,
-        "NAR" or "NARROW" =>
-          IcomScopeRbw.Narrow,
-        _ =>
-          throw new FormatException(
-            $"Invalid scope RBW '{value}'.")
       };
 
     private static bool ParseBoolean01(
