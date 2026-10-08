@@ -15,6 +15,7 @@ namespace SkyRoof
     internal Context ctx = new();
     private RotatorControlCard? RotatorControlCard;
     private ToolStripControlHost? RotatorControlHost;
+    private ToolStripDropDown? RotatorControlPopup;
     private MouseButtons LastRotatorStatusMouseButton;
 
     public MainForm()
@@ -1326,18 +1327,25 @@ namespace SkyRoof
           Size = RotatorControlCard.Size
         };
 
-      RotatorDropdownBtn.DropDownItems.Insert(
-        0,
+      // The directional card is a dedicated right-click popup. Do not insert
+      // it into RotatorDropdownBtn: that arrow intentionally keeps the compact
+      // legacy Enable / Track menu.
+      RotatorControlPopup =
+        new ToolStripDropDown
+        {
+          AutoSize = false,
+          AutoClose = true,
+          DropShadowEnabled = true,
+          Margin = Padding.Empty,
+          Padding = Padding.Empty,
+          Size =
+            new Size(
+              RotatorControlCard.Width + 2,
+              RotatorControlCard.Height + 2)
+        };
+      RotatorControlPopup.Items.Add(
         RotatorControlHost);
-      RotatorDropdownBtn.DropDownItems.Insert(
-        1,
-        new ToolStripSeparator());
 
-      RotatorDropdownBtn.DropDownOpening += (_, _) =>
-        RotatorControlCard?.RefreshState();
-
-      // Keep the existing small arrow button for normal left-click use, but
-      // make the status area itself useful as the requested right-click card.
       RotatorLedLabel.MouseDown += RotatorStatus_MouseDown;
       RotatorStatusLabel.MouseDown += RotatorStatus_MouseDown;
     }
@@ -1351,8 +1359,56 @@ namespace SkyRoof
       if (e.Button != MouseButtons.Right)
         return;
 
-      RotatorControlCard?.RefreshState();
-      RotatorDropdownBtn.ShowDropDown();
+      ShowRotatorManualControl(
+        Cursor.Position);
+    }
+
+    internal void ShowRotatorManualControl(
+      Point screenPoint)
+    {
+      if (RotatorControlPopup == null ||
+          RotatorControlCard == null)
+        return;
+
+      RotatorControlCard.RefreshState();
+
+      Point location =
+        ClampPopupLocation(
+          Screen.FromPoint(screenPoint).WorkingArea,
+          RotatorControlPopup.Size,
+          screenPoint);
+
+      if (RotatorControlPopup.Visible)
+        RotatorControlPopup.Close(
+          ToolStripDropDownCloseReason.AppClicked);
+
+      RotatorControlPopup.Show(
+        location);
+    }
+
+    internal static Point ClampPopupLocation(
+      Rectangle workingArea,
+      Size popupSize,
+      Point requested)
+    {
+      int maxX =
+        Math.Max(
+          workingArea.Left,
+          workingArea.Right - popupSize.Width);
+      int maxY =
+        Math.Max(
+          workingArea.Top,
+          workingArea.Bottom - popupSize.Height);
+
+      return new Point(
+        Math.Clamp(
+          requested.X,
+          workingArea.Left,
+          maxX),
+        Math.Clamp(
+          requested.Y,
+          workingArea.Top,
+          maxY));
     }
 
     public void ShowRotatorStatus()
