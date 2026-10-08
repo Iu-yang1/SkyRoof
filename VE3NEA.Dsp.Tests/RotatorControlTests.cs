@@ -50,7 +50,7 @@ public sealed class RotatorControlTests
             return "90.0\n30.0\n";
         });
         using var engine = StartEngine(server.Port);
-        engine.RotateTo(new Bearing(Math.PI / 2, Math.PI / 6));
+        engine.RotateTo(new SkyRoof.Bearing(Math.PI / 2, Math.PI / 6));
 
         await WaitUntilAsync(() => Volatile.Read(ref moves) >= 2 &&
             engine.LastWrittenBearing != null);
@@ -80,7 +80,7 @@ public sealed class RotatorControlTests
             return "60.0\n10.0\n";
         });
         using var engine = StartEngine(server.Port);
-        engine.RotateTo(new Bearing(Math.PI / 3, Math.PI / 18));
+        engine.RotateTo(new SkyRoof.Bearing(Math.PI / 3, Math.PI / 18));
 
         await WaitUntilAsync(() => Volatile.Read(ref moves) >= 2);
         Assert.True(server.ConnectionCount >= 2);
