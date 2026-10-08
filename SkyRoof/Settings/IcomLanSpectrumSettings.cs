@@ -170,6 +170,11 @@ namespace SkyRoof
     [DefaultValue(1)]
     public int SpectrumAverageSweeps { get; set; } = 1;
 
+    [DisplayName("Spectrum smoothing")]
+    [Description("Odd-numbered frequency-bin moving average applied only to the local spectrum and peak traces. Waterfall data remains raw.")]
+    [DefaultValue(1)]
+    public int SpectrumSmoothingBins { get; set; } = 1;
+
     [DisplayName("Waterfall history")]
     [Description("Number of raw 475-bin scope rows retained by the display.")]
     [DefaultValue(240)]
