@@ -467,6 +467,121 @@ namespace VE3NEA.Dsp.Tests
     }
 
 
+    [Fact]
+    public void ScopeController_RoutesExplicitSkyCatControlIndependentlyFromRsBa1Data()
+    {
+      IcomScopeControlRequest? received = null;
+
+      var controller =
+        new IcomScopeController(
+          () => true,
+          request =>
+          {
+            received = request;
+            return true;
+          });
+
+      var request =
+        IcomScopeControlRequest.ForSpan(
+          1,
+          100_000);
+
+      controller.RequestControl(
+        IcomLanSpectrumSource.RsBa1,
+        IcomScopeControlPath.SkyCat,
+        request).Should().BeTrue();
+
+      received.Should().BeSameAs(request);
+      controller.EffectivePath.Should().Be(
+        IcomScopeControlPath.SkyCat);
+    }
+
+    [Fact]
+    public void ScopeController_AutoKeepsRsBa1WaveformReadOnly()
+    {
+      int requestCount = 0;
+
+      var controller =
+        new IcomScopeController(
+          () => true,
+          _ =>
+          {
+            requestCount++;
+            return true;
+          });
+
+      controller.RequestControl(
+        IcomLanSpectrumSource.RsBa1,
+        IcomScopeControlPath.Auto,
+        IcomScopeControlRequest.ForEdge(
+          0,
+          2)).Should().BeFalse();
+
+      requestCount.Should().Be(0);
+      controller.EffectivePath.Should().Be(
+        IcomScopeControlPath.ReadOnly);
+    }
+
+    [Theory]
+    [InlineData(
+      IcomScopeControlKind.Mode,
+      "U SCOPE_MODE MAIN SCROLL-C")]
+    [InlineData(
+      IcomScopeControlKind.Span,
+      "U SCOPE_SPAN SUB 50000")]
+    [InlineData(
+      IcomScopeControlKind.Edge,
+      "U SCOPE_EDGE MAIN 3")]
+    [InlineData(
+      IcomScopeControlKind.ReferenceLevel,
+      "U SCOPE_REF SUB -3.5")]
+    [InlineData(
+      IcomScopeControlKind.SweepSpeed,
+      "U SCOPE_SPEED MAIN SLOW")]
+    [InlineData(
+      IcomScopeControlKind.FixedEdge,
+      "U SCOPE_FIXED_EDGE 2 1 435000000 436000000")]
+    public void ScopeControlRequest_FormatsSkyCatPrivateCommand(
+      IcomScopeControlKind kind,
+      string expected)
+    {
+      IcomScopeControlRequest request =
+        kind switch
+        {
+          IcomScopeControlKind.Mode =>
+            IcomScopeControlRequest.ForMode(
+              0,
+              IcomScopeMode.ScrollCenter),
+          IcomScopeControlKind.Span =>
+            IcomScopeControlRequest.ForSpan(
+              1,
+              50_000),
+          IcomScopeControlKind.Edge =>
+            IcomScopeControlRequest.ForEdge(
+              0,
+              3),
+          IcomScopeControlKind.ReferenceLevel =>
+            IcomScopeControlRequest.ForReferenceLevel(
+              1,
+              -3.5),
+          IcomScopeControlKind.SweepSpeed =>
+            IcomScopeControlRequest.ForSweepSpeed(
+              0,
+              IcomScopeSweepSpeed.Slow),
+          _ =>
+            IcomScopeControlRequest.ForFixedEdge(
+              2,
+              1,
+              435_000_000,
+              436_000_000)
+        };
+
+      CatControl.FormatIcomScopeCommand(
+        request).Should().Be(
+          expected);
+    }
+
+
     private static byte[] BuildLanUdpPacket(
       IPAddress source,
       IPAddress destination,

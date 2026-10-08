@@ -1,4 +1,6 @@
-﻿namespace SkyRoof
+﻿using System.Globalization;
+
+namespace SkyRoof
 {
   public class CatControl
   {
@@ -56,6 +58,79 @@
 
       return false;
     }
+
+    internal bool RequestIcomScopeControl(
+      IcomScopeControlRequest request)
+    {
+      string command =
+        FormatIcomScopeCommand(request);
+
+      if (Rx?.SupportsIcomScopeOutput == true &&
+          Rx.RequestIcomScopeCommand(command))
+        return true;
+
+      if (Tx != null &&
+          !ReferenceEquals(Tx, Rx) &&
+          Tx.SupportsIcomScopeOutput &&
+          Tx.RequestIcomScopeCommand(command))
+        return true;
+
+      return false;
+    }
+
+    internal static string FormatIcomScopeCommand(
+      IcomScopeControlRequest request)
+    {
+      if (request == null)
+        throw new ArgumentNullException(
+          nameof(request));
+
+      string scope =
+        request.Scope == 1
+          ? "SUB"
+          : "MAIN";
+
+      return request.Kind switch
+      {
+        IcomScopeControlKind.Mode =>
+          $"U SCOPE_MODE {scope} {FormatScopeMode(request.Mode)}",
+
+        IcomScopeControlKind.Span =>
+          $"U SCOPE_SPAN {scope} {request.SpanHz.ToString(CultureInfo.InvariantCulture)}",
+
+        IcomScopeControlKind.Edge =>
+          $"U SCOPE_EDGE {scope} {request.EdgeNumber.ToString(CultureInfo.InvariantCulture)}",
+
+        IcomScopeControlKind.ReferenceLevel =>
+          $"U SCOPE_REF {scope} {request.ReferenceDb.ToString("0.0", CultureInfo.InvariantCulture)}",
+
+        IcomScopeControlKind.SweepSpeed =>
+          $"U SCOPE_SPEED {scope} {request.SweepSpeed.ToString().ToUpperInvariant()}",
+
+        IcomScopeControlKind.FixedEdge =>
+          $"U SCOPE_FIXED_EDGE " +
+          $"{request.FrequencyRange.ToString(CultureInfo.InvariantCulture)} " +
+          $"{request.EdgeNumber.ToString(CultureInfo.InvariantCulture)} " +
+          $"{request.LowerFrequencyHz.ToString(CultureInfo.InvariantCulture)} " +
+          $"{request.UpperFrequencyHz.ToString(CultureInfo.InvariantCulture)}",
+
+        _ =>
+          throw new ArgumentOutOfRangeException(
+            nameof(request.Kind))
+      };
+    }
+
+    private static string FormatScopeMode(
+      IcomScopeMode mode) =>
+      mode switch
+      {
+        IcomScopeMode.Center => "CENTER",
+        IcomScopeMode.Fixed => "FIXED",
+        IcomScopeMode.ScrollCenter => "SCROLL-C",
+        IcomScopeMode.ScrollFixed => "SCROLL-F",
+        _ => throw new ArgumentOutOfRangeException(
+          nameof(mode))
+      };
 
     private void SyncRxEngine(bool wantRx, bool rxAlsoTx, bool crossband)
     {

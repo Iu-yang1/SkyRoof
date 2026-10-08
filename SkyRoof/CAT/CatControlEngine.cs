@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using System.Collections.Concurrent;
+using System.Globalization;
 using Serilog;
 using SkyRoof.Properties;
 using VE3NEA;
@@ -55,6 +56,8 @@ namespace SkyRoof
     // command is sent by SkyCAT over the already-open CAT/virtual-serial path, so this
     // does not create a second Icom LAN session.
     private volatile bool IcomScopeOutputPending;
+    private readonly ConcurrentQueue<string> IcomScopeControlCommands =
+      new();
 
     public event EventHandler? RxTuned;
     public event EventHandler? TxTuned;
@@ -191,6 +194,25 @@ namespace SkyRoof
       IcomScopeOutputPending = true;
     }
 
+    internal bool RequestIcomScopeCommand(
+      string command)
+    {
+      if (!SupportsIcomScopeOutput ||
+          string.IsNullOrWhiteSpace(command) ||
+          !command.StartsWith(
+            "U SCOPE_",
+            StringComparison.Ordinal))
+        return false;
+
+      IcomScopeControlCommands.Enqueue(
+        command);
+
+      LogInfo(
+        $"Queued IC-9700 scope control: {command}");
+
+      return true;
+    }
+
 
 
 
@@ -219,6 +241,11 @@ namespace SkyRoof
       TryReassertCtcssAfterTune();
 
       if (IcomScopeOutputPending) TryEnableIcomScopeOutput();
+
+      if (IcomScopeControlCommands.TryDequeue(
+            out string? scopeCommand))
+        TryWriteIcomScopeControl(
+          scopeCommand);
 
       if (RequestedArmingTone.HasValue) TrySendArmingTone();
     }
@@ -749,6 +776,25 @@ namespace SkyRoof
         Log.Warning(
           "SkyCAT did not accept all IC-9700 scope commands. " +
           "Update SkyCAT to a build that supports U SCOPE / U SCOPE_DATA / U SCOPE_FAST.");
+    }
+
+
+    private void TryWriteIcomScopeControl(
+      string command)
+    {
+      if (!ReferenceEquals(
+            commands,
+            RigCtldCommands.SkyCat))
+      {
+        LogInfo(
+          $"IC-9700 scope control skipped because CAT backend is not SkyCAT: {command}");
+        return;
+      }
+
+      if (!SendWriteCommand(command))
+        Log.Warning(
+          "SkyCAT rejected IC-9700 scope control command: {Command}",
+          command);
     }
 
 
