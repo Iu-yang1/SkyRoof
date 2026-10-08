@@ -139,6 +139,7 @@ namespace SkyRoof
 
           ScopeState.SelectedBand =
             selected;
+          RefreshSelectedScopeSnapshot();
 
           if (!UpdatingScopeControlUi)
           {
@@ -697,6 +698,23 @@ namespace SkyRoof
 
       StartStopBtn.Text = "Start";
       StatusLabel.Text = "Spectrum capture stopped.";
+    }
+
+    private void RefreshSelectedScopeSnapshot()
+    {
+      if (LocalHold)
+        return;
+
+      IcomScopeFrame? selectedFrame =
+        ScopeState.LatestSelectedFrame;
+
+      SpectrumView.Clear();
+
+      if (selectedFrame != null)
+        SpectrumView.PushFrame(
+          selectedFrame);
+
+      RefreshScopeGeometryUi();
     }
 
     private void Capture_ScopeFrameReceived(IcomScopeFrame frame)
