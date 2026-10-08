@@ -52,6 +52,7 @@ namespace SkyRoof
     private bool SpanEdgeShowsSpan = true;
     private int PendingEdgeSyncScope = -1;
     private bool ScopeControlDefaultsAppliedForSession;
+    private CatControlEngine? LastScopeControlBackend;
 
     public IcomLanSpectrumPanel(Context ctx)
     {
@@ -691,6 +692,7 @@ namespace SkyRoof
       LastRenderedScopeFrameTicks = 0;
       LastStatsUsedNativeLan = false;
       ScopeControlDefaultsAppliedForSession = false;
+      LastScopeControlBackend = null;
 
       StartStopBtn.Text = "Stop";
       StatusLabel.Text = settings.Source switch
@@ -744,6 +746,7 @@ namespace SkyRoof
       ScopeController.Reset();
       PendingEdgeSyncScope = -1;
       ScopeControlDefaultsAppliedForSession = false;
+      LastScopeControlBackend = null;
       ScopeState.Clear();
       LastRenderedScopeFrameTicks = 0;
 
@@ -1301,9 +1304,25 @@ namespace SkyRoof
       if (capture == null)
         return;
 
+      CatControlEngine? scopeBackend =
+        ctx.CatControl
+          .GetIcomScopeControlBackend();
+
+      if (!ReferenceEquals(
+            scopeBackend,
+            LastScopeControlBackend))
+      {
+        LastScopeControlBackend =
+          scopeBackend;
+        ScopeControlDefaultsAppliedForSession =
+          false;
+        PendingEdgeSyncScope = -1;
+        ScopeController.Reset();
+      }
+
       if (!ScopeControlDefaultsAppliedForSession &&
           IsSkyCatScopeControlConfigured() &&
-          CanUseSkyCatScopeControl())
+          scopeBackend != null)
       {
         RequestScopeOutputIfDue(
           force: true);
