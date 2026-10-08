@@ -343,6 +343,23 @@ namespace SkyRoof
             targetFrequency))
         return false;
 
+      if (!IsTerrestrial)
+      {
+        if (SatCust == null ||
+            Tx == null ||
+            !Tx.downlink_low.HasValue)
+          return false;
+
+        if (IsTransponder &&
+            TxCust == null)
+          return false;
+
+        if (!useRit &&
+            !IsTransponder &&
+            !DownlinkManualCorrectionEnabled)
+          return false;
+      }
+
       bool ritModeChanged =
         RitEnabled != useRit;
       double previousCorrected =
@@ -369,11 +386,6 @@ namespace SkyRoof
             CorrectedDownlinkFrequency -
             previousCorrected) >= 0.5;
       }
-
-      if (SatCust == null ||
-          Tx == null ||
-          !Tx.downlink_low.HasValue)
-        return false;
 
       double dopplerScale =
         DownlinkDopplerCorrectionEnabled
@@ -410,20 +422,12 @@ namespace SkyRoof
       }
       else if (IsTransponder)
       {
-        if (TxCust == null)
-          return false;
-
         TransponderOffset =
           desiredPreDoppler -
           BaseDownlinkFrequency;
       }
       else
       {
-        // Fixed-frequency satellite tuning uses the existing manual-correction
-        // model. Respect an explicit operator decision to disable it.
-        if (!DownlinkManualCorrectionEnabled)
-          return false;
-
         double desiredManualCorrection =
           targetFrequency -
           BaseDownlinkFrequency *
