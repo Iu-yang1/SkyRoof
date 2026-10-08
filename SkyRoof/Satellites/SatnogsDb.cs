@@ -500,29 +500,53 @@ namespace SkyRoof
 
       try
       {
+        // Automatic orbit priority, low -> high:
+        // SatNOGS (legacy) < AutoTLE < user URL/file sources < CelesTrak OMM CSV.
+        // A still-active manual file import is stored separately and remains
+        // selected above all of these for exactly 72 hours.
         bool primaryDownloaded =
           await DownloadConfigured(
             "tle",
             OrbitSources.TleUrl,
             required: false);
 
+        int primaryCount = 0;
         if (primaryDownloaded)
-          ImportSatnogsTle();
+          primaryCount = ImportSatnogsTle();
         else
           Log.Information(
-            "Primary TLE source is disabled; refreshing custom TLE sources only.");
+            "SatNOGS orbit source is disabled; retaining other automatic layers.");
 
-        // Custom sources are part of the TLE refresh transaction, not an
-        // optional follow-up performed by the UI. This guarantees the final
-        // in-memory state always obeys:
-        // custom #1 > custom #2 > ... > primary.
+        int autoTleCount =
+          await LoadOptionalOrbitSourceAsync(
+            OrbitSources.AutoTleUrl,
+            "AutoTLE",
+            cancellationToken: cts.Token);
+
         int customCount =
           await LoadCustomTleSourcesAsync(
             OrbitSources.CustomTleSources,
             raiseEvent: false,
             cancellationToken: cts.Token);
 
-        if (primaryDownloaded || customCount > 0)
+        int celestrakCount =
+          await LoadOptionalOrbitSourceAsync(
+            OrbitSources.CelestrakOmmCsvUrl,
+            "CelesTrak OMM CSV",
+            forcedExtension: ".csv",
+            cancellationToken: cts.Token);
+
+        int expiredManual =
+          ReleaseExpiredManualOrbitPriority(
+            DateTime.UtcNow,
+            saveAndNotify: false);
+
+        if (primaryDownloaded ||
+            primaryCount > 0 ||
+            autoTleCount > 0 ||
+            customCount > 0 ||
+            celestrakCount > 0 ||
+            expiredManual > 0)
         {
           SaveToFile();
           TleUpdated?.Invoke(
@@ -531,12 +555,122 @@ namespace SkyRoof
         }
 
         Log.Information(
-          $"TLE refresh complete: primary={(primaryDownloaded ? "updated" : "disabled")}, custom={customCount} record(s).");
+          "Orbit refresh complete: SatNOGS={Primary}, AutoTLE={AutoTle}, manual-links={Custom}, CelesTrak={Celestrak}, expired-manual={Expired}",
+          primaryCount,
+          autoTleCount,
+          customCount,
+          celestrakCount,
+          expiredManual);
       }
       catch (Exception ex)
       {
-        Log.Error(ex, "TLE import failed");
+        Log.Error(ex, "Orbit element refresh failed");
         throw;
+      }
+    }
+
+    internal async Task<int> LoadAutomaticOrbitOverlaysAsync(
+      CancellationToken cancellationToken = default)
+    {
+      // ImportAll() has already installed the lowest-priority SatNOGS layer.
+      int autoTleCount =
+        await LoadOptionalOrbitSourceAsync(
+          OrbitSources.AutoTleUrl,
+          "AutoTLE",
+          cancellationToken: cancellationToken);
+
+      int customCount =
+        await LoadCustomTleSourcesAsync(
+          OrbitSources.CustomTleSources,
+          raiseEvent: false,
+          cancellationToken: cancellationToken);
+
+      int celestrakCount =
+        await LoadOptionalOrbitSourceAsync(
+          OrbitSources.CelestrakOmmCsvUrl,
+          "CelesTrak OMM CSV",
+          forcedExtension: ".csv",
+          cancellationToken: cancellationToken);
+
+      ReleaseExpiredManualOrbitPriority(
+        DateTime.UtcNow,
+        saveAndNotify: false);
+
+      if (autoTleCount + customCount + celestrakCount > 0)
+        SaveToFile();
+
+      return autoTleCount + customCount + celestrakCount;
+    }
+
+    private async Task<int> LoadOptionalOrbitSourceAsync(
+      string? source,
+      string label,
+      string? forcedExtension = null,
+      CancellationToken cancellationToken = default)
+    {
+      if (string.IsNullOrWhiteSpace(source))
+        return 0;
+
+      try
+      {
+        string content;
+        string extension;
+
+        if (Uri.TryCreate(source.Trim(), UriKind.Absolute, out Uri? uri) &&
+            (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+        {
+          content =
+            await DownloadHttpClient.GetStringAsync(
+              uri,
+              cancellationToken);
+          extension =
+            forcedExtension ??
+            Path.GetExtension(uri.AbsolutePath);
+        }
+        else
+        {
+          string path =
+            Environment.ExpandEnvironmentVariables(
+              source.Trim());
+          content =
+            await File.ReadAllTextAsync(
+              path,
+              cancellationToken);
+          extension =
+            forcedExtension ??
+            Path.GetExtension(path);
+        }
+
+        SatnogsDbTleList records =
+          ParseTleContent(
+            content,
+            extension,
+            label);
+
+        int applied =
+          ApplyTles(
+            records,
+            createMissingSatellites: true);
+
+        Log.Information(
+          "{OrbitSource} applied {Count} record(s).",
+          label,
+          applied);
+        return applied;
+      }
+      catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+      {
+        throw;
+      }
+      catch (Exception ex)
+      {
+        // Automatic overlays are fallbacks. A failed high-priority source must
+        // not prevent the already-applied lower-priority source from being used.
+        Log.Warning(
+          ex,
+          "{OrbitSource} failed; keeping lower-priority automatic orbit data.",
+          label);
+        return 0;
       }
     }
 
