@@ -628,6 +628,13 @@ namespace SkyRoof
     {
       if (Capture != null) return;
 
+      if (LocalHold)
+      {
+        LocalHold = false;
+        SpectrumView.SetHold(false);
+        UpdateDisplayButtons();
+      }
+
       IcomLanSpectrumSettings settings = ctx.Settings.IcomLanSpectrum;
       SpectrumView.SetHistoryRows(settings.WaterfallRows);
 
