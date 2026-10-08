@@ -368,6 +368,18 @@ namespace SkyRoof
           AddAverageFrameLocked(
             frame.Samples);
         }
+        else if (AverageFrames.Count == 0)
+        {
+          // After a frequency-map translation the prior average is no longer
+          // aligned. Show the newest live/raw sweep until a complete sweep can
+          // seed a fresh average window.
+          Buffer.BlockCopy(
+            frame.Samples,
+            0,
+            LatestSamples,
+            0,
+            ScopePoints);
+        }
 
         if (PeakEnabled &&
             (AverageSweepCount <= 1 ||
@@ -562,21 +574,8 @@ namespace SkyRoof
           row,
           shiftBins);
 
-      foreach (byte[] averageFrame in
-               AverageFrames)
-        ShiftSamples(
-          averageFrame,
-          shiftBins);
-
-      ShiftSamples(
-        AverageSums,
-        shiftBins);
-
-      if (AverageSweepCount > 1 &&
-          AverageFrames.Count > 0)
-        ShiftSamples(
-          LatestSamples,
-          shiftBins);
+      if (AverageSweepCount > 1)
+        ResetAveragingLocked();
 
       if (PeakValid)
         ShiftSamples(
