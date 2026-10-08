@@ -74,14 +74,17 @@ namespace SkyRoof
       TransmitterCustomizations.Remove(
         transmitterUuid);
 
-      if (SatelliteCustomizations.TryGetValue(
-            satellite.sat_id,
-            out SatelliteCustomization? satelliteCustomization) &&
-          string.Equals(
-            satelliteCustomization.SelectedTransmitterId,
-            transmitterUuid,
-            StringComparison.OrdinalIgnoreCase))
-        satelliteCustomization.SelectedTransmitterId = null;
+      // A local transmitter can be reattached by NORAD after downloaded
+      // metadata changes its sat_id. UUIDs are globally unique, so clear any
+      // saved selector reference to the deleted local row, not only the
+      // satellite key that happens to be active today.
+      foreach (SatelliteCustomization satelliteCustomization
+               in SatelliteCustomizations.Values)
+        if (string.Equals(
+              satelliteCustomization.SelectedTransmitterId,
+              transmitterUuid,
+              StringComparison.OrdinalIgnoreCase))
+          satelliteCustomization.SelectedTransmitterId = null;
     }
 
     public List<SatelliteGroup> SatelliteGroups = new();
