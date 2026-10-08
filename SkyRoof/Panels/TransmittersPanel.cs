@@ -12,6 +12,7 @@ namespace SkyRoof
     private SatnogsDbSatellite Satellite;
     // shared, so we don't leak a GDI font handle per item on every rebuild
     private Font? BoldFont;
+    private readonly ContextMenuStrip TransmitterMenu = new();
 
     public TransmittersPanel()
     {
@@ -28,6 +29,7 @@ namespace SkyRoof
       ctx.TransmittersPanel = this;
       ctx.MainForm.TransmittersMNU.Checked = true;
       ctx.Settings.Ui.RestoreColumnWidths("TransmittersPanel", listView1);
+      BuildContextMenu();
       SetSatellite();
     }
 
@@ -62,6 +64,7 @@ namespace SkyRoof
       listView1.BeginUpdate();
       listView1.Items.Clear();
       listView1.Groups.Clear();
+      listView1.Groups.Add(new ListViewGroup("Local"));
       listView1.Groups.Add(new ListViewGroup("SatNOGS"));
       listView1.Groups.Add(new ListViewGroup("JE9PEL"));
 
@@ -73,8 +76,12 @@ namespace SkyRoof
           tx.description,
           SatnogsDbTransmitter.FormatFrequencyRange(tx.downlink_low, tx.downlink_high, tx.invert),
           SatnogsDbTransmitter.FormatFrequencyRange(tx.uplink_low, tx.uplink_high),
+          string.IsNullOrWhiteSpace(tx.DownlinkMode) ? tx.mode : tx.DownlinkMode,
         ]);
-        item.Group = listView1.Groups[0];
+        item.Group =
+          tx.local_custom
+            ? listView1.Groups[0]
+            : listView1.Groups[1];
         item.Tag = tx;
 
         // highlighting
@@ -92,8 +99,8 @@ namespace SkyRoof
       // JE9PEL transmitters
       foreach (var t in Satellite.JE9PELtransmitters.OrderBy(t => t.Mode))
       {
-        var item = new ListViewItem([t.Mode, t.Downlink, t.Uplink]);
-        item.Group = listView1.Groups[1];
+        var item = new ListViewItem([t.Name, t.Downlink, t.Uplink, t.Mode]);
+        item.Group = listView1.Groups[2];
         item.ToolTipText = t.GetTooltipText();
 
         // band color
@@ -120,6 +127,73 @@ namespace SkyRoof
       if (tx == null) return;
 
       ctx.SatelliteSelector.SetSelectedTransmitter(tx);
+    }
+
+    private void BuildContextMenu()
+    {
+      var add =
+        new ToolStripMenuItem(
+          "New Transmitter...");
+      add.Click += (_, _) =>
+        CreateLocalTransmitter();
+
+      TransmitterMenu.Items.Add(
+        add);
+      listView1.ContextMenuStrip =
+        TransmitterMenu;
+    }
+
+    private void CreateLocalTransmitter()
+    {
+      if (Satellite == null)
+        return;
+
+      using var dialog =
+        new CustomTransmitterDialog(
+          Satellite);
+      if (dialog.ShowDialog(this) != DialogResult.OK ||
+          dialog.Definition == null)
+        return;
+
+      try
+      {
+        SatnogsDbTransmitter tx =
+          ctx.SatnogsDb.AddCustomTransmitter(
+            Satellite,
+            dialog.Definition);
+
+        // Refresh both representations: the selector owns the active radio
+        // transmitter, while this panel owns the grouped detail list.
+        ctx.SatelliteSelector.RefreshTransmitters(
+          tx.uuid);
+        CreateTransmitterItems();
+
+        foreach (ListViewItem item in listView1.Items)
+          if (ReferenceEquals(item.Tag, tx) ||
+              (item.Tag is SatnogsDbTransmitter row &&
+               row.uuid == tx.uuid))
+          {
+            item.Selected = true;
+            item.Focused = true;
+            item.EnsureVisible();
+            break;
+          }
+
+        ctx.Settings.SaveToFile();
+      }
+      catch (Exception ex)
+      {
+        Log.Error(
+          ex,
+          "Unable to save local transmitter.");
+
+        MessageBox.Show(
+          this,
+          $"Unable to save the transmitter.\n\n{ex.Message}",
+          "New Transmitter",
+          MessageBoxButtons.OK,
+          MessageBoxIcon.Error);
+      }
     }
   }
 }
