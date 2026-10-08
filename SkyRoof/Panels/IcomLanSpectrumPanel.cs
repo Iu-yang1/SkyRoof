@@ -825,9 +825,40 @@ namespace SkyRoof
       if (!ScopeState.ShouldDisplay(frame))
         return;
 
+      SynchronizePendingEdgeIfNeeded(
+        frame);
       SpectrumView.PushFrame(frame);
       LastRenderedScopeFrameTicks = ticks;
       RefreshScopeGeometryUi();
+    }
+
+    private void SynchronizePendingEdgeIfNeeded(
+      IcomScopeFrame frame)
+    {
+      if (PendingEdgeSyncScope !=
+          frame.Scope)
+        return;
+
+      PendingEdgeSyncScope = -1;
+
+      if (!CanUseSkyCatScopeControl() ||
+          frame.Mode is not
+            ((byte)IcomScopeMode.Fixed) and not
+            ((byte)IcomScopeMode.ScrollFixed))
+        return;
+
+      IcomLanSpectrumSettings settings =
+        ctx.Settings.IcomLanSpectrum;
+
+      ScopeController.RequestControl(
+        settings.Source,
+        settings.ControlPath,
+        IcomScopeControlRequest.ForEdge(
+          frame.Scope,
+          Math.Clamp(
+            settings.ScopeEdgeNumber,
+            1,
+            4)));
     }
 
     private void RefreshScopeGeometryUi()
