@@ -708,13 +708,19 @@ namespace SkyRoof
       NativeLanAssistCapture?.Start();
       capture.Start();
 
+      LastScopeControlBackend =
+        ctx.CatControl
+          .GetIcomScopeControlBackend();
+
       // Scope-output control is independent from the waveform transport.
-      // The controller itself decides whether the configured path is writable,
-      // so this also covers passive RS-BA1 waveform + explicit SkyCAT control.
+      // If SkyCAT is already ready, synchronize immediately; otherwise the UI
+      // status loop detects the backend when setup finishes and performs the
+      // same one-shot synchronization then.
       RequestScopeOutputIfDue(
         force: true);
 
-      QueueSavedScopeControlsIfWritable();
+      if (LastScopeControlBackend != null)
+        QueueSavedScopeControlsIfWritable();
     }
 
     private void StopCapture()
