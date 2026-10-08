@@ -2,6 +2,7 @@ namespace SkyRoof
 {
   internal enum IcomScopeControlKind
   {
+    SelectedScope,
     Mode,
     Span,
     Edge,
@@ -29,6 +30,15 @@ namespace SkyRoof
     internal int FrequencyRange { get; init; }
     internal long LowerFrequencyHz { get; init; }
     internal long UpperFrequencyHz { get; init; }
+
+    internal static IcomScopeControlRequest ForSelectedScope(
+      byte scope) =>
+      new()
+      {
+        Kind =
+          IcomScopeControlKind.SelectedScope,
+        Scope = scope
+      };
 
     internal static IcomScopeControlRequest ForMode(
       byte scope,
