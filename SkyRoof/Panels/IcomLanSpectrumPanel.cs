@@ -128,17 +128,42 @@ namespace SkyRoof
       ScopeBandBox.Width = 84;
       ScopeBandBox.Items.AddRange(new object[] { "AUTO", "MAIN", "SUB" });
       ScopeBandBox.Margin = new Padding(0, 3, 8, 3);
-      ScopeBandBox.SelectedIndexChanged += (_, _) =>
-      {
-        ScopeState.SelectedBand =
-          (IcomLanScopeBand)Math.Clamp(
-            ScopeBandBox.SelectedIndex,
-            0,
-            2);
-        SaveUiSettings();
-        RefreshScopeGeometryUi();
-        UpdateScopeControlAvailability();
-      };
+      ScopeBandBox.SelectedIndexChanged +=
+        (_, _) =>
+        {
+          IcomLanScopeBand selected =
+            (IcomLanScopeBand)Math.Clamp(
+              ScopeBandBox.SelectedIndex,
+              0,
+              2);
+
+          ScopeState.SelectedBand =
+            selected;
+
+          if (!UpdatingScopeControlUi)
+          {
+            SaveUiSettings();
+
+            if (selected !=
+                IcomLanScopeBand.Auto)
+            {
+              byte scope =
+                selected ==
+                  IcomLanScopeBand.Sub
+                  ? (byte)1
+                  : (byte)0;
+
+              SendScopeControl(
+                IcomScopeControlRequest
+                  .ForSelectedScope(
+                    scope),
+                $"selected {(scope == 1 ? "SUB" : "MAIN")} scope");
+            }
+          }
+
+          RefreshScopeGeometryUi();
+          UpdateScopeControlAvailability();
+        };
       toolbar.Controls.Add(ScopeBandBox);
 
       ScopeModeBox.DropDownStyle =
@@ -448,28 +473,30 @@ namespace SkyRoof
       IcomLanSpectrumSettings settings =
         ctx.Settings.IcomLanSpectrum;
 
-      ScopeBandBox.SelectedIndex =
-        Math.Clamp(
-          (int)settings.ScopeBand,
-          0,
-          2);
-      ScopeState.SelectedBand =
-        (IcomLanScopeBand)ScopeBandBox.SelectedIndex;
-
-      SpectrumView.SetHistoryRows(
-        settings.WaterfallRows);
-      SpectrumView.SetSpectrumPercent(
-        settings.SpectrumHeightPercent);
-      SpectrumView.SetWaterfallVisible(
-        settings.ShowWaterfall);
-      SpectrumView.SetWaterfallDisplay(
-        settings.WaterfallBrightness,
-        settings.WaterfallContrast,
-        settings.WaterfallPalette);
-
       UpdatingScopeControlUi = true;
       try
       {
+        ScopeBandBox.SelectedIndex =
+          Math.Clamp(
+            (int)settings.ScopeBand,
+            0,
+            2);
+
+        ScopeState.SelectedBand =
+          (IcomLanScopeBand)
+          ScopeBandBox.SelectedIndex;
+
+        SpectrumView.SetHistoryRows(
+          settings.WaterfallRows);
+        SpectrumView.SetSpectrumPercent(
+          settings.SpectrumHeightPercent);
+        SpectrumView.SetWaterfallVisible(
+          settings.ShowWaterfall);
+        SpectrumView.SetWaterfallDisplay(
+          settings.WaterfallBrightness,
+          settings.WaterfallContrast,
+          settings.WaterfallPalette);
+
         double referenceDb =
           NormalizeReferenceLevel(
             settings.ScopeReferenceLevelDb);
