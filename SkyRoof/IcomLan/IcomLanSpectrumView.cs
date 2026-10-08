@@ -264,6 +264,8 @@ namespace SkyRoof
       if (frame.Samples.Length < ScopePoints)
         return;
 
+      bool zoomReset = false;
+
       lock (DataSync)
       {
         if (HoldEnabled)
@@ -286,6 +288,7 @@ namespace SkyRoof
           {
             HorizontalZoomFactor = 1.0;
             HorizontalZoomCenter = 0.5;
+            zoomReset = true;
           }
         }
         else if (previousFrame != null)
@@ -389,6 +392,9 @@ namespace SkyRoof
             WaterfallHead);
         }
       }
+
+      if (zoomReset)
+        ZoomChanged?.Invoke(1);
 
       Invalidate();
     }
@@ -531,6 +537,16 @@ namespace SkyRoof
           row,
           shiftBins);
 
+      foreach (byte[] averageFrame in
+               AverageFrames)
+        ShiftSamples(
+          averageFrame,
+          shiftBins);
+
+      ShiftSamples(
+        AverageSums,
+        shiftBins);
+
       if (PeakValid)
         ShiftSamples(
           PeakSamples,
@@ -583,6 +599,61 @@ namespace SkyRoof
       Array.Clear(
         samples,
         leftCount,
+        left);
+    }
+
+    private static void ShiftSamples(
+      int[] samples,
+      int shiftBins)
+    {
+      if (shiftBins == 0 ||
+          samples.Length == 0)
+        return;
+
+      if (Math.Abs(shiftBins) >=
+          samples.Length)
+      {
+        Array.Clear(
+          samples);
+        return;
+      }
+
+      if (shiftBins > 0)
+      {
+        int count =
+          samples.Length -
+          shiftBins;
+
+        Array.Copy(
+          samples,
+          0,
+          samples,
+          shiftBins,
+          count);
+
+        Array.Clear(
+          samples,
+          0,
+          shiftBins);
+        return;
+      }
+
+      int left =
+        -shiftBins;
+      int countLeft =
+        samples.Length -
+        left;
+
+      Array.Copy(
+        samples,
+        left,
+        samples,
+        0,
+        countLeft);
+
+      Array.Clear(
+        samples,
+        countLeft,
         left);
     }
 
