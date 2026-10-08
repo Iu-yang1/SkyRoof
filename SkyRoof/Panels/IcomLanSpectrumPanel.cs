@@ -372,6 +372,10 @@ namespace SkyRoof
         LocalHold = !LocalHold;
         SpectrumView.SetHold(LocalHold);
         UpdateDisplayButtons();
+        UpdateScopeControlAvailability();
+
+        if (!LocalHold)
+          ApplyControlSettings();
       };
       toolbar.Controls.Add(HoldBtn);
 
@@ -951,7 +955,11 @@ namespace SkyRoof
 
     private void UpdateScopeControlAvailability()
     {
+      ScopeBandBox.Enabled =
+        !LocalHold;
+
       bool enabled =
+        !LocalHold &&
         CanUseSkyCatScopeControl() &&
         TryGetControlScope(
           out _);
@@ -1286,6 +1294,12 @@ namespace SkyRoof
 
     internal void ApplyControlSettings()
     {
+      // HOLD is an atomic display snapshot. Settings may be edited while the
+      // snapshot is frozen, but do not swap the displayed scope/geometry under
+      // the frozen trace. The saved values are applied when HOLD is released.
+      if (LocalHold)
+        return;
+
       LoadSettingsToUi();
 
       if (Capture != null)
@@ -1294,6 +1308,15 @@ namespace SkyRoof
 
     internal void ApplySettings()
     {
+      // Changing transport/source is a new acquisition session, so a stale
+      // display HOLD must not survive the restart.
+      if (LocalHold)
+      {
+        LocalHold = false;
+        SpectrumView.SetHold(false);
+        UpdateDisplayButtons();
+      }
+
       bool restart = Capture != null;
 
       if (restart)
