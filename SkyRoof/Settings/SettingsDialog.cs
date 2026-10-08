@@ -148,6 +148,14 @@ namespace SkyRoof
           ValidateInt(e, 250, 25);
           break;
 
+        case "SkyRoof.IcomLanSpectrumSettings.ScopeEdgeNumber":
+          ValidateInt(e, 4, 1);
+          break;
+
+        case "SkyRoof.IcomLanSpectrumSettings.ScopeReferenceLevelDb":
+          ValidateHalfDb(e);
+          break;
+
         case "SkyRoof.Ft4ConsoleSettings.TxGain":
           ValidateInt(e, 0, -60);
           break;
@@ -209,6 +217,25 @@ namespace SkyRoof
     {
       float cleanValue = Math.Max(min, Math.Min(max, (float)e.ChangedItem.Value));
       e.ChangedItem.PropertyDescriptor.SetValue(e.ChangedItem.Parent.Value, cleanValue);
+    }
+
+    private void ValidateHalfDb(PropertyValueChangedEventArgs e)
+    {
+      double value =
+        Convert.ToDouble(
+          e.ChangedItem.Value);
+
+      double cleanValue =
+        Math.Clamp(
+          Math.Round(
+            value * 2,
+            MidpointRounding.AwayFromZero) / 2.0,
+          -20.0,
+          20.0);
+
+      e.ChangedItem.PropertyDescriptor.SetValue(
+        e.ChangedItem.Parent.Value,
+        cleanValue);
     }
 
 

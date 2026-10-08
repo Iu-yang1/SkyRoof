@@ -766,16 +766,14 @@ namespace SkyRoof
 
       bool scopeOk = SendWriteCommand("U SCOPE 1");
       bool dataOk = SendWriteCommand("U SCOPE_DATA 1");
-      bool fastOk = SendWriteCommand("U SCOPE_FAST 1");
 
-      if (scopeOk && dataOk && fastOk)
+      if (scopeOk && dataOk)
         LogInfo(
-          "IC-9700 scope and waveform output enabled through SkyCAT; " +
-          "MAIN/SUB sweep speed set to FAST");
+          "IC-9700 scope and waveform output enabled through SkyCAT");
       else
         Log.Warning(
-          "SkyCAT did not accept all IC-9700 scope commands. " +
-          "Update SkyCAT to a build that supports U SCOPE / U SCOPE_DATA / U SCOPE_FAST.");
+          "SkyCAT did not accept all IC-9700 scope output commands. " +
+          "Update SkyCAT to a build that supports U SCOPE / U SCOPE_DATA.");
     }
 
 

@@ -10,7 +10,7 @@ namespace SkyRoof
     FixedEdge
   }
 
-  internal enum IcomScopeSweepSpeed : byte
+  public enum IcomScopeSweepSpeed : byte
   {
     Fast = 0,
     Mid = 1,

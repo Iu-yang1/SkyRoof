@@ -6,8 +6,23 @@ namespace SkyRoof
   {
     private readonly Context ctx;
 
+    private static readonly long[] ScopeSpanValues =
+    [
+      2_500,
+      5_000,
+      10_000,
+      25_000,
+      50_000,
+      100_000,
+      250_000,
+      500_000
+    ];
+
     private readonly ComboBox ScopeBandBox = new();
-    private readonly Label ModeLabel = new();
+    private readonly ComboBox ScopeModeBox = new();
+    private readonly ComboBox SpanEdgeBox = new();
+    private readonly NumericUpDown ReferenceBox = new();
+    private readonly ComboBox SweepSpeedBox = new();
     private readonly Label GeometryLabel = new();
     private readonly Button StartStopBtn = new();
     private readonly Button ClearBtn = new();
@@ -33,13 +48,18 @@ namespace SkyRoof
     private bool LastStatsUsedNativeLan;
     private bool LocalHold;
     private bool PeakHold;
+    private bool UpdatingScopeControlUi;
+    private bool SpanEdgeShowsSpan = true;
 
     public IcomLanSpectrumPanel(Context ctx)
     {
       this.ctx = ctx;
       ScopeController =
         new IcomScopeController(
-          () => ctx.CatControl.RequestIcomScopeOutput());
+          () => ctx.CatControl.RequestIcomScopeOutput(),
+          request =>
+            ctx.CatControl.RequestIcomScopeControl(
+              request));
 
       Text = "Icom LAN Spectrum";
       Name = "IcomLanSpectrumPanel";
@@ -117,17 +137,177 @@ namespace SkyRoof
             2);
         SaveUiSettings();
         RefreshScopeGeometryUi();
+        UpdateScopeControlAvailability();
       };
       toolbar.Controls.Add(ScopeBandBox);
 
-      ModeLabel.AutoSize = true;
-      ModeLabel.Text = "—";
-      ModeLabel.Font =
-        new Font(
-          Font,
-          FontStyle.Bold);
-      ModeLabel.Margin = new Padding(2, 7, 10, 0);
-      toolbar.Controls.Add(ModeLabel);
+      ScopeModeBox.DropDownStyle =
+        ComboBoxStyle.DropDownList;
+      ScopeModeBox.Width = 92;
+      ScopeModeBox.Items.AddRange(
+        new object[]
+        {
+          "CENTER",
+          "FIXED",
+          "SCROLL-C",
+          "SCROLL-F"
+        });
+      ScopeModeBox.Margin =
+        new Padding(0, 3, 6, 3);
+      ScopeModeBox.SelectedIndexChanged +=
+        (_, _) =>
+        {
+          if (UpdatingScopeControlUi ||
+              ScopeModeBox.SelectedIndex < 0)
+            return;
+
+          IcomScopeMode mode =
+            (IcomScopeMode)
+            ScopeModeBox.SelectedIndex;
+
+          ConfigureSpanEdgeControl(
+            mode is IcomScopeMode.Center or
+              IcomScopeMode.ScrollCenter);
+
+          if (!TryGetControlScope(
+                out byte scope))
+            return;
+
+          SendScopeControl(
+            IcomScopeControlRequest.ForMode(
+              scope,
+              mode),
+            $"mode {ScopeModeBox.SelectedItem}");
+        };
+      toolbar.Controls.Add(ScopeModeBox);
+
+      SpanEdgeBox.DropDownStyle =
+        ComboBoxStyle.DropDownList;
+      SpanEdgeBox.Width = 86;
+      SpanEdgeBox.Margin =
+        new Padding(0, 3, 6, 3);
+      SpanEdgeBox.SelectedIndexChanged +=
+        (_, _) =>
+        {
+          if (UpdatingScopeControlUi ||
+              SpanEdgeBox.SelectedIndex < 0 ||
+              !TryGetControlScope(
+                out byte scope))
+            return;
+
+          IcomLanSpectrumSettings settings =
+            ctx.Settings.IcomLanSpectrum;
+
+          if (SpanEdgeShowsSpan)
+          {
+            long span =
+              ScopeSpanValues[
+                SpanEdgeBox.SelectedIndex];
+
+            SendScopeControl(
+              IcomScopeControlRequest.ForSpan(
+                scope,
+                span),
+              $"span {FormatHalfSpan(span)}");
+          }
+          else
+          {
+            int edge =
+              SpanEdgeBox.SelectedIndex + 1;
+
+            settings.ScopeEdgeNumber =
+              edge;
+            ctx.Settings.SaveToFile();
+
+            SendScopeControl(
+              IcomScopeControlRequest.ForEdge(
+                scope,
+                edge),
+              $"edge {edge}");
+          }
+        };
+      toolbar.Controls.Add(SpanEdgeBox);
+
+      toolbar.Controls.Add(
+        new Label
+        {
+          AutoSize = true,
+          Text = "REF:",
+          Margin =
+            new Padding(0, 7, 3, 0)
+        });
+
+      ReferenceBox.Minimum = -20;
+      ReferenceBox.Maximum = 20;
+      ReferenceBox.DecimalPlaces = 1;
+      ReferenceBox.Increment = 0.5m;
+      ReferenceBox.Width = 62;
+      ReferenceBox.Margin =
+        new Padding(0, 3, 6, 3);
+      ReferenceBox.ValueChanged +=
+        (_, _) =>
+        {
+          if (UpdatingScopeControlUi ||
+              !ReferenceBox.Focused ||
+              !TryGetControlScope(
+                out byte scope))
+            return;
+
+          double referenceDb =
+            (double)ReferenceBox.Value;
+
+          ctx.Settings.IcomLanSpectrum
+            .ScopeReferenceLevelDb =
+            referenceDb;
+          ctx.Settings.SaveToFile();
+
+          SendScopeControl(
+            IcomScopeControlRequest
+              .ForReferenceLevel(
+                scope,
+                referenceDb),
+            $"reference {referenceDb:+0.0;-0.0;0.0} dB");
+        };
+      toolbar.Controls.Add(ReferenceBox);
+
+      SweepSpeedBox.DropDownStyle =
+        ComboBoxStyle.DropDownList;
+      SweepSpeedBox.Width = 70;
+      SweepSpeedBox.Items.AddRange(
+        new object[]
+        {
+          "FAST",
+          "MID",
+          "SLOW"
+        });
+      SweepSpeedBox.Margin =
+        new Padding(0, 3, 8, 3);
+      SweepSpeedBox.SelectedIndexChanged +=
+        (_, _) =>
+        {
+          if (UpdatingScopeControlUi ||
+              SweepSpeedBox.SelectedIndex < 0 ||
+              !TryGetControlScope(
+                out byte scope))
+            return;
+
+          IcomScopeSweepSpeed speed =
+            (IcomScopeSweepSpeed)
+            SweepSpeedBox.SelectedIndex;
+
+          ctx.Settings.IcomLanSpectrum
+            .ScopeSweepSpeed =
+            speed;
+          ctx.Settings.SaveToFile();
+
+          SendScopeControl(
+            IcomScopeControlRequest
+              .ForSweepSpeed(
+                scope,
+                speed),
+            $"speed {SweepSpeedBox.SelectedItem}");
+        };
+      toolbar.Controls.Add(SweepSpeedBox);
 
       GeometryLabel.AutoSize = true;
       GeometryLabel.Text = "Waiting for scope";
@@ -265,6 +445,29 @@ namespace SkyRoof
         settings.WaterfallContrast,
         settings.WaterfallPalette);
 
+      UpdatingScopeControlUi = true;
+      try
+      {
+        ReferenceBox.Value =
+          (decimal)Math.Clamp(
+            settings.ScopeReferenceLevelDb,
+            -20.0,
+            20.0);
+
+        SweepSpeedBox.SelectedIndex =
+          Math.Clamp(
+            (int)settings.ScopeSweepSpeed,
+            0,
+            2);
+
+        ConfigureSpanEdgeControl(
+          SpanEdgeShowsSpan);
+      }
+      finally
+      {
+        UpdatingScopeControlUi = false;
+      }
+
       UpdateDisplayButtons();
       RefreshTuningOverlay();
       RefreshScopeGeometryUi();
@@ -395,7 +598,15 @@ namespace SkyRoof
       capture.Start();
 
       if (UsingSkyCatScopeSource)
-        RequestScopeOutputIfDue(force: true);
+      {
+        RequestScopeOutputIfDue(
+          force: true);
+
+        // Previous builds always forced FAST when enabling scope output.
+        // Preserve that default behavior through the independent SPEED command
+        // so later reasserts no longer overwrite an operator-selected MID/SLOW.
+        QueueSavedSweepSpeedForBothScopes();
+      }
     }
 
     private void StopCapture()
@@ -495,29 +706,232 @@ namespace SkyRoof
 
       if (frame == null)
       {
-        ModeLabel.Text = "—";
-        GeometryLabel.Text = "Waiting for scope";
+        GeometryLabel.Text =
+          "Waiting for scope";
+        UpdateScopeControlAvailability();
         return;
       }
 
       IcomScopeGeometry geometry =
         frame.Geometry;
 
-      ModeLabel.Text =
-        frame.ModeName;
+      UpdatingScopeControlUi = true;
+      try
+      {
+        ScopeModeBox.SelectedIndex =
+          frame.Mode <=
+            (byte)IcomScopeMode.ScrollFixed
+            ? frame.Mode
+            : -1;
+
+        bool spanMode =
+          frame.Mode is
+            (byte)IcomScopeMode.Center or
+            (byte)IcomScopeMode.ScrollCenter;
+
+        ConfigureSpanEdgeControl(
+          spanMode);
+
+        if (spanMode &&
+            geometry.IsValid)
+        {
+          int spanIndex =
+            Array.IndexOf(
+              ScopeSpanValues,
+              geometry.SpanHz);
+
+          if (spanIndex >= 0)
+            SpanEdgeBox.SelectedIndex =
+              spanIndex;
+        }
+        else if (!spanMode)
+        {
+          SpanEdgeBox.SelectedIndex =
+            Math.Clamp(
+              ctx.Settings.IcomLanSpectrum
+                .ScopeEdgeNumber,
+              1,
+              4) - 1;
+        }
+
+        ReferenceBox.Value =
+          (decimal)Math.Clamp(
+            ctx.Settings.IcomLanSpectrum
+              .ScopeReferenceLevelDb,
+            -20.0,
+            20.0);
+
+        SweepSpeedBox.SelectedIndex =
+          Math.Clamp(
+            (int)ctx.Settings.IcomLanSpectrum
+              .ScopeSweepSpeed,
+            0,
+            2);
+      }
+      finally
+      {
+        UpdatingScopeControlUi = false;
+      }
 
       if (!geometry.IsValid)
       {
         GeometryLabel.Text =
           "Frequency geometry unavailable";
+        UpdateScopeControlAvailability();
         return;
       }
 
       GeometryLabel.Text =
-        frame.Mode == (byte)IcomScopeMode.Center
-          ? FormatHalfSpan(geometry.SpanHz)
+        frame.Mode ==
+          (byte)IcomScopeMode.Center
+          ? FormatHalfSpan(
+              geometry.SpanHz)
           : $"{FormatToolbarFrequency(geometry.LowerFrequencyHz)} — " +
             $"{FormatToolbarFrequency(geometry.UpperFrequencyHz)}";
+
+      UpdateScopeControlAvailability();
+    }
+
+    private void ConfigureSpanEdgeControl(
+      bool showSpan)
+    {
+      if (SpanEdgeBox.Items.Count > 0 &&
+          SpanEdgeShowsSpan == showSpan)
+        return;
+
+      SpanEdgeShowsSpan =
+        showSpan;
+
+      bool previousUpdating =
+        UpdatingScopeControlUi;
+      UpdatingScopeControlUi = true;
+
+      try
+      {
+        SpanEdgeBox.Items.Clear();
+
+        if (showSpan)
+        {
+          foreach (long span in
+                   ScopeSpanValues)
+            SpanEdgeBox.Items.Add(
+              FormatSpanChoice(span));
+        }
+        else
+        {
+          SpanEdgeBox.Items.AddRange(
+            new object[]
+            {
+              "EDGE 1",
+              "EDGE 2",
+              "EDGE 3",
+              "EDGE 4"
+            });
+
+          SpanEdgeBox.SelectedIndex =
+            Math.Clamp(
+              ctx.Settings.IcomLanSpectrum
+                .ScopeEdgeNumber,
+              1,
+              4) - 1;
+        }
+      }
+      finally
+      {
+        UpdatingScopeControlUi =
+          previousUpdating;
+      }
+    }
+
+    private bool TryGetControlScope(
+      out byte scope)
+    {
+      IcomLanScopeBand selected =
+        ScopeState.SelectedBand;
+
+      if (selected ==
+          IcomLanScopeBand.Main)
+      {
+        scope = 0;
+        return true;
+      }
+
+      if (selected ==
+          IcomLanScopeBand.Sub)
+      {
+        scope = 1;
+        return true;
+      }
+
+      IcomScopeFrame? frame =
+        ScopeState.LatestSelectedFrame;
+
+      if (frame != null)
+      {
+        scope =
+          frame.Scope == 1
+            ? (byte)1
+            : (byte)0;
+        return true;
+      }
+
+      scope = 0;
+      return false;
+    }
+
+    private void UpdateScopeControlAvailability()
+    {
+      IcomLanSpectrumSettings settings =
+        ctx.Settings.IcomLanSpectrum;
+
+      IcomScopeControlPath path =
+        IcomScopeController.ResolveControlPath(
+          settings.Source,
+          settings.ControlPath);
+
+      bool enabled =
+        path == IcomScopeControlPath.SkyCat &&
+        TryGetControlScope(
+          out _);
+
+      ScopeModeBox.Enabled =
+        enabled;
+      SpanEdgeBox.Enabled =
+        enabled;
+      ReferenceBox.Enabled =
+        enabled;
+      SweepSpeedBox.Enabled =
+        enabled;
+    }
+
+    private bool SendScopeControl(
+      IcomScopeControlRequest request,
+      string description)
+    {
+      IcomLanSpectrumSettings settings =
+        ctx.Settings.IcomLanSpectrum;
+
+      bool routed =
+        ScopeController.RequestControl(
+          settings.Source,
+          settings.ControlPath,
+          request);
+
+      StatusLabel.Text =
+        routed
+          ? $"Scope control queued via {ScopeController.EffectivePath}: {description}."
+          : "Scope control is read-only or no active SkyCAT control engine is available. " +
+            "Set Scope control path to SkyCAT when using RS-BA1 waveform data.";
+
+      return routed;
+    }
+
+    private static string FormatSpanChoice(
+      long spanHz)
+    {
+      return spanHz >= 1_000_000
+        ? $"{spanHz / 1_000_000.0:0.###} MHz"
+        : $"{spanHz / 1_000.0:0.###} kHz";
     }
 
     private void RefreshTuningOverlay()
@@ -704,6 +1118,26 @@ namespace SkyRoof
         settings.Source,
         settings.ControlPath,
         force);
+    }
+
+    private void QueueSavedSweepSpeedForBothScopes()
+    {
+      IcomLanSpectrumSettings settings =
+        ctx.Settings.IcomLanSpectrum;
+
+      ScopeController.RequestControl(
+        settings.Source,
+        settings.ControlPath,
+        IcomScopeControlRequest.ForSweepSpeed(
+          0,
+          settings.ScopeSweepSpeed));
+
+      ScopeController.RequestControl(
+        settings.Source,
+        settings.ControlPath,
+        IcomScopeControlRequest.ForSweepSpeed(
+          1,
+          settings.ScopeSweepSpeed));
     }
 
     internal void ApplyDisplaySettings()

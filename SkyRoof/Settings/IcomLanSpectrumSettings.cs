@@ -54,13 +54,27 @@ namespace SkyRoof
     [DefaultValue(IcomLanSpectrumSource.SkyCat)]
     public IcomLanSpectrumSource Source { get; set; } = IcomLanSpectrumSource.SkyCat;
 
-    // Persist the control route independently from the waveform source. It stays
-    // hidden until the full scope-control UI is implemented, so Phase 1 does not
-    // expose controls that are not wired yet.
-    [Browsable(false)]
+    [DisplayName("Scope control path")]
+    [Description("Select how spectrum-scope writes are sent independently of the waveform source. Auto uses SkyCAT for a SkyCAT source, leaves passive RS-BA1 read-only, and preserves experimental Direct LAN behavior. Select SkyCAT explicitly to control the radio while using RS-BA1 as the waveform source.")]
     [DefaultValue(IcomScopeControlPath.Auto)]
     public IcomScopeControlPath ControlPath { get; set; } =
       IcomScopeControlPath.Auto;
+
+    [DisplayName("Scope edge number")]
+    [Description("Selected IC-9700 fixed/scroll-fixed scope edge, 1 through 4.")]
+    [DefaultValue(1)]
+    public int ScopeEdgeNumber { get; set; } = 1;
+
+    [DisplayName("Scope reference level")]
+    [Description("IC-9700 scope reference level in dB, from -20.0 to +20.0 in 0.5 dB steps.")]
+    [DefaultValue(0d)]
+    public double ScopeReferenceLevelDb { get; set; } = 0;
+
+    [DisplayName("Scope sweep speed")]
+    [Description("IC-9700 scope sweep speed used by the explicit spectrum controls.")]
+    [DefaultValue(IcomScopeSweepSpeed.Fast)]
+    public IcomScopeSweepSpeed ScopeSweepSpeed { get; set; } =
+      IcomScopeSweepSpeed.Fast;
 
     [DisplayName("SkyCAT scope TCP port")]
     [Description("Loopback TCP port exported by skycatd for native IC-9700 scope frames.")]
