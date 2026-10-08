@@ -21,6 +21,7 @@ namespace SkyRoof
     private readonly ComboBox ScopeBandBox = new();
     private readonly ComboBox ScopeModeBox = new();
     private readonly ComboBox SpanEdgeBox = new();
+    private readonly Button FixedEdgeEditBtn = new();
     private readonly NumericUpDown ReferenceBox = new();
     private readonly ComboBox SweepSpeedBox = new();
     private readonly ComboBox VbwBox = new();
@@ -290,6 +291,16 @@ namespace SkyRoof
           }
         };
       toolbar.Controls.Add(SpanEdgeBox);
+
+      FixedEdgeEditBtn.Text = "EDGE…";
+      FixedEdgeEditBtn.AutoSize = true;
+      FixedEdgeEditBtn.Visible = false;
+      FixedEdgeEditBtn.Margin =
+        new Padding(0, 2, 6, 2);
+      FixedEdgeEditBtn.Click +=
+        (_, _) => EditSelectedFixedEdge();
+      toolbar.Controls.Add(
+        FixedEdgeEditBtn);
 
       toolbar.Controls.Add(
         new Label
@@ -1213,6 +1224,8 @@ namespace SkyRoof
 
       SpanEdgeShowsSpan =
         showSpan;
+      FixedEdgeEditBtn.Visible =
+        !showSpan;
 
       bool previousUpdating =
         UpdatingScopeControlUi;
@@ -1326,6 +1339,10 @@ namespace SkyRoof
       SpanEdgeBox.Enabled =
         enabled &&
         ScopeModeBox.SelectedIndex >= 0;
+      FixedEdgeEditBtn.Enabled =
+        enabled &&
+        !SpanEdgeShowsSpan &&
+        ScopeState.LatestSelectedFrame != null;
       ReferenceBox.Enabled =
         enabled;
       SweepSpeedBox.Enabled =
@@ -1374,6 +1391,179 @@ namespace SkyRoof
 
       return routed;
     }
+
+    private void EditSelectedFixedEdge()
+    {
+      if (LocalHold ||
+          !CanUseSkyCatScopeControl())
+        return;
+
+      IcomScopeFrame? frame =
+        ScopeState.LatestSelectedFrame;
+
+      if (frame == null ||
+          !frame.Geometry.IsValid ||
+          (frame.Mode !=
+             (byte)IcomScopeMode.Fixed &&
+           frame.Mode !=
+             (byte)IcomScopeMode.ScrollFixed))
+        return;
+
+      int frequencyRange =
+        GetFixedEdgeFrequencyRange(
+          frame.Geometry);
+
+      if (frequencyRange == 0)
+      {
+        StatusLabel.Text =
+          "Fixed-edge editing is unavailable because the raw IC-9700 scope geometry is outside the 144/430/1200 MHz preset ranges.";
+        return;
+      }
+
+      IcomLanSpectrumSettings settings =
+        ctx.Settings.IcomLanSpectrum;
+      int edgeNumber =
+        Math.Clamp(
+          settings.ScopeEdgeNumber,
+          1,
+          4);
+      string key =
+        $"{frequencyRange}:{edgeNumber}";
+
+      (long minimum,
+       long maximum) =
+        GetFixedEdgeRangeBounds(
+          frequencyRange);
+
+      long lowerHz =
+        Math.Clamp(
+          RoundToKilohertz(
+            frame.Geometry.LowerFrequencyHz),
+          minimum,
+          maximum -
+          1_000);
+      long upperHz =
+        Math.Clamp(
+          RoundToKilohertz(
+            frame.Geometry.UpperFrequencyHz),
+          lowerHz +
+          1_000,
+          maximum);
+
+      if (settings.FixedEdgePresets
+          .TryGetValue(
+            key,
+            out IcomScopeFixedEdgePreset? saved) &&
+          saved.LowerHz >= minimum &&
+          saved.UpperHz <= maximum &&
+          saved.UpperHz > saved.LowerHz)
+      {
+        lowerHz =
+          saved.LowerHz;
+        upperHz =
+          saved.UpperHz;
+      }
+
+      using var dialog =
+        new IcomScopeFixedEdgeDialog(
+          frequencyRange,
+          edgeNumber,
+          lowerHz,
+          upperHz);
+
+      if (dialog.ShowDialog(this) !=
+          DialogResult.OK)
+        return;
+
+      settings.FixedEdgePresets[key] =
+        new IcomScopeFixedEdgePreset
+        {
+          LowerHz =
+            dialog.LowerHz,
+          UpperHz =
+            dialog.UpperHz
+        };
+
+      ctx.Settings.SaveToFile();
+
+      bool routed =
+        SendScopeControl(
+          IcomScopeControlRequest.ForFixedEdge(
+            frequencyRange,
+            edgeNumber,
+            dialog.LowerHz,
+            dialog.UpperHz),
+          $"fixed edge {edgeNumber} {dialog.LowerHz / 1_000_000.0:0.000}–{dialog.UpperHz / 1_000_000.0:0.000} MHz");
+
+      if (routed &&
+          TryGetControlScope(
+            out byte scope))
+      {
+        SendScopeControl(
+          IcomScopeControlRequest.ForEdge(
+            scope,
+            edgeNumber),
+          $"edge {edgeNumber}");
+      }
+    }
+
+    private static int GetFixedEdgeFrequencyRange(
+      IcomScopeGeometry geometry)
+    {
+      if (!geometry.IsValid)
+        return 0;
+
+      long center =
+        geometry.LowerFrequencyHz +
+        geometry.SpanHz / 2;
+
+      if (center is >=
+            144_000_000 and <=
+            148_000_000)
+        return 1;
+
+      if (center is >=
+            430_000_000 and <=
+            450_000_000)
+        return 2;
+
+      if (center is >=
+            1_240_000_000 and <=
+            1_300_000_000)
+        return 3;
+
+      return 0;
+    }
+
+    private static (
+      long Minimum,
+      long Maximum)
+      GetFixedEdgeRangeBounds(
+        int frequencyRange) =>
+      frequencyRange switch
+      {
+        1 =>
+          (144_000_000,
+           148_000_000),
+        2 =>
+          (430_000_000,
+           450_000_000),
+        3 =>
+          (1_240_000_000,
+           1_300_000_000),
+        _ =>
+          throw new ArgumentOutOfRangeException(
+            nameof(frequencyRange))
+      };
+
+    private static long RoundToKilohertz(
+      long frequencyHz) =>
+      checked(
+        1_000 *
+        (long)Math.Round(
+          frequencyHz /
+          1_000.0,
+          MidpointRounding.AwayFromZero));
 
     private static double NormalizeReferenceLevel(
       double referenceDb)
