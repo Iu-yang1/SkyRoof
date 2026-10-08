@@ -92,6 +92,9 @@ namespace SkyRoof
 
       return request.Kind switch
       {
+        IcomScopeControlKind.SelectedScope =>
+          $"U SCOPE_SELECT {scope}",
+
         IcomScopeControlKind.Mode =>
           $"U SCOPE_MODE {scope} {FormatScopeMode(request.Mode)}",
 
