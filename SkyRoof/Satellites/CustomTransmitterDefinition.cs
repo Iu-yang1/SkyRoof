@@ -15,6 +15,8 @@ namespace SkyRoof
     public long? downlink_hz { get; set; }
     public long? uplink_hz { get; set; }
     public string mode { get; set; } = "FM";
+    public DateTime updated_utc { get; set; } =
+      DateTime.UtcNow;
 
     internal bool HasAnyFrequency =>
       downlink_hz.HasValue ||
