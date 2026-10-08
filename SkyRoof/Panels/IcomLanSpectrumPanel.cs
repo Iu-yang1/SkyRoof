@@ -1039,9 +1039,21 @@ namespace SkyRoof
       else if (ctx.Slicer != null)
         mode = ctx.Slicer.CurrentMode;
 
+      long displayOffsetHz = 0;
+
+      if (receiveHz > 0 &&
+          ctx.Settings.Transverter.RxCatOffsetEnabled)
+      {
+        displayOffsetHz =
+          ctx.Settings.Transverter
+            .GetCatLoOffset(
+              receiveHz);
+      }
+
       SpectrumView.SetTuningOverlay(
         receiveHz,
-        mode);
+        mode,
+        displayOffsetHz);
     }
 
     private static string FormatHalfSpan(long spanHz)
