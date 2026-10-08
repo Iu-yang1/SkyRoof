@@ -6,6 +6,29 @@ namespace VE3NEA.Dsp.Tests;
 public sealed class RotatorManualControlTests
 {
     [Fact]
+    public void LiveTrackedPassLocksManualControl()
+    {
+        Assert.True(
+            RotatorWidget.ShouldLockManualControl(
+                isTracking: true,
+                passIsActive: true));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public void PrePositioningOrTrackOffKeepsManualControlAvailable(
+        bool isTracking,
+        bool passIsActive)
+    {
+        Assert.False(
+            RotatorWidget.ShouldLockManualControl(
+                isTracking,
+                passIsActive));
+    }
+
+    [Fact]
     public void ClampManualTargetUsesConfiguredRotatorLimits()
     {
         var settings = new RotatorSettings

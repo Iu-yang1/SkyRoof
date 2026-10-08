@@ -130,6 +130,20 @@ namespace SkyRoof
     // single source of truth used by auto-selection instead of a shadow flag
     public bool IsTracking => engine != null && TrackCheckbox.Checked;
 
+    // Manual control is locked only after AOS while Track remains enabled.
+    // Pre-positioning before AOS may still be adjusted manually; the first
+    // manual command will explicitly clear Track and take ownership.
+    public bool IsManualControlLocked =>
+      ShouldLockManualControl(
+        IsTracking,
+        Path?.Pass?.IsActive() == true);
+
+    internal static bool ShouldLockManualControl(
+      bool isTracking,
+      bool passIsActive) =>
+      isTracking &&
+      passIsActive;
+
     public void RotateTo(Bearing? bearing)
     {
       if (engine == null || bearing == null) return;
@@ -193,7 +207,7 @@ namespace SkyRoof
       double azimuthDeg,
       double elevationDeg)
     {
-      if (engine == null) return;
+      if (engine == null || IsManualControlLocked) return;
 
       var target =
         ClampManualTarget(
@@ -201,9 +215,9 @@ namespace SkyRoof
           elevationDeg,
           ctx.Settings.Rotator);
 
-      // Manual control takes ownership from automatic tracking. Setting the
-      // checkbox raises the normal tracking handler; RotateTo immediately
-      // replaces the queued STOP with the new absolute position command.
+      // Before AOS, Track may already be checked because the antenna is
+      // pre-positioning for the upcoming pass. Manual control is allowed in
+      // that state, but the operator must explicitly take ownership first.
       if (TrackCheckbox.Checked)
         TrackCheckbox.Checked = false;
 
@@ -217,7 +231,7 @@ namespace SkyRoof
       double azimuthDeltaDeg,
       double elevationDeltaDeg)
     {
-      if (engine == null) return;
+      if (engine == null || IsManualControlLocked) return;
 
       // The first jog while tracking starts at the actual antenna position,
       // not at a possibly far-ahead tracking target. Subsequent repeated jogs
@@ -239,6 +253,8 @@ namespace SkyRoof
 
     internal void ManualPark()
     {
+      if (IsManualControlLocked) return;
+
       ManualMoveToDegrees(
         ctx.Settings.Rotator.ParkAzimuth,
         ctx.Settings.Rotator.ParkElevation);

@@ -30,6 +30,7 @@ namespace SkyRoof
     private readonly Button GoButton = new();
     private readonly Button ParkButton = new();
     private readonly Button TrackButton = new();
+    private readonly Label ManualHintLabel = new();
     private readonly System.Windows.Forms.Timer RefreshTimer = new();
 
     private Context? ctx;
@@ -107,16 +108,13 @@ namespace SkyRoof
       StepSpinner.Size = new Size(72, 23);
       Controls.Add(StepSpinner);
 
-      var hint = new Label
-      {
-        AutoSize = false,
-        ForeColor = SystemColors.GrayText,
-        Location = new Point(228, 166),
-        Size = new Size(80, 68),
-        Text = "Hold a direction\nto repeat.\n\nCenter = STOP",
-        TextAlign = ContentAlignment.TopLeft
-      };
-      Controls.Add(hint);
+      ManualHintLabel.AutoSize = false;
+      ManualHintLabel.ForeColor = SystemColors.GrayText;
+      ManualHintLabel.Location = new Point(228, 166);
+      ManualHintLabel.Size = new Size(80, 76);
+      ManualHintLabel.Text = "Hold a direction\nto repeat.\n\nCenter = STOP";
+      ManualHintLabel.TextAlign = ContentAlignment.TopLeft;
+      Controls.Add(ManualHintLabel);
 
       TrackButton.Location = new Point(232, 247);
       TrackButton.Size = new Size(72, 26);
@@ -238,23 +236,52 @@ namespace SkyRoof
 
       ConnectionLabel.Text =
         !enabled ? "Disabled" :
+        rotator.IsManualControlLocked ? "Live Track" :
         connected ? "Connected" :
         "Connecting";
 
       ConnectionLabel.ForeColor =
         !enabled ? SystemColors.GrayText :
+        rotator.IsManualControlLocked ? Color.Goldenrod :
         connected ? Color.LimeGreen :
         Color.IndianRed;
 
-      Wheel.Enabled = enabled;
-      GoButton.Enabled = enabled;
-      ParkButton.Enabled = enabled;
-      TrackButton.Enabled = enabled && rotator.TrackCheckbox.Enabled;
+      bool manualLocked =
+        rotator.IsManualControlLocked;
+      bool manualEnabled =
+        enabled &&
+        !manualLocked;
+
+      Wheel.Enabled = manualEnabled;
+      StepSpinner.Enabled = manualEnabled;
+      AzimuthSpinner.Enabled = manualEnabled;
+      ElevationSpinner.Enabled = manualEnabled;
+      GoButton.Enabled = manualEnabled;
+      ParkButton.Enabled = manualEnabled;
+
+      // TRACK remains available while manual controls are locked so the
+      // operator can intentionally leave live-pass tracking. As soon as Track
+      // is cleared the wheel becomes available on the next refresh tick.
+      TrackButton.Enabled =
+        enabled &&
+        rotator.TrackCheckbox.Enabled;
 
       TrackButton.Text =
         rotator.IsTracking
           ? "TRACK ✓"
           : "TRACK";
+
+      ManualHintLabel.Text =
+        manualLocked
+          ? "LIVE TRACK\n\nManual locked.\nClear TRACK first."
+          : rotator.IsTracking
+            ? "PRE-POSITION\n\nManual input will\nclear TRACK first."
+            : "Hold a direction\nto repeat.\n\nCenter = STOP";
+
+      ManualHintLabel.ForeColor =
+        manualLocked
+          ? Color.IndianRed
+          : SystemColors.GrayText;
 
       if (!AzimuthSpinner.Focused)
         SetSpinnerValue(
