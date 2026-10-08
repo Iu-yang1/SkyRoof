@@ -33,6 +33,7 @@ namespace SkyRoof
     private readonly Button WaterfallBtn = new();
     private readonly Button ReadbackBtn = new();
     private readonly ComboBox AverageBox = new();
+    private readonly ComboBox SmoothBox = new();
     private readonly ComboBox ZoomBox = new();
     private readonly Button SettingsBtn = new();
     private readonly Label StatusLabel = new();
@@ -576,6 +577,52 @@ namespace SkyRoof
         new Label
         {
           AutoSize = true,
+          Text = "SMOOTH:",
+          Margin = new Padding(2, 7, 3, 0)
+        });
+
+      SmoothBox.DropDownStyle =
+        ComboBoxStyle.DropDownList;
+      SmoothBox.Width = 58;
+      SmoothBox.Items.AddRange(
+        new object[]
+        {
+          "OFF",
+          "3",
+          "5",
+          "9"
+        });
+      SmoothBox.Margin =
+        new Padding(0, 3, 6, 3);
+      SmoothBox.SelectedIndexChanged +=
+        (_, _) =>
+        {
+          if (UpdatingScopeControlUi ||
+              SmoothBox.SelectedIndex < 0)
+            return;
+
+          int bins =
+            SmoothBox.SelectedIndex switch
+            {
+              0 => 1,
+              1 => 3,
+              2 => 5,
+              _ => 9
+            };
+
+          ctx.Settings.IcomLanSpectrum
+            .SpectrumSmoothingBins =
+            bins;
+          SpectrumView.SetSmoothingBins(
+            bins);
+          ctx.Settings.SaveToFile();
+        };
+      toolbar.Controls.Add(SmoothBox);
+
+      toolbar.Controls.Add(
+        new Label
+        {
+          AutoSize = true,
           Text = "ZOOM:",
           Margin = new Padding(2, 7, 3, 0)
         });
@@ -760,6 +807,28 @@ namespace SkyRoof
             1 => 0,
             2 => 1,
             4 => 2,
+            _ => 3
+          };
+
+        int smoothingBins =
+          settings.SpectrumSmoothingBins switch
+          {
+            <= 1 => 1,
+            <= 3 => 3,
+            <= 5 => 5,
+            _ => 9
+          };
+
+        settings.SpectrumSmoothingBins =
+          smoothingBins;
+        SpectrumView.SetSmoothingBins(
+          smoothingBins);
+        SmoothBox.SelectedIndex =
+          smoothingBins switch
+          {
+            1 => 0,
+            3 => 1,
+            5 => 2,
             _ => 3
           };
 
