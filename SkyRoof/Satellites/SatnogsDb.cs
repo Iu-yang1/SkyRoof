@@ -768,7 +768,7 @@ namespace SkyRoof
     {
       // Satellite metadata and transmitter metadata are required to rebuild the
       // database. The primary TLE feed is deliberately optional: operators may
-      // clear that URL and rely entirely on Custom TLE Sources.
+      // clear that URL and rely entirely on Manual Orbit Source URLs.
       return
         File.Exists(Path.Combine(DownloadsFolder, "satellites.json")) &&
         File.Exists(Path.Combine(DownloadsFolder, "transmitters.json")) &&
@@ -862,7 +862,7 @@ namespace SkyRoof
       }
     }
 
-    private void ImportSatnogsTle()
+    private int ImportSatnogsTle()
     {
       string content =
         File.ReadAllText(
@@ -873,10 +873,10 @@ namespace SkyRoof
       SatnogsDbTleList tles =
         ParseTleContent(
           content,
-          null,
-          "Primary TLE source");
+          ".json",
+          "SatNOGS orbit");
 
-      ApplyTles(
+      return ApplyTles(
         tles,
         createMissingSatellites: false);
     }
@@ -1077,26 +1077,123 @@ namespace SkyRoof
 
     internal void LoadTleFromFile(string tleFileName)
     {
-      Log.Information($"Loading TLE from file: {tleFileName}");
+      Log.Information($"Loading manual orbit elements from file: {tleFileName}");
 
       try
       {
-        string tleContent = File.ReadAllText(tleFileName);
-        SatnogsDbTleList tles = ParseTleContent(
-          tleContent,
-          Path.GetExtension(tleFileName),
-          $"File: {Path.GetFileName(tleFileName)}");
+        string orbitContent = File.ReadAllText(tleFileName);
+        DateTime importedUtc = DateTime.UtcNow;
+        DateTime expiresUtc = importedUtc + ManualOrbitPriorityLifetime;
 
-        ApplyTles(tles, createMissingSatellites: true);
+        SatnogsDbTleList records = ParseTleContent(
+          orbitContent,
+          Path.GetExtension(tleFileName),
+          $"Manual file: {Path.GetFileName(tleFileName)}");
+
+        int applied =
+          ApplyTles(
+            records,
+            createMissingSatellites: true,
+            manualOverride: true,
+            manualExpiresUtc: expiresUtc);
+
         SaveToFile();
         TleUpdated?.Invoke(this, EventArgs.Empty);
-        Log.Information($"TLE loaded: {tles.Count} records");
+        Log.Information(
+          "Manual orbit import applied {Count} record(s); priority expires at {Expires:O}.",
+          applied,
+          expiresUtc);
       }
       catch (Exception ex)
       {
-        Log.Error(ex, "Load TLE from file failed");
+        Log.Error(ex, "Load orbit elements from file failed");
         throw;
       }
+    }
+
+    internal int ReleaseExpiredManualOrbitPriority(
+      DateTime utc,
+      bool saveAndNotify = true)
+    {
+      int released = 0;
+
+      foreach (SatnogsDbSatellite sat in Satellites)
+      {
+        bool wasManual = sat.ManualTle != null;
+        if (sat.RefreshOrbitSelection(utc) &&
+            wasManual &&
+            sat.ManualTle == null)
+        {
+          sat.updated = sat.Tle?.updated ?? sat.updated;
+          sat.BuildAllNames();
+          sat.SetFlags();
+          released++;
+        }
+      }
+
+      if (released > 0 && saveAndNotify)
+      {
+        SaveToFile();
+        TleUpdated?.Invoke(this, EventArgs.Empty);
+        Log.Information(
+          "Released {Count} expired manual orbit override(s); automatic priority restored.",
+          released);
+      }
+
+      return released;
+    }
+
+    internal int CopyActiveManualOrbitOverridesFrom(
+      SatnogsDb source,
+      DateTime utc)
+    {
+      int copied = 0;
+
+      foreach (SatnogsDbSatellite oldSat in source.Satellites)
+      {
+        if (!oldSat.HasActiveManualOrbit(utc) ||
+            oldSat.ManualTle == null ||
+            oldSat.ManualTleExpiresUtc is not DateTime expires)
+          continue;
+
+        SatnogsDbSatellite? target = Satellites
+          .FirstOrDefault(s => s.norad_cat_id == oldSat.norad_cat_id);
+
+        if (target == null && oldSat.norad_cat_id != null)
+        {
+          string satId = $"CUSTOM-{oldSat.norad_cat_id.Value:00000}";
+          target = new SatnogsDbSatellite
+          {
+            sat_id = satId,
+            norad_cat_id = oldSat.norad_cat_id,
+            name = oldSat.name,
+            names = oldSat.names,
+            image = string.Empty,
+            status = "in orbit",
+            website = string.Empty,
+            @operator = string.Empty,
+            countries = string.Empty,
+            telemetries = new SatnogsDbSatellite.Telemetries(),
+            citation = oldSat.citation,
+            associated_satellites = new List<string>(),
+            updated = oldSat.ManualTle.updated
+          };
+          SatelliteList[satId] = target;
+        }
+
+        if (target == null) continue;
+
+        target.SetManualTle(
+          oldSat.ManualTle,
+          expires,
+          utc);
+        target.updated = target.Tle?.updated ?? target.updated;
+        target.BuildAllNames();
+        target.SetFlags();
+        copied++;
+      }
+
+      return copied;
     }
 
     internal async Task<int> LoadCustomTleSourcesAsync(
@@ -1145,7 +1242,7 @@ namespace SkyRoof
           SatnogsDbTleList tles = ParseTleContent(content, extension, label);
           loadedSources[source] = tles;
           Log.Information(
-            $"Custom TLE source fetched: {source} ({tles.Count} records)");
+            $"Manual orbit URL source fetched: {source} ({tles.Count} records)");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -1155,7 +1252,7 @@ namespace SkyRoof
         {
           // One broken optional source must not suppress the remaining sources
           // or the lower-priority primary TLE.
-          Log.Warning(ex, $"Custom TLE source failed: {source}");
+          Log.Warning(ex, $"Manual orbit URL source failed: {source}");
         }
       }
 
@@ -1178,7 +1275,7 @@ namespace SkyRoof
             sources,
             source) + 1;
         Log.Information(
-          $"Custom TLE source applied at priority {priority}: {source} ({applied} records)");
+          $"Manual orbit URL source applied at priority {priority}: {source} ({applied} records)");
       }
 
       if (total > 0)
