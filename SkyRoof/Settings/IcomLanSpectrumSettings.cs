@@ -33,6 +33,12 @@ namespace SkyRoof
     Heat = 3
   }
 
+  public sealed class IcomScopeFixedEdgePreset
+  {
+    public long LowerHz { get; set; }
+    public long UpperHz { get; set; }
+  }
+
   public class IcomLanSpectrumSettings
   {
     [DisplayName("Radio IPv4 address")]
@@ -99,6 +105,10 @@ namespace SkyRoof
     public IcomScopeMarkerPosition ScopeMarkerPosition { get; set; } =
       IcomScopeMarkerPosition.FilterCenter;
 
+
+    [Browsable(false)]
+    public Dictionary<string, IcomScopeFixedEdgePreset> FixedEdgePresets
+      { get; set; } = new();
 
     [DisplayName("SkyCAT scope TCP port")]
     [Description("Loopback TCP port exported by skycatd for native IC-9700 scope frames.")]
