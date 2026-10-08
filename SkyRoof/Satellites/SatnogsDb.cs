@@ -111,7 +111,8 @@ namespace SkyRoof
         // contain serialized local rows from the previous run; remove/rebuild those
         // rows from custom-transmitters.json so refreshes never create duplicates
         // and a future delete/edit operation cannot leave stale cache entries.
-        ApplyCustomTransmitters();
+        ApplyCustomTransmitters(
+          rebuild: true);
 
         // the override file is live configuration, not a build-time artifact: apply it on every load so a
         // record saved from the Signal Params dialog takes effect at the next start without a database
@@ -1193,16 +1194,29 @@ namespace SkyRoof
       return transmitter;
     }
 
-    internal int ApplyCustomTransmitters()
+    internal int ApplyCustomTransmitters(
+      bool rebuild = false)
     {
       // Satellites.json is a derived cache and can contain last run's local
-      // rows. custom-transmitters.json is authoritative, so rebuild the layer.
-      foreach (SatnogsDbSatellite sat in Satellites)
-        sat.Transmitters.RemoveAll(
-          t => t.local_custom);
+      // rows. At startup we rebuild from the authoritative local file. During
+      // ordinary orbit refreshes, retain existing objects so active selector /
+      // RadioLink references stay valid and only attach records that are
+      // missing because a new orbit-only satellite just appeared.
+      if (rebuild)
+        foreach (SatnogsDbSatellite sat in Satellites)
+          sat.Transmitters.RemoveAll(
+            t => t.local_custom);
 
       CustomTransmitterDefinitionList definitions =
         LoadCustomTransmitterDefinitions();
+
+      var existingUuids =
+        Satellites
+          .SelectMany(s => s.Transmitters)
+          .Select(t => t.uuid)
+          .Where(id => !string.IsNullOrWhiteSpace(id))
+          .ToHashSet(
+            StringComparer.OrdinalIgnoreCase);
 
       int applied = 0;
       foreach (CustomTransmitterDefinition definition in definitions)
@@ -1210,6 +1224,10 @@ namespace SkyRoof
         if (string.IsNullOrWhiteSpace(definition.uuid) ||
             string.IsNullOrWhiteSpace(definition.description) ||
             !definition.HasAnyFrequency)
+          continue;
+
+        if (existingUuids.Contains(
+              definition.uuid))
           continue;
 
         SatnogsDbSatellite? sat = null;
@@ -1235,6 +1253,8 @@ namespace SkyRoof
             sat);
         sat.Transmitters.Add(
           tx);
+        existingUuids.Add(
+          tx.uuid);
         applied++;
       }
 
