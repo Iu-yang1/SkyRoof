@@ -9,6 +9,9 @@ namespace SkyRoof
     private bool rxEngineIncludesTx;
     private bool rxEngineCrossband;
 
+    internal event Action<IcomScopeReadbackState>?
+      IcomScopeReadbackReceived;
+
     /// <summary>
     /// Ensures CAT engines match settings and link topology. Does not restart engines
     /// when only frequency/mode changed — <see cref="FrequencyWidget"/> pushes those via
@@ -82,6 +85,15 @@ namespace SkyRoof
 
       return engine.RequestIcomScopeCommand(
         command);
+    }
+
+    internal bool RequestIcomScopeReadback()
+    {
+      CatControlEngine? engine =
+        GetIcomScopeControlBackend();
+
+      return engine?.RequestIcomScopeReadback() ??
+        false;
     }
 
     internal void CancelIcomScopeRequests()
@@ -311,6 +323,10 @@ namespace SkyRoof
       // an RX-only engine never fires it, so the extra subscription is harmless there
       engine.TxTuned += (s, e) => ctx.FrequencyControl.TxTuned();
       engine.StatusChanged += (s, e) => ctx.MainForm.ShowCatStatus();
+      engine.IcomScopeReadbackReceived +=
+        state =>
+          IcomScopeReadbackReceived?.Invoke(
+            state);
       return engine;
     }
 
@@ -319,6 +335,10 @@ namespace SkyRoof
       var engine = new CatControlEngine(ctx.Settings.Cat.TxCat, ctx.Settings.Cat);
       engine.TxTuned += (s, e) => ctx.FrequencyControl.TxTuned();
       engine.StatusChanged += (s, e) => ctx.MainForm.ShowCatStatus();
+      engine.IcomScopeReadbackReceived +=
+        state =>
+          IcomScopeReadbackReceived?.Invoke(
+            state);
       return engine;
     }
 
