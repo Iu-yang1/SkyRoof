@@ -783,6 +783,119 @@ namespace VE3NEA.Dsp.Tests
 
 
     [Fact]
+    public void ScopeView_FrequencyForXUsesVisibleZoomWindow()
+    {
+      var frame =
+        new IcomScopeFrame
+        {
+          Mode =
+            (byte)IcomScopeMode.Center,
+          FrequencyAHz =
+            435_600_000,
+          FrequencyBHz =
+            200_000
+        };
+
+      var plot =
+        new System.Drawing.Rectangle(
+          0,
+          0,
+          101,
+          50);
+
+      // 4x centered zoom shows the middle 25% of the full geometry:
+      // 435.575 .. 435.625 MHz.
+      IcomLanSpectrumView.FrequencyForX(
+        frame.Geometry,
+        plot,
+        0,
+        0,
+        4,
+        0.5).Should().Be(
+          435_575_000);
+
+      IcomLanSpectrumView.FrequencyForX(
+        frame.Geometry,
+        plot,
+        50,
+        0,
+        4,
+        0.5).Should().Be(
+          435_600_000);
+
+      IcomLanSpectrumView.FrequencyForX(
+        frame.Geometry,
+        plot,
+        100,
+        0,
+        4,
+        0.5).Should().Be(
+          435_625_000);
+    }
+
+    [Fact]
+    public void ScopeReadbackParserParsesStableSkyCatSnapshot()
+    {
+      IcomScopeReadbackState state =
+        IcomScopeReadbackState.Parse(
+          "SELECT=SUB;" +
+          "MAIN.MODE=CENTER;" +
+          "MAIN.SPAN=100000;" +
+          "MAIN.EDGE=1;" +
+          "MAIN.REF=-3.5;" +
+          "MAIN.SPEED=FAST;" +
+          "MAIN.VBW=WIDE;" +
+          "SUB.MODE=SCROLL-F;" +
+          "SUB.SPAN=50000;" +
+          "SUB.EDGE=2;" +
+          "SUB.REF=1.0;" +
+          "SUB.SPEED=MID;" +
+          "SUB.VBW=NARROW;" +
+          "TX=1;" +
+          "CENTER=ABS;" +
+          "MARKER=CARRIER");
+
+      state.SelectedScope.Should().Be(1);
+      state.MainMode.Should().Be(
+        IcomScopeMode.Center);
+      state.MainSpanHz.Should().Be(
+        100_000);
+      state.MainReferenceDb.Should().Be(
+        -3.5);
+      state.MainVbw.Should().Be(
+        IcomScopeVbw.Wide);
+      state.SubMode.Should().Be(
+        IcomScopeMode.ScrollFixed);
+      state.SubEdge.Should().Be(2);
+      state.SubSpeed.Should().Be(
+        IcomScopeSweepSpeed.Mid);
+      state.ScopeDuringTx.Should().BeTrue();
+      state.CenterType.Should().Be(
+        IcomScopeCenterType.CarrierPointAbsolute);
+      state.MarkerPosition.Should().Be(
+        IcomScopeMarkerPosition.CarrierPoint);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("SELECT=MAIN")]
+    [InlineData(
+      "SELECT=SIDE;MAIN.MODE=CENTER;MAIN.SPAN=100000;MAIN.EDGE=1;MAIN.REF=0.0;MAIN.SPEED=FAST;MAIN.VBW=WIDE;" +
+      "SUB.MODE=CENTER;SUB.SPAN=100000;SUB.EDGE=1;SUB.REF=0.0;SUB.SPEED=FAST;SUB.VBW=WIDE;TX=0;CENTER=FILTER;MARKER=FILTER")]
+    public void ScopeReadbackParserRejectsIncompleteOrInvalidSnapshots(
+      string text)
+    {
+      Action parse =
+        () =>
+          IcomScopeReadbackState.Parse(
+            text);
+
+      parse.Should()
+        .Throw<FormatException>();
+    }
+
+
+    [Fact]
     public void ScopeView_FrequencyForXRejectsInvalidGeometry()
     {
       IcomLanSpectrumView.FrequencyForX(
@@ -1113,6 +1226,22 @@ namespace VE3NEA.Dsp.Tests
         "U SCOPE_FIXED_EDGE 2 1 435100000 436100000");
     }
 
+    [Theory]
+    [InlineData("U SCOPE_TX 1", "SCOPE_TX")]
+    [InlineData("U SCOPE_CENTER_TYPE ABS", "SCOPE_CENTER_TYPE")]
+    [InlineData("U SCOPE_MARKER CARRIER", "SCOPE_MARKER")]
+    [InlineData("U SCOPE_VBW MAIN WIDE", "SCOPE_VBW MAIN")]
+    [InlineData("U SCOPE_VBW SUB NARROW", "SCOPE_VBW SUB")]
+    public void ScopeCommandQueue_KeysRemainingControlsBySemanticTarget(
+      string command,
+      string expected)
+    {
+      IcomScopeCommandQueue.GetCommandKey(
+        command).Should().Be(
+          expected);
+    }
+
+
     [Fact]
     public void ScopeCommandQueue_ClearCancelsAllPendingCommands()
     {
@@ -1237,6 +1366,18 @@ namespace VE3NEA.Dsp.Tests
       (int)IcomScopeControlKind.SweepSpeed,
       "U SCOPE_SPEED MAIN SLOW")]
     [InlineData(
+      (int)IcomScopeControlKind.ScopeDuringTx,
+      "U SCOPE_TX 1")]
+    [InlineData(
+      (int)IcomScopeControlKind.CenterType,
+      "U SCOPE_CENTER_TYPE ABS")]
+    [InlineData(
+      (int)IcomScopeControlKind.Vbw,
+      "U SCOPE_VBW SUB WIDE")]
+    [InlineData(
+      (int)IcomScopeControlKind.MarkerPosition,
+      "U SCOPE_MARKER CARRIER")]
+    [InlineData(
       (int)IcomScopeControlKind.FixedEdge,
       "U SCOPE_FIXED_EDGE 2 1 435000000 436000000")]
     public void ScopeControlRequest_FormatsSkyCatPrivateCommand(
@@ -1272,6 +1413,19 @@ namespace VE3NEA.Dsp.Tests
             IcomScopeControlRequest.ForSweepSpeed(
               0,
               IcomScopeSweepSpeed.Slow),
+          IcomScopeControlKind.ScopeDuringTx =>
+            IcomScopeControlRequest.ForScopeDuringTx(
+              true),
+          IcomScopeControlKind.CenterType =>
+            IcomScopeControlRequest.ForCenterType(
+              IcomScopeCenterType.CarrierPointAbsolute),
+          IcomScopeControlKind.Vbw =>
+            IcomScopeControlRequest.ForVbw(
+              1,
+              IcomScopeVbw.Wide),
+          IcomScopeControlKind.MarkerPosition =>
+            IcomScopeControlRequest.ForMarkerPosition(
+              IcomScopeMarkerPosition.CarrierPoint),
           _ =>
             IcomScopeControlRequest.ForFixedEdge(
               2,
