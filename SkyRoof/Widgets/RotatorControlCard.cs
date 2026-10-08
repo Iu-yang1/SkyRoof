@@ -125,8 +125,13 @@ namespace SkyRoof
       ParkButton.Location = new Point(232, 280);
       ParkButton.Size = new Size(72, 26);
       ParkButton.Text = "PARK";
-      ParkButton.Click += (_, _) => rotator?.ManualPark();
+      ParkButton.MouseUp += ParkButton_MouseUp;
       Controls.Add(ParkButton);
+
+      var parkToolTip = new ToolTip();
+      parkToolTip.SetToolTip(
+        ParkButton,
+        "Left-click: move to PARK\nRight-click: save PARK azimuth/elevation");
 
       var divider = new Label
       {
@@ -257,7 +262,10 @@ namespace SkyRoof
       AzimuthSpinner.Enabled = manualEnabled;
       ElevationSpinner.Enabled = manualEnabled;
       GoButton.Enabled = manualEnabled;
-      ParkButton.Enabled = manualEnabled;
+      // PARK stays clickable while live tracking is locked so right-click can
+      // edit the saved preset. ManualPark itself still rejects movement while
+      // the live-pass lock is active.
+      ParkButton.Enabled = enabled;
 
       // TRACK remains available while manual controls are locked so the
       // operator can intentionally leave live-pass tracking. As soon as Track
@@ -309,6 +317,33 @@ namespace SkyRoof
       }
 
       base.Dispose(disposing);
+    }
+
+    private void ParkButton_MouseUp(
+      object? sender,
+      MouseEventArgs e)
+    {
+      if (rotator == null ||
+          ctx == null)
+        return;
+
+      if (e.Button == MouseButtons.Left)
+      {
+        rotator.ManualPark();
+        RefreshState();
+        return;
+      }
+
+      if (e.Button != MouseButtons.Right)
+        return;
+
+      using var dialog =
+        new ParkPositionDialog(
+          ctx,
+          rotator.GetManualActualBearing());
+
+      dialog.ShowDialog();
+      RefreshState();
     }
 
     private void Wheel_JogRequested(
@@ -474,7 +509,6 @@ namespace SkyRoof
         bounds,
         center,
         RotatorJogDirection.ElevationUp,
-        "EL+",
         "▲");
 
       DrawDirection(
@@ -482,7 +516,6 @@ namespace SkyRoof
         bounds,
         center,
         RotatorJogDirection.AzimuthUp,
-        "AZ+",
         "▶");
 
       DrawDirection(
@@ -490,7 +523,6 @@ namespace SkyRoof
         bounds,
         center,
         RotatorJogDirection.ElevationDown,
-        "EL−",
         "▼");
 
       DrawDirection(
@@ -498,7 +530,6 @@ namespace SkyRoof
         bounds,
         center,
         RotatorJogDirection.AzimuthDown,
-        "AZ−",
         "◀");
 
       Color stopColor =
@@ -681,12 +712,9 @@ namespace SkyRoof
       RectangleF wheelBounds,
       PointF center,
       RotatorJogDirection direction,
-      string label,
       string arrow)
     {
       float radius = wheelBounds.Width / 2f;
-      float x = center.X;
-      float y = center.Y;
 
       RectangleF sector = direction switch
       {
@@ -740,63 +768,14 @@ namespace SkyRoof
       using var arrowFont =
         new Font(
           "Segoe UI Symbol",
-          Math.Max(15f, Font.Size + 6f),
+          Math.Max(20f, Font.Size + 10f),
           FontStyle.Bold);
-      using var labelFont =
-        new Font(
-          "Segoe UI",
-          Math.Max(7.5f, Font.Size - 1f),
-          FontStyle.Regular);
-
-      Rectangle arrowRect =
-        Rectangle.Round(sector);
 
       TextRenderer.DrawText(
         graphics,
         arrow,
         arrowFont,
-        arrowRect,
-        Enabled ? ForeColor : SystemColors.GrayText,
-        TextFormatFlags.HorizontalCenter |
-        TextFormatFlags.VerticalCenter);
-
-      Rectangle labelRect =
-        direction switch
-        {
-          RotatorJogDirection.ElevationUp =>
-            new(
-              (int)sector.Left,
-              (int)sector.Bottom - 14,
-              (int)sector.Width,
-              14),
-
-          RotatorJogDirection.ElevationDown =>
-            new(
-              (int)sector.Left,
-              (int)sector.Top,
-              (int)sector.Width,
-              14),
-
-          RotatorJogDirection.AzimuthDown =>
-            new(
-              (int)sector.Left,
-              (int)sector.Bottom - 14,
-              (int)sector.Width,
-              14),
-
-          _ =>
-            new(
-              (int)sector.Left,
-              (int)sector.Bottom - 14,
-              (int)sector.Width,
-              14)
-        };
-
-      TextRenderer.DrawText(
-        graphics,
-        label,
-        labelFont,
-        labelRect,
+        Rectangle.Round(sector),
         Enabled ? ForeColor : SystemColors.GrayText,
         TextFormatFlags.HorizontalCenter |
         TextFormatFlags.VerticalCenter);
