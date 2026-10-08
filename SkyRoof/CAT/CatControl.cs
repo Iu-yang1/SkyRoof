@@ -78,19 +78,22 @@ namespace SkyRoof
       return false;
     }
 
-    internal (int Pending, long Dropped)? GetIcomScopeControlQueueStats()
+    internal (int Pending, long Dropped, long Rejected)?
+      GetIcomScopeControlQueueStats()
     {
       if (Rx?.SupportsIcomScopeOutput == true)
         return (
           Rx.PendingIcomScopeControlCount,
-          Rx.DroppedIcomScopeControlCount);
+          Rx.DroppedIcomScopeControlCount,
+          Rx.RejectedIcomScopeControlCount);
 
       if (Tx != null &&
           !ReferenceEquals(Tx, Rx) &&
           Tx.SupportsIcomScopeOutput)
         return (
           Tx.PendingIcomScopeControlCount,
-          Tx.DroppedIcomScopeControlCount);
+          Tx.DroppedIcomScopeControlCount,
+          Tx.RejectedIcomScopeControlCount);
 
       return null;
     }
