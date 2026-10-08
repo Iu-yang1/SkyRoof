@@ -21,6 +21,7 @@ namespace SkyRoof
     private readonly Queue<byte[]> AverageFrames = new();
     private readonly int[] AverageSums = new int[ScopePoints];
     private int AverageSweepCount = 1;
+    private int SmoothingBins = 1;
     private IcomScopeFrame? LatestFrame;
 
     private byte[][] WaterfallRows = Array.Empty<byte[]>();
@@ -186,6 +187,27 @@ namespace SkyRoof
         ResetAveragingLocked();
       }
 
+      Invalidate();
+    }
+
+    internal void SetSmoothingBins(
+      int bins)
+    {
+      int normalized =
+        bins switch
+        {
+          <= 1 => 1,
+          <= 3 => 3,
+          <= 5 => 5,
+          _ => 9
+        };
+
+      if (SmoothingBins ==
+          normalized)
+        return;
+
+      SmoothingBins =
+        normalized;
       Invalidate();
     }
 
@@ -667,6 +689,85 @@ namespace SkyRoof
     }
 
 
+    internal static byte[] SmoothSamplesForDisplay(
+      byte[] samples,
+      int bins)
+    {
+      if (samples == null)
+        throw new ArgumentNullException(
+          nameof(samples));
+
+      int normalized =
+        bins switch
+        {
+          <= 1 => 1,
+          <= 3 => 3,
+          <= 5 => 5,
+          _ => 9
+        };
+
+      if (normalized == 1 ||
+          samples.Length < 2)
+        return
+          (byte[])samples.Clone();
+
+      int radius =
+        normalized / 2;
+      var output =
+        new byte[samples.Length];
+
+      int windowSum = 0;
+      int windowStart = 0;
+      int windowEnd = -1;
+
+      for (int i = 0;
+           i < samples.Length;
+           i++)
+      {
+        int desiredStart =
+          Math.Max(
+            0,
+            i - radius);
+        int desiredEnd =
+          Math.Min(
+            samples.Length - 1,
+            i + radius);
+
+        while (windowEnd <
+               desiredEnd)
+        {
+          windowEnd++;
+          windowSum +=
+            samples[windowEnd];
+        }
+
+        while (windowStart <
+               desiredStart)
+        {
+          windowSum -=
+            samples[windowStart];
+          windowStart++;
+        }
+
+        int count =
+          windowEnd -
+          windowStart +
+          1;
+
+        output[i] =
+          (byte)Math.Clamp(
+            (int)Math.Round(
+              windowSum /
+              (double)count,
+              MidpointRounding.AwayFromZero),
+            0,
+            160);
+      }
+
+      return output;
+    }
+
+
     internal static bool RequiresHistoryReset(
       IcomScopeFrame? previous,
       IcomScopeFrame current)
@@ -769,6 +870,20 @@ namespace SkyRoof
           PeakEnabled &&
           PeakValid;
         RebuildWaterfallBitmapIfNeeded();
+      }
+
+      if (SmoothingBins > 1)
+      {
+        samples =
+          SmoothSamplesForDisplay(
+            samples,
+            SmoothingBins);
+
+        if (peakVisible)
+          peakSamples =
+            SmoothSamplesForDisplay(
+              peakSamples,
+              SmoothingBins);
       }
 
       GetLayout(
@@ -1657,6 +1772,9 @@ namespace SkyRoof
 
         if (AverageSweepCount > 1)
           left += $" · AVG {AverageSweepCount}";
+
+        if (SmoothingBins > 1)
+          left += $" · SMOOTH {SmoothingBins}";
 
         if (HoldEnabled)
           left += " · HOLD";
