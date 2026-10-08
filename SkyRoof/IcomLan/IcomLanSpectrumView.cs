@@ -459,7 +459,8 @@ namespace SkyRoof
         return;
       }
 
-      if (HoldEnabled)
+      if (HoldEnabled ||
+          !IsCurrentScopeTunable())
         return;
 
       Rectangle plot =
@@ -635,10 +636,17 @@ namespace SkyRoof
         GetSpectrumPlotRectangle(
           spectrum);
 
+      if (!plot.Contains(point))
+      {
+        Cursor = Cursors.Default;
+        return;
+      }
+
       Cursor =
-        plot.Contains(point)
-          ? Cursors.Cross
-          : Cursors.Default;
+        !HoldEnabled &&
+        IsCurrentScopeTunable()
+          ? Cursors.SizeWE
+          : Cursors.Cross;
     }
 
     protected override void OnMouseCaptureChanged(
@@ -655,6 +663,12 @@ namespace SkyRoof
       TuneCommitTimer.Stop();
       FlushPendingTune();
       TuningCompleted?.Invoke();
+    }
+
+    private bool IsCurrentScopeTunable()
+    {
+      lock (DataSync)
+        return LatestFrame?.Scope == 0;
     }
 
     private bool TryGetCurrentGeometry(
