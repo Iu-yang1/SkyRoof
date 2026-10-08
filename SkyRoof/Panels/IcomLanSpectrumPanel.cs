@@ -2263,9 +2263,23 @@ namespace SkyRoof
             ? $"Gaps {effectiveCapture.SequenceGapCount:N0}"
             : "No gaps";
 
+      // Radio-side controls intentionally stay disabled for a passive
+      // RS-BA1 read-only session. Show how to enable them safely instead
+      // of leaving the operator with unexplained grey controls.
+      string controlHint =
+        resolvedControlPath == IcomScopeControlPath.ReadOnly
+          ? " (Settings: use SkyCAT)"
+          : resolvedControlPath == IcomScopeControlPath.SkyCat &&
+            scopeBackend == null
+            ? " (backend offline)"
+            : resolvedControlPath == IcomScopeControlPath.SkyCat &&
+              !ScopeReadbackCompletedForSession
+              ? " (waiting sync)"
+              : "";
+
       StatsLabel.Text =
         $"{FormatSpectrumSource(spectrumSettings.Source)} · " +
-        $"{transportSummary} · Ctrl {FormatControlPath(resolvedControlPath)} · " +
+        $"{transportSummary} · Ctrl {FormatControlPath(resolvedControlPath)}{controlHint} · " +
         $"475 bins · {DisplayFps:0.0} fps · {health}";
 
       LastDiagnosticsText =
