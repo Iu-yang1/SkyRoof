@@ -927,6 +927,37 @@ namespace VE3NEA.Dsp.Tests
     }
 
 
+    [Theory]
+    [InlineData(435600000L, 120, 435600100L)]
+    [InlineData(435600000L, -120, 435599900L)]
+    [InlineData(435600000L, 240, 435600200L)]
+    [InlineData(435600000L, 1, 435600100L)]
+    [InlineData(435600000L, -1, 435599900L)]
+    [InlineData(435600000L, 0, 435600000L)]
+    public void ScopeView_AltWheelTuneUsesOneHundredHertzSteps(
+      long currentHz,
+      int wheelDelta,
+      long expectedHz)
+    {
+      IcomLanSpectrumView
+        .CalculateMouseWheelTuneTarget(
+          currentHz,
+          wheelDelta)
+        .Should().Be(
+          expectedHz);
+    }
+
+    [Fact]
+    public void ScopeView_AltWheelTuneRejectsMissingReceiveFrequency()
+    {
+      IcomLanSpectrumView
+        .CalculateMouseWheelTuneTarget(
+          0,
+          120)
+        .Should().Be(0);
+    }
+
+
     [Fact]
     public void ScopeView_FrequencyForXRejectsInvalidGeometry()
     {
