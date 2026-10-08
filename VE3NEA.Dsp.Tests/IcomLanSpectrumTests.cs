@@ -845,14 +845,12 @@ namespace VE3NEA.Dsp.Tests
           "MAIN.REF=-3.5;" +
           "MAIN.SPEED=FAST;" +
           "MAIN.VBW=WIDE;" +
-          "MAIN.RBW=MID;" +
           "SUB.MODE=SCROLL-F;" +
           "SUB.SPAN=50000;" +
           "SUB.EDGE=2;" +
           "SUB.REF=1.0;" +
           "SUB.SPEED=MID;" +
           "SUB.VBW=NARROW;" +
-          "SUB.RBW=NAR;" +
           "TX=1;" +
           "CENTER=ABS;" +
           "MARKER=CARRIER");
@@ -866,15 +864,11 @@ namespace VE3NEA.Dsp.Tests
         -3.5);
       state.MainVbw.Should().Be(
         IcomScopeVbw.Wide);
-      state.MainRbw.Should().Be(
-        IcomScopeRbw.Mid);
       state.SubMode.Should().Be(
         IcomScopeMode.ScrollFixed);
       state.SubEdge.Should().Be(2);
       state.SubSpeed.Should().Be(
         IcomScopeSweepSpeed.Mid);
-      state.SubRbw.Should().Be(
-        IcomScopeRbw.Narrow);
       state.ScopeDuringTx.Should().BeTrue();
       state.CenterType.Should().Be(
         IcomScopeCenterType.CarrierPointAbsolute);
@@ -886,8 +880,8 @@ namespace VE3NEA.Dsp.Tests
     [InlineData("")]
     [InlineData("SELECT=MAIN")]
     [InlineData(
-      "SELECT=SIDE;MAIN.MODE=CENTER;MAIN.SPAN=100000;MAIN.EDGE=1;MAIN.REF=0.0;MAIN.SPEED=FAST;MAIN.VBW=WIDE;MAIN.RBW=WIDE;" +
-      "SUB.MODE=CENTER;SUB.SPAN=100000;SUB.EDGE=1;SUB.REF=0.0;SUB.SPEED=FAST;SUB.VBW=WIDE;SUB.RBW=WIDE;TX=0;CENTER=FILTER;MARKER=FILTER")]
+      "SELECT=SIDE;MAIN.MODE=CENTER;MAIN.SPAN=100000;MAIN.EDGE=1;MAIN.REF=0.0;MAIN.SPEED=FAST;MAIN.VBW=WIDE;" +
+      "SUB.MODE=CENTER;SUB.SPAN=100000;SUB.EDGE=1;SUB.REF=0.0;SUB.SPEED=FAST;SUB.VBW=WIDE;TX=0;CENTER=FILTER;MARKER=FILTER")]
     public void ScopeReadbackParserRejectsIncompleteOrInvalidSnapshots(
       string text)
     {
@@ -1353,8 +1347,6 @@ namespace VE3NEA.Dsp.Tests
     [InlineData("U SCOPE_MARKER CARRIER", "SCOPE_MARKER")]
     [InlineData("U SCOPE_VBW MAIN WIDE", "SCOPE_VBW MAIN")]
     [InlineData("U SCOPE_VBW SUB NARROW", "SCOPE_VBW SUB")]
-    [InlineData("U SCOPE_RBW MAIN MID", "SCOPE_RBW MAIN")]
-    [InlineData("U SCOPE_RBW SUB NAR", "SCOPE_RBW SUB")]
     public void ScopeCommandQueue_KeysRemainingControlsBySemanticTarget(
       string command,
       string expected)
@@ -1498,9 +1490,6 @@ namespace VE3NEA.Dsp.Tests
       (int)IcomScopeControlKind.Vbw,
       "U SCOPE_VBW SUB WIDE")]
     [InlineData(
-      (int)IcomScopeControlKind.Rbw,
-      "U SCOPE_RBW SUB NAR")]
-    [InlineData(
       (int)IcomScopeControlKind.MarkerPosition,
       "U SCOPE_MARKER CARRIER")]
     [InlineData(
@@ -1549,10 +1538,6 @@ namespace VE3NEA.Dsp.Tests
             IcomScopeControlRequest.ForVbw(
               1,
               IcomScopeVbw.Wide),
-          IcomScopeControlKind.Rbw =>
-            IcomScopeControlRequest.ForRbw(
-              1,
-              IcomScopeRbw.Narrow),
           IcomScopeControlKind.MarkerPosition =>
             IcomScopeControlRequest.ForMarkerPosition(
               IcomScopeMarkerPosition.CarrierPoint),
