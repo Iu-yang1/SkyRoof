@@ -841,13 +841,16 @@ namespace SkyRoof
         return;
       }
 
+      long displayOffsetHz =
+        GetScopeDisplayFrequencyOffsetHz();
+
       GeometryLabel.Text =
         frame.Mode ==
           (byte)IcomScopeMode.Center
           ? FormatHalfSpan(
               geometry.SpanHz)
-          : $"{FormatToolbarFrequency(geometry.LowerFrequencyHz)} — " +
-            $"{FormatToolbarFrequency(geometry.UpperFrequencyHz)}";
+          : $"{FormatToolbarFrequency(checked(geometry.LowerFrequencyHz + displayOffsetHz))} — " +
+            $"{FormatToolbarFrequency(checked(geometry.UpperFrequencyHz + displayOffsetHz))}";
 
       UpdateScopeControlAvailability();
     }
@@ -1039,21 +1042,28 @@ namespace SkyRoof
       else if (ctx.Slicer != null)
         mode = ctx.Slicer.CurrentMode;
 
-      long displayOffsetHz = 0;
-
-      if (receiveHz > 0 &&
-          ctx.Settings.Transverter.RxCatOffsetEnabled)
-      {
-        displayOffsetHz =
-          ctx.Settings.Transverter
-            .GetCatLoOffset(
-              receiveHz);
-      }
-
       SpectrumView.SetTuningOverlay(
         receiveHz,
         mode,
-        displayOffsetHz);
+        GetScopeDisplayFrequencyOffsetHz());
+    }
+
+    private long GetScopeDisplayFrequencyOffsetHz()
+    {
+      RadioLink link =
+        ctx.FrequencyControl.RadioLink;
+
+      if (!ctx.Settings.Transverter
+            .RxCatOffsetEnabled ||
+          !double.IsFinite(
+            link.CorrectedDownlinkFrequency) ||
+          link.CorrectedDownlinkFrequency <= 0)
+        return 0;
+
+      return
+        ctx.Settings.Transverter
+          .GetCatLoOffset(
+            link.CorrectedDownlinkFrequency);
     }
 
     private static string FormatHalfSpan(long spanHz)
@@ -1201,7 +1211,10 @@ namespace SkyRoof
             : nativeLanActive
               ? $"Receiving high-rate native IC-9700 LAN 27 00 waveform · " +
                 $"{nativeLan!.DetectedRadioAddress ?? "radio"}:" +
-                $"{nativeLan.DetectedCivPort?.ToString() ?? "auto"} · SkyCAT controls scope."
+                $"{nativeLan.DetectedCivPort?.ToString() ?? "auto"} · " +
+                (CanUseSkyCatScopeControl()
+                  ? "SkyCAT controls scope."
+                  : "scope control read-only.")
               : $"Receiving IC-9700 CI-V 27 00 spectrum data · {capture.TransportName}.";
       }
     }
