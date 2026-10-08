@@ -729,6 +729,7 @@ namespace SkyRoof
       // carry receiver caches, AUTO selection, HOLD state, or controller
       // rate-limit state into a later source/session.
       ScopeController.Reset();
+      PendingEdgeSyncScope = -1;
       ScopeState.Clear();
       LastRenderedScopeFrameTicks = 0;
 
@@ -1421,12 +1422,14 @@ namespace SkyRoof
             ? (byte)1
             : (byte)0;
 
-        ScopeController.RequestControl(
-          settings.Source,
-          settings.ControlPath,
-          IcomScopeControlRequest
-            .ForSelectedScope(
-              selectedScope));
+        if (ScopeController.RequestControl(
+              settings.Source,
+              settings.ControlPath,
+              IcomScopeControlRequest
+                .ForSelectedScope(
+                  selectedScope)))
+          PendingEdgeSyncScope =
+            selectedScope;
       }
 
       IcomScopeSweepSpeed speed =
@@ -1451,18 +1454,29 @@ namespace SkyRoof
           1,
           speed));
 
-      if (!TryGetControlScope(
-            out byte scope))
-        return;
+      double referenceDb =
+        NormalizeReferenceLevel(
+          settings.ScopeReferenceLevelDb);
 
       ScopeController.RequestControl(
         settings.Source,
         settings.ControlPath,
         IcomScopeControlRequest
           .ForReferenceLevel(
-            scope,
-            NormalizeReferenceLevel(
-              settings.ScopeReferenceLevelDb)));
+            0,
+            referenceDb));
+
+      ScopeController.RequestControl(
+        settings.Source,
+        settings.ControlPath,
+        IcomScopeControlRequest
+          .ForReferenceLevel(
+            1,
+            referenceDb));
+
+      if (!TryGetControlScope(
+            out byte scope))
+        return;
 
       IcomScopeFrame? frame =
         ScopeState.LatestSelectedFrame;
@@ -1480,6 +1494,7 @@ namespace SkyRoof
               settings.ScopeEdgeNumber,
               1,
               4)));
+        PendingEdgeSyncScope = -1;
       }
     }
 
