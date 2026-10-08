@@ -448,17 +448,27 @@ namespace SkyRoof
       UpdatingScopeControlUi = true;
       try
       {
-        ReferenceBox.Value =
-          (decimal)Math.Clamp(
-            settings.ScopeReferenceLevelDb,
-            -20.0,
-            20.0);
+        double referenceDb =
+          NormalizeReferenceLevel(
+            settings.ScopeReferenceLevelDb);
 
-        SweepSpeedBox.SelectedIndex =
+        settings.ScopeReferenceLevelDb =
+          referenceDb;
+
+        ReferenceBox.Value =
+          (decimal)referenceDb;
+
+        int speedIndex =
           Math.Clamp(
             (int)settings.ScopeSweepSpeed,
             0,
             2);
+
+        settings.ScopeSweepSpeed =
+          (IcomScopeSweepSpeed)speedIndex;
+
+        SweepSpeedBox.SelectedIndex =
+          speedIndex;
 
         ConfigureSpanEdgeControl(
           SpanEdgeShowsSpan);
@@ -755,11 +765,9 @@ namespace SkyRoof
         }
 
         ReferenceBox.Value =
-          (decimal)Math.Clamp(
+          (decimal)NormalizeReferenceLevel(
             ctx.Settings.IcomLanSpectrum
-              .ScopeReferenceLevelDb,
-            -20.0,
-            20.0);
+              .ScopeReferenceLevelDb);
 
         SweepSpeedBox.SelectedIndex =
           Math.Clamp(
@@ -890,6 +898,8 @@ namespace SkyRoof
           settings.ControlPath);
 
       bool enabled =
+        settings.Source !=
+          IcomLanSpectrumSource.DirectLan &&
         path == IcomScopeControlPath.SkyCat &&
         TryGetControlScope(
           out _);
@@ -924,6 +934,21 @@ namespace SkyRoof
             "Set Scope control path to SkyCAT when using RS-BA1 waveform data.";
 
       return routed;
+    }
+
+    private static double NormalizeReferenceLevel(
+      double referenceDb)
+    {
+      if (!double.IsFinite(
+            referenceDb))
+        return 0;
+
+      return Math.Clamp(
+        Math.Round(
+          referenceDb * 2,
+          MidpointRounding.AwayFromZero) / 2.0,
+        -20.0,
+        20.0);
     }
 
     private static string FormatSpanChoice(
@@ -1111,6 +1136,9 @@ namespace SkyRoof
 
     private void RequestScopeOutputIfDue(bool force)
     {
+      if (UsingDirectLanSource)
+        return;
+
       IcomLanSpectrumSettings settings =
         ctx.Settings.IcomLanSpectrum;
 
@@ -1125,19 +1153,25 @@ namespace SkyRoof
       IcomLanSpectrumSettings settings =
         ctx.Settings.IcomLanSpectrum;
 
+      IcomScopeSweepSpeed speed =
+        (IcomScopeSweepSpeed)Math.Clamp(
+          (int)settings.ScopeSweepSpeed,
+          0,
+          2);
+
       ScopeController.RequestControl(
         settings.Source,
         settings.ControlPath,
         IcomScopeControlRequest.ForSweepSpeed(
           0,
-          settings.ScopeSweepSpeed));
+          speed));
 
       ScopeController.RequestControl(
         settings.Source,
         settings.ControlPath,
         IcomScopeControlRequest.ForSweepSpeed(
           1,
-          settings.ScopeSweepSpeed));
+          speed));
     }
 
     internal void ApplyDisplaySettings()
