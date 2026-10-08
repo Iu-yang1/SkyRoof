@@ -440,11 +440,17 @@ namespace SkyRoof
           if (!ctx.FrequencyControl.RadioLink.HasDownlink)
             return;
 
-          ctx.FrequencyControl
-            .TuneDownlinkToFrequency(
-              frequencyHz,
-              useRit,
-              lightweightUi: true);
+          bool tuned =
+            ctx.FrequencyControl
+              .TuneDownlinkToFrequency(
+                frequencyHz,
+                useRit,
+                lightweightUi: true);
+
+          if (!tuned)
+            StatusLabel.Text =
+              "Spectrum tune ignored: the target is not writable in the current RX model " +
+              "(for example, manual correction is disabled or the target leaves the active CAT transverter band).";
         };
 
       SpectrumView.TuningCompleted +=
