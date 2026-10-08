@@ -688,6 +688,35 @@ namespace SkyRoof
           ctx,
           "SkyRoof.Settings.IcomLanSpectrum")
           .ShowDialog(this);
+
+      var diagnosticsMenu =
+        new ContextMenuStrip();
+      diagnosticsMenu.Items.Add(
+        "Spectrum diagnostics…",
+        null,
+        (_, _) => ShowSpectrumDiagnostics());
+      diagnosticsMenu.Items.Add(
+        "Copy spectrum diagnostics",
+        null,
+        (_, _) =>
+        {
+          try
+          {
+            Clipboard.SetText(
+              LastDiagnosticsText);
+          }
+          catch (ExternalException)
+          {
+            StatusLabel.Text =
+              "Could not copy spectrum diagnostics because the clipboard is busy.";
+          }
+        });
+
+      SettingsBtn.ContextMenuStrip =
+        diagnosticsMenu;
+      StatsLabel.ContextMenuStrip =
+        diagnosticsMenu;
+
       toolbar.Controls.Add(SettingsBtn);
 
       root.Controls.Add(toolbar, 0, 0);
@@ -2123,6 +2152,7 @@ namespace SkyRoof
         LastScopeReadbackUtc = null;
         PendingEdgeSyncScope = -1;
         ScopeController.Reset();
+        UpdateScopeControlAvailability();
       }
 
       if (!LocalHold &&
@@ -2213,27 +2243,49 @@ namespace SkyRoof
           true;
       }
 
-      string controlQueue =
-        queueStats.HasValue
-          ? $" · Q {queueStats.Value.Pending:N0}" +
-            $" / Drop {queueStats.Value.Dropped:N0}" +
-            $" / Reject {queueStats.Value.Rejected:N0}"
-          : "";
+      string transportSummary =
+        capture.IsDirectLan
+          ? "Direct LAN"
+          : nativeLanActive
+            ? "Native LAN"
+            : capture.IsSkyCatStream
+              ? "SkyCAT TCP"
+              : "Passive LAN";
+
+      string health =
+        effectiveCapture.InvalidScopeFrameCount > 0
+          ? $"Bad scope {effectiveCapture.InvalidScopeFrameCount:N0}"
+          : !effectiveCapture.IsSkyCatStream &&
+            effectiveCapture.SequenceGapCount > 0
+            ? $"Gaps {effectiveCapture.SequenceGapCount:N0}"
+            : "No gaps";
 
       StatsLabel.Text =
-        $"Data {FormatSpectrumSource(spectrumSettings.Source)} · " +
-        $"Transport {radio} · Ctrl {FormatControlPath(resolvedControlPath)}" +
-        controlQueue +
-        (LastScopeReadbackUtc.HasValue
-          ? $" · RB {LastScopeReadbackUtc.Value:HH:mm:ss}Z"
-          : "") +
-        $" · Frames {effectiveCapture.PacketCount:N0} · " +
-        $"CI-V {effectiveCapture.CivFrameCount:N0} · Sweeps {scopeFrames:N0} · " +
-        $"{ScopeFps:0.0}/s · Display {DisplayFps:0.0} fps · " +
-        $"BadScope {effectiveCapture.InvalidScopeFrameCount:N0}" +
-        (!effectiveCapture.IsSkyCatStream
-          ? $" · Gaps {effectiveCapture.SequenceGapCount:N0} · Duplicates {effectiveCapture.DuplicateChunkCount:N0}"
-          : "");
+        $"{FormatSpectrumSource(spectrumSettings.Source)} · " +
+        $"{transportSummary} · Ctrl {FormatControlPath(resolvedControlPath)} · " +
+        $"475 bins · {DisplayFps:0.0} fps · {health}";
+
+      LastDiagnosticsText =
+        string.Join(
+          Environment.NewLine,
+          "SkyRoof IC-9700 Spectrum Diagnostics",
+          $"Data source: {FormatSpectrumSource(spectrumSettings.Source)}",
+          $"Transport: {radio}",
+          $"Control path: {FormatControlPath(resolvedControlPath)}",
+          $"Scope readback: {(LastScopeReadbackUtc.HasValue ? LastScopeReadbackUtc.Value.ToString("O") : "not completed")}",
+          $"Queue pending: {queueStats?.Pending.ToString("N0") ?? "n/a"}",
+          $"Queue dropped: {queueStats?.Dropped.ToString("N0") ?? "n/a"}",
+          $"Queue rejected: {queueStats?.Rejected.ToString("N0") ?? "n/a"}",
+          $"Packets: {effectiveCapture.PacketCount:N0}",
+          $"CI-V frames: {effectiveCapture.CivFrameCount:N0}",
+          $"Complete sweeps: {scopeFrames:N0}",
+          $"Scope rate: {ScopeFps:0.0}/s",
+          $"Display rate: {DisplayFps:0.0} fps",
+          $"Invalid scope frames: {effectiveCapture.InvalidScopeFrameCount:N0}",
+          $"Sequence gaps: {effectiveCapture.SequenceGapCount:N0}",
+          $"Duplicate chunks: {effectiveCapture.DuplicateChunkCount:N0}",
+          $"Sequence resets: {effectiveCapture.SequenceResetCount:N0}",
+          $"LAN length overflow packets: {effectiveCapture.LanLengthOverflowPacketCount:N0}");
 
       DateTime? last = effectiveCapture.LastScopeFrameUtc;
       bool scopeStale =
@@ -2280,6 +2332,16 @@ namespace SkyRoof
                   : "scope control read-only.")
               : $"Receiving IC-9700 CI-V 27 00 spectrum data · {capture.TransportName}.";
       }
+    }
+
+    private void ShowSpectrumDiagnostics()
+    {
+      MessageBox.Show(
+        this,
+        LastDiagnosticsText,
+        "Spectrum Diagnostics",
+        MessageBoxButtons.OK,
+        MessageBoxIcon.Information);
     }
 
     private static string FormatSpectrumSource(
