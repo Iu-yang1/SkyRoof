@@ -142,7 +142,7 @@ namespace SkyRoof
 
     [ReadOnly(true)]
     [Category("Orbit")]
-    [DisplayName("TLE")]
+    [DisplayName("Orbit Elements")]
     public string? TleInfo {get; set; }
 
     [ReadOnly(true)]
@@ -379,7 +379,7 @@ namespace SkyRoof
       if (IsEphemerisTarget)
         tooltipText += $"\nephemeris: {citation}";
       else if (Tle != null) tooltipText +=
-          $"\nTLE: {TleInfo}\nperiod: {Period} min.\ninclination: {Inclination}°\n" +
+          $"\norbit: {TleInfo}\nperiod: {Period} min.\ninclination: {Inclination}°\n" +
           $"footprint: {Footprint} km\naltitude: {Altitude}";
       tooltipText += Flags.HasFlag(SatelliteFlags.TrackingTarget)
         ? "\nradio: tracking only"
@@ -394,7 +394,10 @@ namespace SkyRoof
     {
       if (Tle == null) return;
 
-      TleInfo = $"{Tle.updated:yyyy-MM-dd HH:mm}Z ({ Tle.tle_source})";
+      TleInfo = $"{Tle.updated:yyyy-MM-dd HH:mm}Z ({Tle.tle_source})";
+      if (HasActiveManualOrbit(DateTime.UtcNow) &&
+          ManualTleExpiresUtc is DateTime expires)
+        TleInfo += $" [manual priority until {expires:yyyy-MM-dd HH:mm}Z]";
 
       if (Tle.omm != null)
       {
