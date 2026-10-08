@@ -433,6 +433,9 @@ namespace SkyRoof
           ctx.Settings.IcomLanSpectrum
             .ScopeVbw =
             vbw;
+          ctx.Settings.IcomLanSpectrum
+            .ManageAdvancedScopeControls =
+            true;
           ctx.Settings.SaveToFile();
 
           SendScopeControlToBothReceivers(
@@ -2299,37 +2302,40 @@ namespace SkyRoof
           0,
           1);
 
-      ScopeController.RequestControl(
-        settings.Source,
-        settings.ControlPath,
-        IcomScopeControlRequest.ForVbw(
-          0,
-          vbw));
+      if (settings.ManageAdvancedScopeControls)
+      {
+        ScopeController.RequestControl(
+          settings.Source,
+          settings.ControlPath,
+          IcomScopeControlRequest.ForVbw(
+            0,
+            vbw));
 
-      ScopeController.RequestControl(
-        settings.Source,
-        settings.ControlPath,
-        IcomScopeControlRequest.ForVbw(
-          1,
-          vbw));
+        ScopeController.RequestControl(
+          settings.Source,
+          settings.ControlPath,
+          IcomScopeControlRequest.ForVbw(
+            1,
+            vbw));
 
-      ScopeController.RequestControl(
-        settings.Source,
-        settings.ControlPath,
-        IcomScopeControlRequest.ForScopeDuringTx(
-          settings.ScopeDuringTx));
+        ScopeController.RequestControl(
+          settings.Source,
+          settings.ControlPath,
+          IcomScopeControlRequest.ForScopeDuringTx(
+            settings.ScopeDuringTx));
 
-      ScopeController.RequestControl(
-        settings.Source,
-        settings.ControlPath,
-        IcomScopeControlRequest.ForCenterType(
-          settings.ScopeCenterType));
+        ScopeController.RequestControl(
+          settings.Source,
+          settings.ControlPath,
+          IcomScopeControlRequest.ForCenterType(
+            settings.ScopeCenterType));
 
-      ScopeController.RequestControl(
-        settings.Source,
-        settings.ControlPath,
-        IcomScopeControlRequest.ForMarkerPosition(
-          settings.ScopeMarkerPosition));
+        ScopeController.RequestControl(
+          settings.Source,
+          settings.ControlPath,
+          IcomScopeControlRequest.ForMarkerPosition(
+            settings.ScopeMarkerPosition));
+      }
 
       double referenceDb =
         NormalizeReferenceLevel(
