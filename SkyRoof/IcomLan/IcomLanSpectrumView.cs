@@ -7,6 +7,21 @@ namespace SkyRoof
   internal sealed class IcomLanSpectrumView : Control
   {
     private const int ScopePoints = 475;
+    // The instrument scope has its own dark, high-contrast color scheme,
+    // independent of the application's Light/Dark/GitHub dock theme.
+    private static readonly Color ScopeBackground = Color.FromArgb(5, 8, 14);
+    private static readonly Color ScopeForeground = Color.FromArgb(224, 230, 235);
+    private static readonly Color ScopeGrid = Color.FromArgb(59, 75, 87);
+    private static readonly Color ScopeSubGrid = Color.FromArgb(36, 48, 59);
+    private static readonly Color ScopeTrace = Color.FromArgb(44, 219, 88);
+    private static readonly Color ScopePeak = Color.FromArgb(255, 203, 74);
+    private static readonly Color ScopeTxFill = Color.FromArgb(48, 235, 68, 76);
+    private static readonly Color ScopeTxMarker = Color.FromArgb(235, 68, 76);
+    private static readonly Color ScopeTxText = Color.FromArgb(255, 200, 204);
+    private static readonly Color ScopeCursor = Color.FromArgb(186, 211, 226);
+    private static readonly Color ScopeReadoutBorder = Color.FromArgb(105, 125, 138);
+    private static readonly Color ScopeHoldBackground = Color.FromArgb(37, 44, 55);
+    private static readonly Color ScopeHoldLine = Color.FromArgb(100, 117, 128);
     private const int SplitterHeight = 6;
     private const int MinimumSpectrumHeight = 80;
     private const int MinimumWaterfallHeight = 60;
@@ -840,9 +855,9 @@ namespace SkyRoof
       base.OnPaint(e);
 
       Color scopeBack =
-        Theme.SpectrumBackground;
+        ScopeBackground;
       Color textColor =
-        Theme.SpectrumText;
+        ScopeForeground;
 
       e.Graphics.Clear(scopeBack);
       e.Graphics.SmoothingMode =
@@ -937,10 +952,7 @@ namespace SkyRoof
           waterfallRect);
       }
 
-      Color borderColor =
-        Theme.IsDark
-          ? Color.FromArgb(90, 90, 90)
-          : Color.FromArgb(170, 190, 202);
+      Color borderColor = ScopeGrid;
 
       using var borderPen =
         new Pen(borderColor);
@@ -2004,7 +2016,7 @@ namespace SkyRoof
             : 3;
 
       Color gridColor =
-        Theme.SpectrumGrid;
+        ScopeGrid;
 
       using var gridPen =
         new Pen(gridColor);
@@ -2104,7 +2116,7 @@ namespace SkyRoof
       Rectangle plot)
     {
       Color gridColor =
-        Theme.SpectrumSubGrid;
+        ScopeSubGrid;
 
       using var gridPen =
         new Pen(gridColor);
@@ -2141,7 +2153,7 @@ namespace SkyRoof
         zoomFactor,
         zoomCenter,
         noiseFloor,
-        Theme.SpectrumTrace,
+        ScopeTrace,
         1.25f,
         DashStyle.Solid);
     }
@@ -2161,7 +2173,7 @@ namespace SkyRoof
         zoomFactor,
         zoomCenter,
         noiseFloor,
-        Theme.SpectrumPeak,
+        ScopePeak,
         1.0f,
         DashStyle.Dot);
     }
@@ -2367,7 +2379,7 @@ namespace SkyRoof
 
       using var brush =
         new SolidBrush(
-          Theme.SpectrumTxFill);
+          ScopeTxFill);
 
       graphics.FillRectangle(
         brush,
@@ -2419,7 +2431,7 @@ namespace SkyRoof
 
       using var pen =
         new Pen(
-          Theme.SpectrumTxMarker,
+          ScopeTxMarker,
           1.4f);
 
       graphics.DrawLine(
@@ -2443,7 +2455,7 @@ namespace SkyRoof
         label,
         SystemFonts.MessageBoxFont,
         labelBounds,
-        Theme.SpectrumTxText,
+        ScopeTxText,
         TextFormatFlags.HorizontalCenter |
         TextFormatFlags.NoPrefix |
         TextFormatFlags.NoPadding);
@@ -2516,7 +2528,7 @@ namespace SkyRoof
 
       using var cursorPen =
         new Pen(
-          Theme.SpectrumCursor,
+          ScopeCursor,
           1f)
         {
           DashStyle =
@@ -2577,7 +2589,7 @@ namespace SkyRoof
 
       using var boxPen =
         new Pen(
-          Theme.SpectrumReadoutBorder);
+          ScopeReadoutBorder);
 
       graphics.FillRectangle(
         boxBrush,
@@ -2643,10 +2655,10 @@ namespace SkyRoof
         return;
 
       Color back =
-        Theme.SpectrumHoldBack;
+        ScopeHoldBackground;
 
       Color line =
-        Theme.SpectrumHoldLine;
+        ScopeHoldLine;
 
       using var brush =
         new SolidBrush(back);
