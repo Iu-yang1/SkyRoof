@@ -31,6 +31,7 @@ namespace SkyRoof
     private readonly Button ParkButton = new();
     private readonly Button TrackButton = new();
     private readonly Label ManualHintLabel = new();
+    private readonly ToolTip UiToolTip = new();
     private readonly System.Windows.Forms.Timer RefreshTimer = new();
 
     private Context? ctx;
@@ -128,8 +129,7 @@ namespace SkyRoof
       ParkButton.MouseUp += ParkButton_MouseUp;
       Controls.Add(ParkButton);
 
-      var parkToolTip = new ToolTip();
-      parkToolTip.SetToolTip(
+      UiToolTip.SetToolTip(
         ParkButton,
         "Left-click: move to PARK\nRight-click: save PARK azimuth/elevation");
 
@@ -313,6 +313,7 @@ namespace SkyRoof
       {
         RefreshTimer.Stop();
         RefreshTimer.Dispose();
+        UiToolTip.Dispose();
         Wheel.Dispose();
       }
 
