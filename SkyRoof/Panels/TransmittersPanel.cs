@@ -13,6 +13,9 @@ namespace SkyRoof
     // shared, so we don't leak a GDI font handle per item on every rebuild
     private Font? BoldFont;
     private readonly ContextMenuStrip TransmitterMenu = new();
+    private readonly ToolStripMenuItem DeleteTransmitterMNU =
+      new("Delete Transmitter");
+    private SatnogsDbTransmitter? ContextTransmitter;
 
     public TransmittersPanel()
     {
@@ -137,10 +140,136 @@ namespace SkyRoof
       add.Click += (_, _) =>
         CreateLocalTransmitter();
 
-      TransmitterMenu.Items.Add(
-        add);
+      DeleteTransmitterMNU.Click += (_, _) =>
+        DeleteSelectedLocalTransmitter();
+
+      TransmitterMenu.Items.AddRange(
+        [
+          add,
+          new ToolStripSeparator(),
+          DeleteTransmitterMNU
+        ]);
+      TransmitterMenu.Opening += (_, _) =>
+        UpdateContextMenuState();
+
+      listView1.MouseDown +=
+        ListView1_MouseDown;
       listView1.ContextMenuStrip =
         TransmitterMenu;
+    }
+
+    private void ListView1_MouseDown(
+      object? sender,
+      MouseEventArgs e)
+    {
+      if (e.Button != MouseButtons.Right)
+        return;
+
+      // Do not select the row here. Selection changes the active transmitter
+      // and may retune CAT/SDR; opening a context menu must be side-effect free.
+      ContextTransmitter =
+        listView1.GetItemAt(
+          e.X,
+          e.Y)?.Tag as SatnogsDbTransmitter;
+    }
+
+    private void UpdateContextMenuState()
+    {
+      SatnogsDbTransmitter? tx =
+        GetSelectedLocalTransmitter();
+
+      DeleteTransmitterMNU.Enabled =
+        tx != null;
+      DeleteTransmitterMNU.Text =
+        tx == null
+          ? "Delete Transmitter"
+          : $"Delete {tx.description}";
+    }
+
+    private SatnogsDbTransmitter? GetSelectedLocalTransmitter()
+    {
+      return ContextTransmitter?.local_custom == true
+        ? ContextTransmitter
+        : null;
+    }
+
+    private void DeleteSelectedLocalTransmitter()
+    {
+      if (Satellite == null)
+        return;
+
+      SatnogsDbTransmitter? tx =
+        GetSelectedLocalTransmitter();
+      if (tx == null)
+        return;
+
+      string downlink =
+        SatnogsDbTransmitter.FormatFrequencyRange(
+          tx.downlink_low,
+          tx.downlink_high,
+          tx.invert);
+      string uplink =
+        SatnogsDbTransmitter.FormatFrequencyRange(
+          tx.uplink_low,
+          tx.uplink_high);
+
+      string details =
+        $"Name: {tx.description}\n" +
+        $"Downlink: {(string.IsNullOrWhiteSpace(downlink) ? "—" : downlink)}\n" +
+        $"Uplink: {(string.IsNullOrWhiteSpace(uplink) ? "—" : uplink)}\n" +
+        $"Mode: {(string.IsNullOrWhiteSpace(tx.DownlinkMode) ? tx.mode : tx.DownlinkMode)}";
+
+      DialogResult rc =
+        MessageBox.Show(
+          this,
+          $"Delete this local transmitter?\n\n{details}\n\nThis cannot be undone.",
+          "Delete Local Transmitter",
+          MessageBoxButtons.YesNo,
+          MessageBoxIcon.Warning,
+          MessageBoxDefaultButton.Button2);
+
+      if (rc != DialogResult.Yes)
+        return;
+
+      try
+      {
+        bool deleted =
+          ctx.SatnogsDb.DeleteCustomTransmitter(
+            Satellite,
+            tx);
+        if (!deleted)
+        {
+          MessageBox.Show(
+            this,
+            "The local transmitter could not be found in the saved local data.",
+            "Delete Local Transmitter",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
+          return;
+        }
+
+        ctx.Settings.Satellites.RemoveTransmitterCustomization(
+          Satellite,
+          tx.uuid);
+
+        ContextTransmitter = null;
+        ctx.SatelliteSelector.RefreshTransmitters();
+        CreateTransmitterItems();
+        ctx.Settings.SaveToFile();
+      }
+      catch (Exception ex)
+      {
+        Log.Error(
+          ex,
+          "Unable to delete local transmitter.");
+
+        MessageBox.Show(
+          this,
+          $"Unable to delete the transmitter.\n\n{ex.Message}",
+          "Delete Local Transmitter",
+          MessageBoxButtons.OK,
+          MessageBoxIcon.Error);
+      }
     }
 
     private void CreateLocalTransmitter()
