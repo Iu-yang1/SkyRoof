@@ -163,11 +163,13 @@ namespace SkyRoof
                   ? (byte)1
                   : (byte)0;
 
-              SendScopeControl(
-                IcomScopeControlRequest
-                  .ForSelectedScope(
-                    scope),
-                $"selected {(scope == 1 ? "SUB" : "MAIN")} scope");
+              if (SendScopeControl(
+                    IcomScopeControlRequest
+                      .ForSelectedScope(
+                        scope),
+                    $"selected {(scope == 1 ? "SUB" : "MAIN")} scope"))
+                PendingEdgeSyncScope =
+                  scope;
             }
           }
 
