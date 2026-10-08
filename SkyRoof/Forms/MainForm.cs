@@ -1576,7 +1576,11 @@ namespace SkyRoof
       SatellitePass? pass = ctx.SatelliteSelector.SelectedPass;
       ctx.SkyViewPanel?.SetPass(pass);
       ctx.EarthViewPanel?.SetPass(pass);
-      RotatorWidget.SetPass(pass);
+      // Idle-gap Auto Selection pre-tunes the radio, not the antenna. A
+      // manual tracking pass must survive the satellite selector's events.
+      // Normal selections and schedule-owned TrackPass at AOS are unchanged.
+      if (!ctx.AutoSelector.IsPreselecting || !ctx.RotatorControl.IsTracking)
+        RotatorWidget.SetPass(pass);
     }
   }
 }
