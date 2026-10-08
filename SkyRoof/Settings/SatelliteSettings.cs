@@ -64,6 +64,26 @@ namespace SkyRoof
       return cust;
     }
 
+    internal void RemoveTransmitterCustomization(
+      SatnogsDbSatellite satellite,
+      string transmitterUuid)
+    {
+      if (string.IsNullOrWhiteSpace(transmitterUuid))
+        return;
+
+      TransmitterCustomizations.Remove(
+        transmitterUuid);
+
+      if (SatelliteCustomizations.TryGetValue(
+            satellite.sat_id,
+            out SatelliteCustomization? satelliteCustomization) &&
+          string.Equals(
+            satelliteCustomization.SelectedTransmitterId,
+            transmitterUuid,
+            StringComparison.OrdinalIgnoreCase))
+        satelliteCustomization.SelectedTransmitterId = null;
+    }
+
     public List<SatelliteGroup> SatelliteGroups = new();
     public string SelectedGroupId;
     public string SelectedSatelliteId;
