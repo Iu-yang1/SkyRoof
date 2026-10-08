@@ -1351,12 +1351,14 @@ namespace SkyRoof
           spectrumSettings.Source,
           spectrumSettings.ControlPath);
 
-      (int Pending, long Dropped)? queueStats =
+      (int Pending, long Dropped, long Rejected)? queueStats =
         ctx.CatControl.GetIcomScopeControlQueueStats();
 
       string controlQueue =
         queueStats.HasValue
-          ? $" · Q {queueStats.Value.Pending:N0} / Drop {queueStats.Value.Dropped:N0}"
+          ? $" · Q {queueStats.Value.Pending:N0}" +
+            $" / Drop {queueStats.Value.Dropped:N0}" +
+            $" / Reject {queueStats.Value.Rejected:N0}"
           : "";
 
       StatsLabel.Text =
