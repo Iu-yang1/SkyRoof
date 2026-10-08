@@ -942,6 +942,89 @@ namespace VE3NEA.Dsp.Tests
 
 
     [Fact]
+    public void SpectrumSmoothing_UsesSymmetricMovingAverage()
+    {
+      byte[] samples =
+      [
+        0,
+        0,
+        90,
+        0,
+        0
+      ];
+
+      byte[] smoothed =
+        IcomLanSpectrumView
+          .SmoothSamplesForDisplay(
+            samples,
+            3);
+
+      smoothed.Should().Equal(
+        new byte[]
+        {
+          0,
+          30,
+          30,
+          30,
+          0
+        });
+    }
+
+    [Fact]
+    public void SpectrumSmoothing_ShrinksWindowAtEdgesWithoutMutatingInput()
+    {
+      byte[] samples =
+      [
+        30,
+        60,
+        90
+      ];
+
+      byte[] smoothed =
+        IcomLanSpectrumView
+          .SmoothSamplesForDisplay(
+            samples,
+            5);
+
+      smoothed.Should().Equal(
+        new byte[]
+        {
+          60,
+          60,
+          60
+        });
+
+      samples.Should().Equal(
+        new byte[]
+        {
+          30,
+          60,
+          90
+        });
+    }
+
+    [Fact]
+    public void SpectrumSmoothing_OffReturnsIndependentCopy()
+    {
+      byte[] samples =
+      [
+        10,
+        20,
+        30
+      ];
+
+      byte[] copy =
+        IcomLanSpectrumView
+          .SmoothSamplesForDisplay(
+            samples,
+            1);
+
+      copy.Should().Equal(samples);
+      copy.Should().NotBeSameAs(samples);
+    }
+
+
+    [Fact]
     public void ScopeHistoryReset_ChangesScopeOrMode()
     {
       var previous =
