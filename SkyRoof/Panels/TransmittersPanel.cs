@@ -15,6 +15,7 @@ namespace SkyRoof
     private readonly ContextMenuStrip TransmitterMenu = new();
     private readonly ToolStripMenuItem DeleteTransmitterMNU =
       new("Delete Transmitter");
+    private SatnogsDbTransmitter? ContextTransmitter;
 
     public TransmittersPanel()
     {
@@ -164,20 +165,12 @@ namespace SkyRoof
       if (e.Button != MouseButtons.Right)
         return;
 
-      ListViewItem? item =
+      // Do not select the row here. Selection changes the active transmitter
+      // and may retune CAT/SDR; opening a context menu must be side-effect free.
+      ContextTransmitter =
         listView1.GetItemAt(
           e.X,
-          e.Y);
-
-      if (item == null)
-      {
-        foreach (ListViewItem selected in listView1.SelectedItems)
-          selected.Selected = false;
-        return;
-      }
-
-      item.Selected = true;
-      item.Focused = true;
+          e.Y)?.Tag as SatnogsDbTransmitter;
     }
 
     private void UpdateContextMenuState()
@@ -195,12 +188,8 @@ namespace SkyRoof
 
     private SatnogsDbTransmitter? GetSelectedLocalTransmitter()
     {
-      if (listView1.SelectedItems.Count != 1)
-        return null;
-
-      return listView1.SelectedItems[0].Tag is SatnogsDbTransmitter tx &&
-             tx.local_custom
-        ? tx
+      return ContextTransmitter?.local_custom == true
+        ? ContextTransmitter
         : null;
     }
 
@@ -263,6 +252,7 @@ namespace SkyRoof
           Satellite,
           tx.uuid);
 
+        ContextTransmitter = null;
         ctx.SatelliteSelector.RefreshTransmitters();
         CreateTransmitterItems();
         ctx.Settings.SaveToFile();
