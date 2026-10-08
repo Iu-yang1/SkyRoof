@@ -65,16 +65,19 @@ namespace SkyRoof
 
       ActualLabel.AutoSize = false;
       ActualLabel.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+      ActualLabel.ForeColor = Color.LimeGreen;
       ActualLabel.Location = new Point(12, 38);
       ActualLabel.Size = new Size(292, 20);
       Controls.Add(ActualLabel);
 
       TargetLabel.AutoSize = false;
+      TargetLabel.ForeColor = Color.DeepSkyBlue;
       TargetLabel.Location = new Point(12, 58);
       TargetLabel.Size = new Size(292, 20);
       Controls.Add(TargetLabel);
 
       SatelliteLabel.AutoSize = false;
+      SatelliteLabel.ForeColor = Color.Goldenrod;
       SatelliteLabel.Location = new Point(12, 78);
       SatelliteLabel.Size = new Size(292, 20);
       Controls.Add(SatelliteLabel);
