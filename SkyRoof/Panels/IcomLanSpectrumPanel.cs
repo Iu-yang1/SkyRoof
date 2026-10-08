@@ -208,11 +208,31 @@ namespace SkyRoof
                 out byte scope))
             return;
 
-          SendScopeControl(
-            IcomScopeControlRequest.ForMode(
-              scope,
-              mode),
-            $"mode {ScopeModeBox.SelectedItem}");
+          bool routed =
+            SendScopeControl(
+              IcomScopeControlRequest.ForMode(
+                scope,
+                mode),
+              $"mode {ScopeModeBox.SelectedItem}");
+
+          if (routed &&
+              mode is
+                IcomScopeMode.Fixed or
+                IcomScopeMode.ScrollFixed)
+          {
+            int edge =
+              Math.Clamp(
+                ctx.Settings.IcomLanSpectrum
+                  .ScopeEdgeNumber,
+                1,
+                4);
+
+            SendScopeControl(
+              IcomScopeControlRequest.ForEdge(
+                scope,
+                edge),
+              $"edge {edge}");
+          }
         };
       toolbar.Controls.Add(ScopeModeBox);
 
