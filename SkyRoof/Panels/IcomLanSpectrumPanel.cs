@@ -25,6 +25,7 @@ namespace SkyRoof
     private readonly NumericUpDown ReferenceBox = new();
     private readonly ComboBox SweepSpeedBox = new();
     private readonly ComboBox VbwBox = new();
+    private readonly ComboBox RbwBox = new();
     private readonly Label GeometryLabel = new();
     private readonly Button StartStopBtn = new();
     private readonly Button ClearBtn = new();
@@ -447,6 +448,54 @@ namespace SkyRoof
             $"VBW {VbwBox.SelectedItem}");
         };
       toolbar.Controls.Add(VbwBox);
+
+      toolbar.Controls.Add(
+        new Label
+        {
+          AutoSize = true,
+          Text = "RBW:",
+          Margin = new Padding(0, 7, 3, 0)
+        });
+
+      RbwBox.DropDownStyle =
+        ComboBoxStyle.DropDownList;
+      RbwBox.Width = 66;
+      RbwBox.Items.AddRange(
+        new object[]
+        {
+          "WIDE",
+          "MID",
+          "NAR"
+        });
+      RbwBox.Margin =
+        new Padding(0, 3, 8, 3);
+      RbwBox.SelectedIndexChanged +=
+        (_, _) =>
+        {
+          if (UpdatingScopeControlUi ||
+              RbwBox.SelectedIndex < 0)
+            return;
+
+          IcomScopeRbw rbw =
+            (IcomScopeRbw)RbwBox.SelectedIndex;
+
+          ctx.Settings.IcomLanSpectrum
+            .ScopeRbw =
+            rbw;
+          ctx.Settings.IcomLanSpectrum
+            .ManageAdvancedScopeControls =
+            true;
+          ctx.Settings.SaveToFile();
+
+          SendScopeControlToBothReceivers(
+            scope =>
+              IcomScopeControlRequest
+                .ForRbw(
+                  scope,
+                  rbw),
+            $"RBW {RbwBox.SelectedItem}");
+        };
+      toolbar.Controls.Add(RbwBox);
 
       GeometryLabel.AutoSize = true;
       GeometryLabel.Text = "Waiting for scope";
@@ -877,6 +926,16 @@ namespace SkyRoof
         VbwBox.SelectedIndex =
           vbwIndex;
 
+        int rbwIndex =
+          Math.Clamp(
+            (int)settings.ScopeRbw,
+            0,
+            2);
+        settings.ScopeRbw =
+          (IcomScopeRbw)rbwIndex;
+        RbwBox.SelectedIndex =
+          rbwIndex;
+
         ConfigureSpanEdgeControl(
           SpanEdgeShowsSpan);
       }
@@ -1292,6 +1351,13 @@ namespace SkyRoof
               .ScopeVbw,
             0,
             1);
+
+        RbwBox.SelectedIndex =
+          Math.Clamp(
+            (int)ctx.Settings.IcomLanSpectrum
+              .ScopeRbw,
+            0,
+            2);
       }
       finally
       {
@@ -1455,6 +1521,8 @@ namespace SkyRoof
         enabled;
       VbwBox.Enabled =
         enabled;
+      RbwBox.Enabled =
+        enabled;
       ReadbackBtn.Enabled =
         !LocalHold &&
         CanUseSkyCatScopeControl();
@@ -1527,6 +1595,8 @@ namespace SkyRoof
           state.SubSpeed;
         settings.ScopeVbw =
           state.SubVbw;
+        settings.ScopeRbw =
+          state.SubRbw;
       }
       else
       {
@@ -1538,6 +1608,8 @@ namespace SkyRoof
           state.MainSpeed;
         settings.ScopeVbw =
           state.MainVbw;
+        settings.ScopeRbw =
+          state.MainRbw;
       }
 
       settings.ScopeDuringTx =
@@ -1565,6 +1637,11 @@ namespace SkyRoof
             (int)settings.ScopeVbw,
             0,
             1);
+        RbwBox.SelectedIndex =
+          Math.Clamp(
+            (int)settings.ScopeRbw,
+            0,
+            2);
 
         if (!SpanEdgeShowsSpan)
           SpanEdgeBox.SelectedIndex =
@@ -2302,6 +2379,12 @@ namespace SkyRoof
           0,
           1);
 
+      IcomScopeRbw rbw =
+        (IcomScopeRbw)Math.Clamp(
+          (int)settings.ScopeRbw,
+          0,
+          2);
+
       if (settings.ManageAdvancedScopeControls)
       {
         ScopeController.RequestControl(
@@ -2317,6 +2400,20 @@ namespace SkyRoof
           IcomScopeControlRequest.ForVbw(
             1,
             vbw));
+
+        ScopeController.RequestControl(
+          settings.Source,
+          settings.ControlPath,
+          IcomScopeControlRequest.ForRbw(
+            0,
+            rbw));
+
+        ScopeController.RequestControl(
+          settings.Source,
+          settings.ControlPath,
+          IcomScopeControlRequest.ForRbw(
+            1,
+            rbw));
 
         ScopeController.RequestControl(
           settings.Source,
