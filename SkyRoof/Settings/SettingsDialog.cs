@@ -301,7 +301,11 @@ namespace SkyRoof
                 "SkyRoof.IcomLanSpectrumSettings.ScopeBand" or
                 "SkyRoof.IcomLanSpectrumSettings.ScopeEdgeNumber" or
                 "SkyRoof.IcomLanSpectrumSettings.ScopeReferenceLevelDb" or
-                "SkyRoof.IcomLanSpectrumSettings.ScopeSweepSpeed");
+                "SkyRoof.IcomLanSpectrumSettings.ScopeSweepSpeed" or
+                "SkyRoof.IcomLanSpectrumSettings.ScopeDuringTx" or
+                "SkyRoof.IcomLanSpectrumSettings.ScopeCenterType" or
+                "SkyRoof.IcomLanSpectrumSettings.ScopeVbw" or
+                "SkyRoof.IcomLanSpectrumSettings.ScopeMarkerPosition");
 
         if (transportChanged)
           ctx.IcomLanSpectrumPanel?.ApplySettings();
