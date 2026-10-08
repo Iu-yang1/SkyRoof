@@ -54,7 +54,7 @@ namespace SkyRoof
       SatelliteAzimuthLabel.Text = "180°";
       SatelliteAzimuthLabel.TextAlign = ContentAlignment.MiddleCenter;
       toolTip1.SetToolTip(SatelliteAzimuthLabel, "Satellite Azimuth\r\n\r\nClick for manual rotator control");
-      SatelliteAzimuthLabel.Click += AzEl_Click;
+      SatelliteAzimuthLabel.MouseClick += AzEl_MouseClick;
       // 
       // label1
       // 
@@ -87,7 +87,7 @@ namespace SkyRoof
       SatelliteElevationLabel.Text = "90°";
       SatelliteElevationLabel.TextAlign = ContentAlignment.MiddleCenter;
       toolTip1.SetToolTip(SatelliteElevationLabel, "Satellite Elevation\r\n\r\nClick for manual rotator control");
-      SatelliteElevationLabel.Click += AzEl_Click;
+      SatelliteElevationLabel.MouseClick += AzEl_MouseClick;
       // 
       // TrackCheckbox
       // 
