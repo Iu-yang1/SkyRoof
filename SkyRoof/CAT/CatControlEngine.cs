@@ -64,6 +64,12 @@ namespace SkyRoof
     internal long DroppedIcomScopeControlCount =>
       IcomScopeControlCommands.DroppedCount;
 
+    private long RejectedIcomScopeControlCountValue;
+
+    internal long RejectedIcomScopeControlCount =>
+      Interlocked.Read(
+        ref RejectedIcomScopeControlCountValue);
+
     public event EventHandler? RxTuned;
     public event EventHandler? TxTuned;
 
@@ -804,9 +810,14 @@ namespace SkyRoof
       }
 
       if (!SendWriteCommand(command))
+      {
+        Interlocked.Increment(
+          ref RejectedIcomScopeControlCountValue);
+
         Log.Warning(
           "SkyCAT rejected IC-9700 scope control command: {Command}",
           command);
+      }
     }
 
 
