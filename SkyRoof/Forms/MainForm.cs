@@ -1257,7 +1257,12 @@ namespace SkyRoof
       // The status labels retain their existing left-click enable/disable
       // shortcut. Right-click belongs to the manual control card and must not
       // accidentally toggle the rotator engine.
-      if (LastRotatorStatusMouseButton == MouseButtons.Right)
+      bool statusLabelClick =
+        ReferenceEquals(sender, RotatorLedLabel) ||
+        ReferenceEquals(sender, RotatorStatusLabel);
+
+      if (statusLabelClick &&
+          LastRotatorStatusMouseButton == MouseButtons.Right)
       {
         LastRotatorStatusMouseButton = MouseButtons.None;
         return;
