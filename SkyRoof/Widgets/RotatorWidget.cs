@@ -16,6 +16,7 @@ namespace SkyRoof
     // handler keeps that exact pass instead of rebuilding the path from GetNextPass
     private bool settingTrack;
     public Bearing? AntBearing { get => engine?.LastReadBearing; }
+    public Bearing? SatelliteBearing => SatBearing;
 
     // PathOptimizerForm instance is created once and reused
     private PathOptimizerForm dialog = new();
@@ -173,6 +174,112 @@ namespace SkyRoof
       TrackCheckbox.Checked = !TrackCheckbox.Checked;
     }
 
+    internal Bearing? GetManualActualBearing()
+    {
+      return AntBearing == null
+        ? null
+        : Unsanitize(AntBearing);
+    }
+
+    internal Bearing? GetManualTargetBearing()
+    {
+      Bearing? target = engine?.RequestedBearing;
+      return target == null
+        ? null
+        : Unsanitize(target);
+    }
+
+    internal void ManualMoveToDegrees(
+      double azimuthDeg,
+      double elevationDeg)
+    {
+      if (engine == null) return;
+
+      var target =
+        ClampManualTarget(
+          azimuthDeg,
+          elevationDeg,
+          ctx.Settings.Rotator);
+
+      // Manual control takes ownership from automatic tracking. Setting the
+      // checkbox raises the normal tracking handler; RotateTo immediately
+      // replaces the queued STOP with the new absolute position command.
+      if (TrackCheckbox.Checked)
+        TrackCheckbox.Checked = false;
+
+      RotateTo(
+        new Bearing(
+          target.AzimuthDeg * Trig.RinD,
+          target.ElevationDeg * Trig.RinD));
+    }
+
+    internal void ManualJog(
+      double azimuthDeltaDeg,
+      double elevationDeltaDeg)
+    {
+      if (engine == null) return;
+
+      // The first jog while tracking starts at the actual antenna position,
+      // not at a possibly far-ahead tracking target. Subsequent repeated jogs
+      // build on the last manual command so press-and-hold feels continuous
+      // even while the physical rotator is still catching up.
+      Bearing? basis =
+        TrackCheckbox.Checked
+          ? GetManualActualBearing() ??
+            GetManualTargetBearing()
+          : GetManualTargetBearing() ??
+            GetManualActualBearing();
+
+      if (basis == null) return;
+
+      ManualMoveToDegrees(
+        basis.AzDeg + azimuthDeltaDeg,
+        basis.ElDeg + elevationDeltaDeg);
+    }
+
+    internal void ManualPark()
+    {
+      ManualMoveToDegrees(
+        ctx.Settings.Rotator.ParkAzimuth,
+        ctx.Settings.Rotator.ParkElevation);
+    }
+
+    internal static (
+      double AzimuthDeg,
+      double ElevationDeg)
+      ClampManualTarget(
+        double azimuthDeg,
+        double elevationDeg,
+        RotatorSettings settings)
+    {
+      double minAz =
+        Math.Min(
+          settings.MinAzimuth,
+          settings.MaxAzimuth);
+      double maxAz =
+        Math.Max(
+          settings.MinAzimuth,
+          settings.MaxAzimuth);
+      double minEl =
+        Math.Min(
+          settings.MinElevation,
+          settings.MaxElevation);
+      double maxEl =
+        Math.Max(
+          settings.MinElevation,
+          settings.MaxElevation);
+
+      return (
+        Math.Clamp(
+          azimuthDeg,
+          minAz,
+          maxAz),
+        Math.Clamp(
+          elevationDeg,
+          minEl,
+          maxEl));
+    }
+
     public string? GetStatusString()
     {
       if (!ctx.Settings.Rotator.Enabled) return "Rotator control disabled";
@@ -304,6 +411,17 @@ namespace SkyRoof
     //----------------------------------------------------------------------------------------------
     //                                   helper functions
     //----------------------------------------------------------------------------------------------
+    private Bearing Unsanitize(Bearing bearing)
+    {
+      var sett = ctx.Settings.Rotator;
+
+      return new Bearing(
+        bearing.Az -
+          sett.AzimuthOffset * Trig.RinD,
+        bearing.El -
+          sett.ElevationOffset * Trig.RinD);
+    }
+
     private Bearing Sanitize(Bearing bearing)
     {
       var sett = ctx.Settings.Rotator;
