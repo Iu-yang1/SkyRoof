@@ -78,6 +78,15 @@ namespace SkyRoof
       return false;
     }
 
+    internal void CancelIcomScopeRequests()
+    {
+      Rx?.CancelIcomScopeRequests();
+
+      if (Tx != null &&
+          !ReferenceEquals(Tx, Rx))
+        Tx.CancelIcomScopeRequests();
+    }
+
     internal (int Pending, long Dropped, long Rejected)?
       GetIcomScopeControlQueueStats()
     {
