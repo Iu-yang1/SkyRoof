@@ -50,6 +50,7 @@ namespace SkyRoof
     private bool PeakHold;
     private bool UpdatingScopeControlUi;
     private bool SpanEdgeShowsSpan = true;
+    private int PendingEdgeSyncScope = -1;
 
     public IcomLanSpectrumPanel(Context ctx)
     {
@@ -303,9 +304,7 @@ namespace SkyRoof
         (_, _) =>
         {
           if (UpdatingScopeControlUi ||
-              !ReferenceBox.Focused ||
-              !TryGetControlScope(
-                out byte scope))
+              !ReferenceBox.Focused)
             return;
 
           double referenceDb =
@@ -316,11 +315,12 @@ namespace SkyRoof
             referenceDb;
           ctx.Settings.SaveToFile();
 
-          SendScopeControl(
-            IcomScopeControlRequest
-              .ForReferenceLevel(
-                scope,
-                referenceDb),
+          SendScopeControlToBothReceivers(
+            scope =>
+              IcomScopeControlRequest
+                .ForReferenceLevel(
+                  scope,
+                  referenceDb),
             $"reference {referenceDb:+0.0;-0.0;0.0} dB");
         };
       toolbar.Controls.Add(ReferenceBox);
@@ -341,9 +341,7 @@ namespace SkyRoof
         (_, _) =>
         {
           if (UpdatingScopeControlUi ||
-              SweepSpeedBox.SelectedIndex < 0 ||
-              !TryGetControlScope(
-                out byte scope))
+              SweepSpeedBox.SelectedIndex < 0)
             return;
 
           IcomScopeSweepSpeed speed =
@@ -355,11 +353,12 @@ namespace SkyRoof
             speed;
           ctx.Settings.SaveToFile();
 
-          SendScopeControl(
-            IcomScopeControlRequest
-              .ForSweepSpeed(
-                scope,
-                speed),
+          SendScopeControlToBothReceivers(
+            scope =>
+              IcomScopeControlRequest
+                .ForSweepSpeed(
+                  scope,
+                  speed),
             $"speed {SweepSpeedBox.SelectedItem}");
         };
       toolbar.Controls.Add(SweepSpeedBox);
@@ -1056,6 +1055,25 @@ namespace SkyRoof
         enabled;
       SweepSpeedBox.Enabled =
         enabled;
+    }
+
+    private void SendScopeControlToBothReceivers(
+      Func<byte, IcomScopeControlRequest> requestFactory,
+      string description)
+    {
+      bool main =
+        SendScopeControl(
+          requestFactory(0),
+          $"MAIN {description}");
+
+      bool sub =
+        SendScopeControl(
+          requestFactory(1),
+          $"SUB {description}");
+
+      if (main || sub)
+        StatusLabel.Text =
+          $"Scope control queued for MAIN/SUB: {description}.";
     }
 
     private bool SendScopeControl(
