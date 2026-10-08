@@ -294,4 +294,122 @@ namespace SkyRoof
             $"Invalid marker position '{value}'.")
       };
   }
+
+  internal sealed class IcomFixedEdgeReadbackState
+  {
+    internal int FrequencyRange { get; init; }
+    internal int EdgeNumber { get; init; }
+    internal long LowerHz { get; init; }
+    internal long UpperHz { get; init; }
+
+    internal static IcomFixedEdgeReadbackState Parse(
+      string text)
+    {
+      if (string.IsNullOrWhiteSpace(
+            text))
+        throw new FormatException(
+          "Empty fixed-edge readback.");
+
+      Dictionary<string, string> values =
+        text
+          .Split(
+            ';',
+            StringSplitOptions.RemoveEmptyEntries |
+            StringSplitOptions.TrimEntries)
+          .Select(
+            item =>
+            {
+              int equals =
+                item.IndexOf('=');
+
+              if (equals <= 0 ||
+                  equals ==
+                    item.Length - 1)
+                throw new FormatException(
+                  $"Malformed fixed-edge field '{item}'.");
+
+              return new KeyValuePair<string, string>(
+                item[..equals],
+                item[(equals + 1)..]);
+            })
+          .ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value,
+            StringComparer.OrdinalIgnoreCase);
+
+      int range =
+        ParseInt(
+          values,
+          "RANGE");
+      int edge =
+        ParseInt(
+          values,
+          "EDGE");
+      long lower =
+        ParseLong(
+          values,
+          "LOWER");
+      long upper =
+        ParseLong(
+          values,
+          "UPPER");
+
+      if (range is < 1 or > 3)
+        throw new FormatException(
+          $"Invalid fixed-edge range '{range}'.");
+
+      if (edge is < 1 or > 4)
+        throw new FormatException(
+          $"Invalid fixed-edge number '{edge}'.");
+
+      if (upper <= lower)
+        throw new FormatException(
+          "Fixed-edge upper frequency must be greater than lower frequency.");
+
+      return new IcomFixedEdgeReadbackState
+      {
+        FrequencyRange = range,
+        EdgeNumber = edge,
+        LowerHz = lower,
+        UpperHz = upper
+      };
+    }
+
+    private static int ParseInt(
+      Dictionary<string, string> values,
+      string key)
+    {
+      long value =
+        ParseLong(
+          values,
+          key);
+
+      if (value >
+          int.MaxValue)
+        throw new FormatException(
+          $"Fixed-edge field '{key}' is too large.");
+
+      return (int)value;
+    }
+
+    private static long ParseLong(
+      Dictionary<string, string> values,
+      string key)
+    {
+      if (!values.TryGetValue(
+            key,
+            out string? text) ||
+          !long.TryParse(
+            text,
+            NumberStyles.Integer,
+            CultureInfo.InvariantCulture,
+            out long value) ||
+          value < 0)
+        throw new FormatException(
+          $"Invalid fixed-edge field '{key}'.");
+
+      return value;
+    }
+  }
+
 }
