@@ -145,7 +145,8 @@ namespace SkyRoof
             SaveUiSettings();
 
             if (selected !=
-                IcomLanScopeBand.Auto)
+                  IcomLanScopeBand.Auto &&
+                CanUseSkyCatScopeControl())
             {
               byte scope =
                 selected ==
@@ -656,6 +657,8 @@ namespace SkyRoof
       NativeLanAssistCapture?.Start();
       capture.Start();
 
+      QueueSavedScopeSelectionIfWritable();
+
       if (UsingSkyCatScopeSource)
       {
         RequestScopeOutputIfDue(
@@ -936,20 +939,24 @@ namespace SkyRoof
       return false;
     }
 
-    private void UpdateScopeControlAvailability()
+    private bool CanUseSkyCatScopeControl()
     {
       IcomLanSpectrumSettings settings =
         ctx.Settings.IcomLanSpectrum;
 
-      IcomScopeControlPath path =
-        IcomScopeController.ResolveControlPath(
-          settings.Source,
-          settings.ControlPath);
-
-      bool enabled =
+      return
         settings.Source !=
           IcomLanSpectrumSource.DirectLan &&
-        path == IcomScopeControlPath.SkyCat &&
+        IcomScopeController.ResolveControlPath(
+          settings.Source,
+          settings.ControlPath) ==
+          IcomScopeControlPath.SkyCat;
+    }
+
+    private void UpdateScopeControlAvailability()
+    {
+      bool enabled =
+        CanUseSkyCatScopeControl() &&
         TryGetControlScope(
           out _);
 
@@ -1195,6 +1202,32 @@ namespace SkyRoof
         settings.Source,
         settings.ControlPath,
         force);
+    }
+
+    private void QueueSavedScopeSelectionIfWritable()
+    {
+      if (!CanUseSkyCatScopeControl())
+        return;
+
+      IcomLanSpectrumSettings settings =
+        ctx.Settings.IcomLanSpectrum;
+
+      if (settings.ScopeBand ==
+          IcomLanScopeBand.Auto)
+        return;
+
+      byte scope =
+        settings.ScopeBand ==
+          IcomLanScopeBand.Sub
+          ? (byte)1
+          : (byte)0;
+
+      ScopeController.RequestControl(
+        settings.Source,
+        settings.ControlPath,
+        IcomScopeControlRequest
+          .ForSelectedScope(
+            scope));
     }
 
     private void QueueSavedSweepSpeedForBothScopes()
