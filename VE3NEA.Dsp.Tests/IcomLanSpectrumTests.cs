@@ -1114,6 +1114,26 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void ScopeCommandQueue_ClearCancelsAllPendingCommands()
+    {
+      var queue =
+        new IcomScopeCommandQueue(
+          capacity: 8);
+
+      queue.Enqueue(
+        "U SCOPE_MODE MAIN FIXED");
+      queue.Enqueue(
+        "U SCOPE_EDGE MAIN 2");
+
+      queue.Clear();
+
+      queue.Count.Should().Be(0);
+      queue.TryDequeue(
+        out _).Should().BeFalse();
+    }
+
+
+    [Fact]
     public void ScopeCommandQueue_DropsOldestDistinctCommandAtCapacity()
     {
       var queue =
