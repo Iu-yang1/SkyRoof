@@ -307,6 +307,20 @@ namespace SkyRoof
                 "SkyRoof.IcomLanSpectrumSettings.ScopeVbw" or
                 "SkyRoof.IcomLanSpectrumSettings.ScopeMarkerPosition");
 
+        bool advancedControlChanged =
+          ChangedFields.Exists(
+            s =>
+              s is
+                "SkyRoof.IcomLanSpectrumSettings.ScopeDuringTx" or
+                "SkyRoof.IcomLanSpectrumSettings.ScopeCenterType" or
+                "SkyRoof.IcomLanSpectrumSettings.ScopeVbw" or
+                "SkyRoof.IcomLanSpectrumSettings.ScopeMarkerPosition");
+
+        if (advancedControlChanged)
+          ctx.Settings.IcomLanSpectrum
+            .ManageAdvancedScopeControls =
+            true;
+
         if (transportChanged)
           ctx.IcomLanSpectrumPanel?.ApplySettings();
         else if (controlChanged)
