@@ -8,6 +8,7 @@ using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using Serilog;
 using SGPdotNET.TLE;
+using SGPdotNET.Parsers;
 using SkyRoof.Satellites;
 using VE3NEA;
 using VE3NEA.SkyTlm.Core;   // SignalParams / Framing, for the save-to-overrides writer (§6.1)
@@ -43,6 +44,8 @@ namespace SkyRoof
     private OrbitSourceSettings OrbitSources = new();
     private CancellationTokenSource cts;
     private JsonSerializerSettings JsonSettings = new();
+
+    internal static readonly TimeSpan ManualOrbitPriorityLifetime = TimeSpan.FromDays(3);
 
     public IEnumerable<SatnogsDbSatellite> Satellites { get => SatelliteList.Values; }
     public bool Loaded { get => loaded; }
@@ -91,9 +94,18 @@ namespace SkyRoof
         var satellites = JsonConvert.DeserializeObject<SatnogsDbSatelliteList>(json);
         SatelliteList = satellites.ToDictionary(s => s.sat_id);
 
+        bool orbitLayersChanged = false;
+        DateTime now = DateTime.UtcNow;
         foreach (var sat in satellites)
+        {
           foreach (var tx in sat.Transmitters)
             tx.Satellite = sat;
+
+          // Migrate pre-layered Satellites.json files and release any manual
+          // file override whose 72-hour priority window expired while SkyRoof
+          // was not running.
+          orbitLayersChanged |= sat.InitializeOrbitLayers(now);
+        }
 
         // the override file is live configuration, not a build-time artifact: apply it on every load so a
         // record saved from the Signal Params dialog takes effect at the next start without a database
@@ -102,6 +114,9 @@ namespace SkyRoof
         ApplyTransmitterOverrides();
 
         loaded = SatelliteList.Count > 0;
+
+        if (orbitLayersChanged)
+          SaveToFile();
       }
       catch (Exception ex)
       {
