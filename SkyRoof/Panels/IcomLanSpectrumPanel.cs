@@ -843,9 +843,10 @@ namespace SkyRoof
       PendingEdgeSyncScope = -1;
 
       if (!CanUseSkyCatScopeControl() ||
-          frame.Mode is not
-            ((byte)IcomScopeMode.Fixed) and not
-            ((byte)IcomScopeMode.ScrollFixed))
+          (frame.Mode !=
+             (byte)IcomScopeMode.Fixed &&
+           frame.Mode !=
+             (byte)IcomScopeMode.ScrollFixed))
         return;
 
       IcomLanSpectrumSettings settings =
