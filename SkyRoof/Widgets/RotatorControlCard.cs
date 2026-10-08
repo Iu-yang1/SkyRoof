@@ -377,9 +377,9 @@ namespace SkyRoof
     private RotatorJogDirection HotDirection;
     private RotatorJogDirection PressedDirection;
 
-    internal Bearing? ActualBearing { get; set; }
-    internal Bearing? TargetBearing { get; set; }
-    internal Bearing? SatelliteBearing { get; set; }
+    internal Bearing? ActualBearing;
+    internal Bearing? TargetBearing;
+    internal Bearing? SatelliteBearing;
 
     internal event Action<RotatorJogDirection>? JogRequested;
     internal event EventHandler? StopRequested;
