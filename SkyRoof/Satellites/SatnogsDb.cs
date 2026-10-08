@@ -1194,6 +1194,70 @@ namespace SkyRoof
       return transmitter;
     }
 
+    internal bool DeleteCustomTransmitter(
+      SatnogsDbSatellite satellite,
+      SatnogsDbTransmitter transmitter)
+    {
+      if (satellite == null)
+        throw new ArgumentNullException(
+          nameof(satellite));
+      if (transmitter == null)
+        throw new ArgumentNullException(
+          nameof(transmitter));
+      if (!transmitter.local_custom)
+        return false;
+      if (string.IsNullOrWhiteSpace(transmitter.uuid))
+        return false;
+
+      CustomTransmitterDefinitionList definitions =
+        LoadCustomTransmitterDefinitions();
+
+      if (!RemoveCustomTransmitterDefinition(
+            definitions,
+            transmitter.uuid))
+        return false;
+
+      SaveCustomTransmitterDefinitions(
+        definitions);
+
+      int removedRuntime =
+        satellite.Transmitters.RemoveAll(
+          t =>
+            t.local_custom &&
+            string.Equals(
+              t.uuid,
+              transmitter.uuid,
+              StringComparison.OrdinalIgnoreCase));
+
+      satellite.RefreshTransmitterDerivedData();
+      SaveToFile();
+
+      Log.Information(
+        "Local transmitter deleted: {Satellite} / {Description} ({Uuid}); runtime rows removed: {RemovedRuntime}",
+        satellite.name,
+        transmitter.description,
+        transmitter.uuid,
+        removedRuntime);
+
+      return true;
+    }
+
+    internal static bool RemoveCustomTransmitterDefinition(
+      CustomTransmitterDefinitionList definitions,
+      string uuid)
+    {
+      if (definitions == null ||
+          string.IsNullOrWhiteSpace(uuid))
+        return false;
+
+      return definitions.RemoveAll(
+          d =>
+            string.Equals(
+              d.uuid,
+              uuid,
+              StringComparison.OrdinalIgnoreCase)) > 0;
+    }
+
     internal int ApplyCustomTransmitters(
       bool rebuild = false)
     {
