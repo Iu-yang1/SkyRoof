@@ -159,8 +159,7 @@ namespace SkyRoof
         "SCOPE_EDGE" or
         "SCOPE_REF" or
         "SCOPE_SPEED" or
-        "SCOPE_VBW" or
-        "SCOPE_RBW"
+        "SCOPE_VBW"
           when parts.Length >= 3 =>
             $"{verb} {parts[2]}",
 
