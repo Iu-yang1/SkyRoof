@@ -231,7 +231,11 @@ namespace SkyRoof
 
     public void SetDownlinkBaseFrequency(double frequency)
     {
-      if (IsTerrestrial || Tx == null || TxCust == null) return;
+      if (IsTerrestrial ||
+          !HasDownlink ||
+          Tx == null ||
+          TxCust == null)
+        return;
       DownlinkBaseOffset = checked((long)Math.Round(frequency - DatabaseDownlinkBaseFrequency));
       ComputeFrequencies();
     }
