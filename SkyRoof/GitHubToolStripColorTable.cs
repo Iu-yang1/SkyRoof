@@ -113,8 +113,11 @@ namespace SkyRoof
     protected override void OnRenderArrow(
       ToolStripArrowRenderEventArgs e)
     {
-      if (e.ToolStrip is MenuStrip ||
-          e.ToolStrip is ToolStripDropDown)
+      ToolStrip? owner =
+        e.Item.Owner;
+
+      if (owner is MenuStrip ||
+          owner is ToolStripDropDown)
         e.ArrowColor =
           e.Item.Enabled
             ? Palette.TextSecondary
