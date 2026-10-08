@@ -586,13 +586,13 @@ namespace SkyRoof
       try
       {
         SatDataLedLabel.ForeColor = SystemColors.GrayText;
-        SatDataStatusLabel.ToolTipText = SatDataLedLabel.ToolTipText = "Downloading TLE...";
+        SatDataStatusLabel.ToolTipText = SatDataLedLabel.ToolTipText = "Downloading orbit elements...";
 
 
         await ctx.SatnogsDb.DownloadTle();
 
         DownloadOk = true;
-        Log.Information("TLE downloaded");
+        Log.Information("Orbit elements downloaded");
         return true;
       }
       catch (Exception ex)
@@ -625,7 +625,7 @@ namespace SkyRoof
     {
       bool ok = await DownloadTle();
       if (!ok)
-        MessageBox.Show("Failed to download TLE data",
+        MessageBox.Show("Failed to download orbit-element data",
           "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
     }
 
