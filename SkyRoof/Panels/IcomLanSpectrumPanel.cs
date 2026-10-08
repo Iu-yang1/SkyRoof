@@ -74,6 +74,8 @@ namespace SkyRoof
 
       ctx.CatControl.IcomScopeReadbackReceived +=
         CatControl_IcomScopeReadbackReceived;
+      ctx.CatControl.IcomFixedEdgeReadbackReceived +=
+        CatControl_IcomFixedEdgeReadbackReceived;
 
       Text = "Icom LAN Spectrum";
       Name = "IcomLanSpectrumPanel";
@@ -306,6 +308,16 @@ namespace SkyRoof
         new Padding(0, 2, 6, 2);
       FixedEdgeEditBtn.Click +=
         (_, _) => EditSelectedFixedEdge();
+
+      var fixedEdgeMenu =
+        new ContextMenuStrip();
+      fixedEdgeMenu.Items.Add(
+        "Read selected Edge preset from IC-9700",
+        null,
+        (_, _) => RequestSelectedFixedEdgeReadback());
+      FixedEdgeEditBtn.ContextMenuStrip =
+        fixedEdgeMenu;
+
       toolbar.Controls.Add(
         FixedEdgeEditBtn);
 
@@ -1540,6 +1552,94 @@ namespace SkyRoof
       return routed;
     }
 
+    private void RequestSelectedFixedEdgeReadback()
+    {
+      if (LocalHold ||
+          !CanUseSkyCatScopeControl())
+        return;
+
+      IcomScopeFrame? frame =
+        ScopeState.LatestSelectedFrame;
+
+      if (frame == null ||
+          !frame.Geometry.IsValid)
+        return;
+
+      int frequencyRange =
+        GetFixedEdgeFrequencyRange(
+          frame.Geometry);
+      int edgeNumber =
+        Math.Clamp(
+          ctx.Settings.IcomLanSpectrum
+            .ScopeEdgeNumber,
+          1,
+          4);
+
+      if (frequencyRange == 0)
+      {
+        StatusLabel.Text =
+          "Cannot read the selected Edge preset because the current raw scope geometry is outside the IC-9700 144/430/1200 MHz ranges.";
+        return;
+      }
+
+      if (ctx.CatControl
+          .RequestIcomFixedEdgeReadback(
+            frequencyRange,
+            edgeNumber))
+      {
+        StatusLabel.Text =
+          $"Reading IC-9700 fixed Edge {edgeNumber} preset…";
+      }
+    }
+
+    private void CatControl_IcomFixedEdgeReadbackReceived(
+      IcomFixedEdgeReadbackState state)
+    {
+      if (IsDisposed ||
+          Disposing)
+        return;
+
+      try
+      {
+        BeginInvoke(
+          (Action)(() =>
+          {
+            if (IsDisposed)
+              return;
+
+            IcomLanSpectrumSettings settings =
+              ctx.Settings.IcomLanSpectrum;
+
+            settings.FixedEdgePresets ??=
+              new Dictionary<string, IcomScopeFixedEdgePreset>();
+
+            string key =
+              $"{state.FrequencyRange}:{state.EdgeNumber}";
+
+            settings.FixedEdgePresets[key] =
+              new IcomScopeFixedEdgePreset
+              {
+                LowerHz =
+                  state.LowerHz,
+                UpperHz =
+                  state.UpperHz
+              };
+
+            ctx.Settings.SaveToFile();
+
+            StatusLabel.Text =
+              $"Read IC-9700 Edge {state.EdgeNumber}: " +
+              $"{state.LowerHz / 1_000_000.0:0.000}–" +
+              $"{state.UpperHz / 1_000_000.0:0.000} MHz.";
+          }));
+      }
+      catch (InvalidOperationException)
+      {
+        // Panel is closing.
+      }
+    }
+
+
     private void EditSelectedFixedEdge()
     {
       if (LocalHold ||
@@ -1597,6 +1697,9 @@ namespace SkyRoof
           lowerHz +
           1_000,
           maximum);
+
+      settings.FixedEdgePresets ??=
+        new Dictionary<string, IcomScopeFixedEdgePreset>();
 
       if (settings.FixedEdgePresets
           .TryGetValue(
@@ -2264,6 +2367,8 @@ namespace SkyRoof
     {
       ctx.CatControl.IcomScopeReadbackReceived -=
         CatControl_IcomScopeReadbackReceived;
+      ctx.CatControl.IcomFixedEdgeReadbackReceived -=
+        CatControl_IcomFixedEdgeReadbackReceived;
       UiTimer.Stop();
       StopCapture();
 
