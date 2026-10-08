@@ -407,7 +407,11 @@ namespace SkyRoof
         UpdateScopeControlAvailability();
 
         if (!LocalHold)
+        {
+          RequestScopeOutputIfDue(
+            force: true);
           ApplyControlSettings();
+        }
       };
       toolbar.Controls.Add(HoldBtn);
 
@@ -1326,7 +1330,8 @@ namespace SkyRoof
         ScopeController.Reset();
       }
 
-      if (!ScopeControlDefaultsAppliedForSession &&
+      if (!LocalHold &&
+          !ScopeControlDefaultsAppliedForSession &&
           IsSkyCatScopeControlConfigured() &&
           scopeBackend != null)
       {
