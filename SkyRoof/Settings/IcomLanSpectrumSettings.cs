@@ -131,6 +131,11 @@ namespace SkyRoof
     [DefaultValue(true)]
     public bool AutoStart { get; set; } = true;
 
+    [DisplayName("Spectrum averaging")]
+    [Description("Number of complete IC-9700 sweeps averaged for the local spectrum trace. Waterfall rows remain unaveraged.")]
+    [DefaultValue(1)]
+    public int SpectrumAverageSweeps { get; set; } = 1;
+
     [DisplayName("Waterfall history")]
     [Description("Number of raw 475-bin scope rows retained by the display.")]
     [DefaultValue(240)]
