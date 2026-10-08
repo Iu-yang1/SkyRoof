@@ -82,6 +82,10 @@ namespace SkyRoof
     public IcomScopeSweepSpeed ScopeSweepSpeed { get; set; } =
       IcomScopeSweepSpeed.Fast;
 
+    [Browsable(false)]
+    [DefaultValue(false)]
+    public bool ManageAdvancedScopeControls { get; set; }
+
     [DisplayName("Scope during TX")]
     [Description("IC-9700 CENTER-type scope display while transmitting.")]
     [DefaultValue(false)]
