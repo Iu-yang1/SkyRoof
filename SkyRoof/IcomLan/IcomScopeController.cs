@@ -8,6 +8,10 @@ namespace SkyRoof
     Edge,
     ReferenceLevel,
     SweepSpeed,
+    ScopeDuringTx,
+    CenterType,
+    Vbw,
+    MarkerPosition,
     FixedEdge
   }
 
@@ -16,6 +20,25 @@ namespace SkyRoof
     Fast = 0,
     Mid = 1,
     Slow = 2
+  }
+
+  public enum IcomScopeCenterType : byte
+  {
+    FilterCenter = 0,
+    CarrierPoint = 1,
+    CarrierPointAbsolute = 2
+  }
+
+  public enum IcomScopeVbw : byte
+  {
+    Narrow = 0,
+    Wide = 1
+  }
+
+  public enum IcomScopeMarkerPosition : byte
+  {
+    FilterCenter = 0,
+    CarrierPoint = 1
   }
 
   internal sealed class IcomScopeControlRequest
@@ -27,6 +50,10 @@ namespace SkyRoof
     internal int EdgeNumber { get; init; }
     internal double ReferenceDb { get; init; }
     internal IcomScopeSweepSpeed SweepSpeed { get; init; }
+    internal bool Enabled { get; init; }
+    internal IcomScopeCenterType CenterType { get; init; }
+    internal IcomScopeVbw Vbw { get; init; }
+    internal IcomScopeMarkerPosition MarkerPosition { get; init; }
     internal int FrequencyRange { get; init; }
     internal long LowerFrequencyHz { get; init; }
     internal long UpperFrequencyHz { get; init; }
@@ -88,6 +115,40 @@ namespace SkyRoof
         Kind = IcomScopeControlKind.SweepSpeed,
         Scope = scope,
         SweepSpeed = speed
+      };
+
+    internal static IcomScopeControlRequest ForScopeDuringTx(
+      bool enabled) =>
+      new()
+      {
+        Kind = IcomScopeControlKind.ScopeDuringTx,
+        Enabled = enabled
+      };
+
+    internal static IcomScopeControlRequest ForCenterType(
+      IcomScopeCenterType type) =>
+      new()
+      {
+        Kind = IcomScopeControlKind.CenterType,
+        CenterType = type
+      };
+
+    internal static IcomScopeControlRequest ForVbw(
+      byte scope,
+      IcomScopeVbw vbw) =>
+      new()
+      {
+        Kind = IcomScopeControlKind.Vbw,
+        Scope = scope,
+        Vbw = vbw
+      };
+
+    internal static IcomScopeControlRequest ForMarkerPosition(
+      IcomScopeMarkerPosition position) =>
+      new()
+      {
+        Kind = IcomScopeControlKind.MarkerPosition,
+        MarkerPosition = position
       };
 
     internal static IcomScopeControlRequest ForFixedEdge(
