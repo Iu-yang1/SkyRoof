@@ -13,6 +13,9 @@ namespace SkyRoof
   public partial class MainForm : Form
   {
     internal Context ctx = new();
+    private RotatorControlCard? RotatorControlCard;
+    private ToolStripControlHost? RotatorControlHost;
+    private MouseButtons LastRotatorStatusMouseButton;
 
     public MainForm()
     {
@@ -46,6 +49,8 @@ namespace SkyRoof
       ctx.UdpStreamSender.ctx = ctx;
 
       var settingsLoadResult = ctx.Settings.LoadFromFile();
+
+      AddRotatorControlCard();
 
       // SatnogsDb is intentionally created later in LoadSatelliteData(), after
       // the form has entered its Load phase. Do not dereference it here: the
@@ -1249,6 +1254,21 @@ namespace SkyRoof
 
     private void RotLedLabel_Click(object sender, EventArgs e)
     {
+      // The status labels retain their existing left-click enable/disable
+      // shortcut. Right-click belongs to the manual control card and must not
+      // accidentally toggle the rotator engine.
+      bool statusLabelClick =
+        ReferenceEquals(sender, RotatorLedLabel) ||
+        ReferenceEquals(sender, RotatorStatusLabel);
+
+      if (statusLabelClick &&
+          LastRotatorStatusMouseButton == MouseButtons.Right)
+      {
+        LastRotatorStatusMouseButton = MouseButtons.None;
+        return;
+      }
+
+      LastRotatorStatusMouseButton = MouseButtons.None;
       ctx.Settings.Rotator.Enabled = !ctx.Settings.Rotator.Enabled;
       ctx.RotatorControl.ApplySettings();
     }
@@ -1289,6 +1309,52 @@ namespace SkyRoof
       TxCatLedLabel.ToolTipText = txTip;
     }
 
+    private void AddRotatorControlCard()
+    {
+      RotatorControlCard = new RotatorControlCard();
+      RotatorControlCard.Attach(
+        ctx,
+        ctx.RotatorControl);
+
+      RotatorControlHost =
+        new ToolStripControlHost(
+          RotatorControlCard)
+        {
+          AutoSize = false,
+          Margin = Padding.Empty,
+          Padding = Padding.Empty,
+          Size = RotatorControlCard.Size
+        };
+
+      RotatorDropdownBtn.DropDownItems.Insert(
+        0,
+        RotatorControlHost);
+      RotatorDropdownBtn.DropDownItems.Insert(
+        1,
+        new ToolStripSeparator());
+
+      RotatorDropdownBtn.DropDownOpening += (_, _) =>
+        RotatorControlCard?.RefreshState();
+
+      // Keep the existing small arrow button for normal left-click use, but
+      // make the status area itself useful as the requested right-click card.
+      RotatorLedLabel.MouseDown += RotatorStatus_MouseDown;
+      RotatorStatusLabel.MouseDown += RotatorStatus_MouseDown;
+    }
+
+    private void RotatorStatus_MouseDown(
+      object? sender,
+      MouseEventArgs e)
+    {
+      LastRotatorStatusMouseButton = e.Button;
+
+      if (e.Button != MouseButtons.Right)
+        return;
+
+      RotatorControlCard?.RefreshState();
+      RotatorDropdownBtn.ShowDropDown();
+    }
+
     public void ShowRotatorStatus()
     {
       if (!ctx.Settings.Rotator.Enabled) RotatorLedLabel.ForeColor = SystemColors.GrayText;
@@ -1300,6 +1366,7 @@ namespace SkyRoof
       TrackRotatorMNU.Checked = ctx.RotatorControl.TrackCheckbox.Checked;
 
       RotatorStatusLabel.ToolTipText = ctx.RotatorControl.GetStatusString();
+      RotatorControlCard?.RefreshState();
     }
 
 
