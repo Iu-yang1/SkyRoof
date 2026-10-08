@@ -18,6 +18,9 @@ namespace SkyRoof
         IcomScopeWaterfallPalette.Classic);
 
     private byte[] LatestSamples = new byte[ScopePoints];
+    private readonly Queue<byte[]> AverageFrames = new();
+    private readonly int[] AverageSums = new int[ScopePoints];
+    private int AverageSweepCount = 1;
     private IcomScopeFrame? LatestFrame;
 
     private byte[][] WaterfallRows = Array.Empty<byte[]>();
@@ -40,11 +43,15 @@ namespace SkyRoof
     private bool HoldEnabled;
 
     private double SpectrumFraction = 0.36;
+    private double HorizontalZoomFactor = 1.0;
+    private double HorizontalZoomCenter = 0.5;
     private bool SplitterDragging;
     private bool FrequencyTuning;
     private bool TuneUsingRit;
     private IcomScopeGeometry TuneGestureGeometry;
     private long TuneGestureDisplayFrequencyOffsetHz;
+    private double TuneGestureZoomFactor = 1.0;
+    private double TuneGestureZoomCenter = 0.5;
     private long? PendingTuneFrequencyHz;
     private readonly System.Windows.Forms.Timer TuneCommitTimer =
       new() { Interval = 40 };
@@ -59,6 +66,7 @@ namespace SkyRoof
     private Slicer.Mode? TransmitMode;
 
     internal event Action<int>? SpectrumPercentChanged;
+    internal event Action<int>? ZoomChanged;
     internal event Action<long, bool>? TuneFrequencyRequested;
     internal event Action? TuningCompleted;
 
@@ -152,6 +160,64 @@ namespace SkyRoof
         WaterfallDirty = true;
       }
 
+      Invalidate();
+    }
+
+    internal void SetAverageSweeps(int sweeps)
+    {
+      int normalized =
+        sweeps switch
+        {
+          <= 1 => 1,
+          <= 2 => 2,
+          <= 4 => 4,
+          _ => 8
+        };
+
+      lock (DataSync)
+      {
+        if (AverageSweepCount == normalized)
+          return;
+
+        AverageSweepCount = normalized;
+        ResetAveragingLocked();
+      }
+
+      Invalidate();
+    }
+
+    internal int ZoomFactor =>
+      (int)Math.Round(
+        HorizontalZoomFactor);
+
+    internal void SetZoomFactor(
+      int factor)
+    {
+      int normalized =
+        factor switch
+        {
+          <= 1 => 1,
+          <= 2 => 2,
+          <= 4 => 4,
+          <= 8 => 8,
+          _ => 16
+        };
+
+      SetZoomAroundFraction(
+        normalized,
+        0.5);
+    }
+
+    internal void ResetZoom()
+    {
+      if (HorizontalZoomFactor == 1.0 &&
+          Math.Abs(HorizontalZoomCenter - 0.5) <
+            1e-12)
+        return;
+
+      HorizontalZoomFactor = 1.0;
+      HorizontalZoomCenter = 0.5;
+      ZoomChanged?.Invoke(1);
       Invalidate();
     }
 
@@ -249,24 +315,40 @@ namespace SkyRoof
         }
 
         LatestFrame = frame;
-        Buffer.BlockCopy(
-          frame.Samples,
-          0,
-          LatestSamples,
-          0,
-          ScopePoints);
 
-        if (PeakEnabled)
+        if (AverageSweepCount <= 1)
+        {
+          Buffer.BlockCopy(
+            frame.Samples,
+            0,
+            LatestSamples,
+            0,
+            ScopePoints);
+        }
+        else if (frame.SweepComplete)
+        {
+          AddAverageFrameLocked(
+            frame.Samples);
+        }
+
+        if (PeakEnabled &&
+            (AverageSweepCount <= 1 ||
+             frame.SweepComplete))
         {
           for (int i = 0;
                i < ScopePoints;
                i++)
           {
+            byte sample =
+              AverageSweepCount <= 1
+                ? frame.Samples[i]
+                : LatestSamples[i];
+
             if (!PeakValid ||
-                frame.Samples[i] >
+                sample >
                   PeakSamples[i])
               PeakSamples[i] =
-                frame.Samples[i];
+                sample;
           }
 
           PeakValid = true;
@@ -322,7 +404,67 @@ namespace SkyRoof
       Array.Clear(PeakSamples);
       PeakValid = false;
       HistoryShiftResidualBins = 0;
+      ResetAveragingLocked();
       WaterfallDirty = true;
+    }
+
+    private void ResetAveragingLocked()
+    {
+      AverageFrames.Clear();
+      Array.Clear(
+        AverageSums);
+    }
+
+    private void AddAverageFrameLocked(
+      byte[] samples)
+    {
+      var copy =
+        new byte[ScopePoints];
+
+      Buffer.BlockCopy(
+        samples,
+        0,
+        copy,
+        0,
+        ScopePoints);
+
+      AverageFrames.Enqueue(
+        copy);
+
+      for (int i = 0;
+           i < ScopePoints;
+           i++)
+        AverageSums[i] +=
+          copy[i];
+
+      while (AverageFrames.Count >
+             AverageSweepCount)
+      {
+        byte[] old =
+          AverageFrames.Dequeue();
+
+        for (int i = 0;
+             i < ScopePoints;
+             i++)
+          AverageSums[i] -=
+            old[i];
+      }
+
+      int divisor =
+        Math.Max(
+          1,
+          AverageFrames.Count);
+
+      for (int i = 0;
+           i < ScopePoints;
+           i++)
+        LatestSamples[i] =
+          (byte)Math.Clamp(
+            (int)Math.Round(
+              AverageSums[i] /
+              (double)divisor),
+            0,
+            160);
     }
 
     internal static int CalculateHistoryShiftBins(
@@ -606,6 +748,100 @@ namespace SkyRoof
           waterfallRect.Height - 1);
     }
 
+    protected override void OnMouseWheel(
+      MouseEventArgs e)
+    {
+      base.OnMouseWheel(e);
+
+      GetLayout(
+        out _,
+        out Rectangle spectrum,
+        out _,
+        out Rectangle waterfall);
+
+      Rectangle active =
+        spectrum.Contains(
+          e.Location)
+          ? spectrum
+          : waterfall.Contains(
+              e.Location)
+            ? waterfall
+            : Rectangle.Empty;
+
+      if (active.IsEmpty ||
+          active.Width < 2)
+        return;
+
+      if (ModifierKeys.HasFlag(
+            Keys.Shift) &&
+          HorizontalZoomFactor > 1.0)
+      {
+        double width =
+          1.0 /
+          HorizontalZoomFactor;
+        double step =
+          width *
+          0.12 *
+          (e.Delta > 0
+            ? -1.0
+            : 1.0);
+
+        HorizontalZoomCenter =
+          Math.Clamp(
+            HorizontalZoomCenter +
+            step,
+            width / 2.0,
+            1.0 -
+            width / 2.0);
+
+        Invalidate();
+        return;
+      }
+
+      int current =
+        ZoomFactor;
+      int next =
+        e.Delta > 0
+          ? current switch
+            {
+              1 => 2,
+              2 => 4,
+              4 => 8,
+              _ => 16
+            }
+          : current switch
+            {
+              16 => 8,
+              8 => 4,
+              4 => 2,
+              _ => 1
+            };
+
+      double anchor =
+        (Math.Clamp(
+          e.X,
+          active.Left,
+          active.Right - 1) -
+         active.Left) /
+        (double)Math.Max(
+          1,
+          active.Width - 1);
+
+      SetZoomAroundFraction(
+        next,
+        anchor);
+    }
+
+    protected override void OnMouseDoubleClick(
+      MouseEventArgs e)
+    {
+      base.OnMouseDoubleClick(e);
+
+      if (e.Button ==
+          MouseButtons.Middle)
+        ResetZoom();
+    }
+
     protected override void OnMouseDown(
       MouseEventArgs e)
     {
@@ -644,6 +880,8 @@ namespace SkyRoof
             plot,
             geometry,
             MainDisplayFrequencyOffsetHz,
+            HorizontalZoomFactor,
+            HorizontalZoomCenter,
             out long frequencyHz))
         return;
 
@@ -653,6 +891,10 @@ namespace SkyRoof
         geometry;
       TuneGestureDisplayFrequencyOffsetHz =
         MainDisplayFrequencyOffsetHz;
+      TuneGestureZoomFactor =
+        HorizontalZoomFactor;
+      TuneGestureZoomCenter =
+        HorizontalZoomCenter;
       TuneUsingRit =
         ModifierKeys.HasFlag(
           Keys.Control);
@@ -678,6 +920,8 @@ namespace SkyRoof
         FrequencyTuning = false;
         TuneGestureGeometry = default;
         TuneGestureDisplayFrequencyOffsetHz = 0;
+        TuneGestureZoomFactor = 1.0;
+        TuneGestureZoomCenter = 0.5;
         TuneCommitTimer.Stop();
         FlushPendingTune();
         Capture = false;
@@ -729,6 +973,8 @@ namespace SkyRoof
               tuningPlot,
               TuneGestureGeometry,
               TuneGestureDisplayFrequencyOffsetHz,
+              TuneGestureZoomFactor,
+              TuneGestureZoomCenter,
               out long frequencyHz))
           PendingTuneFrequencyHz =
             frequencyHz;
@@ -836,6 +1082,8 @@ namespace SkyRoof
       FrequencyTuning = false;
       TuneGestureGeometry = default;
       TuneGestureDisplayFrequencyOffsetHz = 0;
+      TuneGestureZoomFactor = 1.0;
+      TuneGestureZoomCenter = 0.5;
       TuneCommitTimer.Stop();
       FlushPendingTune();
       TuningCompleted?.Invoke();
@@ -863,6 +1111,8 @@ namespace SkyRoof
       Rectangle plot,
       IcomScopeGeometry geometry,
       long displayFrequencyOffsetHz,
+      double zoomFactor,
+      double zoomCenter,
       out long frequencyHz)
     {
       frequencyHz = 0;
@@ -876,7 +1126,9 @@ namespace SkyRoof
           geometry,
           plot,
           point.X,
-          displayFrequencyOffsetHz);
+          displayFrequencyOffsetHz,
+          zoomFactor,
+          zoomCenter);
 
       return true;
     }
@@ -885,13 +1137,15 @@ namespace SkyRoof
       IcomScopeGeometry geometry,
       Rectangle plot,
       int x,
-      long displayFrequencyOffsetHz = 0)
+      long displayFrequencyOffsetHz = 0,
+      double zoomFactor = 1.0,
+      double zoomCenter = 0.5)
     {
       if (!geometry.IsValid ||
           plot.Width < 2)
         return 0;
 
-      double fraction =
+      double plotFraction =
         (Math.Clamp(
           x,
           plot.Left,
@@ -901,10 +1155,135 @@ namespace SkyRoof
           1,
           plot.Width - 1);
 
+      GetVisibleFractionRange(
+        zoomFactor,
+        zoomCenter,
+        out double visibleStart,
+        out double visibleEnd);
+
+      double fraction =
+        visibleStart +
+        plotFraction *
+        (visibleEnd -
+         visibleStart);
+
       return checked(
         geometry.FrequencyAtFraction(
           fraction) +
         displayFrequencyOffsetHz);
+    }
+
+    private static void GetVisibleFractionRange(
+      double zoomFactor,
+      double zoomCenter,
+      out double start,
+      out double end)
+    {
+      double factor =
+        Math.Clamp(
+          zoomFactor,
+          1.0,
+          16.0);
+      double width =
+        1.0 /
+        factor;
+      double center =
+        Math.Clamp(
+          zoomCenter,
+          width / 2.0,
+          1.0 -
+          width / 2.0);
+
+      start =
+        center -
+        width / 2.0;
+      end =
+        center +
+        width / 2.0;
+    }
+
+    private static double ToVisiblePlotFraction(
+      double fullFraction,
+      double zoomFactor,
+      double zoomCenter)
+    {
+      GetVisibleFractionRange(
+        zoomFactor,
+        zoomCenter,
+        out double start,
+        out double end);
+
+      return
+        (fullFraction -
+         start) /
+        Math.Max(
+          1e-12,
+          end -
+          start);
+    }
+
+    private void SetZoomAroundFraction(
+      int factor,
+      double plotAnchorFraction)
+    {
+      int normalized =
+        Math.Clamp(
+          factor,
+          1,
+          16);
+
+      if (normalized is not
+            (1 or 2 or 4 or 8 or 16))
+        normalized =
+          normalized < 2
+            ? 1
+            : normalized < 4
+              ? 2
+              : normalized < 8
+                ? 4
+                : normalized < 16
+                  ? 8
+                  : 16;
+
+      double anchor =
+        Math.Clamp(
+          plotAnchorFraction,
+          0.0,
+          1.0);
+
+      GetVisibleFractionRange(
+        HorizontalZoomFactor,
+        HorizontalZoomCenter,
+        out double oldStart,
+        out double oldEnd);
+
+      double fullAnchor =
+        oldStart +
+        anchor *
+        (oldEnd -
+         oldStart);
+
+      double newWidth =
+        1.0 /
+        normalized;
+      double newStart =
+        Math.Clamp(
+          fullAnchor -
+          anchor *
+          newWidth,
+          0.0,
+          1.0 -
+          newWidth);
+
+      HorizontalZoomFactor =
+        normalized;
+      HorizontalZoomCenter =
+        newStart +
+        newWidth / 2.0;
+
+      ZoomChanged?.Invoke(
+        normalized);
+      Invalidate();
     }
 
     private long GetDisplayFrequencyOffset(
