@@ -35,11 +35,21 @@ namespace SkyRoof
       ApplyTune();
     }
 
+    internal CatControlEngine? GetIcomScopeControlBackend()
+    {
+      if (Rx?.SupportsIcomScopeOutput == true)
+        return Rx;
+
+      if (Tx != null &&
+          !ReferenceEquals(Tx, Rx) &&
+          Tx.SupportsIcomScopeOutput)
+        return Tx;
+
+      return null;
+    }
+
     internal bool HasIcomScopeControlBackend =>
-      Rx?.SupportsIcomScopeOutput == true ||
-      (Tx != null &&
-       !ReferenceEquals(Tx, Rx) &&
-       Tx.SupportsIcomScopeOutput);
+      GetIcomScopeControlBackend() != null;
 
     /// <summary>
     /// Route an IC-9700 scope-output request to an active SkyCAT engine.
@@ -48,40 +58,30 @@ namespace SkyRoof
     /// </summary>
     internal bool RequestIcomScopeOutput()
     {
-      if (Rx?.SupportsIcomScopeOutput == true)
-      {
-        Rx.RequestIcomScopeOutput();
-        return true;
-      }
+      CatControlEngine? engine =
+        GetIcomScopeControlBackend();
 
-      if (Tx != null &&
-          !ReferenceEquals(Tx, Rx) &&
-          Tx.SupportsIcomScopeOutput)
-      {
-        Tx.RequestIcomScopeOutput();
-        return true;
-      }
+      if (engine == null)
+        return false;
 
-      return false;
+      engine.RequestIcomScopeOutput();
+      return true;
     }
 
     internal bool RequestIcomScopeControl(
       IcomScopeControlRequest request)
     {
+      CatControlEngine? engine =
+        GetIcomScopeControlBackend();
+
+      if (engine == null)
+        return false;
+
       string command =
         FormatIcomScopeCommand(request);
 
-      if (Rx?.SupportsIcomScopeOutput == true &&
-          Rx.RequestIcomScopeCommand(command))
-        return true;
-
-      if (Tx != null &&
-          !ReferenceEquals(Tx, Rx) &&
-          Tx.SupportsIcomScopeOutput &&
-          Tx.RequestIcomScopeCommand(command))
-        return true;
-
-      return false;
+      return engine.RequestIcomScopeCommand(
+        command);
     }
 
     internal void CancelIcomScopeRequests()
@@ -96,21 +96,15 @@ namespace SkyRoof
     internal (int Pending, long Dropped, long Rejected)?
       GetIcomScopeControlQueueStats()
     {
-      if (Rx?.SupportsIcomScopeOutput == true)
-        return (
-          Rx.PendingIcomScopeControlCount,
-          Rx.DroppedIcomScopeControlCount,
-          Rx.RejectedIcomScopeControlCount);
+      CatControlEngine? engine =
+        GetIcomScopeControlBackend();
 
-      if (Tx != null &&
-          !ReferenceEquals(Tx, Rx) &&
-          Tx.SupportsIcomScopeOutput)
-        return (
-          Tx.PendingIcomScopeControlCount,
-          Tx.DroppedIcomScopeControlCount,
-          Tx.RejectedIcomScopeControlCount);
-
-      return null;
+      return engine == null
+        ? null
+        : (
+          engine.PendingIcomScopeControlCount,
+          engine.DroppedIcomScopeControlCount,
+          engine.RejectedIcomScopeControlCount);
     }
 
     internal static string FormatIcomScopeCommand(
