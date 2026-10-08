@@ -1309,61 +1309,171 @@ namespace SkyRoof
           .Distinct(StringComparer.OrdinalIgnoreCase)
           .ToArray();
 
-    private SatnogsDbTleList ParseTleContent(
+    internal SatnogsDbTleList ParseTleContent(
       string content,
       string? extension,
       string sourceLabel)
     {
-      SatnogsDbTleList tles;
+      string trimmed = content.TrimStart();
+      string ext = (extension ?? string.Empty).ToLowerInvariant();
+      SatnogsDbTleList records;
 
-      if (content.TrimStart().StartsWith("["))
+      if (ext == ".csv" || LooksLikeOmmCsv(content))
       {
-        tles =
-          JsonConvert.DeserializeObject<SatnogsDbTleList>(content, JsonSettings)
-          ?? new SatnogsDbTleList();
+        var parser = new OmmCsvParser();
+        records = TlesFromOmm(parser.Parse(content), sourceLabel);
+      }
+      else if (trimmed.StartsWith("["))
+      {
+        if (LooksLikeOmmJson(content))
+        {
+          var parser = new OmmJsonParser();
+          records = TlesFromOmm(parser.Parse(content), sourceLabel);
+        }
+        else
+        {
+          records =
+            JsonConvert.DeserializeObject<SatnogsDbTleList>(
+              content,
+              JsonSettings)
+            ?? new SatnogsDbTleList();
+        }
       }
       else
       {
-        tles = TlesFromText(content, sourceLabel);
+        records = TlesFromText(content, sourceLabel);
       }
 
-      foreach (SatnogsDbTle tle in tles)
+      foreach (SatnogsDbTle record in records)
       {
-        if (tle.norad_cat_id == null && !string.IsNullOrWhiteSpace(tle.tle1))
-          tle.norad_cat_id = ParseNoradId(tle.tle1);
+        if (record.omm != null)
+        {
+          record.norad_cat_id =
+            checked((int)record.omm.NoradCatID);
+          if (string.IsNullOrWhiteSpace(record.tle0))
+            record.tle0 =
+              string.IsNullOrWhiteSpace(record.omm.ObjectName)
+                ? $"NORAD {record.omm.NoradCatID}"
+                : record.omm.ObjectName;
+          if (record.updated == default)
+            record.updated = record.omm.Epoch;
+        }
+        else if (record.norad_cat_id == null &&
+                 !string.IsNullOrWhiteSpace(record.tle1))
+        {
+          record.norad_cat_id = ParseNoradId(record.tle1);
+        }
 
-        if (string.IsNullOrWhiteSpace(tle.tle_source))
-          tle.tle_source = sourceLabel;
+        if (string.IsNullOrWhiteSpace(record.tle_source))
+          record.tle_source = sourceLabel;
 
-        if (tle.updated == default)
-          tle.updated = DateTime.UtcNow;
+        if (record.updated == default)
+          record.updated = DateTime.UtcNow;
       }
 
-      return tles;
+      return records;
+    }
+
+    internal static bool LooksLikeOmmCsv(string content)
+    {
+      string? header = content
+        .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+        .Select(line => line.Trim())
+        .FirstOrDefault();
+
+      if (header == null) return false;
+
+      return
+        header.Contains("NORAD_CAT_ID", StringComparison.OrdinalIgnoreCase) &&
+        header.Contains("EPOCH", StringComparison.OrdinalIgnoreCase) &&
+        header.Contains("MEAN_MOTION", StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static bool LooksLikeOmmJson(string content)
+    {
+      try
+      {
+        JToken root = JToken.Parse(content);
+        JObject? first =
+          root is JArray array
+            ? array.OfType<JObject>().FirstOrDefault()
+            : null;
+
+        if (first == null) return false;
+
+        return
+          first.GetValue("NORAD_CAT_ID", StringComparison.OrdinalIgnoreCase) != null &&
+          first.GetValue("EPOCH", StringComparison.OrdinalIgnoreCase) != null &&
+          first.GetValue("MEAN_MOTION", StringComparison.OrdinalIgnoreCase) != null;
+      }
+      catch (JsonException)
+      {
+        return false;
+      }
+    }
+
+    internal static SatnogsDbTleList TlesFromOmm(
+      IEnumerable<OmmData> ommRecords,
+      string sourceLabel)
+    {
+      SatnogsDbTleList records = new();
+
+      foreach (OmmData omm in ommRecords)
+      {
+        if (omm.NoradCatID == 0 ||
+            omm.Epoch == DateTime.MinValue ||
+            omm.MeanMotion == 0)
+          continue;
+
+        records.Add(
+          new SatnogsDbTle
+          {
+            tle0 =
+              string.IsNullOrWhiteSpace(omm.ObjectName)
+                ? $"NORAD {omm.NoradCatID}"
+                : omm.ObjectName,
+            tle1 = string.Empty,
+            tle2 = string.Empty,
+            tle_source = sourceLabel,
+            norad_cat_id = checked((int)omm.NoradCatID),
+            updated = omm.Epoch,
+            omm = omm
+          });
+      }
+
+      return records;
     }
 
     private int ApplyTles(
-      IEnumerable<SatnogsDbTle> tles,
-      bool createMissingSatellites)
+      IEnumerable<SatnogsDbTle> records,
+      bool createMissingSatellites,
+      bool manualOverride = false,
+      DateTime? manualExpiresUtc = null)
     {
-      int applied = 0;
+      if (manualOverride && manualExpiresUtc == null)
+        throw new ArgumentException(
+          "Manual orbit overrides require an expiration time.",
+          nameof(manualExpiresUtc));
 
-      foreach (SatnogsDbTle tle in tles)
+      int applied = 0;
+      DateTime now = DateTime.UtcNow;
+
+      foreach (SatnogsDbTle record in records)
       {
-        if (tle.norad_cat_id == null) continue;
+        if (record.norad_cat_id == null) continue;
 
         SatnogsDbSatellite? sat = Satellites
-          .FirstOrDefault(s => s.norad_cat_id == tle.norad_cat_id);
+          .FirstOrDefault(s => s.norad_cat_id == record.norad_cat_id);
 
         if (sat == null && createMissingSatellites)
         {
-          string satId = $"CUSTOM-{tle.norad_cat_id.Value:00000}";
-          string name = NormalizeTleName(tle.tle0, tle.norad_cat_id.Value);
+          string satId = $"CUSTOM-{record.norad_cat_id.Value:00000}";
+          string name = NormalizeTleName(record.tle0, record.norad_cat_id.Value);
 
           sat = new SatnogsDbSatellite
           {
             sat_id = satId,
-            norad_cat_id = tle.norad_cat_id,
+            norad_cat_id = record.norad_cat_id,
             name = name,
             names = string.Empty,
             image = string.Empty,
@@ -1372,9 +1482,9 @@ namespace SkyRoof
             @operator = string.Empty,
             countries = string.Empty,
             telemetries = new SatnogsDbSatellite.Telemetries(),
-            citation = tle.tle_source ?? string.Empty,
+            citation = record.tle_source ?? string.Empty,
             associated_satellites = new List<string>(),
-            updated = tle.updated
+            updated = record.updated
           };
 
           SatelliteList[satId] = sat;
@@ -1382,16 +1492,28 @@ namespace SkyRoof
 
         if (sat == null) continue;
 
-        tle.sat_id = sat.sat_id;
-        sat.SetTle(tle);
-        sat.updated = tle.updated;
+        record.sat_id = sat.sat_id;
+
+        if (manualOverride)
+          sat.SetManualTle(
+            record,
+            manualExpiresUtc!.Value,
+            now);
+        else
+          sat.SetAutomaticTle(
+            record,
+            now);
+
+        sat.updated = sat.Tle?.updated ?? record.updated;
         sat.BuildAllNames();
         sat.SetFlags();
         applied++;
       }
 
+      loaded = SatelliteList.Count > 0;
       return applied;
     }
+
 
     internal static SatnogsDbTleList TlesFromText(
       string tleContent,
