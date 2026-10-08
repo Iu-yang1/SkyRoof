@@ -57,6 +57,7 @@ namespace SkyRoof
     private volatile bool IcomScopeOutputPending;
     private readonly IcomScopeCommandQueue IcomScopeControlCommands =
       new(capacity: 24);
+    private volatile bool IcomScopeReadbackPending;
 
     internal int PendingIcomScopeControlCount =>
       IcomScopeControlCommands.Count;
@@ -72,6 +73,8 @@ namespace SkyRoof
 
     public event EventHandler? RxTuned;
     public event EventHandler? TxTuned;
+    internal event Action<IcomScopeReadbackState>?
+      IcomScopeReadbackReceived;
 
     public CatControlEngine(CatRadioSettings radioSettings, CatSettings catSettings) : base(radioSettings.Host, radioSettings.Port, catSettings)
     {
@@ -208,7 +211,17 @@ namespace SkyRoof
     internal void CancelIcomScopeRequests()
     {
       IcomScopeOutputPending = false;
+      IcomScopeReadbackPending = false;
       IcomScopeControlCommands.Clear();
+    }
+
+    internal bool RequestIcomScopeReadback()
+    {
+      if (!SupportsIcomScopeOutput)
+        return false;
+
+      IcomScopeReadbackPending = true;
+      return true;
     }
 
     internal bool RequestIcomScopeCommand(
@@ -272,6 +285,9 @@ namespace SkyRoof
             out string? scopeCommand))
         TryWriteIcomScopeControl(
           scopeCommand);
+
+      if (IcomScopeReadbackPending)
+        TryReadIcomScopeState();
 
       if (RequestedArmingTone.HasValue) TrySendArmingTone();
     }
@@ -800,6 +816,56 @@ namespace SkyRoof
         Log.Warning(
           "SkyCAT did not accept all IC-9700 scope output commands. " +
           "Update SkyCAT to a build that supports U SCOPE / U SCOPE_DATA.");
+    }
+
+
+    private void TryReadIcomScopeState()
+    {
+      IcomScopeReadbackPending = false;
+
+      if (!ReferenceEquals(
+            commands,
+            RigCtldCommands.SkyCat))
+        return;
+
+      string? reply =
+        SendReadCommand(
+          "U SCOPE_READ");
+
+      if (string.IsNullOrWhiteSpace(
+            reply))
+      {
+        Log.Warning(
+          "SkyCAT returned no IC-9700 scope readback.");
+        return;
+      }
+
+      if (reply.StartsWith(
+            "RPRT ",
+            StringComparison.Ordinal))
+      {
+        Log.Warning(
+          "SkyCAT IC-9700 scope readback failed: {Reply}",
+          reply);
+        return;
+      }
+
+      try
+      {
+        IcomScopeReadbackState state =
+          IcomScopeReadbackState.Parse(
+            reply);
+
+        IcomScopeReadbackReceived?.Invoke(
+          state);
+      }
+      catch (FormatException ex)
+      {
+        Log.Warning(
+          ex,
+          "SkyCAT returned malformed IC-9700 scope readback: {Reply}",
+          reply);
+      }
     }
 
 
