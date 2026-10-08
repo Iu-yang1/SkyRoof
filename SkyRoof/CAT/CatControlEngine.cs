@@ -56,7 +56,7 @@ namespace SkyRoof
     // does not create a second Icom LAN session.
     private volatile bool IcomScopeOutputPending;
     private readonly IcomScopeCommandQueue IcomScopeControlCommands =
-      new(capacity: 24);
+      new(capacity: 32);
     private volatile bool IcomScopeReadbackPending;
     private IcomFixedEdgeReadbackRequest? IcomFixedEdgeReadbackPending;
 
