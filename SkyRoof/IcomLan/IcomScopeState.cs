@@ -6,9 +6,13 @@ namespace SkyRoof
   /// </summary>
   internal sealed class IcomScopeState
   {
+    private static readonly TimeSpan AutoFailoverDelay =
+      TimeSpan.FromMilliseconds(750);
+
     private IcomScopeFrame? MainFrameValue;
     private IcomScopeFrame? SubFrameValue;
     private int SelectedBandValue = (int)IcomLanScopeBand.Auto;
+    private int AutoScopeValue = -1;
 
     internal IcomLanScopeBand SelectedBand
     {
@@ -30,6 +34,34 @@ namespace SkyRoof
         Volatile.Write(ref SubFrameValue, frame);
       else
         Volatile.Write(ref MainFrameValue, frame);
+
+      if (SelectedBand !=
+          IcomLanScopeBand.Auto)
+        return;
+
+      // AUTO is intentionally sticky. Prefer MAIN whenever it is active, and
+      // fail over to SUB only after MAIN has gone stale. This prevents passive
+      // captures that contain both receivers from alternating the entire view
+      // and invalidating the waterfall mapping on every frame.
+      if (frame.Scope == 0)
+      {
+        Volatile.Write(
+          ref AutoScopeValue,
+          0);
+        return;
+      }
+
+      IcomScopeFrame? main =
+        Volatile.Read(
+          ref MainFrameValue);
+
+      if (main == null ||
+          frame.TimestampUtc -
+            main.TimestampUtc >
+            AutoFailoverDelay)
+        Volatile.Write(
+          ref AutoScopeValue,
+          1);
     }
 
     internal bool ShouldDisplay(IcomScopeFrame frame)
@@ -39,9 +71,16 @@ namespace SkyRoof
 
       return SelectedBand switch
       {
-        IcomLanScopeBand.Main => frame.Scope == 0,
-        IcomLanScopeBand.Sub => frame.Scope == 1,
-        _ => true
+        IcomLanScopeBand.Main =>
+          frame.Scope == 0,
+        IcomLanScopeBand.Sub =>
+          frame.Scope == 1,
+        _ =>
+          Volatile.Read(
+            ref AutoScopeValue) < 0 ||
+          frame.Scope ==
+            Volatile.Read(
+              ref AutoScopeValue)
       };
     }
 
@@ -56,9 +95,18 @@ namespace SkyRoof
 
         return SelectedBand switch
         {
-          IcomLanScopeBand.Main => main,
-          IcomLanScopeBand.Sub => sub,
-          _ => Newer(main, sub)
+          IcomLanScopeBand.Main =>
+            main,
+          IcomLanScopeBand.Sub =>
+            sub,
+          _ =>
+            Volatile.Read(
+              ref AutoScopeValue) switch
+            {
+              0 => main ?? sub,
+              1 => sub ?? main,
+              _ => Newer(main, sub)
+            }
         };
       }
     }
@@ -74,6 +122,9 @@ namespace SkyRoof
       Volatile.Write(
         ref SubFrameValue,
         null);
+      Volatile.Write(
+        ref AutoScopeValue,
+        -1);
     }
 
     private static IcomScopeFrame? Newer(
