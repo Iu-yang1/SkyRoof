@@ -1073,6 +1073,7 @@ namespace SkyRoof
         ctx.Settings.IcomLanSpectrum;
 
       return
+        Capture != null &&
         settings.Source !=
           IcomLanSpectrumSource.DirectLan &&
         IcomScopeController.ResolveControlPath(
