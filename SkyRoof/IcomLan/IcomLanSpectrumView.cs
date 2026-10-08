@@ -277,6 +277,16 @@ namespace SkyRoof
               frame))
         {
           ClearMappedHistoryLocked();
+
+          if (HorizontalZoomFactor != 1.0 ||
+              Math.Abs(
+                HorizontalZoomCenter -
+                0.5) >
+                1e-12)
+          {
+            HorizontalZoomFactor = 1.0;
+            HorizontalZoomCenter = 0.5;
+          }
         }
         else if (previousFrame != null)
         {
@@ -1475,6 +1485,12 @@ namespace SkyRoof
         if (frame.OutOfRange)
           right += " · OUT OF RANGE";
 
+        if (HorizontalZoomFactor > 1.0)
+          left += $" · ZOOM {ZoomFactor}×";
+
+        if (AverageSweepCount > 1)
+          left += $" · AVG {AverageSweepCount}";
+
         if (HoldEnabled)
           left += " · HOLD";
       }
@@ -1590,13 +1606,17 @@ namespace SkyRoof
       DrawTrace(
         graphics,
         plot,
-        samples);
+        samples,
+        HorizontalZoomFactor,
+        HorizontalZoomCenter);
 
       if (peakVisible)
         DrawPeakTrace(
           graphics,
           plot,
-          peakSamples);
+          peakSamples,
+          HorizontalZoomFactor,
+          HorizontalZoomCenter);
 
       DrawFrequencyMarker(
         graphics,
@@ -1644,13 +1664,25 @@ namespace SkyRoof
            i <= intervals;
            i++)
       {
-        double fraction =
+        double plotFraction =
           i / (double)intervals;
+
+        GetVisibleFractionRange(
+          HorizontalZoomFactor,
+          HorizontalZoomCenter,
+          out double visibleStart,
+          out double visibleEnd);
+
+        double fraction =
+          visibleStart +
+          plotFraction *
+          (visibleEnd -
+           visibleStart);
 
         int x =
           plot.Left +
           (int)Math.Round(
-            fraction *
+            plotFraction *
             Math.Max(
               0,
               plot.Width - 1));
@@ -1750,28 +1782,107 @@ namespace SkyRoof
     private static void DrawTrace(
       Graphics graphics,
       Rectangle plot,
-      byte[] samples)
+      byte[] samples,
+      double zoomFactor,
+      double zoomCenter)
+    {
+      DrawSampleTrace(
+        graphics,
+        plot,
+        samples,
+        zoomFactor,
+        zoomCenter,
+        Theme.IsDark
+          ? Theme.BrandBlue
+          : Theme.BlueDark,
+        1.25f,
+        DashStyle.Solid);
+    }
+
+    private static void DrawPeakTrace(
+      Graphics graphics,
+      Rectangle plot,
+      byte[] samples,
+      double zoomFactor,
+      double zoomCenter)
+    {
+      DrawSampleTrace(
+        graphics,
+        plot,
+        samples,
+        zoomFactor,
+        zoomCenter,
+        Theme.BrandPink,
+        1.0f,
+        DashStyle.Dot);
+    }
+
+    private static void DrawSampleTrace(
+      Graphics graphics,
+      Rectangle plot,
+      byte[] samples,
+      double zoomFactor,
+      double zoomCenter,
+      Color color,
+      float width,
+      DashStyle dashStyle)
     {
       if (samples.Length < 2)
         return;
 
+      GetVisibleFractionRange(
+        zoomFactor,
+        zoomCenter,
+        out double visibleStart,
+        out double visibleEnd);
+
+      int last =
+        samples.Length - 1;
+      int startIndex =
+        Math.Max(
+          0,
+          (int)Math.Floor(
+            visibleStart *
+            last) - 1);
+      int endIndex =
+        Math.Min(
+          last,
+          (int)Math.Ceiling(
+            visibleEnd *
+            last) + 1);
+
+      if (endIndex <= startIndex)
+        return;
+
       var points =
-        new PointF[samples.Length];
+        new List<PointF>(
+          endIndex -
+          startIndex +
+          1);
 
       float usableHeight =
         Math.Max(
           1,
           plot.Height - 4);
 
-      for (int i = 0;
-           i < samples.Length;
+      for (int i = startIndex;
+           i <= endIndex;
            i++)
       {
+        double fullFraction =
+          i /
+          (double)last;
+        double visibleFraction =
+          ToVisiblePlotFraction(
+            fullFraction,
+            zoomFactor,
+            zoomCenter);
+
         float x =
           plot.Left +
-          i *
-          (plot.Width - 1f) /
-          (samples.Length - 1f);
+          (float)(
+            visibleFraction *
+            (plot.Width - 1));
 
         float normalized =
           Math.Clamp(
@@ -1785,83 +1896,44 @@ namespace SkyRoof
           normalized *
           usableHeight;
 
-        points[i] =
+        points.Add(
           new PointF(
             x,
-            y);
+            y));
       }
 
-      Color traceColor =
-        Theme.IsDark
-          ? Theme.BrandBlue
-          : Theme.BlueDark;
-
-      using var tracePen =
-        new Pen(
-          traceColor,
-          1.25f);
-
-      graphics.DrawLines(
-        tracePen,
-        points);
-    }
-
-    private static void DrawPeakTrace(
-      Graphics graphics,
-      Rectangle plot,
-      byte[] samples)
-    {
-      if (samples.Length < 2)
+      if (points.Count < 2)
         return;
 
-      var points =
-        new PointF[samples.Length];
+      GraphicsState state =
+        graphics.Save();
 
-      float usableHeight =
-        Math.Max(
-          1,
-          plot.Height - 4);
-
-      for (int i = 0;
-           i < samples.Length;
-           i++)
+      try
       {
-        float x =
-          plot.Left +
-          i *
-          (plot.Width - 1f) /
-          (samples.Length - 1f);
+        graphics.SetClip(
+          plot);
 
-        float normalized =
-          Math.Clamp(
-            samples[i] / 160f,
-            0f,
-            1f);
+        using var pen =
+          new Pen(
+            color,
+            width)
+          {
+            DashStyle =
+              dashStyle
+          };
 
-        points[i] =
-          new PointF(
-            x,
-            plot.Bottom -
-            2 -
-            normalized *
-            usableHeight);
+        graphics.DrawLines(
+          pen,
+          points.ToArray());
       }
-
-      using var pen =
-        new Pen(
-          Theme.BrandPink,
-          1.0f)
-        {
-          DashStyle =
-            DashStyle.Dot
-        };
-
-      graphics.DrawLines(
-        pen,
-        points);
+      finally
+      {
+        graphics.Restore(
+          state);
+      }
     }
 
-    private static void DrawPassband(
+    private void DrawPassband(
       Graphics graphics,
       Rectangle plot,
       IcomScopeGeometry geometry,
@@ -1902,8 +1974,21 @@ namespace SkyRoof
           checked(high - displayOffsetHz));
 
       if (double.IsNaN(lowFraction) ||
-          double.IsNaN(highFraction) ||
-          highFraction < 0 ||
+          double.IsNaN(highFraction))
+        return;
+
+      lowFraction =
+        ToVisiblePlotFraction(
+          lowFraction,
+          HorizontalZoomFactor,
+          HorizontalZoomCenter);
+      highFraction =
+        ToVisiblePlotFraction(
+          highFraction,
+          HorizontalZoomFactor,
+          HorizontalZoomCenter);
+
+      if (highFraction < 0 ||
           lowFraction > 1)
         return;
 
@@ -1950,7 +2035,7 @@ namespace SkyRoof
           plot.Bottom));
     }
 
-    private static void DrawFrequencyMarker(
+    private void DrawFrequencyMarker(
       Graphics graphics,
       Rectangle plot,
       IcomScopeGeometry geometry,
@@ -1971,8 +2056,15 @@ namespace SkyRoof
         return;
 
       double fraction =
-        geometry.FractionForFrequency(
-          rawFrequency);
+        ToVisiblePlotFraction(
+          geometry.FractionForFrequency(
+            rawFrequency),
+          HorizontalZoomFactor,
+          HorizontalZoomCenter);
+
+      if (fraction < 0 ||
+          fraction > 1)
+        return;
 
       int x =
         plot.Left +
@@ -2034,12 +2126,33 @@ namespace SkyRoof
             PointerLocation))
         return;
 
-      double fraction =
+      double plotFraction =
         (PointerLocation.X -
          plot.Left) /
         (double)Math.Max(
           1,
           plot.Width - 1);
+
+      double cursorZoomFactor =
+        FrequencyTuning
+          ? TuneGestureZoomFactor
+          : HorizontalZoomFactor;
+      double cursorZoomCenter =
+        FrequencyTuning
+          ? TuneGestureZoomCenter
+          : HorizontalZoomCenter;
+
+      GetVisibleFractionRange(
+        cursorZoomFactor,
+        cursorZoomCenter,
+        out double visibleStart,
+        out double visibleEnd);
+
+      double fraction =
+        visibleStart +
+        plotFraction *
+        (visibleEnd -
+         visibleStart);
 
       long cursorDisplayOffsetHz =
         FrequencyTuning
@@ -2388,15 +2501,41 @@ namespace SkyRoof
           WaterfallRows.Length == 0)
         return;
 
+      GetVisibleFractionRange(
+        HorizontalZoomFactor,
+        HorizontalZoomCenter,
+        out double visibleStart,
+        out double visibleEnd);
+
+      int sourceLeft =
+        Math.Clamp(
+          (int)Math.Floor(
+            visibleStart *
+            (WaterfallBitmap.Width - 1)),
+          0,
+          WaterfallBitmap.Width - 1);
+
+      int sourceRight =
+        Math.Clamp(
+          (int)Math.Ceiling(
+            visibleEnd *
+            (WaterfallBitmap.Width - 1)) + 1,
+          sourceLeft + 1,
+          WaterfallBitmap.Width);
+
+      int sourceWidth =
+        sourceRight -
+        sourceLeft;
+
       if (WaterfallHead < 0)
       {
         graphics.DrawImage(
           WaterfallBitmap,
           destination,
           new Rectangle(
+            sourceLeft,
             0,
-            0,
-            WaterfallBitmap.Width,
+            sourceWidth,
             WaterfallBitmap.Height),
           GraphicsUnit.Pixel);
         return;
@@ -2431,9 +2570,9 @@ namespace SkyRoof
             destination.Width,
             firstHeight),
           new Rectangle(
-            0,
+            sourceLeft,
             WaterfallHead,
-            WaterfallBitmap.Width,
+            sourceWidth,
             firstRows),
           GraphicsUnit.Pixel);
       }
@@ -2456,9 +2595,9 @@ namespace SkyRoof
             destination.Width,
             secondHeight),
           new Rectangle(
+            sourceLeft,
             0,
-            0,
-            WaterfallBitmap.Width,
+            sourceWidth,
             secondRows),
           GraphicsUnit.Pixel);
       }
