@@ -1013,6 +1013,109 @@ namespace VE3NEA.Dsp.Tests
 
 
     [Fact]
+    public void ScopeCommandQueue_CoalescesLatestValueWithoutReorderingOtherKinds()
+    {
+      var queue =
+        new IcomScopeCommandQueue(
+          capacity: 8);
+
+      queue.Enqueue(
+        "U SCOPE_MODE MAIN CENTER");
+      queue.Enqueue(
+        "U SCOPE_EDGE MAIN 1");
+      queue.Enqueue(
+        "U SCOPE_MODE MAIN FIXED");
+
+      queue.Count.Should().Be(2);
+
+      queue.TryDequeue(
+        out string? first).Should().BeTrue();
+      first.Should().Be(
+        "U SCOPE_MODE MAIN FIXED");
+
+      queue.TryDequeue(
+        out string? second).Should().BeTrue();
+      second.Should().Be(
+        "U SCOPE_EDGE MAIN 1");
+    }
+
+    [Fact]
+    public void ScopeCommandQueue_KeepsMainAndSubTargetsIndependent()
+    {
+      var queue =
+        new IcomScopeCommandQueue(
+          capacity: 8);
+
+      queue.Enqueue(
+        "U SCOPE_REF MAIN 0.0");
+      queue.Enqueue(
+        "U SCOPE_REF SUB -3.5");
+      queue.Enqueue(
+        "U SCOPE_REF MAIN 2.0");
+
+      queue.Count.Should().Be(2);
+
+      queue.TryDequeue(
+        out string? main).Should().BeTrue();
+      main.Should().Be(
+        "U SCOPE_REF MAIN 2.0");
+
+      queue.TryDequeue(
+        out string? sub).Should().BeTrue();
+      sub.Should().Be(
+        "U SCOPE_REF SUB -3.5");
+    }
+
+    [Fact]
+    public void ScopeCommandQueue_CoalescesFixedEdgeByRangeAndEdgeNumber()
+    {
+      var queue =
+        new IcomScopeCommandQueue(
+          capacity: 8);
+
+      queue.Enqueue(
+        "U SCOPE_FIXED_EDGE 2 1 435000000 436000000");
+      queue.Enqueue(
+        "U SCOPE_FIXED_EDGE 2 1 435100000 436100000");
+
+      queue.Count.Should().Be(1);
+
+      queue.TryDequeue(
+        out string? command).Should().BeTrue();
+      command.Should().Be(
+        "U SCOPE_FIXED_EDGE 2 1 435100000 436100000");
+    }
+
+    [Fact]
+    public void ScopeCommandQueue_DropsOldestDistinctCommandAtCapacity()
+    {
+      var queue =
+        new IcomScopeCommandQueue(
+          capacity: 2);
+
+      queue.Enqueue(
+        "U SCOPE_MODE MAIN CENTER");
+      queue.Enqueue(
+        "U SCOPE_EDGE MAIN 1");
+      queue.Enqueue(
+        "U SCOPE_REF MAIN 0.0");
+
+      queue.Count.Should().Be(2);
+      queue.DroppedCount.Should().Be(1);
+
+      queue.TryDequeue(
+        out string? first).Should().BeTrue();
+      first.Should().Be(
+        "U SCOPE_EDGE MAIN 1");
+
+      queue.TryDequeue(
+        out string? second).Should().BeTrue();
+      second.Should().Be(
+        "U SCOPE_REF MAIN 0.0");
+    }
+
+
+    [Fact]
     public void ScopeController_RoutesExplicitSkyCatControlIndependentlyFromRsBa1Data()
     {
       IcomScopeControlRequest? received = null;
