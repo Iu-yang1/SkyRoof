@@ -1054,6 +1054,9 @@ namespace SkyRoof
       UdpClient civ,
       CancellationToken token)
     {
+      // Direct LAN periodically reasserts only the minimum commands needed
+      // to keep scope waveform output alive. Do not force MAIN/SUB sweep speed
+      // (or any other operator scope preference) from the transport layer.
       byte[][] commands =
       {
         new byte[]
@@ -1065,16 +1068,6 @@ namespace SkyRoof
         {
           0xFE, 0xFE, RadioCivAddress, 0xE0,
           0x27, 0x11, 0x01, 0xFD
-        },
-        new byte[]
-        {
-          0xFE, 0xFE, RadioCivAddress, 0xE0,
-          0x27, 0x1A, 0x00, 0x00, 0xFD
-        },
-        new byte[]
-        {
-          0xFE, 0xFE, RadioCivAddress, 0xE0,
-          0x27, 0x1A, 0x01, 0x00, 0xFD
         }
       };
 
