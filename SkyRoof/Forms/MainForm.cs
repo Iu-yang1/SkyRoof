@@ -1348,6 +1348,7 @@ namespace SkyRoof
 
       RotatorLedLabel.MouseDown += RotatorStatus_MouseDown;
       RotatorStatusLabel.MouseDown += RotatorStatus_MouseDown;
+      RotatorDropdownBtn.MouseDown += RotatorStatus_MouseDown;
     }
 
     private void RotatorStatus_MouseDown(
