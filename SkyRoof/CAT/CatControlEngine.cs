@@ -1,5 +1,4 @@
-﻿using System.Collections.Concurrent;
-using System.Globalization;
+﻿using System.Globalization;
 using Serilog;
 using SkyRoof.Properties;
 using VE3NEA;
@@ -56,8 +55,8 @@ namespace SkyRoof
     // command is sent by SkyCAT over the already-open CAT/virtual-serial path, so this
     // does not create a second Icom LAN session.
     private volatile bool IcomScopeOutputPending;
-    private readonly ConcurrentQueue<string> IcomScopeControlCommands =
-      new();
+    private readonly IcomScopeCommandQueue IcomScopeControlCommands =
+      new(capacity: 24);
 
     public event EventHandler? RxTuned;
     public event EventHandler? TxTuned;
@@ -204,8 +203,17 @@ namespace SkyRoof
             StringComparison.Ordinal))
         return false;
 
+      long droppedBefore =
+        IcomScopeControlCommands.DroppedCount;
+
       IcomScopeControlCommands.Enqueue(
         command);
+
+      if (IcomScopeControlCommands.DroppedCount >
+          droppedBefore)
+        Log.Warning(
+          "IC-9700 scope-control queue was full; dropped the oldest pending command before queuing {Command}",
+          command);
 
       LogInfo(
         $"Queued IC-9700 scope control: {command}");
