@@ -631,8 +631,14 @@ namespace SkyRoof
 
     private void LoadTleMNU_Click(object sender, EventArgs e)
     {
-      var dlg = new OpenFileDialog();
-      dlg.Filter = "JSON Files (*.json)|*.json|Text Files (*.txt)|*.txt|All Files (*.*)|*.*";
+      var dlg = new OpenFileDialog
+      {
+        Filter =
+          "Orbit Elements (*.csv;*.json;*.txt)|*.csv;*.json;*.txt|" +
+          "OMM CSV (*.csv)|*.csv|OMM / SatNOGS JSON (*.json)|*.json|" +
+          "TLE Text (*.txt)|*.txt|All Files (*.*)|*.*",
+        Title = "Load Manual Orbit Elements (priority for 3 days)"
+      };
       if (dlg.ShowDialog() != DialogResult.OK) return;
 
       ctx.SatnogsDb.LoadTleFromFile(dlg.FileName);
@@ -1434,6 +1440,12 @@ namespace SkyRoof
     {
       CheckDownloadSatelliteList();
       CheckDownloadTle();
+
+      // Manual file imports temporarily outrank CelesTrak for 72 hours.
+      // Releasing an expired override here makes the already-persisted
+      // automatic fallback active even when no network request is needed.
+      ctx.SatnogsDb.ReleaseExpiredManualOrbitPriority(DateTime.UtcNow);
+
       ctx.AmsatStatusLoader.GetStatusesAsync();
     }
 
