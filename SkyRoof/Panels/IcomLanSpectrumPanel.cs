@@ -136,6 +136,13 @@ namespace SkyRoof
               ScopeBandBox.SelectedIndex,
               0,
               2);
+          IcomLanScopeBand previous =
+            ScopeState.SelectedBand;
+
+          if (selected !=
+                IcomLanScopeBand.Auto &&
+              selected != previous)
+            ScopeState.Clear();
 
           ScopeState.SelectedBand =
             selected;
