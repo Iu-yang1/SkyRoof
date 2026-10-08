@@ -661,13 +661,12 @@ namespace SkyRoof
       NativeLanAssistCapture?.Start();
       capture.Start();
 
-      if (UsingSkyCatScopeSource)
-        RequestScopeOutputIfDue(
-          force: true);
+      // Scope-output control is independent from the waveform transport.
+      // The controller itself decides whether the configured path is writable,
+      // so this also covers passive RS-BA1 waveform + explicit SkyCAT control.
+      RequestScopeOutputIfDue(
+        force: true);
 
-      // Control is independent from the waveform source. This applies equally
-      // to native SkyCAT spectrum data and to passive RS-BA1 waveform data with
-      // an explicitly selected SkyCAT control path.
       QueueSavedScopeControlsIfWritable();
     }
 
@@ -1234,7 +1233,9 @@ namespace SkyRoof
             : capture.IsSkyCatStream
               ? capture.PacketCount == 0
                 ? $"Connected/waiting for SkyCAT scope TCP/{ctx.Settings.IcomLanSpectrum.SkyCatScopePort}; " +
-                  "CI-V 27 10 / 27 11 are being reasserted."
+                  (CanUseSkyCatScopeControl()
+                    ? "CI-V 27 10 / 27 11 are being reasserted."
+                    : "scope output control is read-only.")
                 : "SkyCAT scope stream is connected, but no complete CI-V 27 00 sweep has been assembled yet."
               : capture.PacketCount == 0
                 ? $"Listening for IC-9700 UDP/{ctx.Settings.IcomLanSpectrum.SerialPort} traffic..."
