@@ -17,6 +17,7 @@ namespace SkyRoof
     private ToolStripControlHost? RotatorControlHost;
     private ToolStripDropDown? RotatorControlPopup;
     private MouseButtons LastRotatorStatusMouseButton;
+    private ToolStripProfessionalRenderer? LightThemeRenderer;
 
     public MainForm()
     {
@@ -143,6 +144,9 @@ namespace SkyRoof
         ctx.Settings.Waterfall.SplitterDistance = ctx.WaterfallPanel.SplitContainer.SplitterDistance;
 
       ctx.Settings.SaveToFile();
+
+      LightThemeRenderer?.Dispose();
+      LightThemeRenderer = null;
 
       // dispose sdr and dsp
       ctx.Sdr?.Dispose();
@@ -1109,8 +1113,42 @@ namespace SkyRoof
     {
       // the DockPanelSuite theme must be selected before any DockContent is created: its setter
       // throws when dock content exists, which is one reason the theme is a startup setting.
-      // Application.SetColorMode has already been called in Program.Main
-      DockHost.Theme = Theme.IsDark ? new VS2015DarkTheme() : new VS2015LightTheme();
+      // Application.SetColorMode has already been called in Program.Main.
+      if (Theme.IsDark)
+      {
+        DockHost.Theme =
+          new VS2015DarkTheme();
+      }
+      else
+      {
+        DockHost.Theme =
+          new PinkBlueLightDockTheme();
+
+        // The main menu and status bar are outside DockPanelSuite, so give
+        // them the same pink / blue / white light-theme chrome explicitly.
+        LightThemeRenderer =
+          new ToolStripProfessionalRenderer(
+            new PinkBlueToolStripColorTable())
+          {
+            RoundedEdges = false
+          };
+
+        menuStrip1.Renderer =
+          LightThemeRenderer;
+        StatusStrip.Renderer =
+          LightThemeRenderer;
+
+        Toolbar.BackColor =
+          Theme.BrandWhite;
+        menuStrip1.BackColor =
+          Theme.BrandWhite;
+        menuStrip1.ForeColor =
+          Theme.LightInk;
+        StatusStrip.BackColor =
+          Theme.BrandPink;
+        StatusStrip.ForeColor =
+          Theme.LightInk;
+      }
 
       ShowThemeMenuChecks();
     }
