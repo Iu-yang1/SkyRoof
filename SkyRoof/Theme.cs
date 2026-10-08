@@ -362,6 +362,111 @@ namespace SkyRoof
         GitHubThemeColors.Light.Accent,
         GitHubThemeColors.Dark.Accent);
 
+    // IC-9700 spectrum view. Keep the existing Light/Dark appearance exactly
+    // as before, while GitHub themes use Primer-like blue/neutral/status roles.
+    public static Color SpectrumBackground =>
+      Pick(
+        BrandWhite,
+        Color.FromArgb(12, 16, 20),
+        GitHubThemeColors.Light.CanvasDefault,
+        GitHubThemeColors.Dark.CanvasDefault);
+
+    public static Color SpectrumText =>
+      Pick(
+        LightInk,
+        Color.Gainsboro,
+        GitHubThemeColors.Light.TextPrimary,
+        GitHubThemeColors.Dark.TextPrimary);
+
+    public static Color SpectrumGrid =>
+      Pick(
+        Color.FromArgb(90, BrandBlue),
+        Color.FromArgb(65, 105, 112, 118),
+        Color.FromArgb(
+          86,
+          GitHubThemeColors.Light.Accent),
+        Color.FromArgb(
+          92,
+          GitHubThemeColors.Dark.Accent));
+
+    public static Color SpectrumSubGrid =>
+      Pick(
+        Color.FromArgb(45, BrandPink),
+        Color.FromArgb(50, 95, 95, 95),
+        Color.FromArgb(
+          76,
+          GitHubThemeColors.Light.BorderDefault),
+        Color.FromArgb(
+          88,
+          GitHubThemeColors.Dark.BorderDefault));
+
+    public static Color SpectrumTrace =>
+      Pick(
+        BlueDark,
+        BrandBlue,
+        GitHubThemeColors.Light.Accent,
+        GitHubThemeColors.Dark.Accent);
+
+    public static Color SpectrumPeak =>
+      Pick(
+        BrandPink,
+        BrandPink,
+        GitHubThemeColors.Light.Attention,
+        GitHubThemeColors.Dark.Attention);
+
+    public static Color SpectrumTxFill =>
+      Pick(
+        Color.FromArgb(54, BrandPink),
+        Color.FromArgb(44, BrandPink),
+        Color.FromArgb(
+          48,
+          GitHubThemeColors.Light.Danger),
+        Color.FromArgb(
+          54,
+          GitHubThemeColors.Dark.Danger));
+
+    public static Color SpectrumTxMarker =>
+      Pick(
+        BrandPink,
+        BrandPink,
+        GitHubThemeColors.Light.Danger,
+        GitHubThemeColors.Dark.Danger);
+
+    public static Color SpectrumTxText =>
+      Pick(
+        PinkDark,
+        Color.White,
+        GitHubThemeColors.Light.Danger,
+        GitHubThemeColors.Dark.Danger);
+
+    public static Color SpectrumCursor =>
+      Pick(
+        BlueDark,
+        Color.FromArgb(185, 235, 235, 235),
+        GitHubThemeColors.Light.TextSecondary,
+        GitHubThemeColors.Dark.TextSecondary);
+
+    public static Color SpectrumReadoutBorder =>
+      Pick(
+        BrandBlue,
+        Color.Gray,
+        GitHubThemeColors.Light.BorderDefault,
+        GitHubThemeColors.Dark.BorderDefault);
+
+    public static Color SpectrumHoldBack =>
+      Pick(
+        BlueWash,
+        Color.FromArgb(36, 42, 48),
+        GitHubThemeColors.Light.CanvasSubtle,
+        GitHubThemeColors.Dark.CanvasSubtle);
+
+    public static Color SpectrumHoldLine =>
+      Pick(
+        BlueDark,
+        Color.FromArgb(105, 115, 125),
+        GitHubThemeColors.Light.BorderDefault,
+        GitHubThemeColors.Dark.BorderDefault);
+
     // Signal Details provenance: the color of a value a decoded frame has confirmed - the field dots, the
     // gear glyph and the dialog's status line. The text is what sets the requirement: LimeGreen carries a
     // dot on either ground but washes out as text on #F0F0F0, the same 1.5:1 the passband above trades
