@@ -192,55 +192,14 @@ namespace SkyRoof
       bool useRit,
       bool lightweightUi)
     {
-      if (!RadioLink.HasDownlink ||
-          !double.IsFinite(
-            targetFrequency))
+      if (!RadioLink.SetCorrectedDownlinkFrequency(
+            targetFrequency,
+            useRit))
         return;
-
-      // Lock the gesture semantics before calculating the delta. This matters
-      // when an earlier gesture left RIT enabled: disabling RIT changes the
-      // corrected RX frequency, so calculating against the old corrected value
-      // would miss the requested spectrum frequency by the previous RIT offset.
-      bool ritModeChanged =
-        RadioLink.RitEnabled !=
-        useRit;
-
-      RadioLink.RitEnabled =
-        useRit;
-      RadioLink.ComputeFrequencies();
-
-      double deltaExact =
-        targetFrequency -
-        RadioLink.CorrectedDownlinkFrequency;
-
-      long deltaRounded =
-        checked((long)Math.Round(
-          deltaExact,
-          MidpointRounding.AwayFromZero));
-
-      // A RIT-mode transition can change the corrected radio frequency even
-      // when the target needs no additional delta. In that case we must still
-      // push the recomputed frequency to CAT/SDR.
-      if (deltaRounded == 0 &&
-          !ritModeChanged)
-        return;
-
-      // Scope geometry is bounded to the IC-9700 bands, but keep this method
-      // robust if another caller supplies a wider target in the future.
-      int delta =
-        (int)Math.Clamp(
-          deltaRounded,
-          int.MinValue,
-          int.MaxValue);
 
       // CAT polling reads before writes. Ignore the old dial readback while
       // the spectrum gesture is actively driving the new RX target.
       SuppressCatTuneFeedback();
-
-      if (delta != 0)
-        RadioLink.IncrementDownlinkFrequency(
-          delta);
-
       RadioLinkToRadio();
 
       if (lightweightUi)
