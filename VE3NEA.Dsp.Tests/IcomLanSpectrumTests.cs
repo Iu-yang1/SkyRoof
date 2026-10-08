@@ -524,27 +524,30 @@ namespace VE3NEA.Dsp.Tests
 
     [Theory]
     [InlineData(
-      IcomScopeControlKind.Mode,
+      (int)IcomScopeControlKind.Mode,
       "U SCOPE_MODE MAIN SCROLL-C")]
     [InlineData(
-      IcomScopeControlKind.Span,
+      (int)IcomScopeControlKind.Span,
       "U SCOPE_SPAN SUB 50000")]
     [InlineData(
-      IcomScopeControlKind.Edge,
+      (int)IcomScopeControlKind.Edge,
       "U SCOPE_EDGE MAIN 3")]
     [InlineData(
-      IcomScopeControlKind.ReferenceLevel,
+      (int)IcomScopeControlKind.ReferenceLevel,
       "U SCOPE_REF SUB -3.5")]
     [InlineData(
-      IcomScopeControlKind.SweepSpeed,
+      (int)IcomScopeControlKind.SweepSpeed,
       "U SCOPE_SPEED MAIN SLOW")]
     [InlineData(
-      IcomScopeControlKind.FixedEdge,
+      (int)IcomScopeControlKind.FixedEdge,
       "U SCOPE_FIXED_EDGE 2 1 435000000 436000000")]
     public void ScopeControlRequest_FormatsSkyCatPrivateCommand(
-      IcomScopeControlKind kind,
+      int kindValue,
       string expected)
     {
+      IcomScopeControlKind kind =
+        (IcomScopeControlKind)kindValue;
+
       IcomScopeControlRequest request =
         kind switch
         {
