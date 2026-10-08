@@ -181,6 +181,14 @@ namespace SkyRoof
         if (HoldEnabled)
           return;
 
+        IcomScopeFrame? previousFrame =
+          LatestFrame;
+
+        if (RequiresHistoryReset(
+              previousFrame,
+              frame))
+          ClearMappedHistoryLocked();
+
         LatestFrame = frame;
         Buffer.BlockCopy(
           frame.Samples,
@@ -240,17 +248,63 @@ namespace SkyRoof
       {
         LatestFrame = null;
         Array.Clear(LatestSamples);
-
-        foreach (byte[] row in WaterfallRows)
-          Array.Clear(row);
-
-        WaterfallHead = -1;
-        Array.Clear(PeakSamples);
-        PeakValid = false;
-        WaterfallDirty = true;
+        ClearMappedHistoryLocked();
       }
 
       Invalidate();
+    }
+
+    private void ClearMappedHistoryLocked()
+    {
+      foreach (byte[] row in WaterfallRows)
+        Array.Clear(row);
+
+      WaterfallHead = -1;
+      Array.Clear(PeakSamples);
+      PeakValid = false;
+      WaterfallDirty = true;
+    }
+
+    internal static bool RequiresHistoryReset(
+      IcomScopeFrame? previous,
+      IcomScopeFrame current)
+    {
+      if (previous == null)
+        return false;
+
+      if (previous.Scope !=
+          current.Scope ||
+          previous.Mode !=
+          current.Mode)
+        return true;
+
+      IcomScopeGeometry previousGeometry =
+        previous.Geometry;
+      IcomScopeGeometry currentGeometry =
+        current.Geometry;
+
+      if (!previousGeometry.IsValid ||
+          !currentGeometry.IsValid)
+        return false;
+
+      if (previousGeometry.SpanHz !=
+          currentGeometry.SpanHz)
+        return true;
+
+      // CENTER and SCROLL-C are expected to translate as the tuned frequency
+      // moves. Their horizontal scale remains valid as long as the span is
+      // unchanged. FIXED and SCROLL-F use programmed edge windows; moving
+      // those edges changes the frequency mapping and invalidates old rows.
+      if (current.Mode is
+            (byte)IcomScopeMode.Fixed or
+            (byte)IcomScopeMode.ScrollFixed)
+        return
+          previousGeometry.LowerFrequencyHz !=
+            currentGeometry.LowerFrequencyHz ||
+          previousGeometry.UpperFrequencyHz !=
+            currentGeometry.UpperFrequencyHz;
+
+      return false;
     }
 
     protected override void Dispose(bool disposing)
