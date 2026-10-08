@@ -77,13 +77,13 @@ namespace SkyRoof
 
     [DisplayName("Parking Azimuth")]
     [Description("Azimuth of the parking position")]
-    [DefaultValue(0)]
-    public int ParkAzimuth { get; set; }
+    [DefaultValue(0f)]
+    public float ParkAzimuth { get; set; }
 
     [DisplayName("Parking Elevation")]
     [Description("Elevation of the parking position")]
-    [DefaultValue(0)]
-    public int ParkElevation { get; set; }
+    [DefaultValue(0f)]
+    public float ParkElevation { get; set; }
 
     public override string ToString() { return string.Empty; }
   }
