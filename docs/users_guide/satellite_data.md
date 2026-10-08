@@ -61,39 +61,50 @@ The telemetry definition files in the **TelemetryRegistry** folder work the same
 `"readOnly": true` (camelCase, to match those files' key style) to a definition to keep your edits when
 SkyRoof updates its bundled definitions.
 
-## TLE
+## Orbit Elements (OMM / TLE)
 
-The satellite orbit elements ([TLE](https://celestrak.org/columns/v04n03/) data)
-are downloaded from **SatNOGS DB** by default.
+SkyRoof accepts both modern CCSDS **OMM** orbit elements and traditional **TLE** data. CelesTrak
+OMM CSV is the highest-priority automatic source by default. OMM CSV/JSON is propagated directly
+through SGP4 and is not converted back to the legacy 69-column TLE representation, so newer
+six-digit NORAD catalogue numbers remain usable.
 
-The built-in satellite-list, transmitter-list and primary TLE URLs are exposed in
-**Tools / Orbit / TLE Sources / Edit Source URLs** under **Orbit / Ephemeris Sources**.
-They are normal settings, so you can replace or clear them instead of editing source code.
+Automatic orbit sources are applied from lowest to highest priority:
 
-Additional TLE feeds can be entered in **Custom TLE Sources**. Separate multiple URLs or local
-file paths with semicolons or new lines. Plain 2-line/3-line TLE text and SatNOGS-style JSON are
-supported. For example:
+1. the original **SatNOGS** TLE source;
+2. the built-in **AutoTLE** source;
+3. **Manual Orbit Source URLs** configured by the operator (first entry has the highest priority
+   within this group);
+4. **CelesTrak OMM CSV**.
 
-```text
-http://autotle.bi4pym.cn/AutoTLE.txt
-```
+These URLs are exposed under **Tools / Orbit / TLE Sources / Edit Source URLs** in
+**Orbit / Ephemeris Sources**. The default CelesTrak source is the amateur GP/OMM CSV feed.
+Manual Orbit Source URLs may point to HTTP(S) URLs or local files and may contain traditional
+2-line/3-line TLE text, SatNOGS-style JSON, CelesTrak/CCSDS OMM JSON, or OMM CSV.
 
-Custom TLE feeds are the highest-priority orbit source and are applied after the primary source,
-so they override an existing NORAD object's current TLE and can also add tracking-only objects
-that are not present in the SatNOGS database. Within **Custom TLE Sources**, entries are ordered
-from highest to lowest priority: the first source wins over the second, the second over the third,
-and so on.
+### Temporary manual-file priority
 
-SatNOGS obtains these data from different sources and makes the latest and most reliable data
-available on their web site. The source of TLE and its creation time are shown in the
-[Satellite Details window](satellite_details_window.md)
-or [panel](satellite_details_panel.md):
+**Tools / Load Orbit Elements From File** imports CSV, JSON, or TXT files. A manual file
+import temporarily moves the imported objects above every automatic source, including CelesTrak.
+That manual priority lasts for exactly **3 days (72 hours) from the import time**.
 
-![TLE Date](../images/tle_date_details.png)
+Automatic downloads continue to refresh underneath the manual layer. When the 72-hour window
+expires, SkyRoof releases the manual priority automatically and immediately returns each object
+to its latest automatic orbit, normally the CelesTrak OMM CSV value. This expiration is persisted,
+so closing and reopening SkyRoof does not restart the three-day timer.
 
-and in the mouse tooltip of the satellite:
+The supported manual-file formats are:
 
-![TLE Date](../images/tle_date_tooltip.png)
+- **OMM CSV** from CelesTrak/CCSDS;
+- **OMM JSON** from CelesTrak/CCSDS;
+- **SatNOGS JSON** TLE records;
+- traditional **2-line or 3-line TLE text**.
+
+Orbit-only objects that do not exist in the SatNOGS transmitter database can still be created as
+tracking-only targets. This does not create or modify transmitter records.
+
+The active orbit source and element epoch are shown in the satellite details/tooltip. While a
+manual-file layer is active, the tooltip also shows when its temporary priority expires.
+
 
 ## JPL Ephemeris Sources
 
@@ -113,7 +124,7 @@ tracking-only objects and the managed **Solar System** group is immediately avai
 
 ## Automatic Updates
 
-SkyRoof automatically downloads the satellite list every 7 days, and TLE data every 24 hours.
+SkyRoof automatically downloads the satellite list every 7 days, and orbit-element data every 24 hours.
 
 The mouse tooltip of the Satellite Data label on the status bar shows the last download time:
 
@@ -124,18 +135,8 @@ The light next to the label turns yellow if the satellite data are not up to dat
 ## Manual Updates
 
 In addition to automatic downloads, the data may be manually downloaded at any time using
-the **Tools / Download All Satellite Data** and **Tools / Download Only TLE** menu commands.
+the **Tools / Download All Satellite Data** and **Tools / Download Orbit Elements** menu commands.
 
-## Loading TLE from File
-
-If your system is not connected to the Internet, you can load TLE data from a local file
-using the **Tools / Load TLE from File** menu command. Two TLE formats are supported:
-
-- **.json** - TLE data from the SatNOGS web site, recommended ([download](https://db.satnogs.org/api/tle/?format=json));
-- **.txt** - 3-line TLE data in a text file, available from many sources, e.g. CelesTrak
-    ([download](https://celestrak.org/NORAD/elements/gp.php?GROUP=amateur&FORMAT=tle)).
-
-Note that TLE import cannot add new satellites, it only loads orbital elements for the satellites already in the database.
 
 ## AMSAT Satellite Status
 
