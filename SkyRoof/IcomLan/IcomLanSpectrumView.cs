@@ -11,6 +11,8 @@ namespace SkyRoof
     private const int MinimumSpectrumHeight = 80;
     private const int MinimumWaterfallHeight = 60;
     private const int AxisHeight = 20;
+    private const int MouseWheelDelta = 120;
+    private const long MouseWheelTuneStepHz = 100;
 
     private readonly object DataSync = new();
     private int[] Palette =
@@ -977,6 +979,34 @@ namespace SkyRoof
         return;
 
       if (ModifierKeys.HasFlag(
+            Keys.Alt))
+      {
+        if (HoldEnabled ||
+            !IsCurrentScopeTunable() ||
+            ReceiveFrequencyHz <= 0)
+          return;
+
+        long target =
+          CalculateMouseWheelTuneTarget(
+            ReceiveFrequencyHz,
+            e.Delta);
+
+        if (target ==
+            ReceiveFrequencyHz)
+          return;
+
+        bool useRit =
+          ModifierKeys.HasFlag(
+            Keys.Control);
+
+        TuneFrequencyRequested?.Invoke(
+          target,
+          useRit);
+        TuningCompleted?.Invoke();
+        return;
+      }
+
+      if (ModifierKeys.HasFlag(
             Keys.Shift) &&
           HorizontalZoomFactor > 1.0)
       {
@@ -1423,6 +1453,30 @@ namespace SkyRoof
 
       return true;
     }
+
+    internal static long CalculateMouseWheelTuneTarget(
+      long currentFrequencyHz,
+      int wheelDelta)
+    {
+      if (currentFrequencyHz <= 0 ||
+          wheelDelta == 0)
+        return currentFrequencyHz;
+
+      int detents =
+        wheelDelta /
+        MouseWheelDelta;
+
+      if (detents == 0)
+        detents =
+          Math.Sign(
+            wheelDelta);
+
+      return checked(
+        currentFrequencyHz +
+        detents *
+        MouseWheelTuneStepHz);
+    }
+
 
     internal static long FrequencyForX(
       IcomScopeGeometry geometry,
