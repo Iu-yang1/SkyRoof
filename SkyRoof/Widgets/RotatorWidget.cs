@@ -134,8 +134,15 @@ namespace SkyRoof
     // Pre-positioning before AOS may still be adjusted manually; the first
     // manual command will explicitly clear Track and take ownership.
     public bool IsManualControlLocked =>
-      IsTracking &&
-      Path?.Pass?.IsActive() == true;
+      ShouldLockManualControl(
+        IsTracking,
+        Path?.Pass?.IsActive() == true);
+
+    internal static bool ShouldLockManualControl(
+      bool isTracking,
+      bool passIsActive) =>
+      isTracking &&
+      passIsActive;
 
     public void RotateTo(Bearing? bearing)
     {
