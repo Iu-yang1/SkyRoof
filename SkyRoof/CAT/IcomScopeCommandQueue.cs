@@ -2,8 +2,9 @@ namespace SkyRoof
 {
   /// <summary>
   /// Small bounded/coalescing queue for IC-9700 scope-control commands.
-  /// Commands with the same semantic target replace the pending value in-place,
-  /// preserving relative ordering against other scope operations.
+  /// Commands with the same semantic target replace the older pending value and
+  /// move to the tail, preserving the temporal order of the operator's latest
+  /// actions while keeping MAIN/SUB targets independently coalesced.
   /// </summary>
   internal sealed class IcomScopeCommandQueue
   {
