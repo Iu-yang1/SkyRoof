@@ -139,6 +139,18 @@ namespace SkyRoof
         IcomScopeControlKind.SweepSpeed =>
           $"U SCOPE_SPEED {scope} {request.SweepSpeed.ToString().ToUpperInvariant()}",
 
+        IcomScopeControlKind.ScopeDuringTx =>
+          $"U SCOPE_TX {(request.Enabled ? "1" : "0")}",
+
+        IcomScopeControlKind.CenterType =>
+          $"U SCOPE_CENTER_TYPE {FormatScopeCenterType(request.CenterType)}",
+
+        IcomScopeControlKind.Vbw =>
+          $"U SCOPE_VBW {scope} {request.Vbw.ToString().ToUpperInvariant()}",
+
+        IcomScopeControlKind.MarkerPosition =>
+          $"U SCOPE_MARKER {(request.MarkerPosition == IcomScopeMarkerPosition.CarrierPoint ? "CARRIER" : "FILTER")}",
+
         IcomScopeControlKind.FixedEdge =>
           $"U SCOPE_FIXED_EDGE " +
           $"{request.FrequencyRange.ToString(CultureInfo.InvariantCulture)} " +
@@ -151,6 +163,21 @@ namespace SkyRoof
             nameof(request.Kind))
       };
     }
+
+    private static string FormatScopeCenterType(
+      IcomScopeCenterType type) =>
+      type switch
+      {
+        IcomScopeCenterType.FilterCenter =>
+          "FILTER",
+        IcomScopeCenterType.CarrierPoint =>
+          "CARRIER",
+        IcomScopeCenterType.CarrierPointAbsolute =>
+          "ABS",
+        _ =>
+          throw new ArgumentOutOfRangeException(
+            nameof(type))
+      };
 
     private static string FormatScopeMode(
       IcomScopeMode mode) =>
