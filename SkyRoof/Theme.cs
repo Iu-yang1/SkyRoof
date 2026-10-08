@@ -90,7 +90,7 @@ namespace SkyRoof
     public static readonly Color BrandPink =
       Color.FromArgb(0xF5, 0xA9, 0xB8);
     public static readonly Color BrandWhite =
-      Color.FromArgb(0xFF, 0xFF, 0xFF);
+      Color.White;
 
     internal static readonly Color LightInk =
       Color.FromArgb(0x24, 0x31, 0x3A);
