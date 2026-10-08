@@ -501,6 +501,98 @@ namespace VE3NEA.Dsp.Tests
     }
 
 
+    [Fact]
+    public void ScopeHistoryReset_ChangesScopeOrMode()
+    {
+      var previous =
+        new IcomScopeFrame
+        {
+          Scope = 0,
+          Mode = (byte)IcomScopeMode.Center,
+          FrequencyAHz = 435_600_000,
+          FrequencyBHz = 100_000
+        };
+
+      var differentScope =
+        new IcomScopeFrame
+        {
+          Scope = 1,
+          Mode = (byte)IcomScopeMode.Center,
+          FrequencyAHz = 145_900_000,
+          FrequencyBHz = 100_000
+        };
+
+      var differentMode =
+        new IcomScopeFrame
+        {
+          Scope = 0,
+          Mode = (byte)IcomScopeMode.Fixed,
+          FrequencyAHz = 435_500_000,
+          FrequencyBHz = 435_700_000
+        };
+
+      IcomLanSpectrumView.RequiresHistoryReset(
+        previous,
+        differentScope).Should().BeTrue();
+
+      IcomLanSpectrumView.RequiresHistoryReset(
+        previous,
+        differentMode).Should().BeTrue();
+    }
+
+    [Fact]
+    public void ScopeHistoryReset_CenterTranslationKeepsHistoryWhenSpanIsStable()
+    {
+      var previous =
+        new IcomScopeFrame
+        {
+          Scope = 0,
+          Mode = (byte)IcomScopeMode.Center,
+          FrequencyAHz = 435_600_000,
+          FrequencyBHz = 100_000
+        };
+
+      var movedCenter =
+        new IcomScopeFrame
+        {
+          Scope = 0,
+          Mode = (byte)IcomScopeMode.Center,
+          FrequencyAHz = 435_601_500,
+          FrequencyBHz = 100_000
+        };
+
+      IcomLanSpectrumView.RequiresHistoryReset(
+        previous,
+        movedCenter).Should().BeFalse();
+    }
+
+    [Fact]
+    public void ScopeHistoryReset_FixedEdgeMovementInvalidatesHistory()
+    {
+      var previous =
+        new IcomScopeFrame
+        {
+          Scope = 0,
+          Mode = (byte)IcomScopeMode.Fixed,
+          FrequencyAHz = 435_000_000,
+          FrequencyBHz = 436_000_000
+        };
+
+      var movedEdges =
+        new IcomScopeFrame
+        {
+          Scope = 0,
+          Mode = (byte)IcomScopeMode.Fixed,
+          FrequencyAHz = 435_100_000,
+          FrequencyBHz = 436_100_000
+        };
+
+      IcomLanSpectrumView.RequiresHistoryReset(
+        previous,
+        movedEdges).Should().BeTrue();
+    }
+
+
     [Theory]
     [InlineData(0, 0, 100, 0)]
     [InlineData(80, 0, 100, 80)]
