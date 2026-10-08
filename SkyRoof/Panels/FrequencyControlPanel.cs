@@ -26,8 +26,8 @@ namespace SkyRoof
     private readonly Button UplinkResetBtn = new();
 
     private readonly GroupBox TuningGroup = new();
-    private readonly Label NoDopplerDownlinkValue = new();
-    private readonly Label NoDopplerUplinkValue = new();
+    private readonly FrequencyReadoutLabel NoDopplerDownlinkValue = new();
+    private readonly FrequencyReadoutLabel NoDopplerUplinkValue = new();
     private readonly Label TuningModeLabel = new();
     private readonly Button BackToBaseBtn = new();
     private readonly FrequencyTuningBar TuningBar = new();
@@ -309,7 +309,7 @@ namespace SkyRoof
       TuningGroup.Controls.Add(layout);
     }
 
-    private static void ConfigureCompactTuningValue(Label value)
+    private static void ConfigureCompactTuningValue(FrequencyReadoutLabel value)
     {
       // A dock-filled WinForms Label must not also participate in AutoSize.
       // Otherwise TableLayoutPanel may lay it out at the original text's
@@ -323,9 +323,48 @@ namespace SkyRoof
       value.Font = new Font("Segoe UI", 10F);
       value.Text = "000,000,000 Hz";
       value.TextAlign = ContentAlignment.MiddleCenter;
-      value.AutoEllipsis = false;
-      value.UseCompatibleTextRendering = false;
       value.Margin = new Padding(3, 0, 3, 4);
+    }
+
+    // No-Doppler values update at mouse-wheel rate. Paint the complete
+    // background and text together instead of relying on the stock Label's
+    // internal text layout/partial invalidation when docked and resized.
+    private sealed class FrequencyReadoutLabel : Control
+    {
+      public FrequencyReadoutLabel()
+      {
+        SetStyle(
+          ControlStyles.UserPaint |
+          ControlStyles.AllPaintingInWmPaint |
+          ControlStyles.OptimizedDoubleBuffer |
+          ControlStyles.ResizeRedraw |
+          ControlStyles.Opaque,
+          true);
+        TabStop = false;
+      }
+
+      protected override void OnTextChanged(EventArgs e)
+      {
+        base.OnTextChanged(e);
+        Invalidate();
+      }
+
+      protected override void OnPaint(PaintEventArgs e)
+      {
+        e.Graphics.Clear(BackColor);
+        TextRenderer.DrawText(
+          e.Graphics,
+          Text,
+          Font,
+          ClientRectangle,
+          ForeColor,
+          TextFormatFlags.HorizontalCenter |
+          TextFormatFlags.VerticalCenter |
+          TextFormatFlags.SingleLine |
+          TextFormatFlags.NoPrefix |
+          TextFormatFlags.EndEllipsis |
+          TextFormatFlags.NoPadding);
+      }
     }
 
     internal void RefreshFromRadioLink()
