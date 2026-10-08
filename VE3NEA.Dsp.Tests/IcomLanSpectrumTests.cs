@@ -488,6 +488,36 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void ScopeView_FrequencyForXAppliesDisplayOffset()
+    {
+      var frame =
+        new IcomScopeFrame
+        {
+          Mode =
+            (byte)IcomScopeMode.Center,
+          FrequencyAHz =
+            28_600_000,
+          FrequencyBHz =
+            200_000
+        };
+
+      var plot =
+        new System.Drawing.Rectangle(
+          0,
+          0,
+          101,
+          50);
+
+      IcomLanSpectrumView.FrequencyForX(
+        frame.Geometry,
+        plot,
+        50,
+        407_000_000).Should().Be(
+          435_600_000);
+    }
+
+
+    [Fact]
     public void ScopeView_FrequencyForXRejectsInvalidGeometry()
     {
       IcomLanSpectrumView.FrequencyForX(
