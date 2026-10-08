@@ -447,6 +447,60 @@ namespace VE3NEA.Dsp.Tests
     }
 
 
+    [Fact]
+    public void ScopeView_FrequencyForXUsesCurrentSpectrumGeometry()
+    {
+      var frame =
+        new IcomScopeFrame
+        {
+          Mode =
+            (byte)IcomScopeMode.Center,
+          FrequencyAHz =
+            435_600_000,
+          FrequencyBHz =
+            200_000
+        };
+
+      var plot =
+        new System.Drawing.Rectangle(
+          10,
+          20,
+          101,
+          100);
+
+      IcomLanSpectrumView.FrequencyForX(
+        frame.Geometry,
+        plot,
+        10).Should().Be(
+          435_500_000);
+
+      IcomLanSpectrumView.FrequencyForX(
+        frame.Geometry,
+        plot,
+        60).Should().Be(
+          435_600_000);
+
+      IcomLanSpectrumView.FrequencyForX(
+        frame.Geometry,
+        plot,
+        110).Should().Be(
+          435_700_000);
+    }
+
+    [Fact]
+    public void ScopeView_FrequencyForXRejectsInvalidGeometry()
+    {
+      IcomLanSpectrumView.FrequencyForX(
+        default,
+        new System.Drawing.Rectangle(
+          0,
+          0,
+          100,
+          50),
+        50).Should().Be(0);
+    }
+
+
     [Theory]
     [InlineData(0, 0, 100, 0)]
     [InlineData(80, 0, 100, 80)]

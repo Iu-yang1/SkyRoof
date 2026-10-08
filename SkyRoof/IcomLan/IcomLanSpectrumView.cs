@@ -40,6 +40,11 @@ namespace SkyRoof
 
     private double SpectrumFraction = 0.36;
     private bool SplitterDragging;
+    private bool FrequencyTuning;
+    private bool TuneUsingRit;
+    private long? PendingTuneFrequencyHz;
+    private readonly System.Windows.Forms.Timer TuneCommitTimer =
+      new() { Interval = 40 };
     private bool PointerInside;
     private Point PointerLocation = new(-1, -1);
 
@@ -47,6 +52,8 @@ namespace SkyRoof
     private Slicer.Mode? ReceiveMode;
 
     internal event Action<int>? SpectrumPercentChanged;
+    internal event Action<long, bool>? TuneFrequencyRequested;
+    internal event Action? TuningCompleted;
 
     internal IcomLanSpectrumView()
     {
@@ -55,6 +62,8 @@ namespace SkyRoof
       ForeColor = Color.Gainsboro;
       Font = new Font("Segoe UI", 9F);
       ResizeRedraw = true;
+      TuneCommitTimer.Tick +=
+        (_, _) => FlushPendingTune();
       ConfigureHistory(240);
     }
 
@@ -247,6 +256,8 @@ namespace SkyRoof
     {
       if (disposing)
       {
+        TuneCommitTimer.Stop();
+        TuneCommitTimer.Dispose();
         WaterfallBitmap?.Dispose();
         WaterfallBitmap = null;
       }
@@ -377,23 +388,68 @@ namespace SkyRoof
 
       GetLayout(
         out _,
-        out _,
+        out Rectangle spectrum,
         out Rectangle splitter,
         out _);
 
-      if (e.Button == MouseButtons.Left &&
-          splitter.Contains(e.Location))
+      if (e.Button != MouseButtons.Left)
+        return;
+
+      if (splitter.Contains(
+            e.Location))
       {
         SplitterDragging = true;
         Capture = true;
         Cursor = Cursors.HSplit;
+        return;
       }
+
+      if (HoldEnabled)
+        return;
+
+      Rectangle plot =
+        GetSpectrumPlotRectangle(
+          spectrum);
+
+      if (!TryGetFrequencyAtPoint(
+            e.Location,
+            plot,
+            out long frequencyHz))
+        return;
+
+      Focus();
+      FrequencyTuning = true;
+      TuneUsingRit =
+        ModifierKeys.HasFlag(
+          Keys.Control);
+      PendingTuneFrequencyHz =
+        frequencyHz;
+      Capture = true;
+      Cursor = Cursors.SizeWE;
+
+      // A click should feel immediate. Subsequent drag updates are throttled.
+      FlushPendingTune();
+      TuneCommitTimer.Start();
     }
 
     protected override void OnMouseUp(
       MouseEventArgs e)
     {
       base.OnMouseUp(e);
+
+      if (FrequencyTuning &&
+          e.Button ==
+            MouseButtons.Left)
+      {
+        FrequencyTuning = false;
+        TuneCommitTimer.Stop();
+        FlushPendingTune();
+        Capture = false;
+        UpdatePointerCursor(
+          e.Location);
+        TuningCompleted?.Invoke();
+        return;
+      }
 
       if (!SplitterDragging)
         return;
@@ -405,7 +461,8 @@ namespace SkyRoof
         (int)Math.Round(
           SpectrumFraction * 100));
 
-      UpdatePointerCursor(e.Location);
+      UpdatePointerCursor(
+        e.Location);
     }
 
     protected override void OnMouseMove(
@@ -415,6 +472,29 @@ namespace SkyRoof
 
       PointerInside = true;
       PointerLocation = e.Location;
+
+      if (FrequencyTuning &&
+          Capture &&
+          e.Button ==
+            MouseButtons.Left)
+      {
+        GetLayout(
+          out _,
+          out Rectangle tuningSpectrum,
+          out _,
+          out _);
+
+        Rectangle tuningPlot =
+          GetSpectrumPlotRectangle(
+            tuningSpectrum);
+
+        if (TryGetFrequencyAtPoint(
+              e.Location,
+              tuningPlot,
+              out long frequencyHz))
+          PendingTuneFrequencyHz =
+            frequencyHz;
+      }
 
       if (SplitterDragging)
       {
@@ -458,7 +538,8 @@ namespace SkyRoof
     {
       base.OnMouseLeave(e);
 
-      if (!SplitterDragging)
+      if (!SplitterDragging &&
+          !FrequencyTuning)
       {
         PointerInside = false;
         PointerLocation = new Point(-1, -1);
@@ -482,6 +563,12 @@ namespace SkyRoof
         return;
       }
 
+      if (FrequencyTuning)
+      {
+        Cursor = Cursors.SizeWE;
+        return;
+      }
+
       Rectangle plot =
         GetSpectrumPlotRectangle(
           spectrum);
@@ -490,6 +577,88 @@ namespace SkyRoof
         plot.Contains(point)
           ? Cursors.Cross
           : Cursors.Default;
+    }
+
+    protected override void OnMouseCaptureChanged(
+      EventArgs e)
+    {
+      base.OnMouseCaptureChanged(e);
+
+      if (Capture ||
+          !FrequencyTuning)
+        return;
+
+      FrequencyTuning = false;
+      TuneCommitTimer.Stop();
+      FlushPendingTune();
+      TuningCompleted?.Invoke();
+    }
+
+    private bool TryGetFrequencyAtPoint(
+      Point point,
+      Rectangle plot,
+      out long frequencyHz)
+    {
+      frequencyHz = 0;
+
+      if (!plot.Contains(point))
+        return false;
+
+      IcomScopeGeometry geometry;
+
+      lock (DataSync)
+        geometry =
+          LatestFrame?.Geometry ??
+          default;
+
+      if (!geometry.IsValid)
+        return false;
+
+      frequencyHz =
+        FrequencyForX(
+          geometry,
+          plot,
+          point.X);
+
+      return true;
+    }
+
+    internal static long FrequencyForX(
+      IcomScopeGeometry geometry,
+      Rectangle plot,
+      int x)
+    {
+      if (!geometry.IsValid ||
+          plot.Width < 2)
+        return 0;
+
+      double fraction =
+        (Math.Clamp(
+          x,
+          plot.Left,
+          plot.Right - 1) -
+         plot.Left) /
+        (double)Math.Max(
+          1,
+          plot.Width - 1);
+
+      return geometry.FrequencyAtFraction(
+        fraction);
+    }
+
+    private void FlushPendingTune()
+    {
+      if (!PendingTuneFrequencyHz.HasValue)
+        return;
+
+      long frequency =
+        PendingTuneFrequencyHz.Value;
+
+      PendingTuneFrequencyHz = null;
+
+      TuneFrequencyRequested?.Invoke(
+        frequency,
+        TuneUsingRit);
     }
 
     private void GetLayout(

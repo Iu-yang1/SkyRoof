@@ -187,6 +187,55 @@ namespace SkyRoof
       RadioLinkToUi();
     }
 
+    internal void TuneDownlinkToFrequency(
+      double targetFrequency,
+      bool useRit,
+      bool lightweightUi)
+    {
+      if (!RadioLink.HasDownlink ||
+          !double.IsFinite(
+            targetFrequency))
+        return;
+
+      double deltaExact =
+        targetFrequency -
+        RadioLink.CorrectedDownlinkFrequency;
+
+      long deltaRounded =
+        checked((long)Math.Round(
+          deltaExact,
+          MidpointRounding.AwayFromZero));
+
+      if (deltaRounded == 0)
+        return;
+
+      // Scope geometry is bounded to the IC-9700 bands, but keep this method
+      // robust if another caller supplies a wider target in the future.
+      int delta =
+        (int)Math.Clamp(
+          deltaRounded,
+          int.MinValue,
+          int.MaxValue);
+
+      // Lock the gesture semantics: ordinary scope tuning moves the normal
+      // downlink/transponder position; Ctrl-started gestures move RIT instead.
+      RadioLink.RitEnabled =
+        useRit;
+
+      // CAT polling reads before writes. Ignore the old dial readback while
+      // the spectrum gesture is actively driving the new RX target.
+      SuppressCatTuneFeedback();
+
+      RadioLink.IncrementDownlinkFrequency(
+        delta);
+      RadioLinkToRadio();
+
+      if (lightweightUi)
+        FrequenciesToUi();
+      else
+        RadioLinkToUi();
+    }
+
     internal void ReturnToBaseTuningPosition()
     {
       if (RadioLink.IsTerrestrial) return;

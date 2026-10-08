@@ -403,6 +403,28 @@ namespace SkyRoof
           percent;
         ctx.Settings.SaveToFile();
       };
+
+      SpectrumView.TuneFrequencyRequested +=
+        (frequencyHz, useRit) =>
+        {
+          if (!ctx.FrequencyControl.RadioLink.HasDownlink)
+            return;
+
+          ctx.FrequencyControl
+            .TuneDownlinkToFrequency(
+              frequencyHz,
+              useRit,
+              lightweightUi: true);
+        };
+
+      SpectrumView.TuningCompleted +=
+        () =>
+        {
+          ctx.FrequencyControl
+            .CompleteDownlinkTuning();
+          RefreshTuningOverlay();
+        };
+
       root.Controls.Add(SpectrumView, 0, 1);
 
       StatusLabel.Dock = DockStyle.Fill;
