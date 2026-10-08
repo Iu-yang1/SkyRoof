@@ -1343,8 +1343,27 @@ namespace SkyRoof
                   ? "auto"
                   : ctx.Settings.IcomLanSpectrum.RadioAddress);
 
+      IcomLanSpectrumSettings spectrumSettings =
+        ctx.Settings.IcomLanSpectrum;
+
+      IcomScopeControlPath resolvedControlPath =
+        IcomScopeController.ResolveControlPath(
+          spectrumSettings.Source,
+          spectrumSettings.ControlPath);
+
+      (int Pending, long Dropped)? queueStats =
+        ctx.CatControl.GetIcomScopeControlQueueStats();
+
+      string controlQueue =
+        queueStats.HasValue
+          ? $" · Q {queueStats.Value.Pending:N0} / Drop {queueStats.Value.Dropped:N0}"
+          : "";
+
       StatsLabel.Text =
-        $"Source {radio} · Frames {effectiveCapture.PacketCount:N0} · " +
+        $"Data {FormatSpectrumSource(spectrumSettings.Source)} · " +
+        $"Transport {radio} · Ctrl {FormatControlPath(resolvedControlPath)}" +
+        controlQueue +
+        $" · Frames {effectiveCapture.PacketCount:N0} · " +
         $"CI-V {effectiveCapture.CivFrameCount:N0} · Sweeps {scopeFrames:N0} · " +
         $"{ScopeFps:0.0}/s · Display {DisplayFps:0.0} fps · " +
         $"BadScope {effectiveCapture.InvalidScopeFrameCount:N0}" +
@@ -1398,6 +1417,26 @@ namespace SkyRoof
               : $"Receiving IC-9700 CI-V 27 00 spectrum data · {capture.TransportName}.";
       }
     }
+
+    private static string FormatSpectrumSource(
+      IcomLanSpectrumSource source) =>
+      source switch
+      {
+        IcomLanSpectrumSource.SkyCat => "SkyCAT",
+        IcomLanSpectrumSource.RsBa1 => "RS-BA1",
+        IcomLanSpectrumSource.DirectLan => "Direct LAN",
+        _ => source.ToString()
+      };
+
+    private static string FormatControlPath(
+      IcomScopeControlPath path) =>
+      path switch
+      {
+        IcomScopeControlPath.SkyCat => "SkyCAT",
+        IcomScopeControlPath.DirectLan => "Direct LAN (experimental)",
+        IcomScopeControlPath.ReadOnly => "Read only",
+        _ => path.ToString()
+      };
 
     private void RequestScopeOutputIfDue(bool force)
     {
