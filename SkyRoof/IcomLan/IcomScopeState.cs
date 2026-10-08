@@ -19,10 +19,22 @@ namespace SkyRoof
       get =>
         (IcomLanScopeBand)Volatile.Read(
           ref SelectedBandValue);
-      set =>
+      set
+      {
+        IcomLanScopeBand normalized =
+          (IcomLanScopeBand)Math.Clamp(
+            (int)value,
+            0,
+            2);
+
         Volatile.Write(
           ref SelectedBandValue,
-          Math.Clamp((int)value, 0, 2));
+          (int)normalized);
+
+        if (normalized ==
+            IcomLanScopeBand.Auto)
+          RefreshAutoScopeFromCache();
+      }
     }
 
     internal void Update(IcomScopeFrame frame)
@@ -125,6 +137,39 @@ namespace SkyRoof
       Volatile.Write(
         ref AutoScopeValue,
         -1);
+    }
+
+    private void RefreshAutoScopeFromCache()
+    {
+      IcomScopeFrame? main =
+        Volatile.Read(
+          ref MainFrameValue);
+      IcomScopeFrame? sub =
+        Volatile.Read(
+          ref SubFrameValue);
+
+      if (main == null)
+      {
+        Volatile.Write(
+          ref AutoScopeValue,
+          sub == null ? -1 : 1);
+        return;
+      }
+
+      if (sub == null ||
+          sub.TimestampUtc -
+            main.TimestampUtc <=
+            AutoFailoverDelay)
+      {
+        Volatile.Write(
+          ref AutoScopeValue,
+          0);
+        return;
+      }
+
+      Volatile.Write(
+        ref AutoScopeValue,
+        1);
     }
 
     private static IcomScopeFrame? Newer(
