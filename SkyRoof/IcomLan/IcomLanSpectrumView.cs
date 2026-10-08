@@ -1476,7 +1476,7 @@ namespace SkyRoof
       TextRenderer.DrawText(
         graphics,
         label,
-        SystemFonts.MessageBoxSystemFonts.MessageBoxFont,
+        SystemFonts.MessageBoxFont,
         labelBounds,
         Theme.IsDark
           ? Color.White
