@@ -233,8 +233,28 @@ namespace SkyRoof
       if (ChangedFields.Exists(s => s.StartsWith("SkyRoof.WaterfallSettings.")))
         ctx.WaterfallPanel?.ApplySettings();
 
-      if (ChangedFields.Exists(s => s.StartsWith("SkyRoof.IcomLanSpectrumSettings.")))
-        ctx.IcomLanSpectrumPanel?.ApplySettings();
+      if (ChangedFields.Exists(
+            s => s.StartsWith(
+              "SkyRoof.IcomLanSpectrumSettings.")))
+      {
+        bool transportChanged =
+          ChangedFields.Exists(
+            s =>
+              s is
+                "SkyRoof.IcomLanSpectrumSettings.RadioAddress" or
+                "SkyRoof.IcomLanSpectrumSettings.SerialPort" or
+                "SkyRoof.IcomLanSpectrumSettings.Source" or
+                "SkyRoof.IcomLanSpectrumSettings.SkyCatScopePort" or
+                "SkyRoof.IcomLanSpectrumSettings.DirectLanControlPort" or
+                "SkyRoof.IcomLanSpectrumSettings.DirectLanUsername" or
+                "SkyRoof.IcomLanSpectrumSettings.DirectLanPassword" or
+                "SkyRoof.IcomLanSpectrumSettings.DirectLanClientName");
+
+        if (transportChanged)
+          ctx.IcomLanSpectrumPanel?.ApplySettings();
+        else
+          ctx.IcomLanSpectrumPanel?.ApplyDisplaySettings();
+      }
 
       if (ChangedFields.Exists(s => s.StartsWith("SkyRoof.OrbitSourceSettings.")))
         ctx.SatnogsDb.ConfigureSources(ctx.Settings.OrbitSources);

@@ -25,6 +25,14 @@ namespace SkyRoof
     ReadOnly = 3
   }
 
+  public enum IcomScopeWaterfallPalette
+  {
+    Classic = 0,
+    Grayscale = 1,
+    Blue = 2,
+    Heat = 3
+  }
+
   public class IcomLanSpectrumSettings
   {
     [DisplayName("Radio IPv4 address")]
@@ -118,6 +126,27 @@ namespace SkyRoof
     [Description("Percentage of the spectrum/waterfall display allocated to the spectrum trace. Drag the divider in the spectrum view to change it.")]
     [DefaultValue(36)]
     public int SpectrumHeightPercent { get; set; } = 36;
+
+    [DisplayName("Show waterfall")]
+    [Description("Show the waterfall below the spectrum trace.")]
+    [DefaultValue(true)]
+    public bool ShowWaterfall { get; set; } = true;
+
+    [DisplayName("Waterfall brightness")]
+    [Description("Display-level offset applied to waterfall colors. Valid useful range is about -80 to +80.")]
+    [DefaultValue(0)]
+    public int WaterfallBrightness { get; set; } = 0;
+
+    [DisplayName("Waterfall contrast")]
+    [Description("Waterfall contrast in percent. 100 preserves the raw IC-9700 scope level mapping.")]
+    [DefaultValue(100)]
+    public int WaterfallContrast { get; set; } = 100;
+
+    [DisplayName("Waterfall palette")]
+    [Description("Color palette used by the local SkyRoof waterfall renderer.")]
+    [DefaultValue(IcomScopeWaterfallPalette.Classic)]
+    public IcomScopeWaterfallPalette WaterfallPalette { get; set; } =
+      IcomScopeWaterfallPalette.Classic;
 
     public override string ToString() => string.Empty;
   }

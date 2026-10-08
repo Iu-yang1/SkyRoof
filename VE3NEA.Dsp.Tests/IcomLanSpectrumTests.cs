@@ -447,6 +447,26 @@ namespace VE3NEA.Dsp.Tests
     }
 
 
+    [Theory]
+    [InlineData(0, 0, 100, 0)]
+    [InlineData(80, 0, 100, 80)]
+    [InlineData(160, 0, 100, 160)]
+    [InlineData(80, 20, 100, 100)]
+    [InlineData(120, 0, 200, 160)]
+    [InlineData(40, 0, 200, 0)]
+    public void WaterfallLevelMapping_AppliesBrightnessAndContrast(
+      int level,
+      int brightness,
+      int contrast,
+      int expected)
+    {
+      IcomLanSpectrumView.MapWaterfallLevel(
+        level,
+        brightness,
+        contrast).Should().Be(expected);
+    }
+
+
     private static byte[] BuildLanUdpPacket(
       IPAddress source,
       IPAddress destination,

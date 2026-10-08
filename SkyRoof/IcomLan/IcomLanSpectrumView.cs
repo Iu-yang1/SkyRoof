@@ -13,7 +13,9 @@ namespace SkyRoof
     private const int AxisHeight = 20;
 
     private readonly object DataSync = new();
-    private readonly int[] Palette = BuildPalette();
+    private int[] Palette =
+      BuildPalette(
+        IcomScopeWaterfallPalette.Classic);
 
     private byte[] LatestSamples = new byte[ScopePoints];
     private IcomScopeFrame? LatestFrame;
@@ -23,6 +25,18 @@ namespace SkyRoof
     private bool WaterfallDirty = true;
     private Bitmap? WaterfallBitmap;
     private int[] WaterfallArgb = Array.Empty<int>();
+    private int[] WaterfallArgbRow = new int[ScopePoints];
+    private bool WaterfallVisible = true;
+    private int WaterfallBrightness;
+    private int WaterfallContrast = 100;
+    private IcomScopeWaterfallPalette WaterfallPalette =
+      IcomScopeWaterfallPalette.Classic;
+
+    private readonly byte[] PeakSamples =
+      new byte[ScopePoints];
+    private bool PeakEnabled;
+    private bool PeakValid;
+    private bool HoldEnabled;
 
     private double SpectrumFraction = 0.36;
     private bool SplitterDragging;
@@ -46,8 +60,83 @@ namespace SkyRoof
 
     internal void SetHistoryRows(int rows)
     {
-      ConfigureHistory(
-        Math.Clamp(rows, 40, 800));
+      int clamped =
+        Math.Clamp(rows, 40, 800);
+
+      if (WaterfallRows.Length == clamped)
+        return;
+
+      ConfigureHistory(clamped);
+    }
+
+    internal void SetHold(bool enabled)
+    {
+      HoldEnabled = enabled;
+      Invalidate();
+    }
+
+    internal void SetPeakHold(bool enabled)
+    {
+      if (PeakEnabled == enabled)
+        return;
+
+      PeakEnabled = enabled;
+
+      if (enabled)
+        ClearPeakHold();
+
+      Invalidate();
+    }
+
+    internal void ClearPeakHold()
+    {
+      lock (DataSync)
+      {
+        Array.Clear(PeakSamples);
+        PeakValid = false;
+      }
+
+      Invalidate();
+    }
+
+    internal void SetWaterfallVisible(bool visible)
+    {
+      if (WaterfallVisible == visible)
+        return;
+
+      WaterfallVisible = visible;
+      Invalidate();
+    }
+
+    internal void SetWaterfallDisplay(
+      int brightness,
+      int contrast,
+      IcomScopeWaterfallPalette palette)
+    {
+      int newBrightness =
+        Math.Clamp(brightness, -80, 80);
+      int newContrast =
+        Math.Clamp(contrast, 25, 250);
+
+      if (WaterfallBrightness == newBrightness &&
+          WaterfallContrast == newContrast &&
+          WaterfallPalette == palette)
+        return;
+
+      lock (DataSync)
+      {
+        WaterfallBrightness =
+          newBrightness;
+        WaterfallContrast =
+          newContrast;
+        WaterfallPalette =
+          palette;
+        Palette =
+          BuildPalette(palette);
+        WaterfallDirty = true;
+      }
+
+      Invalidate();
     }
 
     internal void SetSpectrumPercent(int percent)
@@ -79,6 +168,9 @@ namespace SkyRoof
 
       lock (DataSync)
       {
+        if (HoldEnabled)
+          return;
+
         LatestFrame = frame;
         Buffer.BlockCopy(
           frame.Samples,
@@ -87,6 +179,22 @@ namespace SkyRoof
           0,
           ScopePoints);
 
+        if (PeakEnabled)
+        {
+          for (int i = 0;
+               i < ScopePoints;
+               i++)
+          {
+            if (!PeakValid ||
+                frame.Samples[i] >
+                  PeakSamples[i])
+              PeakSamples[i] =
+                frame.Samples[i];
+          }
+
+          PeakValid = true;
+        }
+
         // Serial/Remote Utility scope data may arrive as 10-11 divisions.
         // Update the trace for every partial division, but advance waterfall
         // history only after the complete 475-bin sweep has arrived.
@@ -94,8 +202,12 @@ namespace SkyRoof
             WaterfallRows.Length > 0)
         {
           WaterfallHead =
-            (WaterfallHead + 1) %
-            WaterfallRows.Length;
+            WaterfallHead < 0
+              ? 0
+              : (WaterfallHead -
+                 1 +
+                 WaterfallRows.Length) %
+                WaterfallRows.Length;
 
           Buffer.BlockCopy(
             frame.Samples,
@@ -103,7 +215,9 @@ namespace SkyRoof
             WaterfallRows[WaterfallHead],
             0,
             ScopePoints);
-          WaterfallDirty = true;
+
+          UpdateWaterfallBitmapRow(
+            WaterfallHead);
         }
       }
 
@@ -121,6 +235,8 @@ namespace SkyRoof
           Array.Clear(row);
 
         WaterfallHead = -1;
+        Array.Clear(PeakSamples);
+        PeakValid = false;
         WaterfallDirty = true;
       }
 
@@ -162,6 +278,9 @@ namespace SkyRoof
       IcomScopeFrame? frame;
       byte[] samples =
         new byte[ScopePoints];
+      byte[] peakSamples =
+        new byte[ScopePoints];
+      bool peakVisible;
 
       lock (DataSync)
       {
@@ -172,6 +291,15 @@ namespace SkyRoof
           samples,
           0,
           ScopePoints);
+        Buffer.BlockCopy(
+          PeakSamples,
+          0,
+          peakSamples,
+          0,
+          ScopePoints);
+        peakVisible =
+          PeakEnabled &&
+          PeakValid;
         RebuildWaterfallBitmapIfNeeded();
       }
 
@@ -192,6 +320,8 @@ namespace SkyRoof
         e.Graphics,
         spectrumRect,
         samples,
+        peakSamples,
+        peakVisible,
         frame,
         scopeBack,
         textColor);
@@ -208,15 +338,9 @@ namespace SkyRoof
         e.Graphics.PixelOffsetMode =
           PixelOffsetMode.Half;
 
-        e.Graphics.DrawImage(
-          WaterfallBitmap,
-          waterfallRect,
-          new Rectangle(
-            0,
-            0,
-            WaterfallBitmap.Width,
-            WaterfallBitmap.Height),
-          GraphicsUnit.Pixel);
+        DrawWaterfallRing(
+          e.Graphics,
+          waterfallRect);
       }
 
       Color borderColor =
@@ -376,6 +500,31 @@ namespace SkyRoof
     {
       int headerHeight =
         Math.Max(24, Font.Height + 8);
+
+      if (!WaterfallVisible)
+      {
+        header =
+          new Rectangle(
+            0,
+            0,
+            ClientSize.Width,
+            headerHeight);
+        spectrum =
+          new Rectangle(
+            0,
+            header.Bottom,
+            ClientSize.Width,
+            Math.Max(
+              0,
+              ClientSize.Height -
+              headerHeight));
+        splitter =
+          Rectangle.Empty;
+        waterfall =
+          Rectangle.Empty;
+        return;
+      }
+
       int available =
         Math.Max(
           0,
@@ -507,6 +656,9 @@ namespace SkyRoof
 
         if (frame.OutOfRange)
           right += " · OUT OF RANGE";
+
+        if (HoldEnabled)
+          left += " · HOLD";
       }
 
       var flagsLeft =
@@ -561,6 +713,8 @@ namespace SkyRoof
       Graphics graphics,
       Rectangle bounds,
       byte[] samples,
+      byte[] peakSamples,
+      bool peakVisible,
       IcomScopeFrame? frame,
       Color background,
       Color textColor)
@@ -602,6 +756,12 @@ namespace SkyRoof
         graphics,
         plot,
         samples);
+
+      if (peakVisible)
+        DrawPeakTrace(
+          graphics,
+          plot,
+          peakSamples);
 
       DrawReceiveMarker(
         graphics,
@@ -798,6 +958,61 @@ namespace SkyRoof
 
       graphics.DrawLines(
         tracePen,
+        points);
+    }
+
+    private static void DrawPeakTrace(
+      Graphics graphics,
+      Rectangle plot,
+      byte[] samples)
+    {
+      if (samples.Length < 2)
+        return;
+
+      var points =
+        new PointF[samples.Length];
+
+      float usableHeight =
+        Math.Max(
+          1,
+          plot.Height - 4);
+
+      for (int i = 0;
+           i < samples.Length;
+           i++)
+      {
+        float x =
+          plot.Left +
+          i *
+          (plot.Width - 1f) /
+          (samples.Length - 1f);
+
+        float normalized =
+          Math.Clamp(
+            samples[i] / 160f,
+            0f,
+            1f);
+
+        points[i] =
+          new PointF(
+            x,
+            plot.Bottom -
+            2 -
+            normalized *
+            usableHeight);
+      }
+
+      using var pen =
+        new Pen(
+          Theme.BrandPink,
+          1.0f)
+        {
+          DashStyle =
+            DashStyle.Dot
+        };
+
+      graphics.DrawLines(
+        pen,
         points);
     }
 
@@ -1157,9 +1372,60 @@ namespace SkyRoof
           new int[
             ScopePoints *
             rows];
+        WaterfallArgbRow =
+          new int[ScopePoints];
       }
 
       Invalidate();
+    }
+
+    private void UpdateWaterfallBitmapRow(
+      int rowIndex)
+    {
+      if (WaterfallBitmap == null ||
+          rowIndex < 0 ||
+          rowIndex >= WaterfallRows.Length)
+        return;
+
+      byte[] row =
+        WaterfallRows[rowIndex];
+
+      for (int x = 0;
+           x < ScopePoints;
+           x++)
+        WaterfallArgbRow[x] =
+          Palette[
+            MapWaterfallLevel(
+              row[x],
+              WaterfallBrightness,
+              WaterfallContrast)];
+
+      Rectangle rect =
+        new(
+          0,
+          rowIndex,
+          ScopePoints,
+          1);
+
+      BitmapData data =
+        WaterfallBitmap.LockBits(
+          rect,
+          ImageLockMode.WriteOnly,
+          PixelFormat.Format32bppArgb);
+
+      try
+      {
+        Marshal.Copy(
+          WaterfallArgbRow,
+          0,
+          data.Scan0,
+          ScopePoints);
+      }
+      finally
+      {
+        WaterfallBitmap.UnlockBits(
+          data);
+      }
     }
 
     private void RebuildWaterfallBitmapIfNeeded()
@@ -1169,37 +1435,24 @@ namespace SkyRoof
           WaterfallRows.Length == 0)
         return;
 
-      int rows =
-        WaterfallRows.Length;
       int index = 0;
 
       for (int y = 0;
-           y < rows;
+           y < WaterfallRows.Length;
            y++)
       {
-        int rowIndex =
-          WaterfallHead < 0
-            ? 0
-            : (WaterfallHead -
-               y +
-               rows) %
-              rows;
-
         byte[] row =
-          WaterfallRows[rowIndex];
+          WaterfallRows[y];
 
         for (int x = 0;
              x < ScopePoints;
              x++)
-        {
-          int level =
-            Math.Clamp(
-              (int)row[x],
-              0,
-              160);
           WaterfallArgb[index++] =
-            Palette[level];
-        }
+            Palette[
+              MapWaterfallLevel(
+                row[x],
+                WaterfallBrightness,
+                WaterfallContrast)];
       }
 
       Rectangle rect =
@@ -1228,19 +1481,16 @@ namespace SkyRoof
         }
         else
         {
-          int rowInts =
-            ScopePoints;
-
           for (int y = 0;
-               y < rows;
+               y < WaterfallRows.Length;
                y++)
           {
             Marshal.Copy(
               WaterfallArgb,
-              y * rowInts,
+              y * ScopePoints,
               data.Scan0 +
               y * data.Stride,
-              rowInts);
+              ScopePoints);
           }
         }
       }
@@ -1253,7 +1503,116 @@ namespace SkyRoof
       WaterfallDirty = false;
     }
 
-    private static int[] BuildPalette()
+    private void DrawWaterfallRing(
+      Graphics graphics,
+      Rectangle destination)
+    {
+      if (WaterfallBitmap == null ||
+          WaterfallRows.Length == 0)
+        return;
+
+      if (WaterfallHead < 0)
+      {
+        graphics.DrawImage(
+          WaterfallBitmap,
+          destination,
+          new Rectangle(
+            0,
+            0,
+            WaterfallBitmap.Width,
+            WaterfallBitmap.Height),
+          GraphicsUnit.Pixel);
+        return;
+      }
+
+      int rows =
+        WaterfallRows.Length;
+      int firstRows =
+        rows -
+        WaterfallHead;
+
+      int firstHeight =
+        (int)Math.Round(
+          destination.Height *
+          firstRows /
+          (double)rows);
+
+      firstHeight =
+        Math.Clamp(
+          firstHeight,
+          0,
+          destination.Height);
+
+      if (firstRows > 0 &&
+          firstHeight > 0)
+      {
+        graphics.DrawImage(
+          WaterfallBitmap,
+          new Rectangle(
+            destination.Left,
+            destination.Top,
+            destination.Width,
+            firstHeight),
+          new Rectangle(
+            0,
+            WaterfallHead,
+            WaterfallBitmap.Width,
+            firstRows),
+          GraphicsUnit.Pixel);
+      }
+
+      int secondRows =
+        WaterfallHead;
+      int secondHeight =
+        destination.Height -
+        firstHeight;
+
+      if (secondRows > 0 &&
+          secondHeight > 0)
+      {
+        graphics.DrawImage(
+          WaterfallBitmap,
+          new Rectangle(
+            destination.Left,
+            destination.Top +
+            firstHeight,
+            destination.Width,
+            secondHeight),
+          new Rectangle(
+            0,
+            0,
+            WaterfallBitmap.Width,
+            secondRows),
+          GraphicsUnit.Pixel);
+      }
+    }
+
+    internal static int MapWaterfallLevel(
+      int level,
+      int brightness,
+      int contrast)
+    {
+      double mapped =
+        (level - 80) *
+        Math.Clamp(
+          contrast,
+          25,
+          250) /
+        100.0 +
+        80 +
+        Math.Clamp(
+          brightness,
+          -80,
+          80);
+
+      return Math.Clamp(
+        (int)Math.Round(mapped),
+        0,
+        160);
+    }
+
+    private static int[] BuildPalette(
+      IcomScopeWaterfallPalette paletteKind)
     {
       var palette =
         new int[161];
@@ -1264,68 +1623,152 @@ namespace SkyRoof
       {
         double t =
           i / 160.0;
-        Color color;
-
-        if (t < 0.25)
-        {
-          double u =
-            t / 0.25;
-          color =
-            Color.FromArgb(
-              255,
-              0,
-              0,
-              (int)Math.Round(
-                25 +
-                180 * u));
-        }
-        else if (t < 0.5)
-        {
-          double u =
-            (t - 0.25) /
-            0.25;
-          color =
-            Color.FromArgb(
-              255,
-              0,
-              (int)Math.Round(
-                210 * u),
-              255);
-        }
-        else if (t < 0.75)
-        {
-          double u =
-            (t - 0.5) /
-            0.25;
-          color =
-            Color.FromArgb(
-              255,
-              (int)Math.Round(
-                255 * u),
-              255,
-              (int)Math.Round(
-                255 *
-                (1 - u)));
-        }
-        else
-        {
-          double u =
-            (t - 0.75) /
-            0.25;
-          color =
-            Color.FromArgb(
-              255,
-              255,
-              255,
-              (int)Math.Round(
-                255 * u));
-        }
+        Color color =
+          paletteKind switch
+          {
+            IcomScopeWaterfallPalette.Grayscale =>
+              GrayscaleColor(t),
+            IcomScopeWaterfallPalette.Blue =>
+              BlueColor(t),
+            IcomScopeWaterfallPalette.Heat =>
+              HeatColor(t),
+            _ =>
+              ClassicColor(t)
+          };
 
         palette[i] =
           color.ToArgb();
       }
 
       return palette;
+    }
+
+    private static Color ClassicColor(double t)
+    {
+      if (t < 0.25)
+      {
+        double u =
+          t / 0.25;
+        return Color.FromArgb(
+          255,
+          0,
+          0,
+          (int)Math.Round(
+            25 +
+            180 * u));
+      }
+
+      if (t < 0.5)
+      {
+        double u =
+          (t - 0.25) /
+          0.25;
+        return Color.FromArgb(
+          255,
+          0,
+          (int)Math.Round(
+            210 * u),
+          255);
+      }
+
+      if (t < 0.75)
+      {
+        double u =
+          (t - 0.5) /
+          0.25;
+        return Color.FromArgb(
+          255,
+          (int)Math.Round(
+            255 * u),
+          255,
+          (int)Math.Round(
+            255 *
+            (1 - u)));
+      }
+
+      double last =
+        (t - 0.75) /
+        0.25;
+      return Color.FromArgb(
+        255,
+        255,
+        255,
+        (int)Math.Round(
+          255 * last));
+    }
+
+    private static Color GrayscaleColor(double t)
+    {
+      int value =
+        (int)Math.Round(
+          255 * t);
+
+      return Color.FromArgb(
+        255,
+        value,
+        value,
+        value);
+    }
+
+    private static Color BlueColor(double t)
+    {
+      if (t < 0.65)
+      {
+        double u =
+          t / 0.65;
+        return Color.FromArgb(
+          255,
+          0,
+          (int)Math.Round(
+            190 * u),
+          (int)Math.Round(
+            40 +
+            215 * u));
+      }
+
+      double v =
+        (t - 0.65) /
+        0.35;
+
+      return Color.FromArgb(
+        255,
+        (int)Math.Round(
+          255 * v),
+        (int)Math.Round(
+          190 +
+          65 * v),
+        255);
+    }
+
+    private static Color HeatColor(double t)
+    {
+      if (t < 0.5)
+      {
+        double u =
+          t / 0.5;
+        return Color.FromArgb(
+          255,
+          (int)Math.Round(
+            255 * u),
+          0,
+          0);
+      }
+
+      double v =
+        (t - 0.5) /
+        0.5;
+
+      return Color.FromArgb(
+        255,
+        255,
+        (int)Math.Round(
+          255 * v),
+        (int)Math.Round(
+          255 *
+          Math.Max(
+            0,
+            (v - 0.75) /
+            0.25)));
     }
 
     private static string FormatAxisFrequency(

@@ -11,6 +11,9 @@ namespace SkyRoof
     private readonly Label GeometryLabel = new();
     private readonly Button StartStopBtn = new();
     private readonly Button ClearBtn = new();
+    private readonly Button HoldBtn = new();
+    private readonly Button PeakBtn = new();
+    private readonly Button WaterfallBtn = new();
     private readonly Button SettingsBtn = new();
     private readonly Label StatusLabel = new();
     private readonly Label StatsLabel = new();
@@ -28,6 +31,8 @@ namespace SkyRoof
     private double DisplayFps;
     private long LastRenderedScopeFrameTicks;
     private bool LastStatsUsedNativeLan;
+    private bool LocalHold;
+    private bool PeakHold;
 
     public IcomLanSpectrumPanel(Context ctx)
     {
@@ -153,6 +158,51 @@ namespace SkyRoof
       };
       toolbar.Controls.Add(ClearBtn);
 
+      HoldBtn.Text = "HOLD";
+      HoldBtn.AutoSize = true;
+      HoldBtn.Margin = new Padding(0, 2, 6, 2);
+      HoldBtn.Click += (_, _) =>
+      {
+        LocalHold = !LocalHold;
+        SpectrumView.SetHold(LocalHold);
+        UpdateDisplayButtons();
+      };
+      toolbar.Controls.Add(HoldBtn);
+
+      PeakBtn.Text = "PEAK";
+      PeakBtn.AutoSize = true;
+      PeakBtn.Margin = new Padding(0, 2, 6, 2);
+      PeakBtn.Click += (_, _) =>
+      {
+        PeakHold = !PeakHold;
+        SpectrumView.SetPeakHold(PeakHold);
+        UpdateDisplayButtons();
+      };
+
+      var peakMenu = new ContextMenuStrip();
+      peakMenu.Items.Add(
+        "Clear peak hold",
+        null,
+        (_, _) => SpectrumView.ClearPeakHold());
+      PeakBtn.ContextMenuStrip = peakMenu;
+      toolbar.Controls.Add(PeakBtn);
+
+      WaterfallBtn.Text = "WF";
+      WaterfallBtn.AutoSize = true;
+      WaterfallBtn.Margin = new Padding(0, 2, 6, 2);
+      WaterfallBtn.Click += (_, _) =>
+      {
+        IcomLanSpectrumSettings settings =
+          ctx.Settings.IcomLanSpectrum;
+        settings.ShowWaterfall =
+          !settings.ShowWaterfall;
+        SpectrumView.SetWaterfallVisible(
+          settings.ShowWaterfall);
+        ctx.Settings.SaveToFile();
+        UpdateDisplayButtons();
+      };
+      toolbar.Controls.Add(WaterfallBtn);
+
       SettingsBtn.Text = "Settings…";
       SettingsBtn.AutoSize = true;
       SettingsBtn.Margin = new Padding(0, 2, 0, 2);
@@ -208,7 +258,14 @@ namespace SkyRoof
         settings.WaterfallRows);
       SpectrumView.SetSpectrumPercent(
         settings.SpectrumHeightPercent);
+      SpectrumView.SetWaterfallVisible(
+        settings.ShowWaterfall);
+      SpectrumView.SetWaterfallDisplay(
+        settings.WaterfallBrightness,
+        settings.WaterfallContrast,
+        settings.WaterfallPalette);
 
+      UpdateDisplayButtons();
       RefreshTuningOverlay();
       RefreshScopeGeometryUi();
     }
@@ -221,6 +278,48 @@ namespace SkyRoof
           0,
           2);
       ctx.Settings.SaveToFile();
+    }
+
+    private void UpdateDisplayButtons()
+    {
+      SetToggleButtonState(
+        HoldBtn,
+        LocalHold);
+      SetToggleButtonState(
+        PeakBtn,
+        PeakHold);
+      SetToggleButtonState(
+        WaterfallBtn,
+        ctx.Settings.IcomLanSpectrum.ShowWaterfall);
+    }
+
+    private static void SetToggleButtonState(
+      Button button,
+      bool active)
+    {
+      button.Font =
+        new Font(
+          button.Font,
+          active
+            ? FontStyle.Bold
+            : FontStyle.Regular);
+
+      button.UseVisualStyleBackColor =
+        !active;
+
+      button.BackColor =
+        active
+          ? Theme.IsDark
+            ? Theme.BlueDark
+            : Theme.BlueWash
+          : SystemColors.Control;
+
+      button.ForeColor =
+        active
+          ? Theme.IsDark
+            ? Color.White
+            : Theme.LightInk
+          : SystemColors.ControlText;
     }
 
     private bool UsingSkyCatScopeSource =>
@@ -603,6 +702,11 @@ namespace SkyRoof
         settings.Source,
         settings.ControlPath,
         force);
+    }
+
+    internal void ApplyDisplaySettings()
+    {
+      LoadSettingsToUi();
     }
 
     internal void ApplySettings()
