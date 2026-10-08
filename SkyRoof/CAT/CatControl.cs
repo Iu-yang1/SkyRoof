@@ -175,9 +175,6 @@ namespace SkyRoof
         IcomScopeControlKind.Vbw =>
           $"U SCOPE_VBW {scope} {request.Vbw.ToString().ToUpperInvariant()}",
 
-        IcomScopeControlKind.Rbw =>
-          $"U SCOPE_RBW {scope} {FormatScopeRbw(request.Rbw)}",
-
         IcomScopeControlKind.MarkerPosition =>
           $"U SCOPE_MARKER {(request.MarkerPosition == IcomScopeMarkerPosition.CarrierPoint ? "CARRIER" : "FILTER")}",
 
@@ -207,21 +204,6 @@ namespace SkyRoof
         _ =>
           throw new ArgumentOutOfRangeException(
             nameof(type))
-      };
-
-    private static string FormatScopeRbw(
-      IcomScopeRbw rbw) =>
-      rbw switch
-      {
-        IcomScopeRbw.Wide =>
-          "WIDE",
-        IcomScopeRbw.Mid =>
-          "MID",
-        IcomScopeRbw.Narrow =>
-          "NAR",
-        _ =>
-          throw new ArgumentOutOfRangeException(
-            nameof(rbw))
       };
 
     private static string FormatScopeMode(
