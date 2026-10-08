@@ -312,9 +312,11 @@ namespace SkyRoof
 
         if (bytesRead == 0)
         {
-          string tail = receivePending.ToString();
+          // EOF is a closed TCP session, not a valid reply. Surface it through
+          // the existing SocketException -> reconnect path instead of spinning
+          // on an apparently connected socket with empty replies.
           receivePending.Clear();
-          return tail;
+          throw new SocketException((int)SocketError.ConnectionReset);
         }
 
         // TCP is a byte stream: one Receive may contain several rigctld
