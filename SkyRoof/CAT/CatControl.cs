@@ -35,6 +35,12 @@ namespace SkyRoof
       ApplyTune();
     }
 
+    internal bool HasIcomScopeControlBackend =>
+      Rx?.SupportsIcomScopeOutput == true ||
+      (Tx != null &&
+       !ReferenceEquals(Tx, Rx) &&
+       Tx.SupportsIcomScopeOutput);
+
     /// <summary>
     /// Route an IC-9700 scope-output request to an active SkyCAT engine.
     /// RX and TX may be separate CAT backends in cross-band configurations, so
