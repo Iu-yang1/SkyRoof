@@ -322,7 +322,7 @@ namespace SkyRoof
       value.ForeColor = Color.Aqua;
       value.Font = new Font("Segoe UI", 10F);
       value.Text = "000,000,000 Hz";
-      value.TextAlign = ContentAlignment.MiddleCenter;
+      // The owner-drawn readout centers text with TextRenderer.
       value.Margin = new Padding(3, 0, 3, 4);
     }
 
