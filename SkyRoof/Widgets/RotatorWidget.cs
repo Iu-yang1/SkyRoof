@@ -98,7 +98,10 @@ namespace SkyRoof
       if (Path == null) return;
 
       SatBearing = Path.GetSatelliteBearing()?.Normalize();
-      if (SatBearing == null) StopRotation();
+      // A missing/expired pass ends *automatic* tracking only. If Track is
+      // unchecked, the operator may be moving the rotator manually and a
+      // one-second tick must not issue an unsolicited STOP.
+      if (SatBearing == null && TrackCheckbox.Checked) StopRotation();
 
       BearingToUi();
       ctx.Announcer.AnnouncePosition(SatBearing);
@@ -165,8 +168,9 @@ namespace SkyRoof
     public void ToggleTracking()
     {
       if (!TrackCheckbox.Enabled) return;
+      // CheckedChanged is raised synchronously by Checked; invoking its handler
+      // again duplicates tracking-path recomputation and stop requests.
       TrackCheckbox.Checked = !TrackCheckbox.Checked;
-      TrackCheckbox_CheckedChanged(StopBtn, EventArgs.Empty);
     }
 
     public string? GetStatusString()
@@ -239,7 +243,21 @@ namespace SkyRoof
     private void BearingToUi()
     {
       var realSatBearing = Path?.GetRealSatelliteBearing();
-      if (realSatBearing == null || SatBearing == null) { ResetUi(); return; }
+      if (realSatBearing == null || SatBearing == null)
+      {
+        // Losing a displayed observation is not a user request to stop tracking.
+        // ResetUi() would uncheck Track and queue an S command, so limit this
+        // branch to rendering. Advance() owns the decision to stop at LOS.
+        SatelliteAzimuthLabel.ForeColor = Color.Gray;
+        SatelliteElevationLabel.ForeColor = Color.Gray;
+        SatelliteAzimuthLabel.Text = "---";
+        SatelliteElevationLabel.Text = "---";
+        AntennaAzimuthLabel.BackColor = Color.Transparent;
+        AntennaElevationLabel.BackColor = Color.Transparent;
+        AntennaAzimuthLabel.Text = IsRunning() && AntBearing != null ? $"{AntBearing.AzDeg:F1}°" : "---";
+        AntennaElevationLabel.Text = IsRunning() && AntBearing != null ? $"{AntBearing.ElDeg:F1}°" : "---";
+        return;
+      }
 
       Color satColor = TrackCheckbox.Checked ? Color.Aqua : Color.Teal;
 
