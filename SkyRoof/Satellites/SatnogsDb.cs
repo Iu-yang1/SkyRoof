@@ -1212,13 +1212,13 @@ namespace SkyRoof
       CustomTransmitterDefinitionList definitions =
         LoadCustomTransmitterDefinitions();
 
-      if (!RemoveCustomTransmitterDefinition(
-            definitions,
-            transmitter.uuid))
-        return false;
-
-      SaveCustomTransmitterDefinitions(
-        definitions);
+      bool removedDefinition =
+        RemoveCustomTransmitterDefinition(
+          definitions,
+          transmitter.uuid);
+      if (removedDefinition)
+        SaveCustomTransmitterDefinitions(
+          definitions);
 
       int removedRuntime =
         satellite.Transmitters.RemoveAll(
@@ -1229,14 +1229,19 @@ namespace SkyRoof
               transmitter.uuid,
               StringComparison.OrdinalIgnoreCase));
 
+      if (!removedDefinition &&
+          removedRuntime == 0)
+        return false;
+
       satellite.RefreshTransmitterDerivedData();
       SaveToFile();
 
       Log.Information(
-        "Local transmitter deleted: {Satellite} / {Description} ({Uuid}); runtime rows removed: {RemovedRuntime}",
+        "Local transmitter deleted: {Satellite} / {Description} ({Uuid}); definition removed: {RemovedDefinition}; runtime rows removed: {RemovedRuntime}",
         satellite.name,
         transmitter.description,
         transmitter.uuid,
+        removedDefinition,
         removedRuntime);
 
       return true;
