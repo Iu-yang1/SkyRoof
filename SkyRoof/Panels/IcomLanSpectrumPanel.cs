@@ -842,7 +842,8 @@ namespace SkyRoof
       }
 
       long displayOffsetHz =
-        GetScopeDisplayFrequencyOffsetHz();
+        GetScopeDisplayFrequencyOffsetHz(
+          frame.Scope);
 
       GeometryLabel.Text =
         frame.Mode ==
@@ -1045,25 +1046,40 @@ namespace SkyRoof
       SpectrumView.SetTuningOverlay(
         receiveHz,
         mode,
-        GetScopeDisplayFrequencyOffsetHz());
+        GetScopeDisplayFrequencyOffsetHz(
+          0),
+        GetScopeDisplayFrequencyOffsetHz(
+          1));
     }
 
-    private long GetScopeDisplayFrequencyOffsetHz()
+    private long GetScopeDisplayFrequencyOffsetHz(
+      byte scope)
     {
       RadioLink link =
         ctx.FrequencyControl.RadioLink;
+      TransverterSettings settings =
+        ctx.Settings.Transverter;
 
-      if (!ctx.Settings.Transverter
-            .RxCatOffsetEnabled ||
+      if (scope == 1)
+      {
+        if (!settings.TxCatOffsetEnabled ||
+            !double.IsFinite(
+              link.CorrectedUplinkFrequency) ||
+            link.CorrectedUplinkFrequency <= 0)
+          return 0;
+
+        return settings.GetCatLoOffset(
+          link.CorrectedUplinkFrequency);
+      }
+
+      if (!settings.RxCatOffsetEnabled ||
           !double.IsFinite(
             link.CorrectedDownlinkFrequency) ||
           link.CorrectedDownlinkFrequency <= 0)
         return 0;
 
-      return
-        ctx.Settings.Transverter
-          .GetCatLoOffset(
-            link.CorrectedDownlinkFrequency);
+      return settings.GetCatLoOffset(
+        link.CorrectedDownlinkFrequency);
     }
 
     private static string FormatHalfSpan(long spanHz)
