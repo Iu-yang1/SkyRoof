@@ -23,6 +23,7 @@ namespace SkyRoof
     private byte[][] WaterfallRows = Array.Empty<byte[]>();
     private int WaterfallHead = -1;
     private bool WaterfallDirty = true;
+    private double HistoryShiftResidualBins;
     private Bitmap? WaterfallBitmap;
     private int[] WaterfallArgb = Array.Empty<int>();
     private int[] WaterfallArgbRow = new int[ScopePoints];
@@ -208,7 +209,38 @@ namespace SkyRoof
         if (RequiresHistoryReset(
               previousFrame,
               frame))
+        {
           ClearMappedHistoryLocked();
+        }
+        else if (previousFrame != null)
+        {
+          IcomScopeGeometry previousGeometry =
+            previousFrame.Geometry;
+          IcomScopeGeometry currentGeometry =
+            frame.Geometry;
+
+          if (previousGeometry.IsValid &&
+              currentGeometry.IsValid &&
+              currentGeometry.ModeName is
+                "CENTER" or "SCROLL-C" &&
+              previousGeometry.SpanHz ==
+                currentGeometry.SpanHz)
+          {
+            int shiftBins =
+              CalculateHistoryShiftBins(
+                previousGeometry,
+                currentGeometry,
+                HistoryShiftResidualBins,
+                out double residualBins);
+
+            HistoryShiftResidualBins =
+              residualBins;
+
+            if (shiftBins != 0)
+              ShiftMappedHistoryLocked(
+                shiftBins);
+          }
+        }
 
         LatestFrame = frame;
         Buffer.BlockCopy(
@@ -283,8 +315,119 @@ namespace SkyRoof
       WaterfallHead = -1;
       Array.Clear(PeakSamples);
       PeakValid = false;
+      HistoryShiftResidualBins = 0;
       WaterfallDirty = true;
     }
+
+    internal static int CalculateHistoryShiftBins(
+      IcomScopeGeometry previous,
+      IcomScopeGeometry current,
+      double residualBins,
+      out double newResidualBins)
+    {
+      newResidualBins =
+        residualBins;
+
+      if (!previous.IsValid ||
+          !current.IsValid ||
+          previous.SpanHz <= 0 ||
+          previous.SpanHz !=
+            current.SpanHz)
+        return 0;
+
+      double binsPerHz =
+        (ScopePoints - 1d) /
+        previous.SpanHz;
+
+      double exactShift =
+        (previous.LowerFrequencyHz -
+         current.LowerFrequencyHz) *
+        binsPerHz +
+        residualBins;
+
+      int shiftBins =
+        (int)Math.Round(
+          exactShift,
+          MidpointRounding.AwayFromZero);
+
+      newResidualBins =
+        exactShift -
+        shiftBins;
+
+      return shiftBins;
+    }
+
+    private void ShiftMappedHistoryLocked(
+      int shiftBins)
+    {
+      if (Math.Abs(shiftBins) >=
+          ScopePoints)
+      {
+        ClearMappedHistoryLocked();
+        return;
+      }
+
+      foreach (byte[] row in
+               WaterfallRows)
+        ShiftSamples(
+          row,
+          shiftBins);
+
+      if (PeakValid)
+        ShiftSamples(
+          PeakSamples,
+          shiftBins);
+
+      WaterfallDirty = true;
+    }
+
+    private static void ShiftSamples(
+      byte[] samples,
+      int shiftBins)
+    {
+      if (shiftBins == 0 ||
+          samples.Length == 0)
+        return;
+
+      if (shiftBins > 0)
+      {
+        int count =
+          samples.Length -
+          shiftBins;
+
+        Array.Copy(
+          samples,
+          0,
+          samples,
+          shiftBins,
+          count);
+
+        Array.Clear(
+          samples,
+          0,
+          shiftBins);
+        return;
+      }
+
+      int left =
+        -shiftBins;
+      int leftCount =
+        samples.Length -
+        left;
+
+      Array.Copy(
+        samples,
+        left,
+        samples,
+        0,
+        leftCount);
+
+      Array.Clear(
+        samples,
+        leftCount,
+        left);
+    }
+
 
     internal static bool RequiresHistoryReset(
       IcomScopeFrame? previous,
@@ -1707,6 +1850,7 @@ namespace SkyRoof
             new byte[ScopePoints];
 
         WaterfallHead = -1;
+        HistoryShiftResidualBins = 0;
         WaterfallDirty = true;
 
         WaterfallBitmap?.Dispose();
