@@ -1,3 +1,4 @@
+using System.Drawing;
 using SkyRoof;
 using Xunit;
 
@@ -26,6 +27,36 @@ public sealed class RotatorManualControlTests
             RotatorWidget.ShouldLockManualControl(
                 isTracking,
                 passIsActive));
+    }
+
+    [Fact]
+    public void ManualPopupIsKeptInsideWorkingArea()
+    {
+        var workingArea = new Rectangle(100, 50, 800, 600);
+        var popupSize = new Size(320, 390);
+
+        var location =
+            MainForm.ClampPopupLocation(
+                workingArea,
+                popupSize,
+                new Point(850, 620));
+
+        Assert.Equal(new Point(580, 260), location);
+    }
+
+    [Fact]
+    public void ManualPopupKeepsRequestedPointWhenItAlreadyFits()
+    {
+        var workingArea = new Rectangle(100, 50, 800, 600);
+        var popupSize = new Size(320, 390);
+
+        var location =
+            MainForm.ClampPopupLocation(
+                workingArea,
+                popupSize,
+                new Point(200, 120));
+
+        Assert.Equal(new Point(200, 120), location);
     }
 
     [Fact]

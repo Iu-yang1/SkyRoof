@@ -25,6 +25,12 @@ namespace SkyRoof
     {
       InitializeComponent();
 
+      // Right-click anywhere on the visible rotator widget (labels, Track,
+      // STOP, or empty background) opens the same manual direction card as the
+      // status bar. Left-click behavior remains unchanged.
+      WireManualPopup(
+        this);
+
       // Create the PathOptimizerForm on startup, but do not show it yet
       dialog.FormClosing += (s, e) => { if (e.CloseReason == CloseReason.UserClosing) e.Cancel = true; dialog.Hide(); };
     }
@@ -307,10 +313,38 @@ namespace SkyRoof
     //----------------------------------------------------------------------------------------------
     //                                        UI
     //----------------------------------------------------------------------------------------------
-    private void AzEl_Click(object sender, EventArgs e)
+    private void WireManualPopup(
+      Control control)
     {
-      if (ModifierKeys == (Keys.Control | Keys.Shift))  ShowRotatorDebugInfo();
-      else Dialog.Open(ctx);
+      control.MouseDown += RotatorWidget_MouseDown;
+
+      foreach (Control child in control.Controls)
+        WireManualPopup(
+          child);
+    }
+
+    private void RotatorWidget_MouseDown(
+      object? sender,
+      MouseEventArgs e)
+    {
+      if (e.Button != MouseButtons.Right)
+        return;
+
+      ctx?.MainForm?.ShowRotatorManualControl(
+        Cursor.Position);
+    }
+
+    private void AzEl_MouseClick(
+      object? sender,
+      MouseEventArgs e)
+    {
+      if (e.Button != MouseButtons.Left)
+        return;
+
+      if (ModifierKeys == (Keys.Control | Keys.Shift))
+        ShowRotatorDebugInfo();
+      else
+        Dialog.Open(ctx);
     }
 
     private void TrackCheckbox_CheckedChanged(object sender, EventArgs e)
