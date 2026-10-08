@@ -57,8 +57,10 @@ namespace SkyRoof
     private bool UpdatingScopeControlUi;
     private bool SpanEdgeShowsSpan = true;
     private int PendingEdgeSyncScope = -1;
-    private bool ScopeControlDefaultsAppliedForSession;
+    private bool ScopeReadbackCompletedForSession;
     private bool ScopeReadbackRequestedForSession;
+    private bool PendingControlSettingsApply;
+    private string LastDiagnosticsText = "Spectrum diagnostics are not available while capture is stopped.";
     private IcomScopeReadbackState? LastScopeReadback;
     private DateTime? LastScopeReadbackUtc;
     private CatControlEngine? LastScopeControlBackend;
@@ -491,7 +493,17 @@ namespace SkyRoof
         {
           RequestScopeOutputIfDue(
             force: true);
-          ApplyControlSettings();
+
+          if (PendingControlSettingsApply)
+          {
+            PendingControlSettingsApply =
+              false;
+            ApplyControlSettings();
+          }
+          else
+          {
+            RequestInitialScopeReadbackIfNeeded();
+          }
         }
       };
       toolbar.Controls.Add(HoldBtn);
@@ -1006,8 +1018,9 @@ namespace SkyRoof
       DisplayFps = 0;
       LastRenderedScopeFrameTicks = 0;
       LastStatsUsedNativeLan = false;
-      ScopeControlDefaultsAppliedForSession = false;
+      ScopeReadbackCompletedForSession = false;
       ScopeReadbackRequestedForSession = false;
+      PendingControlSettingsApply = false;
       LastScopeReadback = null;
       LastScopeReadbackUtc = null;
       LastScopeControlBackend = null;
@@ -1030,15 +1043,15 @@ namespace SkyRoof
         ctx.CatControl
           .GetIcomScopeControlBackend();
 
-      // Scope-output control is independent from the waveform transport.
-      // If SkyCAT is already ready, synchronize immediately; otherwise the UI
-      // status loop detects the backend when setup finishes and performs the
-      // same one-shot synchronization then.
+      // Enabling scope output is required to obtain waveform data, but do
+      // not push saved MODE/SPAN/EDGE/REF/SPEED/VBW values on startup. Query
+      // the radio first so merely opening the spectrum cannot overwrite the
+      // operator's current front-panel scope state.
       RequestScopeOutputIfDue(
         force: true);
 
       if (LastScopeControlBackend != null)
-        QueueSavedScopeControlsIfWritable();
+        RequestInitialScopeReadbackIfNeeded();
     }
 
     private void StopCapture()
@@ -1069,11 +1082,14 @@ namespace SkyRoof
       // rate-limit state into a later source/session.
       ScopeController.Reset();
       PendingEdgeSyncScope = -1;
-      ScopeControlDefaultsAppliedForSession = false;
+      ScopeReadbackCompletedForSession = false;
       ScopeReadbackRequestedForSession = false;
+      PendingControlSettingsApply = false;
       LastScopeReadback = null;
       LastScopeReadbackUtc = null;
       LastScopeControlBackend = null;
+      LastDiagnosticsText =
+        "Spectrum diagnostics are not available while capture is stopped.";
       ScopeState.Clear();
       LastRenderedScopeFrameTicks = 0;
 
@@ -1432,12 +1448,23 @@ namespace SkyRoof
 
     private void UpdateScopeControlAvailability()
     {
+      bool skyCatWritable =
+        CanUseSkyCatScopeControl();
+      bool writeReady =
+        !LocalHold &&
+        skyCatWritable &&
+        ScopeReadbackCompletedForSession;
+
+      // MAIN/SUB remains usable as a local display selector in read-only mode,
+      // but do not let it send SCOPE_SELECT until the initial radio readback
+      // has established the current state.
       ScopeBandBox.Enabled =
-        !LocalHold;
+        !LocalHold &&
+        (!skyCatWritable ||
+         ScopeReadbackCompletedForSession);
 
       bool enabled =
-        !LocalHold &&
-        CanUseSkyCatScopeControl() &&
+        writeReady &&
         TryGetControlScope(
           out _);
 
@@ -1459,6 +1486,18 @@ namespace SkyRoof
       ReadbackBtn.Enabled =
         !LocalHold &&
         CanUseSkyCatScopeControl();
+    }
+
+    private void RequestInitialScopeReadbackIfNeeded()
+    {
+      if (LocalHold ||
+          ScopeReadbackCompletedForSession ||
+          ScopeReadbackRequestedForSession ||
+          !CanUseSkyCatScopeControl())
+        return;
+
+      RequestScopeReadback();
+      UpdateScopeControlAvailability();
     }
 
     private void RequestScopeReadback()
@@ -1512,13 +1551,20 @@ namespace SkyRoof
       IcomLanSpectrumSettings settings =
         ctx.Settings.IcomLanSpectrum;
 
+      bool applyPendingSettings =
+        PendingControlSettingsApply;
+
+      ScopeReadbackCompletedForSession =
+        true;
+
       byte activeScope;
       if (!TryGetControlScope(
             out activeScope))
         activeScope =
           state.SelectedScope;
 
-      if (activeScope == 1)
+      if (!applyPendingSettings &&
+          activeScope == 1)
       {
         settings.ScopeEdgeNumber =
           state.SubEdge;
@@ -1529,7 +1575,7 @@ namespace SkyRoof
         settings.ScopeVbw =
           state.SubVbw;
       }
-      else
+      else if (!applyPendingSettings)
       {
         settings.ScopeEdgeNumber =
           state.MainEdge;
@@ -1541,14 +1587,17 @@ namespace SkyRoof
           state.MainVbw;
       }
 
-      settings.ScopeDuringTx =
-        state.ScopeDuringTx;
-      settings.ScopeCenterType =
-        state.CenterType;
-      settings.ScopeMarkerPosition =
-        state.MarkerPosition;
+      if (!applyPendingSettings)
+      {
+        settings.ScopeDuringTx =
+          state.ScopeDuringTx;
+        settings.ScopeCenterType =
+          state.CenterType;
+        settings.ScopeMarkerPosition =
+          state.MarkerPosition;
 
-      ctx.Settings.SaveToFile();
+        ctx.Settings.SaveToFile();
+      }
 
       UpdatingScopeControlUi = true;
       try
@@ -1580,8 +1629,23 @@ namespace SkyRoof
         UpdatingScopeControlUi = false;
       }
 
-      StatusLabel.Text =
-        $"IC-9700 scope readback synchronized ({(activeScope == 1 ? "SUB" : "MAIN")}).";
+      UpdateScopeControlAvailability();
+
+      if (applyPendingSettings)
+      {
+        PendingControlSettingsApply =
+          false;
+        ScopeReadbackRequestedForSession =
+          false;
+        QueueSavedScopeControlsIfWritable();
+        StatusLabel.Text =
+          "IC-9700 scope state read first; applying the pending explicit spectrum-control changes.";
+      }
+      else
+      {
+        StatusLabel.Text =
+          $"IC-9700 scope readback synchronized ({(activeScope == 1 ? "SUB" : "MAIN")}).";
+      }
     }
 
     private void SendScopeControlToBothReceivers(
@@ -1615,6 +1679,10 @@ namespace SkyRoof
           settings.Source,
           settings.ControlPath,
           request);
+
+      if (routed)
+        ScopeReadbackRequestedForSession =
+          false;
 
       StatusLabel.Text =
         routed
@@ -2047,7 +2115,7 @@ namespace SkyRoof
       {
         LastScopeControlBackend =
           scopeBackend;
-        ScopeControlDefaultsAppliedForSession =
+        ScopeReadbackCompletedForSession =
           false;
         ScopeReadbackRequestedForSession =
           false;
@@ -2058,13 +2126,13 @@ namespace SkyRoof
       }
 
       if (!LocalHold &&
-          !ScopeControlDefaultsAppliedForSession &&
+          !ScopeReadbackCompletedForSession &&
           IsSkyCatScopeControlConfigured() &&
           scopeBackend != null)
       {
         RequestScopeOutputIfDue(
           force: true);
-        QueueSavedScopeControlsIfWritable();
+        RequestInitialScopeReadbackIfNeeded();
       }
 
       DateTime now = DateTime.UtcNow;
@@ -2134,7 +2202,7 @@ namespace SkyRoof
         ctx.CatControl.GetIcomScopeControlQueueStats();
 
       if (!LocalHold &&
-          ScopeControlDefaultsAppliedForSession &&
+          ScopeReadbackCompletedForSession &&
           !ScopeReadbackRequestedForSession &&
           queueStats.HasValue &&
           queueStats.Value.Pending == 0 &&
@@ -2365,7 +2433,6 @@ namespace SkyRoof
         // SPEED/REF are already synchronized globally; defer only the
         // receiver-specific fixed-edge write to whichever scope appears first.
         PendingEdgeSyncScope = -2;
-        ScopeControlDefaultsAppliedForSession = true;
         return;
       }
 
@@ -2392,7 +2459,6 @@ namespace SkyRoof
         PendingEdgeSyncScope = scope;
       }
 
-      ScopeControlDefaultsAppliedForSession = true;
     }
 
     internal void ApplyDisplaySettings()
@@ -2402,19 +2468,37 @@ namespace SkyRoof
 
     internal void ApplyControlSettings()
     {
-      ScopeControlDefaultsAppliedForSession = false;
-      ScopeReadbackRequestedForSession = false;
+      ScopeReadbackRequestedForSession =
+        false;
 
-      // HOLD is an atomic display snapshot. Settings may be edited while the
-      // snapshot is frozen, but do not swap the displayed scope/geometry under
-      // the frozen trace. The saved values are applied when HOLD is released.
+      // HOLD is an atomic display snapshot. Remember an explicit Settings edit
+      // and apply it only after the snapshot is released.
       if (LocalHold)
+      {
+        PendingControlSettingsApply =
+          true;
         return;
+      }
 
       LoadSettingsToUi();
 
-      if (Capture != null)
-        QueueSavedScopeControlsIfWritable();
+      if (Capture == null)
+        return;
+
+      if (CanUseSkyCatScopeControl() &&
+          !ScopeReadbackCompletedForSession)
+      {
+        // The operator explicitly changed Settings before initialization
+        // finished. Read the radio first, then apply those deliberate edits.
+        PendingControlSettingsApply =
+          true;
+        RequestInitialScopeReadbackIfNeeded();
+        StatusLabel.Text =
+          "Waiting for the initial IC-9700 scope readback before applying spectrum-control changes.";
+        return;
+      }
+
+      QueueSavedScopeControlsIfWritable();
     }
 
     internal void ApplySettings()
