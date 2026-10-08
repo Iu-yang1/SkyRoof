@@ -724,6 +724,23 @@ namespace SkyRoof
       capture.StatusChanged -= Capture_StatusChanged;
       capture.Dispose();
 
+      // A stopped capture is a complete acquisition-session boundary. Do not
+      // carry receiver caches, AUTO selection, HOLD state, or controller
+      // rate-limit state into a later source/session.
+      ScopeController.Reset();
+      ScopeState.Clear();
+      LastRenderedScopeFrameTicks = 0;
+
+      if (LocalHold)
+      {
+        LocalHold = false;
+        SpectrumView.SetHold(false);
+      }
+
+      SpectrumView.Clear();
+      UpdateDisplayButtons();
+      RefreshScopeGeometryUi();
+
       StartStopBtn.Text = "Start";
       StatusLabel.Text = "Spectrum capture stopped.";
     }
