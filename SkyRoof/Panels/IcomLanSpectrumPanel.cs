@@ -657,18 +657,14 @@ namespace SkyRoof
       NativeLanAssistCapture?.Start();
       capture.Start();
 
-      QueueSavedScopeSelectionIfWritable();
-
       if (UsingSkyCatScopeSource)
-      {
         RequestScopeOutputIfDue(
           force: true);
 
-        // Previous builds always forced FAST when enabling scope output.
-        // Preserve that default behavior through the independent SPEED command
-        // so later reasserts no longer overwrite an operator-selected MID/SLOW.
-        QueueSavedSweepSpeedForBothScopes();
-      }
+      // Control is independent from the waveform source. This applies equally
+      // to native SkyCAT spectrum data and to passive RS-BA1 waveform data with
+      // an explicitly selected SkyCAT control path.
+      QueueSavedScopeControlsIfWritable();
     }
 
     private void StopCapture()
@@ -1204,7 +1200,7 @@ namespace SkyRoof
         force);
     }
 
-    private void QueueSavedScopeSelectionIfWritable()
+    private void QueueSavedScopeControlsIfWritable()
     {
       if (!CanUseSkyCatScopeControl())
         return;
@@ -1212,28 +1208,22 @@ namespace SkyRoof
       IcomLanSpectrumSettings settings =
         ctx.Settings.IcomLanSpectrum;
 
-      if (settings.ScopeBand ==
+      if (settings.ScopeBand !=
           IcomLanScopeBand.Auto)
-        return;
+      {
+        byte selectedScope =
+          settings.ScopeBand ==
+            IcomLanScopeBand.Sub
+            ? (byte)1
+            : (byte)0;
 
-      byte scope =
-        settings.ScopeBand ==
-          IcomLanScopeBand.Sub
-          ? (byte)1
-          : (byte)0;
-
-      ScopeController.RequestControl(
-        settings.Source,
-        settings.ControlPath,
-        IcomScopeControlRequest
-          .ForSelectedScope(
-            scope));
-    }
-
-    private void QueueSavedSweepSpeedForBothScopes()
-    {
-      IcomLanSpectrumSettings settings =
-        ctx.Settings.IcomLanSpectrum;
+        ScopeController.RequestControl(
+          settings.Source,
+          settings.ControlPath,
+          IcomScopeControlRequest
+            .ForSelectedScope(
+              selectedScope));
+      }
 
       IcomScopeSweepSpeed speed =
         (IcomScopeSweepSpeed)Math.Clamp(
@@ -1241,6 +1231,8 @@ namespace SkyRoof
           0,
           2);
 
+      // Sweep speed is per receiver. Keep both receivers coherent so changing
+      // MAIN/SUB later does not resurrect an old front-panel speed.
       ScopeController.RequestControl(
         settings.Source,
         settings.ControlPath,
@@ -1254,11 +1246,50 @@ namespace SkyRoof
         IcomScopeControlRequest.ForSweepSpeed(
           1,
           speed));
+
+      if (!TryGetControlScope(
+            out byte scope))
+        return;
+
+      ScopeController.RequestControl(
+        settings.Source,
+        settings.ControlPath,
+        IcomScopeControlRequest
+          .ForReferenceLevel(
+            scope,
+            NormalizeReferenceLevel(
+              settings.ScopeReferenceLevelDb)));
+
+      IcomScopeFrame? frame =
+        ScopeState.LatestSelectedFrame;
+
+      if (frame?.Mode is
+            (byte)IcomScopeMode.Fixed or
+            (byte)IcomScopeMode.ScrollFixed)
+      {
+        ScopeController.RequestControl(
+          settings.Source,
+          settings.ControlPath,
+          IcomScopeControlRequest.ForEdge(
+            scope,
+            Math.Clamp(
+              settings.ScopeEdgeNumber,
+              1,
+              4)));
+      }
     }
 
     internal void ApplyDisplaySettings()
     {
       LoadSettingsToUi();
+    }
+
+    internal void ApplyControlSettings()
+    {
+      LoadSettingsToUi();
+
+      if (Capture != null)
+        QueueSavedScopeControlsIfWritable();
     }
 
     internal void ApplySettings()
