@@ -50,6 +50,10 @@ namespace SkyRoof
     // tuning to once per gap, and lets Tick skip the re-selection at AOS when the target is this pass
     private SatellitePass? preselectedPass;
 
+    // True only while changing the radio's selection in the idle-gap pre-tune.
+    // MainForm uses this to leave an already manually-tracking rotator alone.
+    public bool IsPreselecting { get; private set; }
+
     // the engine's own headless recorder, separate from the manual RecorderPanel (plan §2.5); a segment
     // runs from selection to deselection/LOS and is saved as one file per contiguous segment
     private RecordingManager recorder = null!;
@@ -340,10 +344,21 @@ namespace SkyRoof
       var next = GetNextSelection();
       if (next == null) return;
 
-      preselectedPass = next.Value.Pass;
-      Log.Information("Auto-selection tuned to {Sat} orbit #{Orbit} ahead of AOS",
-        preselectedPass.Satellite.name, preselectedPass.OrbitNumber);
-      TuneTo(schedule, preselectedPass.Satellite);
+      var nextPass = next.Value.Pass;
+      // Radio preselection must not reset a manually tracked rotator pass.
+      // TrackPass() at AOS takes over only when the schedule owns tracking.
+      IsPreselecting = true;
+      try
+      {
+        TuneTo(schedule, nextPass.Satellite);
+        preselectedPass = nextPass;
+        Log.Information("Auto-selection tuned to {Sat} orbit #{Orbit} ahead of AOS",
+          nextPass.Satellite.name, nextPass.OrbitNumber);
+      }
+      finally
+      {
+        IsPreselecting = false;
+      }
     }
 
     // selects the satellite and its scheduled transmitter, guarded so the resulting events are not read as
