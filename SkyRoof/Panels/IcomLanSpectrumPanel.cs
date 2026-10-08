@@ -732,8 +732,12 @@ namespace SkyRoof
       capture.StatusChanged -= Capture_StatusChanged;
       capture.Dispose();
 
-      // A stopped capture is a complete acquisition-session boundary. Do not
-      // carry receiver caches, AUTO selection, HOLD state, or controller
+      // A stopped capture is a complete acquisition-session boundary. Cancel
+      // unsent scope-only CAT writes, but leave ordinary RX/TX/PTT CAT state
+      // untouched because the radio-control engine has a longer lifetime.
+      ctx.CatControl.CancelIcomScopeRequests();
+
+      // Do not carry receiver caches, AUTO selection, HOLD state, or controller
       // rate-limit state into a later source/session.
       ScopeController.Reset();
       PendingEdgeSyncScope = -1;
