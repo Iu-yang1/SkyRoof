@@ -51,7 +51,8 @@ namespace SkyRoof
     private Point PointerLocation = new(-1, -1);
 
     private long ReceiveFrequencyHz;
-    private long DisplayFrequencyOffsetHz;
+    private long MainDisplayFrequencyOffsetHz;
+    private long SubDisplayFrequencyOffsetHz;
     private Slicer.Mode? ReceiveMode;
 
     internal event Action<int>? SpectrumPercentChanged;
@@ -161,17 +162,21 @@ namespace SkyRoof
     internal void SetTuningOverlay(
       long receiveFrequencyHz,
       Slicer.Mode? mode,
-      long displayFrequencyOffsetHz = 0)
+      long mainDisplayFrequencyOffsetHz = 0,
+      long subDisplayFrequencyOffsetHz = 0)
     {
       if (ReceiveFrequencyHz == receiveFrequencyHz &&
-          DisplayFrequencyOffsetHz == displayFrequencyOffsetHz &&
+          MainDisplayFrequencyOffsetHz == mainDisplayFrequencyOffsetHz &&
+          SubDisplayFrequencyOffsetHz == subDisplayFrequencyOffsetHz &&
           ReceiveMode == mode)
         return;
 
       ReceiveFrequencyHz =
         receiveFrequencyHz;
-      DisplayFrequencyOffsetHz =
-        displayFrequencyOffsetHz;
+      MainDisplayFrequencyOffsetHz =
+        mainDisplayFrequencyOffsetHz;
+      SubDisplayFrequencyOffsetHz =
+        subDisplayFrequencyOffsetHz;
       ReceiveMode =
         mode;
       Invalidate();
@@ -479,7 +484,7 @@ namespace SkyRoof
             e.Location,
             plot,
             geometry,
-            DisplayFrequencyOffsetHz,
+            MainDisplayFrequencyOffsetHz,
             out long frequencyHz))
         return;
 
@@ -488,7 +493,7 @@ namespace SkyRoof
       TuneGestureGeometry =
         geometry;
       TuneGestureDisplayFrequencyOffsetHz =
-        DisplayFrequencyOffsetHz;
+        MainDisplayFrequencyOffsetHz;
       TuneUsingRit =
         ModifierKeys.HasFlag(
           Keys.Control);
@@ -743,17 +748,11 @@ namespace SkyRoof
         displayFrequencyOffsetHz);
     }
 
-    private long ToDisplayFrequency(
-      long rawScopeFrequencyHz) =>
-      checked(
-        rawScopeFrequencyHz +
-        DisplayFrequencyOffsetHz);
-
-    private long ToRawScopeFrequency(
-      long displayFrequencyHz) =>
-      checked(
-        displayFrequencyHz -
-        DisplayFrequencyOffsetHz);
+    private long GetDisplayFrequencyOffset(
+      IcomScopeFrame? frame) =>
+      frame?.Scope == 1
+        ? SubDisplayFrequencyOffsetHz
+        : MainDisplayFrequencyOffsetHz;
 
     private void FlushPendingTune()
     {
@@ -915,16 +914,19 @@ namespace SkyRoof
 
         IcomScopeGeometry geometry =
           frame.Geometry;
+        long displayOffsetHz =
+          GetDisplayFrequencyOffset(
+            frame);
 
         if (geometry.IsValid)
         {
           right =
             frame.Mode ==
               (byte)IcomScopeMode.Center
-              ? $"{FormatFrequency(ToDisplayFrequency(geometry.CenterFrequencyHz))} · " +
+              ? $"{FormatFrequency(checked(geometry.CenterFrequencyHz + displayOffsetHz))} · " +
                 $"{FormatSpan(geometry.SpanHz)}"
-              : $"{FormatFrequency(ToDisplayFrequency(geometry.LowerFrequencyHz))} – " +
-                $"{FormatFrequency(ToDisplayFrequency(geometry.UpperFrequencyHz))}";
+              : $"{FormatFrequency(checked(geometry.LowerFrequencyHz + displayOffsetHz))} – " +
+                $"{FormatFrequency(checked(geometry.UpperFrequencyHz + displayOffsetHz))}";
         }
         else
         {
@@ -1013,17 +1015,23 @@ namespace SkyRoof
 
       IcomScopeGeometry geometry =
         frame?.Geometry ?? default;
+      long displayOffsetHz =
+        GetDisplayFrequencyOffset(
+          frame);
 
-      DrawPassband(
-        graphics,
-        plot,
-        geometry);
+      if (frame?.Scope == 0)
+        DrawPassband(
+          graphics,
+          plot,
+          geometry,
+          displayOffsetHz);
 
       DrawFrequencyGrid(
         graphics,
         bounds,
         plot,
         geometry,
+        displayOffsetHz,
         textColor);
 
       DrawLevelGrid(
@@ -1041,15 +1049,18 @@ namespace SkyRoof
           plot,
           peakSamples);
 
-      DrawReceiveMarker(
-        graphics,
-        plot,
-        geometry);
+      if (frame?.Scope == 0)
+        DrawReceiveMarker(
+          graphics,
+          plot,
+          geometry,
+          displayOffsetHz);
 
       DrawCursorReadout(
         graphics,
         plot,
         geometry,
+        displayOffsetHz,
         textColor);
     }
 
@@ -1058,6 +1069,7 @@ namespace SkyRoof
       Rectangle spectrumBounds,
       Rectangle plot,
       IcomScopeGeometry geometry,
+      long displayOffsetHz,
       Color textColor)
     {
       int intervals =
@@ -1103,9 +1115,10 @@ namespace SkyRoof
           continue;
 
         long frequency =
-          ToDisplayFrequency(
+          checked(
             geometry.FrequencyAtFraction(
-              fraction));
+              fraction) +
+            displayOffsetHz);
 
         string label =
           FormatAxisFrequency(
@@ -1298,7 +1311,8 @@ namespace SkyRoof
     private void DrawPassband(
       Graphics graphics,
       Rectangle plot,
-      IcomScopeGeometry geometry)
+      IcomScopeGeometry geometry,
+      long displayOffsetHz)
     {
       if (!geometry.IsValid ||
           ReceiveFrequencyHz <= 0 ||
@@ -1327,10 +1341,10 @@ namespace SkyRoof
 
       double lowFraction =
         geometry.FractionForFrequency(
-          ToRawScopeFrequency(low));
+          checked(low - displayOffsetHz));
       double highFraction =
         geometry.FractionForFrequency(
-          ToRawScopeFrequency(high));
+          checked(high - displayOffsetHz));
 
       if (double.IsNaN(lowFraction) ||
           double.IsNaN(highFraction) ||
@@ -1384,11 +1398,13 @@ namespace SkyRoof
     private void DrawReceiveMarker(
       Graphics graphics,
       Rectangle plot,
-      IcomScopeGeometry geometry)
+      IcomScopeGeometry geometry,
+      long displayOffsetHz)
     {
       long rawReceiveFrequency =
-        ToRawScopeFrequency(
-          ReceiveFrequencyHz);
+        checked(
+          ReceiveFrequencyHz -
+          displayOffsetHz);
 
       if (!geometry.ContainsFrequency(
             rawReceiveFrequency))
@@ -1442,6 +1458,7 @@ namespace SkyRoof
       Graphics graphics,
       Rectangle plot,
       IcomScopeGeometry geometry,
+      long displayOffsetHz,
       Color textColor)
     {
       IcomScopeGeometry cursorGeometry =
@@ -1466,7 +1483,7 @@ namespace SkyRoof
       long cursorDisplayOffsetHz =
         FrequencyTuning
           ? TuneGestureDisplayFrequencyOffsetHz
-          : DisplayFrequencyOffsetHz;
+          : displayOffsetHz;
 
       long frequency =
         checked(
