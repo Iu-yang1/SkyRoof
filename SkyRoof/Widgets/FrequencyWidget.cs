@@ -184,7 +184,60 @@ namespace SkyRoof
 
     internal void CompleteDownlinkTuning()
     {
+      // Continuous spectrum gestures may update persistent transponder/manual
+      // corrections many times per second. Persist once at gesture completion
+      // instead of writing the settings file on every drag sample.
+      ctx.Settings.SaveToFile();
       RadioLinkToUi();
+    }
+
+    internal bool TuneDownlinkToFrequency(
+      double targetFrequency,
+      bool useRit,
+      bool lightweightUi)
+    {
+      if (!double.IsFinite(
+            targetFrequency))
+        return false;
+
+      TransverterSettings transverter =
+        ctx.Settings.Transverter;
+
+      if (transverter.RxCatOffsetEnabled)
+      {
+        TransverterBand? currentBand =
+          transverter.GetCatBand(
+            RadioLink.CorrectedDownlinkFrequency);
+        TransverterBand? targetBand =
+          transverter.GetCatBand(
+            targetFrequency);
+
+        // The IC-9700 scope is showing the current CAT/IF domain. Crossing into
+        // a different LO mapping from that same visual axis is ambiguous and can
+        // otherwise leave the model tuned while CAT correctly refuses the write.
+        if (currentBand == null ||
+            targetBand == null ||
+            currentBand.LoOffset !=
+              targetBand.LoOffset)
+          return false;
+      }
+
+      if (!RadioLink.SetCorrectedDownlinkFrequency(
+            targetFrequency,
+            useRit))
+        return false;
+
+      // CAT polling reads before writes. Ignore the old dial readback while
+      // the spectrum gesture is actively driving the new RX target.
+      SuppressCatTuneFeedback();
+      RadioLinkToRadio();
+
+      if (lightweightUi)
+        FrequenciesToUi();
+      else
+        RadioLinkToUi();
+
+      return true;
     }
 
     internal void ReturnToBaseTuningPosition()

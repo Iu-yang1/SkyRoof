@@ -26,8 +26,8 @@ namespace SkyRoof
     private readonly Button UplinkResetBtn = new();
 
     private readonly GroupBox TuningGroup = new();
-    private readonly Label NoDopplerDownlinkValue = new();
-    private readonly Label NoDopplerUplinkValue = new();
+    private readonly FrequencyReadoutLabel NoDopplerDownlinkValue = new();
+    private readonly FrequencyReadoutLabel NoDopplerUplinkValue = new();
     private readonly Label TuningModeLabel = new();
     private readonly Button BackToBaseBtn = new();
     private readonly FrequencyTuningBar TuningBar = new();
@@ -222,6 +222,10 @@ namespace SkyRoof
       };
       layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
       layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+      // The frequency readouts must occupy their entire two-column cells.
+      // Auto-sized labels can collapse to their preferred text width after
+      // repeated mouse-wheel CAT refreshes, leaving clipped colored fragments.
+      layout.AutoSize = false;
 
       layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));          // captions
       layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));     // no-Doppler values
@@ -305,16 +309,62 @@ namespace SkyRoof
       TuningGroup.Controls.Add(layout);
     }
 
-    private static void ConfigureCompactTuningValue(Label value)
+    private static void ConfigureCompactTuningValue(FrequencyReadoutLabel value)
     {
+      // A dock-filled WinForms Label must not also participate in AutoSize.
+      // Otherwise TableLayoutPanel may lay it out at the original text's
+      // preferred width while the frequency is changing rapidly.
+      value.AutoSize = false;
+      value.MinimumSize = Size.Empty;
+      value.MaximumSize = Size.Empty;
       value.Dock = DockStyle.Fill;
       value.BackColor = Color.Black;
       value.ForeColor = Color.Aqua;
       value.Font = new Font("Segoe UI", 10F);
       value.Text = "000,000,000 Hz";
-      value.TextAlign = ContentAlignment.MiddleCenter;
-      value.AutoEllipsis = false;
+      // The owner-drawn readout centers text with TextRenderer.
       value.Margin = new Padding(3, 0, 3, 4);
+    }
+
+    // No-Doppler values update at mouse-wheel rate. Paint the complete
+    // background and text together instead of relying on the stock Label's
+    // internal text layout/partial invalidation when docked and resized.
+    private sealed class FrequencyReadoutLabel : Control
+    {
+      public FrequencyReadoutLabel()
+      {
+        SetStyle(
+          ControlStyles.UserPaint |
+          ControlStyles.AllPaintingInWmPaint |
+          ControlStyles.OptimizedDoubleBuffer |
+          ControlStyles.ResizeRedraw |
+          ControlStyles.Opaque,
+          true);
+        TabStop = false;
+      }
+
+      protected override void OnTextChanged(EventArgs e)
+      {
+        base.OnTextChanged(e);
+        Invalidate();
+      }
+
+      protected override void OnPaint(PaintEventArgs e)
+      {
+        e.Graphics.Clear(BackColor);
+        TextRenderer.DrawText(
+          e.Graphics,
+          Text,
+          Font,
+          ClientRectangle,
+          ForeColor,
+          TextFormatFlags.HorizontalCenter |
+          TextFormatFlags.VerticalCenter |
+          TextFormatFlags.SingleLine |
+          TextFormatFlags.NoPrefix |
+          TextFormatFlags.EndEllipsis |
+          TextFormatFlags.NoPadding);
+      }
     }
 
     internal void RefreshFromRadioLink()

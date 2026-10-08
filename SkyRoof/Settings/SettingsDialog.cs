@@ -132,6 +132,30 @@ namespace SkyRoof
           ValidateInt(e, 5000, 2000);
           break;
 
+        case "SkyRoof.IcomLanSpectrumSettings.WaterfallRows":
+          ValidateInt(e, 800, 40);
+          break;
+
+        case "SkyRoof.IcomLanSpectrumSettings.SpectrumHeightPercent":
+          ValidateInt(e, 80, 20);
+          break;
+
+        case "SkyRoof.IcomLanSpectrumSettings.WaterfallBrightness":
+          ValidateInt(e, 80, -80);
+          break;
+
+        case "SkyRoof.IcomLanSpectrumSettings.WaterfallContrast":
+          ValidateInt(e, 250, 25);
+          break;
+
+        case "SkyRoof.IcomLanSpectrumSettings.ScopeEdgeNumber":
+          ValidateInt(e, 4, 1);
+          break;
+
+        case "SkyRoof.IcomLanSpectrumSettings.ScopeReferenceLevelDb":
+          ValidateHalfDb(e);
+          break;
+
         case "SkyRoof.Ft4ConsoleSettings.TxGain":
           ValidateInt(e, 0, -60);
           break;
@@ -195,6 +219,25 @@ namespace SkyRoof
       e.ChangedItem.PropertyDescriptor.SetValue(e.ChangedItem.Parent.Value, cleanValue);
     }
 
+    private void ValidateHalfDb(PropertyValueChangedEventArgs e)
+    {
+      double value =
+        Convert.ToDouble(
+          e.ChangedItem.Value);
+
+      double cleanValue =
+        Math.Clamp(
+          Math.Round(
+            value * 2,
+            MidpointRounding.AwayFromZero) / 2.0,
+          -20.0,
+          20.0);
+
+      e.ChangedItem.PropertyDescriptor.SetValue(
+        e.ChangedItem.Parent.Value,
+        cleanValue);
+    }
+
 
 
 
@@ -233,8 +276,59 @@ namespace SkyRoof
       if (ChangedFields.Exists(s => s.StartsWith("SkyRoof.WaterfallSettings.")))
         ctx.WaterfallPanel?.ApplySettings();
 
-      if (ChangedFields.Exists(s => s.StartsWith("SkyRoof.IcomLanSpectrumSettings.")))
-        ctx.IcomLanSpectrumPanel?.ApplySettings();
+      if (ChangedFields.Exists(
+            s => s.StartsWith(
+              "SkyRoof.IcomLanSpectrumSettings.")))
+      {
+        bool transportChanged =
+          ChangedFields.Exists(
+            s =>
+              s is
+                "SkyRoof.IcomLanSpectrumSettings.RadioAddress" or
+                "SkyRoof.IcomLanSpectrumSettings.SerialPort" or
+                "SkyRoof.IcomLanSpectrumSettings.Source" or
+                "SkyRoof.IcomLanSpectrumSettings.SkyCatScopePort" or
+                "SkyRoof.IcomLanSpectrumSettings.DirectLanControlPort" or
+                "SkyRoof.IcomLanSpectrumSettings.DirectLanUsername" or
+                "SkyRoof.IcomLanSpectrumSettings.DirectLanPassword" or
+                "SkyRoof.IcomLanSpectrumSettings.DirectLanClientName");
+
+        bool controlChanged =
+          ChangedFields.Exists(
+            s =>
+              s is
+                "SkyRoof.IcomLanSpectrumSettings.ControlPath" or
+                "SkyRoof.IcomLanSpectrumSettings.ScopeBand" or
+                "SkyRoof.IcomLanSpectrumSettings.ScopeEdgeNumber" or
+                "SkyRoof.IcomLanSpectrumSettings.ScopeReferenceLevelDb" or
+                "SkyRoof.IcomLanSpectrumSettings.ScopeSweepSpeed" or
+                "SkyRoof.IcomLanSpectrumSettings.ScopeDuringTx" or
+                "SkyRoof.IcomLanSpectrumSettings.ScopeCenterType" or
+                "SkyRoof.IcomLanSpectrumSettings.ScopeVbw" or
+                "SkyRoof.IcomLanSpectrumSettings.ScopeMarkerPosition");
+
+        bool advancedControlChanged =
+          ChangedFields.Exists(
+            s =>
+              s is
+                "SkyRoof.IcomLanSpectrumSettings.ScopeDuringTx" or
+                "SkyRoof.IcomLanSpectrumSettings.ScopeCenterType" or
+                "SkyRoof.IcomLanSpectrumSettings.ScopeVbw" or
+                "SkyRoof.IcomLanSpectrumSettings.ScopeRbw" or
+                "SkyRoof.IcomLanSpectrumSettings.ScopeMarkerPosition");
+
+        if (advancedControlChanged)
+          ctx.Settings.IcomLanSpectrum
+            .ManageAdvancedScopeControls =
+            true;
+
+        if (transportChanged)
+          ctx.IcomLanSpectrumPanel?.ApplySettings();
+        else if (controlChanged)
+          ctx.IcomLanSpectrumPanel?.ApplyControlSettings();
+        else
+          ctx.IcomLanSpectrumPanel?.ApplyDisplaySettings();
+      }
 
       if (ChangedFields.Exists(s => s.StartsWith("SkyRoof.OrbitSourceSettings.")))
         ctx.SatnogsDb.ConfigureSources(ctx.Settings.OrbitSources);

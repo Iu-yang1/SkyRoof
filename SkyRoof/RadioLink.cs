@@ -330,6 +330,126 @@ namespace SkyRoof
     }
 
     /// <summary>
+    /// Move the logical receive point to an absolute corrected RF frequency.
+    /// This solves the same frequency model used by ComputeFrequencies instead
+    /// of treating the requested corrected-frequency delta as a raw model delta.
+    /// </summary>
+    internal bool SetCorrectedDownlinkFrequency(
+      double targetFrequency,
+      bool useRit)
+    {
+      if (!HasDownlink ||
+          !double.IsFinite(
+            targetFrequency))
+        return false;
+
+      if (!IsTerrestrial)
+      {
+        if (SatCust == null ||
+            Tx == null ||
+            !Tx.downlink_low.HasValue)
+          return false;
+
+        if (IsTransponder &&
+            TxCust == null)
+          return false;
+
+        if (!useRit &&
+            !IsTransponder &&
+            !DownlinkManualCorrectionEnabled)
+          return false;
+      }
+
+      bool ritModeChanged =
+        RitEnabled != useRit;
+      double previousCorrected =
+        CorrectedDownlinkFrequency;
+
+      RitEnabled =
+        useRit;
+
+      if (IsTerrestrial)
+      {
+        if (useRit)
+          RitOffset =
+            targetFrequency -
+            DownlinkFrequency;
+        else
+          DownlinkFrequency =
+            targetFrequency;
+
+        ComputeFrequencies();
+
+        return
+          ritModeChanged ||
+          Math.Abs(
+            CorrectedDownlinkFrequency -
+            previousCorrected) >= 0.5;
+      }
+
+      double dopplerScale =
+        DownlinkDopplerCorrectionEnabled
+          ? 1.0 - DopplerFactor
+          : 1.0;
+
+      if (!double.IsFinite(
+            dopplerScale) ||
+          Math.Abs(dopplerScale) <
+            1e-9)
+        return false;
+
+      double manualCorrection =
+        DownlinkManualCorrectionEnabled
+          ? DownlinkManualCorrection
+          : 0.0;
+
+      double desiredPreDoppler =
+        (targetFrequency -
+         manualCorrection) /
+        dopplerScale;
+
+      if (useRit)
+      {
+        double nominalDownlink =
+          BaseDownlinkFrequency +
+          (IsTransponder
+            ? TransponderOffset
+            : 0.0);
+
+        RitOffset =
+          desiredPreDoppler -
+          nominalDownlink;
+      }
+      else if (IsTransponder)
+      {
+        TransponderOffset =
+          desiredPreDoppler -
+          BaseDownlinkFrequency;
+      }
+      else
+      {
+        double desiredManualCorrection =
+          targetFrequency -
+          BaseDownlinkFrequency *
+          dopplerScale;
+
+        DownlinkManualCorrection =
+          Math.Round(
+            desiredManualCorrection,
+            MidpointRounding.AwayFromZero);
+      }
+
+      ComputeFrequencies();
+
+      return
+        ritModeChanged ||
+        Math.Abs(
+          CorrectedDownlinkFrequency -
+          previousCorrected) >= 0.5;
+    }
+
+
+    /// <summary>
     /// Reset every operator tuning offset so the no-Doppler downlink/uplink return exactly
     /// to their saved Base frequencies.
     /// </summary>

@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using System.Net;
 using FluentAssertions;
 using SkyRoof;
@@ -274,135 +273,1392 @@ namespace VE3NEA.Dsp.Tests
 
 
     [Fact]
-    public void TransitionProbe_RedactsAuthenticatedIcomControlPayloads()
+    public void ScopeGeometry_CenterModeDerivesFrequencyEdges()
     {
-      const string username = "operator";
-      const string password = "secret";
-
-      byte[] login = IcomLanDirectSession.BuildLoginPacket(
-        0x11223344,
-        0xAABBCCDD,
-        0x0123,
-        0x4567,
-        username,
-        password,
-        "icom-pc");
-
-      IcomLanTransitionProbe.IsSensitiveIcomControlPayload(login)
-        .Should().BeTrue();
-
-      byte[] packet = BuildUdpPacket(
-        source: IPAddress.Parse("192.168.1.20"),
-        destination: IPAddress.Parse("192.168.1.4"),
-        sourcePort: 54321,
-        destinationPort: 50001,
-        login);
-
-      IcomLanTransitionProbe.TryInspectPacket(
-        packet,
-        IPAddress.Parse("192.168.1.4"),
-        out ProbePacketInfo info).Should().BeTrue();
-
-      info.PayloadHex.Should().Be(
-        "<redacted Icom LAN authentication/control payload>");
-      info.PayloadHex.Should().NotContain(
-        Convert.ToHexString(
-          IcomLanDirectSession.EncodePasscode(username)));
-      info.PayloadHex.Should().NotContain(
-        Convert.ToHexString(
-          IcomLanDirectSession.EncodePasscode(password)));
-
-      byte[] auth = IcomLanDirectSession.BuildAuthPacket(
-        0x11223344,
-        0xAABBCCDD,
-        0x0124,
-        0x05,
-        new byte[] { 1, 2, 3, 4, 5, 6 });
-
-      IcomLanTransitionProbe.IsSensitiveIcomControlPayload(auth)
-        .Should().BeTrue();
-
-      byte[] serial = new byte[25];
-      BinaryPrimitives.WriteUInt32LittleEndian(
-        serial.AsSpan(0, 4),
-        (uint)serial.Length);
-      serial[16] = 0xC1;
-      BinaryPrimitives.WriteUInt16LittleEndian(
-        serial.AsSpan(17, 2),
-        4);
-      serial[21] = 0xFE;
-      serial[22] = 0xFE;
-      serial[23] = 0xFD;
-      serial[24] = 0x00;
-
-      IcomLanTransitionProbe.IsSensitiveIcomControlPayload(serial)
-        .Should().BeFalse();
-    }
-
-    [Fact]
-    public void TransitionProbe_IdentifiesCombinedLanScopeFrame()
-    {
-      byte[] samples = Enumerable.Range(0, IcomScopeAssembler.ScopePointCount)
-        .Select(i => (byte)(i % 161))
-        .ToArray();
-
-      byte[] civ = BuildScopeHeaderFrame(
-        receiver: 0,
-        sequence: 1,
-        sequenceMaximum: 1,
-        mode: 0,
-        frequencyAHz: 432_066_500,
-        frequencyBHz: 25_000,
-        outOfRange: false,
-        samples);
-
-      byte[] packet = BuildLanUdpPacket(
-        source: IPAddress.Parse("192.168.1.4"),
-        destination: IPAddress.Parse("192.168.1.20"),
-        sourcePort: 50002,
-        destinationPort: 54321,
-        civ);
-
-      IcomLanTransitionProbe.TryInspectPacket(
-        packet,
-        IPAddress.Parse("192.168.1.4"),
-        out ProbePacketInfo info).Should().BeTrue();
-
-      info.RadioToPc.Should().BeTrue();
-      info.RadioPort.Should().Be(50002);
-      info.CombinedScope.Should().BeTrue();
-      info.ChunkedScope.Should().BeFalse();
-      info.CivSignature.Should().Be("27-00 div=01/01");
-      info.PacketSignature.Should().Contain("RADIO->PC");
-    }
-
-    [Fact]
-    public void TransitionProbe_IdentifiesOutgoingScopeEnableCommand()
-    {
-      byte[] civ =
+      var frame = new IcomScopeFrame
       {
-        0xFE, 0xFE, 0xA2, 0xE0,
-        0x27, 0x11, 0x01, 0xFD
+        Mode = (byte)IcomScopeMode.Center,
+        FrequencyAHz = 435_600_000,
+        FrequencyBHz = 200_000
       };
 
-      byte[] packet = BuildLanUdpPacket(
-        source: IPAddress.Parse("192.168.1.20"),
-        destination: IPAddress.Parse("192.168.1.4"),
-        sourcePort: 54321,
-        destinationPort: 50002,
-        civ);
+      IcomScopeGeometry geometry = frame.Geometry;
 
-      IcomLanTransitionProbe.TryInspectPacket(
-        packet,
-        IPAddress.Parse("192.168.1.4"),
-        out ProbePacketInfo info).Should().BeTrue();
-
-      info.RadioToPc.Should().BeFalse();
-      info.RadioPort.Should().Be(50002);
-      info.CivSignature.Should().Be("27-11 01");
-      info.CombinedScope.Should().BeFalse();
-      info.PacketSignature.Should().Contain("PC->RADIO");
+      geometry.IsValid.Should().BeTrue();
+      geometry.ModeName.Should().Be("CENTER");
+      geometry.CenterFrequencyHz.Should().Be(435_600_000);
+      geometry.SpanHz.Should().Be(200_000);
+      geometry.LowerFrequencyHz.Should().Be(435_500_000);
+      geometry.UpperFrequencyHz.Should().Be(435_700_000);
     }
+
+    [Fact]
+    public void ScopeGeometry_FixedModeDerivesCenterAndSpan()
+    {
+      var frame = new IcomScopeFrame
+      {
+        Mode = (byte)IcomScopeMode.Fixed,
+        FrequencyAHz = 430_000_000,
+        FrequencyBHz = 440_000_000
+      };
+
+      IcomScopeGeometry geometry = frame.Geometry;
+
+      geometry.IsValid.Should().BeTrue();
+      geometry.ModeName.Should().Be("FIXED");
+      geometry.CenterFrequencyHz.Should().Be(435_000_000);
+      geometry.SpanHz.Should().Be(10_000_000);
+      geometry.LowerFrequencyHz.Should().Be(430_000_000);
+      geometry.UpperFrequencyHz.Should().Be(440_000_000);
+    }
+
+    [Fact]
+    public void ScopeState_BandSelectionIsIndependentFromCapture()
+    {
+      var state = new IcomScopeState();
+      var main = new IcomScopeFrame
+      {
+        Scope = 0,
+        TimestampUtc = new DateTime(2026, 10, 8, 1, 0, 0, DateTimeKind.Utc)
+      };
+      var sub = new IcomScopeFrame
+      {
+        Scope = 1,
+        TimestampUtc = new DateTime(2026, 10, 8, 1, 0, 1, DateTimeKind.Utc)
+      };
+
+      state.Update(main);
+      state.Update(sub);
+
+      state.SelectedBand = IcomLanScopeBand.Main;
+      state.ShouldDisplay(main).Should().BeTrue();
+      state.ShouldDisplay(sub).Should().BeFalse();
+      state.LatestSelectedFrame.Should().BeSameAs(main);
+
+      state.SelectedBand = IcomLanScopeBand.Sub;
+      state.ShouldDisplay(main).Should().BeFalse();
+      state.ShouldDisplay(sub).Should().BeTrue();
+      state.LatestSelectedFrame.Should().BeSameAs(sub);
+
+      state.SelectedBand = IcomLanScopeBand.Auto;
+      state.LatestSelectedFrame.Should().BeSameAs(sub);
+    }
+
+    [Fact]
+    public void ScopeState_AutoPrefersFreshMainOverInterleavedSub()
+    {
+      var state =
+        new IcomScopeState();
+
+      var main =
+        new IcomScopeFrame
+        {
+          Scope = 0,
+          TimestampUtc =
+            new DateTime(
+              2026, 10, 8,
+              1, 0, 0, 500,
+              DateTimeKind.Utc)
+        };
+
+      var sub =
+        new IcomScopeFrame
+        {
+          Scope = 1,
+          TimestampUtc =
+            new DateTime(
+              2026, 10, 8,
+              1, 0, 0, 700,
+              DateTimeKind.Utc)
+        };
+
+      state.Update(main);
+      state.Update(sub);
+
+      state.ShouldDisplay(main).Should().BeTrue();
+      state.ShouldDisplay(sub).Should().BeFalse();
+      state.LatestSelectedFrame.Should().BeSameAs(main);
+    }
+
+    [Fact]
+    public void ScopeState_AutoFailsOverToSubAfterMainGoesStale()
+    {
+      var state =
+        new IcomScopeState();
+
+      var main =
+        new IcomScopeFrame
+        {
+          Scope = 0,
+          TimestampUtc =
+            new DateTime(
+              2026, 10, 8,
+              1, 0, 0,
+              DateTimeKind.Utc)
+        };
+
+      var sub =
+        new IcomScopeFrame
+        {
+          Scope = 1,
+          TimestampUtc =
+            new DateTime(
+              2026, 10, 8,
+              1, 0, 1,
+              DateTimeKind.Utc)
+        };
+
+      state.Update(main);
+      state.Update(sub);
+
+      state.ShouldDisplay(main).Should().BeFalse();
+      state.ShouldDisplay(sub).Should().BeTrue();
+      state.LatestSelectedFrame.Should().BeSameAs(sub);
+    }
+
+    [Fact]
+    public void ScopeState_ReturningToAutoReevaluatesCachedFrames()
+    {
+      var state =
+        new IcomScopeState
+        {
+          SelectedBand =
+            IcomLanScopeBand.Sub
+        };
+
+      var main =
+        new IcomScopeFrame
+        {
+          Scope = 0,
+          TimestampUtc =
+            new DateTime(
+              2026, 10, 8,
+              1, 0, 0, 500,
+              DateTimeKind.Utc)
+        };
+
+      var sub =
+        new IcomScopeFrame
+        {
+          Scope = 1,
+          TimestampUtc =
+            new DateTime(
+              2026, 10, 8,
+              1, 0, 0, 700,
+              DateTimeKind.Utc)
+        };
+
+      state.Update(main);
+      state.Update(sub);
+
+      state.SelectedBand =
+        IcomLanScopeBand.Auto;
+
+      state.LatestSelectedFrame.Should().BeSameAs(main);
+    }
+
+
+    [Fact]
+    public void ScopeController_AutoPreservesLegacySourceRouting()
+    {
+      IcomScopeController.ResolveControlPath(
+        IcomLanSpectrumSource.SkyCat,
+        IcomScopeControlPath.Auto).Should().Be(
+          IcomScopeControlPath.SkyCat);
+
+      IcomScopeController.ResolveControlPath(
+        IcomLanSpectrumSource.RsBa1,
+        IcomScopeControlPath.Auto).Should().Be(
+          IcomScopeControlPath.ReadOnly);
+
+      IcomScopeController.ResolveControlPath(
+        IcomLanSpectrumSource.DirectLan,
+        IcomScopeControlPath.Auto).Should().Be(
+          IcomScopeControlPath.DirectLan);
+    }
+
+    [Fact]
+    public void ScopeController_CanUseSkyCatControlWithRsBa1Waveform()
+    {
+      int requestCount = 0;
+      var controller =
+        new IcomScopeController(
+          () =>
+          {
+            requestCount++;
+            return true;
+          });
+
+      bool routed =
+        controller.RequestOutputIfDue(
+          IcomLanSpectrumSource.RsBa1,
+          IcomScopeControlPath.SkyCat,
+          force: true,
+          new DateTime(2026, 10, 8, 1, 0, 0, DateTimeKind.Utc));
+
+      routed.Should().BeTrue();
+      requestCount.Should().Be(1);
+      controller.EffectivePath.Should().Be(
+        IcomScopeControlPath.SkyCat);
+    }
+
+    [Fact]
+    public void ScopeController_RateLimitsScopeReasserts()
+    {
+      int requestCount = 0;
+      var controller =
+        new IcomScopeController(
+          () =>
+          {
+            requestCount++;
+            return true;
+          });
+
+      DateTime start =
+        new(2026, 10, 8, 1, 0, 0, DateTimeKind.Utc);
+
+      controller.RequestOutputIfDue(
+        IcomLanSpectrumSource.SkyCat,
+        IcomScopeControlPath.Auto,
+        force: true,
+        start).Should().BeTrue();
+
+      controller.RequestOutputIfDue(
+        IcomLanSpectrumSource.SkyCat,
+        IcomScopeControlPath.Auto,
+        force: false,
+        start.AddSeconds(1)).Should().BeFalse();
+
+      controller.RequestOutputIfDue(
+        IcomLanSpectrumSource.SkyCat,
+        IcomScopeControlPath.Auto,
+        force: false,
+        start.AddSeconds(2)).Should().BeTrue();
+
+      requestCount.Should().Be(2);
+    }
+
+
+    [Fact]
+    public void ScopeGeometry_MapsFractionsToAbsoluteFrequency()
+    {
+      var frame = new IcomScopeFrame
+      {
+        Mode = (byte)IcomScopeMode.Center,
+        FrequencyAHz = 435_600_000,
+        FrequencyBHz = 200_000
+      };
+
+      IcomScopeGeometry geometry =
+        frame.Geometry;
+
+      geometry.FrequencyAtFraction(0).Should().Be(435_500_000);
+      geometry.FrequencyAtFraction(0.5).Should().Be(435_600_000);
+      geometry.FrequencyAtFraction(1).Should().Be(435_700_000);
+      geometry.FractionForFrequency(435_650_000).Should().BeApproximately(0.75, 1e-9);
+      geometry.ContainsFrequency(435_600_000).Should().BeTrue();
+      geometry.ContainsFrequency(435_800_000).Should().BeFalse();
+    }
+
+
+    [Fact]
+    public void CorrectedTuning_TerrestrialSetsAbsoluteReceiveFrequency()
+    {
+      var link =
+        new RadioLink
+        {
+          IsTerrestrial = true,
+          DownlinkFrequency = 145_900_000
+        };
+
+      link.ComputeFrequencies();
+
+      link.SetCorrectedDownlinkFrequency(
+        145_925_000,
+        useRit: false).Should().BeTrue();
+
+      link.DownlinkFrequency.Should().Be(
+        145_925_000);
+      link.CorrectedDownlinkFrequency.Should().Be(
+        145_925_000);
+      link.RitEnabled.Should().BeFalse();
+    }
+
+    [Fact]
+    public void CorrectedTuning_TransponderSolvesDopplerAndPreservesInvertingPair()
+    {
+      var link =
+        BuildTransponderLink(
+          invert: true);
+
+      link.DopplerFactor =
+        0.00002;
+      link.SatCust!.DownlinkManualCorrection =
+        120;
+      link.ComputeFrequencies();
+
+      double previousCorrected =
+        link.CorrectedDownlinkFrequency;
+      double previousUplink =
+        link.UplinkFrequency;
+      double previousOffset =
+        link.TransponderOffset;
+      double target =
+        previousCorrected +
+        25_000;
+
+      link.SetCorrectedDownlinkFrequency(
+        target,
+        useRit: false).Should().BeTrue();
+
+      link.CorrectedDownlinkFrequency
+        .Should().BeApproximately(
+          target,
+          0.51);
+
+      double modelDelta =
+        link.TransponderOffset -
+        previousOffset;
+
+      modelDelta.Should().BeApproximately(
+        25_000 /
+        (1.0 - link.DopplerFactor),
+        0.01);
+
+      // In an inverting linear transponder, moving the downlink position upward
+      // moves the paired nominal uplink downward by the same transponder offset.
+      link.UplinkFrequency.Should()
+        .BeApproximately(
+          previousUplink -
+          modelDelta,
+          0.01);
+    }
+
+    [Fact]
+    public void CorrectedTuning_RitDoesNotMoveTransponderPair()
+    {
+      var link =
+        BuildTransponderLink(
+          invert: false);
+
+      link.DopplerFactor =
+        -0.000015;
+      link.ComputeFrequencies();
+
+      double previousOffset =
+        link.TransponderOffset;
+      double previousUplink =
+        link.UplinkFrequency;
+      double target =
+        link.CorrectedDownlinkFrequency -
+        7_500;
+
+      link.SetCorrectedDownlinkFrequency(
+        target,
+        useRit: true).Should().BeTrue();
+
+      link.CorrectedDownlinkFrequency
+        .Should().BeApproximately(
+          target,
+          0.01);
+      link.TransponderOffset.Should().Be(
+        previousOffset);
+      link.UplinkFrequency.Should().Be(
+        previousUplink);
+      link.RitEnabled.Should().BeTrue();
+    }
+
+    [Fact]
+    public void CorrectedTuning_FixedSatelliteRespectsDisabledManualCorrection()
+    {
+      var link =
+        new RadioLink
+        {
+          IsTerrestrial = false,
+          Tx =
+            new SatnogsDbTransmitter
+            {
+              downlink_low =
+                145_825_000
+            },
+          TxCust =
+            new TransmitterCustomization
+            {
+              uuid = "fixed"
+            },
+          SatCust =
+            new SatelliteCustomization
+            {
+              DownlinkDopplerCorrectionEnabled =
+                true,
+              DownlinkManualCorrectionEnabled =
+                false
+            },
+          DopplerFactor =
+            0.00001
+        };
+
+      link.ComputeFrequencies();
+      double before =
+        link.CorrectedDownlinkFrequency;
+
+      link.SetCorrectedDownlinkFrequency(
+        before + 2_000,
+        useRit: false).Should().BeFalse();
+
+      link.ComputeFrequencies();
+      link.CorrectedDownlinkFrequency.Should().Be(
+        before);
+    }
+
+
+    [Fact]
+    public void ScopeView_FrequencyForXUsesCurrentSpectrumGeometry()
+    {
+      var frame =
+        new IcomScopeFrame
+        {
+          Mode =
+            (byte)IcomScopeMode.Center,
+          FrequencyAHz =
+            435_600_000,
+          FrequencyBHz =
+            200_000
+        };
+
+      var plot =
+        new System.Drawing.Rectangle(
+          10,
+          20,
+          101,
+          100);
+
+      IcomLanSpectrumView.FrequencyForX(
+        frame.Geometry,
+        plot,
+        10).Should().Be(
+          435_500_000);
+
+      IcomLanSpectrumView.FrequencyForX(
+        frame.Geometry,
+        plot,
+        60).Should().Be(
+          435_600_000);
+
+      IcomLanSpectrumView.FrequencyForX(
+        frame.Geometry,
+        plot,
+        110).Should().Be(
+          435_700_000);
+    }
+
+    [Fact]
+    public void ScopeView_FrequencyForXAppliesDisplayOffset()
+    {
+      var frame =
+        new IcomScopeFrame
+        {
+          Mode =
+            (byte)IcomScopeMode.Center,
+          FrequencyAHz =
+            28_600_000,
+          FrequencyBHz =
+            200_000
+        };
+
+      var plot =
+        new System.Drawing.Rectangle(
+          0,
+          0,
+          101,
+          50);
+
+      IcomLanSpectrumView.FrequencyForX(
+        frame.Geometry,
+        plot,
+        50,
+        407_000_000).Should().Be(
+          435_600_000);
+    }
+
+
+    [Fact]
+    public void ScopeView_FrequencyForXUsesVisibleZoomWindow()
+    {
+      var frame =
+        new IcomScopeFrame
+        {
+          Mode =
+            (byte)IcomScopeMode.Center,
+          FrequencyAHz =
+            435_600_000,
+          FrequencyBHz =
+            200_000
+        };
+
+      var plot =
+        new System.Drawing.Rectangle(
+          0,
+          0,
+          101,
+          50);
+
+      // 4x centered zoom shows the middle 25% of the full geometry:
+      // 435.575 .. 435.625 MHz.
+      IcomLanSpectrumView.FrequencyForX(
+        frame.Geometry,
+        plot,
+        0,
+        0,
+        4,
+        0.5).Should().Be(
+          435_575_000);
+
+      IcomLanSpectrumView.FrequencyForX(
+        frame.Geometry,
+        plot,
+        50,
+        0,
+        4,
+        0.5).Should().Be(
+          435_600_000);
+
+      IcomLanSpectrumView.FrequencyForX(
+        frame.Geometry,
+        plot,
+        100,
+        0,
+        4,
+        0.5).Should().Be(
+          435_625_000);
+    }
+
+    [Fact]
+    public void ScopeReadbackParserParsesStableSkyCatSnapshot()
+    {
+      IcomScopeReadbackState state =
+        IcomScopeReadbackState.Parse(
+          "SELECT=SUB;" +
+          "MAIN.MODE=CENTER;" +
+          "MAIN.SPAN=100000;" +
+          "MAIN.EDGE=1;" +
+          "MAIN.REF=-3.5;" +
+          "MAIN.SPEED=FAST;" +
+          "MAIN.VBW=WIDE;" +
+          "SUB.MODE=SCROLL-F;" +
+          "SUB.SPAN=50000;" +
+          "SUB.EDGE=2;" +
+          "SUB.REF=1.0;" +
+          "SUB.SPEED=MID;" +
+          "SUB.VBW=NARROW;" +
+          "TX=1;" +
+          "CENTER=ABS;" +
+          "MARKER=CARRIER");
+
+      state.SelectedScope.Should().Be(1);
+      state.MainMode.Should().Be(
+        IcomScopeMode.Center);
+      state.MainSpanHz.Should().Be(
+        100_000);
+      state.MainReferenceDb.Should().Be(
+        -3.5);
+      state.MainVbw.Should().Be(
+        IcomScopeVbw.Wide);
+      state.SubMode.Should().Be(
+        IcomScopeMode.ScrollFixed);
+      state.SubEdge.Should().Be(2);
+      state.SubSpeed.Should().Be(
+        IcomScopeSweepSpeed.Mid);
+      state.ScopeDuringTx.Should().BeTrue();
+      state.CenterType.Should().Be(
+        IcomScopeCenterType.CarrierPointAbsolute);
+      state.MarkerPosition.Should().Be(
+        IcomScopeMarkerPosition.CarrierPoint);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("SELECT=MAIN")]
+    [InlineData(
+      "SELECT=SIDE;MAIN.MODE=CENTER;MAIN.SPAN=100000;MAIN.EDGE=1;MAIN.REF=0.0;MAIN.SPEED=FAST;MAIN.VBW=WIDE;" +
+      "SUB.MODE=CENTER;SUB.SPAN=100000;SUB.EDGE=1;SUB.REF=0.0;SUB.SPEED=FAST;SUB.VBW=WIDE;TX=0;CENTER=FILTER;MARKER=FILTER")]
+    public void ScopeReadbackParserRejectsIncompleteOrInvalidSnapshots(
+      string text)
+    {
+      Action parse =
+        () =>
+          IcomScopeReadbackState.Parse(
+            text);
+
+      parse.Should()
+        .Throw<FormatException>();
+    }
+
+
+    [Fact]
+    public void FixedEdgeReadbackParserParsesSelectedPreset()
+    {
+      IcomFixedEdgeReadbackState state =
+        IcomFixedEdgeReadbackState.Parse(
+          "RANGE=2;EDGE=3;LOWER=435000000;UPPER=436000000");
+
+      state.FrequencyRange.Should().Be(2);
+      state.EdgeNumber.Should().Be(3);
+      state.LowerHz.Should().Be(435_000_000);
+      state.UpperHz.Should().Be(436_000_000);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("RANGE=2;EDGE=3;LOWER=435000000")]
+    [InlineData("RANGE=4;EDGE=1;LOWER=435000000;UPPER=436000000")]
+    [InlineData("RANGE=2;EDGE=5;LOWER=435000000;UPPER=436000000")]
+    [InlineData("RANGE=2;EDGE=1;LOWER=436000000;UPPER=435000000")]
+    public void FixedEdgeReadbackParserRejectsInvalidSnapshots(
+      string text)
+    {
+      Action parse =
+        () =>
+          IcomFixedEdgeReadbackState.Parse(
+            text);
+
+      parse.Should()
+        .Throw<FormatException>();
+    }
+
+
+    [Theory]
+    [InlineData(435600000L, 120, 435600100L)]
+    [InlineData(435600000L, -120, 435599900L)]
+    [InlineData(435600000L, 240, 435600200L)]
+    [InlineData(435600000L, 1, 435600100L)]
+    [InlineData(435600000L, -1, 435599900L)]
+    [InlineData(435600000L, 0, 435600000L)]
+    public void ScopeView_AltWheelTuneUsesOneHundredHertzSteps(
+      long currentHz,
+      int wheelDelta,
+      long expectedHz)
+    {
+      IcomLanSpectrumView
+        .CalculateMouseWheelTuneTarget(
+          currentHz,
+          wheelDelta)
+        .Should().Be(
+          expectedHz);
+    }
+
+    [Fact]
+    public void ScopeView_AltWheelTuneRejectsMissingReceiveFrequency()
+    {
+      IcomLanSpectrumView
+        .CalculateMouseWheelTuneTarget(
+          0,
+          120)
+        .Should().Be(0);
+    }
+
+
+    [Fact]
+    public void ScopeView_FrequencyForXRejectsInvalidGeometry()
+    {
+      IcomLanSpectrumView.FrequencyForX(
+        default,
+        new System.Drawing.Rectangle(
+          0,
+          0,
+          100,
+          50),
+        50).Should().Be(0);
+    }
+
+
+    [Fact]
+    public void SpectrumSmoothing_UsesSymmetricMovingAverage()
+    {
+      byte[] samples =
+      [
+        0,
+        0,
+        90,
+        0,
+        0
+      ];
+
+      byte[] smoothed =
+        IcomLanSpectrumView
+          .SmoothSamplesForDisplay(
+            samples,
+            3);
+
+      smoothed.Should().Equal(
+        new byte[]
+        {
+          0,
+          30,
+          30,
+          30,
+          0
+        });
+    }
+
+    [Fact]
+    public void SpectrumSmoothing_ShrinksWindowAtEdgesWithoutMutatingInput()
+    {
+      byte[] samples =
+      [
+        30,
+        60,
+        90
+      ];
+
+      byte[] smoothed =
+        IcomLanSpectrumView
+          .SmoothSamplesForDisplay(
+            samples,
+            5);
+
+      smoothed.Should().Equal(
+        new byte[]
+        {
+          60,
+          60,
+          60
+        });
+
+      samples.Should().Equal(
+        new byte[]
+        {
+          30,
+          60,
+          90
+        });
+    }
+
+    [Fact]
+    public void SpectrumSmoothing_OffReturnsIndependentCopy()
+    {
+      byte[] samples =
+      [
+        10,
+        20,
+        30
+      ];
+
+      byte[] copy =
+        IcomLanSpectrumView
+          .SmoothSamplesForDisplay(
+            samples,
+            1);
+
+      copy.Should().Equal(samples);
+      copy.Should().NotBeSameAs(samples);
+    }
+
+
+    [Fact]
+    public void ScopeHistoryReset_ChangesScopeOrMode()
+    {
+      var previous =
+        new IcomScopeFrame
+        {
+          Scope = 0,
+          Mode = (byte)IcomScopeMode.Center,
+          FrequencyAHz = 435_600_000,
+          FrequencyBHz = 100_000
+        };
+
+      var differentScope =
+        new IcomScopeFrame
+        {
+          Scope = 1,
+          Mode = (byte)IcomScopeMode.Center,
+          FrequencyAHz = 145_900_000,
+          FrequencyBHz = 100_000
+        };
+
+      var differentMode =
+        new IcomScopeFrame
+        {
+          Scope = 0,
+          Mode = (byte)IcomScopeMode.Fixed,
+          FrequencyAHz = 435_500_000,
+          FrequencyBHz = 435_700_000
+        };
+
+      IcomLanSpectrumView.RequiresHistoryReset(
+        previous,
+        differentScope).Should().BeTrue();
+
+      IcomLanSpectrumView.RequiresHistoryReset(
+        previous,
+        differentMode).Should().BeTrue();
+    }
+
+    [Fact]
+    public void ScopeHistoryReset_CenterTranslationKeepsHistoryWhenSpanIsStable()
+    {
+      var previous =
+        new IcomScopeFrame
+        {
+          Scope = 0,
+          Mode = (byte)IcomScopeMode.Center,
+          FrequencyAHz = 435_600_000,
+          FrequencyBHz = 100_000
+        };
+
+      var movedCenter =
+        new IcomScopeFrame
+        {
+          Scope = 0,
+          Mode = (byte)IcomScopeMode.Center,
+          FrequencyAHz = 435_601_500,
+          FrequencyBHz = 100_000
+        };
+
+      IcomLanSpectrumView.RequiresHistoryReset(
+        previous,
+        movedCenter).Should().BeFalse();
+    }
+
+    [Fact]
+    public void ScopeHistoryReset_FixedEdgeMovementInvalidatesHistory()
+    {
+      var previous =
+        new IcomScopeFrame
+        {
+          Scope = 0,
+          Mode = (byte)IcomScopeMode.Fixed,
+          FrequencyAHz = 435_000_000,
+          FrequencyBHz = 436_000_000
+        };
+
+      var movedEdges =
+        new IcomScopeFrame
+        {
+          Scope = 0,
+          Mode = (byte)IcomScopeMode.Fixed,
+          FrequencyAHz = 435_100_000,
+          FrequencyBHz = 436_100_000
+        };
+
+      IcomLanSpectrumView.RequiresHistoryReset(
+        previous,
+        movedEdges).Should().BeTrue();
+    }
+
+
+    [Fact]
+    public void ScopeHistoryShift_MovingCenterUpShiftsHistoryLeft()
+    {
+      var previous =
+        new IcomScopeFrame
+        {
+          Mode =
+            (byte)IcomScopeMode.Center,
+          FrequencyAHz =
+            435_600_000,
+          FrequencyBHz =
+            474_000
+        };
+
+      var current =
+        new IcomScopeFrame
+        {
+          Mode =
+            (byte)IcomScopeMode.Center,
+          FrequencyAHz =
+            435_601_000,
+          FrequencyBHz =
+            474_000
+        };
+
+      int shift =
+        IcomLanSpectrumView
+          .CalculateHistoryShiftBins(
+            previous.Geometry,
+            current.Geometry,
+            0,
+            out double residual);
+
+      shift.Should().Be(-1);
+      residual.Should()
+        .BeApproximately(
+          0,
+          1e-12);
+    }
+
+    [Fact]
+    public void ScopeHistoryShift_AccumulatesSubBinDopplerMotion()
+    {
+      var first =
+        new IcomScopeFrame
+        {
+          Mode =
+            (byte)IcomScopeMode.Center,
+          FrequencyAHz =
+            435_600_000,
+          FrequencyBHz =
+            474_000
+        };
+
+      var second =
+        new IcomScopeFrame
+        {
+          Mode =
+            (byte)IcomScopeMode.Center,
+          FrequencyAHz =
+            435_600_400,
+          FrequencyBHz =
+            474_000
+        };
+
+      var third =
+        new IcomScopeFrame
+        {
+          Mode =
+            (byte)IcomScopeMode.Center,
+          FrequencyAHz =
+            435_600_800,
+          FrequencyBHz =
+            474_000
+        };
+
+      IcomLanSpectrumView
+        .CalculateHistoryShiftBins(
+          first.Geometry,
+          second.Geometry,
+          0,
+          out double residual1)
+        .Should().Be(0);
+
+      residual1.Should()
+        .BeApproximately(
+          -0.4,
+          1e-12);
+
+      IcomLanSpectrumView
+        .CalculateHistoryShiftBins(
+          second.Geometry,
+          third.Geometry,
+          residual1,
+          out double residual2)
+        .Should().Be(-1);
+
+      residual2.Should()
+        .BeApproximately(
+          0.2,
+          1e-12);
+    }
+
+
+    [Theory]
+    [InlineData(0, 0, 100, 0)]
+    [InlineData(80, 0, 100, 80)]
+    [InlineData(160, 0, 100, 160)]
+    [InlineData(80, 20, 100, 100)]
+    [InlineData(120, 0, 200, 160)]
+    [InlineData(40, 0, 200, 0)]
+    public void WaterfallLevelMapping_AppliesBrightnessAndContrast(
+      int level,
+      int brightness,
+      int contrast,
+      int expected)
+    {
+      IcomLanSpectrumView.MapWaterfallLevel(
+        level,
+        brightness,
+        contrast).Should().Be(expected);
+    }
+
+
+    [Fact]
+    public void AdaptiveScopeMappingUsesRobustNoiseFloorWithoutChangingRawSamples()
+    {
+      byte[] raw = Enumerable.Repeat((byte)30, 475).ToArray();
+      raw[10] = 5;
+      raw[80] = 140;
+      raw[81] = 160;
+
+      IcomLanSpectrumView.EstimateNoiseFloor(raw).Should().Be(30);
+      raw[80].Should().Be(140);
+      raw[81].Should().Be(160);
+
+      IcomLanSpectrumView.MapSpectrumLevel(30, 30).Should().Be(62);
+      IcomLanSpectrumView.MapSpectrumLevel(100, 30).Should().Be(160);
+      IcomLanSpectrumView.MapAdaptiveWaterfallLevel(30, 30).Should().Be(30);
+      IcomLanSpectrumView.MapAdaptiveWaterfallLevel(35, 30).Should().Be(46);
+      IcomLanSpectrumView.MapAdaptiveWaterfallLevel(0, 0).Should().Be(0);
+    }
+
+    [Fact]
+    public void AdaptiveScopeMappingHandlesEmptyAndOutOfRangeValues()
+    {
+      IcomLanSpectrumView.EstimateNoiseFloor(Array.Empty<byte>())
+        .Should().Be(0);
+      IcomLanSpectrumView.MapSpectrumLevel(-10, 0).Should().Be(0);
+      IcomLanSpectrumView.MapSpectrumLevel(200, 0).Should().Be(160);
+      IcomLanSpectrumView.MapAdaptiveWaterfallLevel(200, 30)
+        .Should().Be(160);
+    }
+
+    [Fact]
+    public void ScopeCommandQueue_CoalescedReplacementMovesToLatestEventPosition()
+    {
+      var queue =
+        new IcomScopeCommandQueue(
+          capacity: 8);
+
+      queue.Enqueue(
+        "U SCOPE_MODE MAIN CENTER");
+      queue.Enqueue(
+        "U SCOPE_EDGE MAIN 1");
+      queue.Enqueue(
+        "U SCOPE_MODE MAIN FIXED");
+
+      queue.Count.Should().Be(2);
+
+      queue.TryDequeue(
+        out string? first).Should().BeTrue();
+      first.Should().Be(
+        "U SCOPE_EDGE MAIN 1");
+
+      queue.TryDequeue(
+        out string? second).Should().BeTrue();
+      second.Should().Be(
+        "U SCOPE_MODE MAIN FIXED");
+    }
+
+    [Fact]
+    public void ScopeCommandQueue_LatestModeThenEdgeSequenceKeepsDependencyOrder()
+    {
+      var queue =
+        new IcomScopeCommandQueue(
+          capacity: 8);
+
+      queue.Enqueue(
+        "U SCOPE_EDGE MAIN 1");
+      queue.Enqueue(
+        "U SCOPE_MODE MAIN FIXED");
+      queue.Enqueue(
+        "U SCOPE_EDGE MAIN 2");
+
+      queue.Count.Should().Be(2);
+
+      queue.TryDequeue(
+        out string? first).Should().BeTrue();
+      first.Should().Be(
+        "U SCOPE_MODE MAIN FIXED");
+
+      queue.TryDequeue(
+        out string? second).Should().BeTrue();
+      second.Should().Be(
+        "U SCOPE_EDGE MAIN 2");
+    }
+
+    [Fact]
+    public void ScopeCommandQueue_KeepsMainAndSubTargetsIndependent()
+    {
+      var queue =
+        new IcomScopeCommandQueue(
+          capacity: 8);
+
+      queue.Enqueue(
+        "U SCOPE_REF MAIN 0.0");
+      queue.Enqueue(
+        "U SCOPE_REF SUB -3.5");
+      queue.Enqueue(
+        "U SCOPE_REF MAIN 2.0");
+
+      queue.Count.Should().Be(2);
+
+      queue.TryDequeue(
+        out string? sub).Should().BeTrue();
+      sub.Should().Be(
+        "U SCOPE_REF SUB -3.5");
+
+      queue.TryDequeue(
+        out string? main).Should().BeTrue();
+      main.Should().Be(
+        "U SCOPE_REF MAIN 2.0");
+    }
+
+    [Fact]
+    public void ScopeCommandQueue_CoalescesFixedEdgeByRangeAndEdgeNumber()
+    {
+      var queue =
+        new IcomScopeCommandQueue(
+          capacity: 8);
+
+      queue.Enqueue(
+        "U SCOPE_FIXED_EDGE 2 1 435000000 436000000");
+      queue.Enqueue(
+        "U SCOPE_FIXED_EDGE 2 1 435100000 436100000");
+
+      queue.Count.Should().Be(1);
+
+      queue.TryDequeue(
+        out string? command).Should().BeTrue();
+      command.Should().Be(
+        "U SCOPE_FIXED_EDGE 2 1 435100000 436100000");
+    }
+
+    [Theory]
+    [InlineData("U SCOPE_TX 1", "SCOPE_TX")]
+    [InlineData("U SCOPE_CENTER_TYPE ABS", "SCOPE_CENTER_TYPE")]
+    [InlineData("U SCOPE_MARKER CARRIER", "SCOPE_MARKER")]
+    [InlineData("U SCOPE_VBW MAIN WIDE", "SCOPE_VBW MAIN")]
+    [InlineData("U SCOPE_VBW SUB NARROW", "SCOPE_VBW SUB")]
+    public void ScopeCommandQueue_KeysRemainingControlsBySemanticTarget(
+      string command,
+      string expected)
+    {
+      IcomScopeCommandQueue.GetCommandKey(
+        command).Should().Be(
+          expected);
+    }
+
+
+    [Fact]
+    public void ScopeCommandQueue_ClearCancelsAllPendingCommands()
+    {
+      var queue =
+        new IcomScopeCommandQueue(
+          capacity: 8);
+
+      queue.Enqueue(
+        "U SCOPE_MODE MAIN FIXED");
+      queue.Enqueue(
+        "U SCOPE_EDGE MAIN 2");
+
+      queue.Clear();
+
+      queue.Count.Should().Be(0);
+      queue.TryDequeue(
+        out _).Should().BeFalse();
+    }
+
+
+    [Fact]
+    public void ScopeCommandQueue_DropsOldestDistinctCommandAtCapacity()
+    {
+      var queue =
+        new IcomScopeCommandQueue(
+          capacity: 2);
+
+      queue.Enqueue(
+        "U SCOPE_MODE MAIN CENTER");
+      queue.Enqueue(
+        "U SCOPE_EDGE MAIN 1");
+      queue.Enqueue(
+        "U SCOPE_REF MAIN 0.0");
+
+      queue.Count.Should().Be(2);
+      queue.DroppedCount.Should().Be(1);
+
+      queue.TryDequeue(
+        out string? first).Should().BeTrue();
+      first.Should().Be(
+        "U SCOPE_EDGE MAIN 1");
+
+      queue.TryDequeue(
+        out string? second).Should().BeTrue();
+      second.Should().Be(
+        "U SCOPE_REF MAIN 0.0");
+    }
+
+
+    [Fact]
+    public void ScopeController_RoutesExplicitSkyCatControlIndependentlyFromRsBa1Data()
+    {
+      IcomScopeControlRequest? received = null;
+
+      var controller =
+        new IcomScopeController(
+          () => true,
+          request =>
+          {
+            received = request;
+            return true;
+          });
+
+      var request =
+        IcomScopeControlRequest.ForSpan(
+          1,
+          100_000);
+
+      controller.RequestControl(
+        IcomLanSpectrumSource.RsBa1,
+        IcomScopeControlPath.SkyCat,
+        request).Should().BeTrue();
+
+      received.Should().BeSameAs(request);
+      controller.EffectivePath.Should().Be(
+        IcomScopeControlPath.SkyCat);
+    }
+
+    [Fact]
+    public void ScopeController_AutoKeepsRsBa1WaveformReadOnly()
+    {
+      int requestCount = 0;
+
+      var controller =
+        new IcomScopeController(
+          () => true,
+          _ =>
+          {
+            requestCount++;
+            return true;
+          });
+
+      controller.RequestControl(
+        IcomLanSpectrumSource.RsBa1,
+        IcomScopeControlPath.Auto,
+        IcomScopeControlRequest.ForEdge(
+          0,
+          2)).Should().BeFalse();
+
+      requestCount.Should().Be(0);
+      controller.EffectivePath.Should().Be(
+        IcomScopeControlPath.ReadOnly);
+    }
+
+    [Theory]
+    [InlineData(
+      (int)IcomScopeControlKind.SelectedScope,
+      "U SCOPE_SELECT SUB")]
+    [InlineData(
+      (int)IcomScopeControlKind.Mode,
+      "U SCOPE_MODE MAIN SCROLL-C")]
+    [InlineData(
+      (int)IcomScopeControlKind.Span,
+      "U SCOPE_SPAN SUB 50000")]
+    [InlineData(
+      (int)IcomScopeControlKind.Edge,
+      "U SCOPE_EDGE MAIN 3")]
+    [InlineData(
+      (int)IcomScopeControlKind.ReferenceLevel,
+      "U SCOPE_REF SUB -3.5")]
+    [InlineData(
+      (int)IcomScopeControlKind.SweepSpeed,
+      "U SCOPE_SPEED MAIN SLOW")]
+    [InlineData(
+      (int)IcomScopeControlKind.ScopeDuringTx,
+      "U SCOPE_TX 1")]
+    [InlineData(
+      (int)IcomScopeControlKind.CenterType,
+      "U SCOPE_CENTER_TYPE ABS")]
+    [InlineData(
+      (int)IcomScopeControlKind.Vbw,
+      "U SCOPE_VBW SUB WIDE")]
+    [InlineData(
+      (int)IcomScopeControlKind.MarkerPosition,
+      "U SCOPE_MARKER CARRIER")]
+    [InlineData(
+      (int)IcomScopeControlKind.FixedEdge,
+      "U SCOPE_FIXED_EDGE 2 1 435000000 436000000")]
+    public void ScopeControlRequest_FormatsSkyCatPrivateCommand(
+      int kindValue,
+      string expected)
+    {
+      IcomScopeControlKind kind =
+        (IcomScopeControlKind)kindValue;
+
+      IcomScopeControlRequest request =
+        kind switch
+        {
+          IcomScopeControlKind.SelectedScope =>
+            IcomScopeControlRequest.ForSelectedScope(
+              1),
+          IcomScopeControlKind.Mode =>
+            IcomScopeControlRequest.ForMode(
+              0,
+              IcomScopeMode.ScrollCenter),
+          IcomScopeControlKind.Span =>
+            IcomScopeControlRequest.ForSpan(
+              1,
+              50_000),
+          IcomScopeControlKind.Edge =>
+            IcomScopeControlRequest.ForEdge(
+              0,
+              3),
+          IcomScopeControlKind.ReferenceLevel =>
+            IcomScopeControlRequest.ForReferenceLevel(
+              1,
+              -3.5),
+          IcomScopeControlKind.SweepSpeed =>
+            IcomScopeControlRequest.ForSweepSpeed(
+              0,
+              IcomScopeSweepSpeed.Slow),
+          IcomScopeControlKind.ScopeDuringTx =>
+            IcomScopeControlRequest.ForScopeDuringTx(
+              true),
+          IcomScopeControlKind.CenterType =>
+            IcomScopeControlRequest.ForCenterType(
+              IcomScopeCenterType.CarrierPointAbsolute),
+          IcomScopeControlKind.Vbw =>
+            IcomScopeControlRequest.ForVbw(
+              1,
+              IcomScopeVbw.Wide),
+          IcomScopeControlKind.MarkerPosition =>
+            IcomScopeControlRequest.ForMarkerPosition(
+              IcomScopeMarkerPosition.CarrierPoint),
+          _ =>
+            IcomScopeControlRequest.ForFixedEdge(
+              2,
+              1,
+              435_000_000,
+              436_000_000)
+        };
+
+      CatControl.FormatIcomScopeCommand(
+        request).Should().Be(
+          expected);
+    }
+
+
+    private static RadioLink BuildTransponderLink(
+      bool invert)
+    {
+      var link =
+        new RadioLink
+        {
+          IsTerrestrial = false,
+          Tx =
+            new SatnogsDbTransmitter
+            {
+              downlink_low =
+                435_500_000,
+              downlink_high =
+                435_600_000,
+              uplink_low =
+                145_900_000,
+              uplink_high =
+                146_000_000,
+              invert =
+                invert
+            },
+          TxCust =
+            new TransmitterCustomization
+            {
+              uuid =
+                "linear",
+              TransponderOffset =
+                20_000
+            },
+          SatCust =
+            new SatelliteCustomization
+            {
+              DownlinkDopplerCorrectionEnabled =
+                true,
+              DownlinkManualCorrectionEnabled =
+                true
+            }
+        };
+
+      link.ComputeFrequencies();
+      return link;
+    }
+
 
     private static byte[] BuildLanUdpPacket(
       IPAddress source,

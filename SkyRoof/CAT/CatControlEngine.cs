@@ -55,9 +55,35 @@ namespace SkyRoof
     // command is sent by SkyCAT over the already-open CAT/virtual-serial path, so this
     // does not create a second Icom LAN session.
     private volatile bool IcomScopeOutputPending;
+    private readonly IcomScopeCommandQueue IcomScopeControlCommands =
+      new(capacity: 32);
+    private volatile bool IcomScopeReadbackPending;
+    private IcomFixedEdgeReadbackRequest? IcomFixedEdgeReadbackPending;
+
+    private sealed class IcomFixedEdgeReadbackRequest
+    {
+      internal int FrequencyRange { get; init; }
+      internal int EdgeNumber { get; init; }
+    }
+
+    internal int PendingIcomScopeControlCount =>
+      IcomScopeControlCommands.Count;
+
+    internal long DroppedIcomScopeControlCount =>
+      IcomScopeControlCommands.DroppedCount;
+
+    private long RejectedIcomScopeControlCountValue;
+
+    internal long RejectedIcomScopeControlCount =>
+      Interlocked.Read(
+        ref RejectedIcomScopeControlCountValue);
 
     public event EventHandler? RxTuned;
     public event EventHandler? TxTuned;
+    internal event Action<IcomScopeReadbackState>?
+      IcomScopeReadbackReceived;
+    internal event Action<IcomFixedEdgeReadbackState>?
+      IcomFixedEdgeReadbackReceived;
 
     public CatControlEngine(CatRadioSettings radioSettings, CatSettings catSettings) : base(radioSettings.Host, radioSettings.Port, catSettings)
     {
@@ -191,6 +217,75 @@ namespace SkyRoof
       IcomScopeOutputPending = true;
     }
 
+    internal void CancelIcomScopeRequests()
+    {
+      IcomScopeOutputPending = false;
+      IcomScopeReadbackPending = false;
+      Volatile.Write(
+        ref IcomFixedEdgeReadbackPending,
+        null);
+      IcomScopeControlCommands.Clear();
+    }
+
+    internal bool RequestIcomScopeReadback()
+    {
+      if (!SupportsIcomScopeOutput)
+        return false;
+
+      IcomScopeReadbackPending = true;
+      return true;
+    }
+
+    internal bool RequestIcomFixedEdgeReadback(
+      int frequencyRange,
+      int edgeNumber)
+    {
+      if (!SupportsIcomScopeOutput ||
+          frequencyRange is < 1 or > 3 ||
+          edgeNumber is < 1 or > 4)
+        return false;
+
+      Volatile.Write(
+        ref IcomFixedEdgeReadbackPending,
+        new IcomFixedEdgeReadbackRequest
+        {
+          FrequencyRange =
+            frequencyRange,
+          EdgeNumber =
+            edgeNumber
+        });
+
+      return true;
+    }
+
+    internal bool RequestIcomScopeCommand(
+      string command)
+    {
+      if (!SupportsIcomScopeOutput ||
+          string.IsNullOrWhiteSpace(command) ||
+          !command.StartsWith(
+            "U SCOPE_",
+            StringComparison.Ordinal))
+        return false;
+
+      long droppedBefore =
+        IcomScopeControlCommands.DroppedCount;
+
+      IcomScopeControlCommands.Enqueue(
+        command);
+
+      if (IcomScopeControlCommands.DroppedCount >
+          droppedBefore)
+        Log.Warning(
+          "IC-9700 scope-control queue was full; dropped the oldest pending command before queuing {Command}",
+          command);
+
+      LogInfo(
+        $"Queued IC-9700 scope control: {command}");
+
+      return true;
+    }
+
 
 
 
@@ -219,6 +314,23 @@ namespace SkyRoof
       TryReassertCtcssAfterTune();
 
       if (IcomScopeOutputPending) TryEnableIcomScopeOutput();
+
+      if (IcomScopeControlCommands.TryDequeue(
+            out string? scopeCommand))
+        TryWriteIcomScopeControl(
+          scopeCommand);
+
+      if (IcomScopeReadbackPending)
+        TryReadIcomScopeState();
+
+      IcomFixedEdgeReadbackRequest? fixedEdgeRequest =
+        Interlocked.Exchange(
+          ref IcomFixedEdgeReadbackPending,
+          null);
+
+      if (fixedEdgeRequest != null)
+        TryReadIcomFixedEdge(
+          fixedEdgeRequest);
 
       if (RequestedArmingTone.HasValue) TrySendArmingTone();
     }
@@ -739,16 +851,133 @@ namespace SkyRoof
 
       bool scopeOk = SendWriteCommand("U SCOPE 1");
       bool dataOk = SendWriteCommand("U SCOPE_DATA 1");
-      bool fastOk = SendWriteCommand("U SCOPE_FAST 1");
 
-      if (scopeOk && dataOk && fastOk)
+      if (scopeOk && dataOk)
         LogInfo(
-          "IC-9700 scope and waveform output enabled through SkyCAT; " +
-          "MAIN/SUB sweep speed set to FAST");
+          "IC-9700 scope and waveform output enabled through SkyCAT");
       else
         Log.Warning(
-          "SkyCAT did not accept all IC-9700 scope commands. " +
-          "Update SkyCAT to a build that supports U SCOPE / U SCOPE_DATA / U SCOPE_FAST.");
+          "SkyCAT did not accept all IC-9700 scope output commands. " +
+          "Update SkyCAT to a build that supports U SCOPE / U SCOPE_DATA.");
+    }
+
+
+    private void TryReadIcomFixedEdge(
+      IcomFixedEdgeReadbackRequest request)
+    {
+      if (!ReferenceEquals(
+            commands,
+            RigCtldCommands.SkyCat))
+        return;
+
+      string? reply =
+        SendReadCommand(
+          $"U SCOPE_READ_EDGE {request.FrequencyRange} {request.EdgeNumber}");
+
+      if (string.IsNullOrWhiteSpace(
+            reply) ||
+          reply.StartsWith(
+            "RPRT ",
+            StringComparison.Ordinal))
+      {
+        Log.Warning(
+          "SkyCAT IC-9700 fixed-edge readback failed for range {Range}, edge {Edge}: {Reply}",
+          request.FrequencyRange,
+          request.EdgeNumber,
+          reply ?? "<null>");
+        return;
+      }
+
+      try
+      {
+        IcomFixedEdgeReadbackState state =
+          IcomFixedEdgeReadbackState.Parse(
+            reply);
+
+        IcomFixedEdgeReadbackReceived?.Invoke(
+          state);
+      }
+      catch (FormatException ex)
+      {
+        Log.Warning(
+          ex,
+          "SkyCAT returned malformed fixed-edge readback: {Reply}",
+          reply);
+      }
+    }
+
+
+    private void TryReadIcomScopeState()
+    {
+      IcomScopeReadbackPending = false;
+
+      if (!ReferenceEquals(
+            commands,
+            RigCtldCommands.SkyCat))
+        return;
+
+      string? reply =
+        SendReadCommand(
+          "U SCOPE_READ");
+
+      if (string.IsNullOrWhiteSpace(
+            reply))
+      {
+        Log.Warning(
+          "SkyCAT returned no IC-9700 scope readback.");
+        return;
+      }
+
+      if (reply.StartsWith(
+            "RPRT ",
+            StringComparison.Ordinal))
+      {
+        Log.Warning(
+          "SkyCAT IC-9700 scope readback failed: {Reply}",
+          reply);
+        return;
+      }
+
+      try
+      {
+        IcomScopeReadbackState state =
+          IcomScopeReadbackState.Parse(
+            reply);
+
+        IcomScopeReadbackReceived?.Invoke(
+          state);
+      }
+      catch (FormatException ex)
+      {
+        Log.Warning(
+          ex,
+          "SkyCAT returned malformed IC-9700 scope readback: {Reply}",
+          reply);
+      }
+    }
+
+
+    private void TryWriteIcomScopeControl(
+      string command)
+    {
+      if (!ReferenceEquals(
+            commands,
+            RigCtldCommands.SkyCat))
+      {
+        LogInfo(
+          $"IC-9700 scope control skipped because CAT backend is not SkyCAT: {command}");
+        return;
+      }
+
+      if (!SendWriteCommand(command))
+      {
+        Interlocked.Increment(
+          ref RejectedIcomScopeControlCountValue);
+
+        Log.Warning(
+          "SkyCAT rejected IC-9700 scope control command: {Command}",
+          command);
+      }
     }
 
 
