@@ -11,6 +11,8 @@ namespace SkyRoof
 
     internal event Action<IcomScopeReadbackState>?
       IcomScopeReadbackReceived;
+    internal event Action<IcomFixedEdgeReadbackState>?
+      IcomFixedEdgeReadbackReceived;
 
     /// <summary>
     /// Ensures CAT engines match settings and link topology. Does not restart engines
@@ -93,6 +95,19 @@ namespace SkyRoof
         GetIcomScopeControlBackend();
 
       return engine?.RequestIcomScopeReadback() ??
+        false;
+    }
+
+    internal bool RequestIcomFixedEdgeReadback(
+      int frequencyRange,
+      int edgeNumber)
+    {
+      CatControlEngine? engine =
+        GetIcomScopeControlBackend();
+
+      return engine?.RequestIcomFixedEdgeReadback(
+        frequencyRange,
+        edgeNumber) ??
         false;
     }
 
@@ -327,6 +342,10 @@ namespace SkyRoof
         state =>
           IcomScopeReadbackReceived?.Invoke(
             state);
+      engine.IcomFixedEdgeReadbackReceived +=
+        state =>
+          IcomFixedEdgeReadbackReceived?.Invoke(
+            state);
       return engine;
     }
 
@@ -338,6 +357,10 @@ namespace SkyRoof
       engine.IcomScopeReadbackReceived +=
         state =>
           IcomScopeReadbackReceived?.Invoke(
+            state);
+      engine.IcomFixedEdgeReadbackReceived +=
+        state =>
+          IcomFixedEdgeReadbackReceived?.Invoke(
             state);
       return engine;
     }
