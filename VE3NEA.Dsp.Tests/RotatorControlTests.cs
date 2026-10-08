@@ -74,7 +74,10 @@ public sealed class RotatorControlTests
 
             // Simulate a controller reboot after acknowledging the first move:
             // close the first TCP session on the next position read.
-            if (command == "p" && Interlocked.Increment(ref disconnects) == 1)
+            // Only simulate a reboot after at least one move was accepted.
+            // The engine may poll 'p' before RotateTo has queued the first 'P'.
+            if (command == "p" && Volatile.Read(ref moves) > 0 &&
+                Interlocked.Increment(ref disconnects) == 1)
                 return null;
 
             return "60.0\n10.0\n";
