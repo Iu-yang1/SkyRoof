@@ -578,6 +578,9 @@ namespace VE3NEA.Dsp.Tests
 
     [Theory]
     [InlineData(
+      (int)IcomScopeControlKind.SelectedScope,
+      "U SCOPE_SELECT SUB")]
+    [InlineData(
       (int)IcomScopeControlKind.Mode,
       "U SCOPE_MODE MAIN SCROLL-C")]
     [InlineData(
@@ -605,6 +608,9 @@ namespace VE3NEA.Dsp.Tests
       IcomScopeControlRequest request =
         kind switch
         {
+          IcomScopeControlKind.SelectedScope =>
+            IcomScopeControlRequest.ForSelectedScope(
+              1),
           IcomScopeControlKind.Mode =>
             IcomScopeControlRequest.ForMode(
               0,
