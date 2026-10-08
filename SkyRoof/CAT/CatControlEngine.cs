@@ -205,6 +205,12 @@ namespace SkyRoof
       IcomScopeOutputPending = true;
     }
 
+    internal void CancelIcomScopeRequests()
+    {
+      IcomScopeOutputPending = false;
+      IcomScopeControlCommands.Clear();
+    }
+
     internal bool RequestIcomScopeCommand(
       string command)
     {
