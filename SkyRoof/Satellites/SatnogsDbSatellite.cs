@@ -142,7 +142,7 @@ namespace SkyRoof
 
     [ReadOnly(true)]
     [Category("Orbit")]
-    [DisplayName("TLE")]
+    [DisplayName("Orbit Elements")]
     public string? TleInfo {get; set; }
 
     [ReadOnly(true)]
@@ -174,7 +174,19 @@ namespace SkyRoof
     public List<SatnogsDbTransmitter> Transmitters = new();
 
     [Browsable(false)]
-    public SatnogsDbTle Tle;
+    public SatnogsDbTle? Tle;
+
+    // Persist the automatic orbit separately from the temporary manual override.
+    // This lets a three-day manual override expire immediately back to the most
+    // recent automatic source without waiting for another network download.
+    [Browsable(false)]
+    public SatnogsDbTle? AutomaticTle;
+
+    [Browsable(false)]
+    public SatnogsDbTle? ManualTle;
+
+    [Browsable(false)]
+    public DateTime? ManualTleExpiresUtc;
 
     [Browsable(false)]
     public string SearchText;
@@ -220,6 +232,65 @@ namespace SkyRoof
       Footprint = null;
     }
 
+    internal bool InitializeOrbitLayers(DateTime utc)
+    {
+      bool migrated = false;
+
+      // Existing Satellites.json files only have Tle. Treat that value as the
+      // automatic fallback when the new layered fields are absent.
+      if (AutomaticTle == null && ManualTle == null && Tle != null)
+      {
+        AutomaticTle = Tle;
+        migrated = true;
+      }
+
+      return RefreshOrbitSelection(utc) || migrated;
+    }
+
+    internal void SetAutomaticTle(SatnogsDbTle tle, DateTime utc)
+    {
+      AutomaticTle = tle;
+      RefreshOrbitSelection(utc);
+    }
+
+    internal void SetManualTle(SatnogsDbTle tle, DateTime expiresUtc, DateTime utc)
+    {
+      ManualTle = tle;
+      ManualTleExpiresUtc = expiresUtc;
+      RefreshOrbitSelection(utc);
+    }
+
+    internal bool HasActiveManualOrbit(DateTime utc) =>
+      ManualTle != null &&
+      ManualTleExpiresUtc is DateTime expires &&
+      expires > utc;
+
+    internal bool RefreshOrbitSelection(DateTime utc)
+    {
+      bool changed = false;
+
+      if (ManualTle != null &&
+          (ManualTleExpiresUtc == null || ManualTleExpiresUtc <= utc))
+      {
+        ManualTle = null;
+        ManualTleExpiresUtc = null;
+        changed = true;
+      }
+
+      SatnogsDbTle? selected =
+        HasActiveManualOrbit(utc)
+          ? ManualTle
+          : AutomaticTle;
+
+      if (!ReferenceEquals(Tle, selected))
+      {
+        SetTle(selected);
+        changed = true;
+      }
+
+      return changed;
+    }
+
 
     private List<string> FormatTransmitters()
     {
@@ -240,7 +311,8 @@ namespace SkyRoof
 
       if (LotwName != null) { name = LotwName; AllNames.Add(LotwName); }
       
-      if (Tle != null) AllNames.Add(Tle.tle0.StartsWith("0 ") ? Tle.tle0.Substring(2) : Tle.tle0);
+      if (Tle != null && !string.IsNullOrWhiteSpace(Tle.tle0))
+        AllNames.Add(Tle.tle0.StartsWith("0 ") ? Tle.tle0.Substring(2) : Tle.tle0);
 
       AllNames.AddRange(JE9PEL_Names);
       AllNames.AddRange(JE9PEL_Callsigns);
@@ -307,7 +379,7 @@ namespace SkyRoof
       if (IsEphemerisTarget)
         tooltipText += $"\nephemeris: {citation}";
       else if (Tle != null) tooltipText +=
-          $"\nTLE: {TleInfo}\nperiod: {Period} min.\ninclination: {Inclination}°\n" +
+          $"\norbit: {TleInfo}\nperiod: {Period} min.\ninclination: {Inclination}°\n" +
           $"footprint: {Footprint} km\naltitude: {Altitude}";
       tooltipText += Flags.HasFlag(SatelliteFlags.TrackingTarget)
         ? "\nradio: tracking only"
@@ -322,15 +394,32 @@ namespace SkyRoof
     {
       if (Tle == null) return;
 
-      TleInfo = $"{Tle.updated:yyyy-MM-dd HH:mm}Z ({ Tle.tle_source})";
+      TleInfo = $"{Tle.updated:yyyy-MM-dd HH:mm}Z ({Tle.tle_source})";
+      if (HasActiveManualOrbit(DateTime.UtcNow) &&
+          ManualTleExpiresUtc is DateTime expires)
+        TleInfo += $" [manual priority until {expires:yyyy-MM-dd HH:mm}Z]";
 
-      // inclination
-      string s = Tle.tle2.Substring(8, 8);
-      if (float.TryParse(s, CultureInfo.InvariantCulture, out float v)) Inclination = (int)v;
+      if (Tle.omm != null)
+      {
+        Inclination = (int)Tle.omm.Inclination;
+        if (Tle.omm.MeanMotion > 0)
+          Period = (int)(1440d / Tle.omm.MeanMotion);
+      }
+      else
+      {
+        // inclination
+        if (Tle.tle2.Length >= 63)
+        {
+          string s = Tle.tle2.Substring(8, 8);
+          if (float.TryParse(s, CultureInfo.InvariantCulture, out float v))
+            Inclination = (int)v;
 
-      // period
-      s = Tle.tle2.Substring(52, 10);
-      if (float.TryParse(s, CultureInfo.InvariantCulture, out v)) Period = (int)(1440f / v);
+          // period
+          s = Tle.tle2.Substring(52, 10);
+          if (float.TryParse(s, CultureInfo.InvariantCulture, out v) && v > 0)
+            Period = (int)(1440f / v);
+        }
+      }
 
       try
       {

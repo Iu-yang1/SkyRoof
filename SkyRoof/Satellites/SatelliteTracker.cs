@@ -40,13 +40,20 @@ namespace SkyRoof
     {
       try
       {
+        if (tle.omm != null)
+          return new Tle(tle.omm);
+
         return new Tle(tle.tle0, tle.tle1, tle.tle2);
       }
       catch (Exception ex)
       {
+        string payload =
+          tle.omm != null
+            ? $"OMM NORAD {tle.omm.NoradCatID} epoch {tle.omm.Epoch:O}"
+            : $"|{tle.tle0}|{tle.tle1}|{tle.tle2}|";
         Log.Error(
           ex,
-          $"Error creating TLE object: |{tle.tle0}|{tle.tle1}|{tle.tle2}|.");
+          $"Error creating orbit object: {payload}.");
         return null;
       }
     }

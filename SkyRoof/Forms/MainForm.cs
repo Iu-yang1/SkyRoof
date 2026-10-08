@@ -586,13 +586,13 @@ namespace SkyRoof
       try
       {
         SatDataLedLabel.ForeColor = SystemColors.GrayText;
-        SatDataStatusLabel.ToolTipText = SatDataLedLabel.ToolTipText = "Downloading TLE...";
+        SatDataStatusLabel.ToolTipText = SatDataLedLabel.ToolTipText = "Downloading orbit elements...";
 
 
         await ctx.SatnogsDb.DownloadTle();
 
         DownloadOk = true;
-        Log.Information("TLE downloaded");
+        Log.Information("Orbit elements downloaded");
         return true;
       }
       catch (Exception ex)
@@ -625,14 +625,20 @@ namespace SkyRoof
     {
       bool ok = await DownloadTle();
       if (!ok)
-        MessageBox.Show("Failed to download TLE data",
+        MessageBox.Show("Failed to download orbit-element data",
           "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
     }
 
     private void LoadTleMNU_Click(object sender, EventArgs e)
     {
-      var dlg = new OpenFileDialog();
-      dlg.Filter = "JSON Files (*.json)|*.json|Text Files (*.txt)|*.txt|All Files (*.*)|*.*";
+      var dlg = new OpenFileDialog
+      {
+        Filter =
+          "Orbit Elements (*.csv;*.json;*.txt)|*.csv;*.json;*.txt|" +
+          "OMM CSV (*.csv)|*.csv|OMM / SatNOGS JSON (*.json)|*.json|" +
+          "TLE Text (*.txt)|*.txt|All Files (*.*)|*.*",
+        Title = "Load Manual Orbit Elements (priority for 3 days)"
+      };
       if (dlg.ShowDialog() != DialogResult.OK) return;
 
       ctx.SatnogsDb.LoadTleFromFile(dlg.FileName);
@@ -1434,6 +1440,12 @@ namespace SkyRoof
     {
       CheckDownloadSatelliteList();
       CheckDownloadTle();
+
+      // Manual file imports temporarily outrank CelesTrak for 72 hours.
+      // Releasing an expired override here makes the already-persisted
+      // automatic fallback active even when no network request is needed.
+      ctx.SatnogsDb.ReleaseExpiredManualOrbitPriority(DateTime.UtcNow);
+
       ctx.AmsatStatusLoader.GetStatusesAsync();
     }
 

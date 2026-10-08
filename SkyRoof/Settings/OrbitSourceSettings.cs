@@ -17,6 +17,10 @@ namespace SkyRoof
       "https://db.satnogs.org/api/transmitters/?format=json";
     public const string DefaultTleUrl =
       "https://db.satnogs.org/api/tle/?format=json";
+    public const string DefaultCelestrakOmmCsvUrl =
+      "https://celestrak.org/NORAD/elements/gp.php?GROUP=amateur&FORMAT=csv";
+    public const string DefaultAutoTleUrl =
+      "http://autotle.bi4pym.cn/AutoTLE.txt";
 
     public const string DefaultDe440sSources =
       "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp;" +
@@ -38,16 +42,28 @@ namespace SkyRoof
     [DefaultValue(DefaultTransmittersUrl)]
     public string TransmittersUrl { get; set; } = DefaultTransmittersUrl;
 
-    [Category("TLE")]
-    [DisplayName("Primary TLE URL")]
-    [Description("Primary TLE update endpoint. The default is SatNOGS. This URL is editable; use Custom TLE Sources for additional plain-text feeds such as AutoTLE. Leave blank to disable updates from the primary source.")]
+    [Category("Orbit elements")]
+    [DisplayName("CelesTrak OMM CSV URL")]
+    [Description("Highest-priority automatic orbit source. The default is CelesTrak's amateur GP/OMM CSV feed. OMM is propagated directly; it is not converted back to legacy TLE.")]
+    [DefaultValue(DefaultCelestrakOmmCsvUrl)]
+    public string CelestrakOmmCsvUrl { get; set; } = DefaultCelestrakOmmCsvUrl;
+
+    [Category("Orbit elements")]
+    [DisplayName("Manual Orbit Source URLs")]
+    [Description("User-configured URL or local-file orbit sources, separated by semicolons or new lines. These are below CelesTrak OMM CSV but above the built-in AutoTLE and SatNOGS sources. Earlier entries have higher priority. TLE text, SatNOGS JSON, and CelesTrak OMM JSON/CSV are supported.")]
+    public string CustomTleSources { get; set; } = string.Empty;
+
+    [Category("Orbit elements")]
+    [DisplayName("AutoTLE URL")]
+    [Description("Built-in AutoTLE fallback source. It is below Manual Orbit Source URLs and CelesTrak OMM CSV, but above the original SatNOGS orbit source. Leave blank to disable it.")]
+    [DefaultValue(DefaultAutoTleUrl)]
+    public string AutoTleUrl { get; set; } = DefaultAutoTleUrl;
+
+    [Category("Orbit elements")]
+    [DisplayName("SatNOGS Orbit URL")]
+    [Description("Lowest-priority automatic orbit source. The default is the original SatNOGS TLE endpoint. Leave blank to disable updates from this source.")]
     [DefaultValue(DefaultTleUrl)]
     public string TleUrl { get; set; } = DefaultTleUrl;
-
-    [Category("TLE")]
-    [DisplayName("Custom TLE Sources")]
-    [Description("Highest-priority TLE overlay. Enter URLs or local file paths separated by semicolons or new lines. Earlier entries have higher priority than later entries, and all custom sources override the Primary TLE URL for matching NORAD objects. Plain 2-line/3-line TLE text and SatNOGS-style JSON are supported.")]
-    public string CustomTleSources { get; set; } = string.Empty;
 
     [Category("JPL ephemeris")]
     [DisplayName("DE440s Download Sources")]

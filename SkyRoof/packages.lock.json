@@ -81,9 +81,9 @@
 },
 "SGP.NET": {
 "type": "Direct",
-"requested": "[1.4.0, )",
-"resolved": "1.4.0",
-"contentHash": "fGKIkw0Af0ZBUHoAnDZ3JVSaSnMSpBF8ferW0RskfW0VC+tHYktt/OhcBNhrsbmdPopiUYJqAdVHJFIM+uZFLQ=="
+"requested": "[1.6.0, )",
+"resolved": "1.6.0",
+"contentHash": "zPPeMEyROMgd/GOqUoV0t8anefaX4OrDCf9KCmqXLWWmusx+RRR3mK05MStoj3WbNFS7MVH1I6WFNJS0AXMXXg=="
 },
 "SharpGL.WinForms": {
 "type": "Direct",

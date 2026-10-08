@@ -8,6 +8,7 @@ using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using Serilog;
 using SGPdotNET.TLE;
+using SGPdotNET.Parsers;
 using SkyRoof.Satellites;
 using VE3NEA;
 using VE3NEA.SkyTlm.Core;   // SignalParams / Framing, for the save-to-overrides writer (§6.1)
@@ -43,6 +44,8 @@ namespace SkyRoof
     private OrbitSourceSettings OrbitSources = new();
     private CancellationTokenSource cts;
     private JsonSerializerSettings JsonSettings = new();
+
+    internal static readonly TimeSpan ManualOrbitPriorityLifetime = TimeSpan.FromDays(3);
 
     public IEnumerable<SatnogsDbSatellite> Satellites { get => SatelliteList.Values; }
     public bool Loaded { get => loaded; }
@@ -91,9 +94,18 @@ namespace SkyRoof
         var satellites = JsonConvert.DeserializeObject<SatnogsDbSatelliteList>(json);
         SatelliteList = satellites.ToDictionary(s => s.sat_id);
 
+        bool orbitLayersChanged = false;
+        DateTime now = DateTime.UtcNow;
         foreach (var sat in satellites)
+        {
           foreach (var tx in sat.Transmitters)
             tx.Satellite = sat;
+
+          // Migrate pre-layered Satellites.json files and release any manual
+          // file override whose 72-hour priority window expired while SkyRoof
+          // was not running.
+          orbitLayersChanged |= sat.InitializeOrbitLayers(now);
+        }
 
         // the override file is live configuration, not a build-time artifact: apply it on every load so a
         // record saved from the Signal Params dialog takes effect at the next start without a database
@@ -102,6 +114,9 @@ namespace SkyRoof
         ApplyTransmitterOverrides();
 
         loaded = SatelliteList.Count > 0;
+
+        if (orbitLayersChanged)
+          SaveToFile();
       }
       catch (Exception ex)
       {
@@ -485,29 +500,53 @@ namespace SkyRoof
 
       try
       {
+        // Automatic orbit priority, low -> high:
+        // SatNOGS (legacy) < AutoTLE < user URL/file sources < CelesTrak OMM CSV.
+        // A still-active manual file import is stored separately and remains
+        // selected above all of these for exactly 72 hours.
         bool primaryDownloaded =
           await DownloadConfigured(
             "tle",
             OrbitSources.TleUrl,
             required: false);
 
+        int primaryCount = 0;
         if (primaryDownloaded)
-          ImportSatnogsTle();
+          primaryCount = ImportSatnogsTle();
         else
           Log.Information(
-            "Primary TLE source is disabled; refreshing custom TLE sources only.");
+            "SatNOGS orbit source is disabled; retaining other automatic layers.");
 
-        // Custom sources are part of the TLE refresh transaction, not an
-        // optional follow-up performed by the UI. This guarantees the final
-        // in-memory state always obeys:
-        // custom #1 > custom #2 > ... > primary.
+        int autoTleCount =
+          await LoadOptionalOrbitSourceAsync(
+            OrbitSources.AutoTleUrl,
+            "AutoTLE",
+            cancellationToken: cts.Token);
+
         int customCount =
           await LoadCustomTleSourcesAsync(
             OrbitSources.CustomTleSources,
             raiseEvent: false,
             cancellationToken: cts.Token);
 
-        if (primaryDownloaded || customCount > 0)
+        int celestrakCount =
+          await LoadOptionalOrbitSourceAsync(
+            OrbitSources.CelestrakOmmCsvUrl,
+            "CelesTrak OMM CSV",
+            forcedExtension: ".csv",
+            cancellationToken: cts.Token);
+
+        int expiredManual =
+          ReleaseExpiredManualOrbitPriority(
+            DateTime.UtcNow,
+            saveAndNotify: false);
+
+        if (primaryDownloaded ||
+            primaryCount > 0 ||
+            autoTleCount > 0 ||
+            customCount > 0 ||
+            celestrakCount > 0 ||
+            expiredManual > 0)
         {
           SaveToFile();
           TleUpdated?.Invoke(
@@ -516,12 +555,122 @@ namespace SkyRoof
         }
 
         Log.Information(
-          $"TLE refresh complete: primary={(primaryDownloaded ? "updated" : "disabled")}, custom={customCount} record(s).");
+          "Orbit refresh complete: SatNOGS={Primary}, AutoTLE={AutoTle}, manual-links={Custom}, CelesTrak={Celestrak}, expired-manual={Expired}",
+          primaryCount,
+          autoTleCount,
+          customCount,
+          celestrakCount,
+          expiredManual);
       }
       catch (Exception ex)
       {
-        Log.Error(ex, "TLE import failed");
+        Log.Error(ex, "Orbit element refresh failed");
         throw;
+      }
+    }
+
+    internal async Task<int> LoadAutomaticOrbitOverlaysAsync(
+      CancellationToken cancellationToken = default)
+    {
+      // ImportAll() has already installed the lowest-priority SatNOGS layer.
+      int autoTleCount =
+        await LoadOptionalOrbitSourceAsync(
+          OrbitSources.AutoTleUrl,
+          "AutoTLE",
+          cancellationToken: cancellationToken);
+
+      int customCount =
+        await LoadCustomTleSourcesAsync(
+          OrbitSources.CustomTleSources,
+          raiseEvent: false,
+          cancellationToken: cancellationToken);
+
+      int celestrakCount =
+        await LoadOptionalOrbitSourceAsync(
+          OrbitSources.CelestrakOmmCsvUrl,
+          "CelesTrak OMM CSV",
+          forcedExtension: ".csv",
+          cancellationToken: cancellationToken);
+
+      ReleaseExpiredManualOrbitPriority(
+        DateTime.UtcNow,
+        saveAndNotify: false);
+
+      if (autoTleCount + customCount + celestrakCount > 0)
+        SaveToFile();
+
+      return autoTleCount + customCount + celestrakCount;
+    }
+
+    private async Task<int> LoadOptionalOrbitSourceAsync(
+      string? source,
+      string label,
+      string? forcedExtension = null,
+      CancellationToken cancellationToken = default)
+    {
+      if (string.IsNullOrWhiteSpace(source))
+        return 0;
+
+      try
+      {
+        string content;
+        string extension;
+
+        if (Uri.TryCreate(source.Trim(), UriKind.Absolute, out Uri? uri) &&
+            (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+        {
+          content =
+            await DownloadHttpClient.GetStringAsync(
+              uri,
+              cancellationToken);
+          extension =
+            forcedExtension ??
+            Path.GetExtension(uri.AbsolutePath);
+        }
+        else
+        {
+          string path =
+            Environment.ExpandEnvironmentVariables(
+              source.Trim());
+          content =
+            await File.ReadAllTextAsync(
+              path,
+              cancellationToken);
+          extension =
+            forcedExtension ??
+            Path.GetExtension(path);
+        }
+
+        SatnogsDbTleList records =
+          ParseTleContent(
+            content,
+            extension,
+            label);
+
+        int applied =
+          ApplyTles(
+            records,
+            createMissingSatellites: true);
+
+        Log.Information(
+          "{OrbitSource} applied {Count} record(s).",
+          label,
+          applied);
+        return applied;
+      }
+      catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+      {
+        throw;
+      }
+      catch (Exception ex)
+      {
+        // Automatic overlays are fallbacks. A failed high-priority source must
+        // not prevent the already-applied lower-priority source from being used.
+        Log.Warning(
+          ex,
+          "{OrbitSource} failed; keeping lower-priority automatic orbit data.",
+          label);
+        return 0;
       }
     }
 
@@ -619,7 +768,7 @@ namespace SkyRoof
     {
       // Satellite metadata and transmitter metadata are required to rebuild the
       // database. The primary TLE feed is deliberately optional: operators may
-      // clear that URL and rely entirely on Custom TLE Sources.
+      // clear that URL and rely entirely on Manual Orbit Source URLs.
       return
         File.Exists(Path.Combine(DownloadsFolder, "satellites.json")) &&
         File.Exists(Path.Combine(DownloadsFolder, "transmitters.json")) &&
@@ -713,7 +862,7 @@ namespace SkyRoof
       }
     }
 
-    private void ImportSatnogsTle()
+    private int ImportSatnogsTle()
     {
       string content =
         File.ReadAllText(
@@ -724,10 +873,10 @@ namespace SkyRoof
       SatnogsDbTleList tles =
         ParseTleContent(
           content,
-          null,
-          "Primary TLE source");
+          ".json",
+          "SatNOGS orbit");
 
-      ApplyTles(
+      return ApplyTles(
         tles,
         createMissingSatellites: false);
     }
@@ -928,26 +1077,123 @@ namespace SkyRoof
 
     internal void LoadTleFromFile(string tleFileName)
     {
-      Log.Information($"Loading TLE from file: {tleFileName}");
+      Log.Information($"Loading manual orbit elements from file: {tleFileName}");
 
       try
       {
-        string tleContent = File.ReadAllText(tleFileName);
-        SatnogsDbTleList tles = ParseTleContent(
-          tleContent,
-          Path.GetExtension(tleFileName),
-          $"File: {Path.GetFileName(tleFileName)}");
+        string orbitContent = File.ReadAllText(tleFileName);
+        DateTime importedUtc = DateTime.UtcNow;
+        DateTime expiresUtc = importedUtc + ManualOrbitPriorityLifetime;
 
-        ApplyTles(tles, createMissingSatellites: true);
+        SatnogsDbTleList records = ParseTleContent(
+          orbitContent,
+          Path.GetExtension(tleFileName),
+          $"Manual file: {Path.GetFileName(tleFileName)}");
+
+        int applied =
+          ApplyTles(
+            records,
+            createMissingSatellites: true,
+            manualOverride: true,
+            manualExpiresUtc: expiresUtc);
+
         SaveToFile();
         TleUpdated?.Invoke(this, EventArgs.Empty);
-        Log.Information($"TLE loaded: {tles.Count} records");
+        Log.Information(
+          "Manual orbit import applied {Count} record(s); priority expires at {Expires:O}.",
+          applied,
+          expiresUtc);
       }
       catch (Exception ex)
       {
-        Log.Error(ex, "Load TLE from file failed");
+        Log.Error(ex, "Load orbit elements from file failed");
         throw;
       }
+    }
+
+    internal int ReleaseExpiredManualOrbitPriority(
+      DateTime utc,
+      bool saveAndNotify = true)
+    {
+      int released = 0;
+
+      foreach (SatnogsDbSatellite sat in Satellites)
+      {
+        bool wasManual = sat.ManualTle != null;
+        if (sat.RefreshOrbitSelection(utc) &&
+            wasManual &&
+            sat.ManualTle == null)
+        {
+          sat.updated = sat.Tle?.updated ?? sat.updated;
+          sat.BuildAllNames();
+          sat.SetFlags();
+          released++;
+        }
+      }
+
+      if (released > 0 && saveAndNotify)
+      {
+        SaveToFile();
+        TleUpdated?.Invoke(this, EventArgs.Empty);
+        Log.Information(
+          "Released {Count} expired manual orbit override(s); automatic priority restored.",
+          released);
+      }
+
+      return released;
+    }
+
+    internal int CopyActiveManualOrbitOverridesFrom(
+      SatnogsDb source,
+      DateTime utc)
+    {
+      int copied = 0;
+
+      foreach (SatnogsDbSatellite oldSat in source.Satellites)
+      {
+        if (!oldSat.HasActiveManualOrbit(utc) ||
+            oldSat.ManualTle == null ||
+            oldSat.ManualTleExpiresUtc is not DateTime expires)
+          continue;
+
+        SatnogsDbSatellite? target = Satellites
+          .FirstOrDefault(s => s.norad_cat_id == oldSat.norad_cat_id);
+
+        if (target == null && oldSat.norad_cat_id != null)
+        {
+          string satId = $"CUSTOM-{oldSat.norad_cat_id.Value:00000}";
+          target = new SatnogsDbSatellite
+          {
+            sat_id = satId,
+            norad_cat_id = oldSat.norad_cat_id,
+            name = oldSat.name,
+            names = oldSat.names,
+            image = string.Empty,
+            status = "in orbit",
+            website = string.Empty,
+            @operator = string.Empty,
+            countries = string.Empty,
+            telemetries = new SatnogsDbSatellite.Telemetries(),
+            citation = oldSat.citation,
+            associated_satellites = new List<string>(),
+            updated = oldSat.ManualTle.updated
+          };
+          SatelliteList[satId] = target;
+        }
+
+        if (target == null) continue;
+
+        target.SetManualTle(
+          oldSat.ManualTle,
+          expires,
+          utc);
+        target.updated = target.Tle?.updated ?? target.updated;
+        target.BuildAllNames();
+        target.SetFlags();
+        copied++;
+      }
+
+      return copied;
     }
 
     internal async Task<int> LoadCustomTleSourcesAsync(
@@ -996,7 +1242,7 @@ namespace SkyRoof
           SatnogsDbTleList tles = ParseTleContent(content, extension, label);
           loadedSources[source] = tles;
           Log.Information(
-            $"Custom TLE source fetched: {source} ({tles.Count} records)");
+            $"Manual orbit URL source fetched: {source} ({tles.Count} records)");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -1006,7 +1252,7 @@ namespace SkyRoof
         {
           // One broken optional source must not suppress the remaining sources
           // or the lower-priority primary TLE.
-          Log.Warning(ex, $"Custom TLE source failed: {source}");
+          Log.Warning(ex, $"Manual orbit URL source failed: {source}");
         }
       }
 
@@ -1029,7 +1275,7 @@ namespace SkyRoof
             sources,
             source) + 1;
         Log.Information(
-          $"Custom TLE source applied at priority {priority}: {source} ({applied} records)");
+          $"Manual orbit URL source applied at priority {priority}: {source} ({applied} records)");
       }
 
       if (total > 0)
@@ -1063,61 +1309,171 @@ namespace SkyRoof
           .Distinct(StringComparer.OrdinalIgnoreCase)
           .ToArray();
 
-    private SatnogsDbTleList ParseTleContent(
+    internal SatnogsDbTleList ParseTleContent(
       string content,
       string? extension,
       string sourceLabel)
     {
-      SatnogsDbTleList tles;
+      string trimmed = content.TrimStart();
+      string ext = (extension ?? string.Empty).ToLowerInvariant();
+      SatnogsDbTleList records;
 
-      if (content.TrimStart().StartsWith("["))
+      if (ext == ".csv" || LooksLikeOmmCsv(content))
       {
-        tles =
-          JsonConvert.DeserializeObject<SatnogsDbTleList>(content, JsonSettings)
-          ?? new SatnogsDbTleList();
+        var parser = new OmmCsvParser();
+        records = TlesFromOmm(parser.Parse(content), sourceLabel);
+      }
+      else if (trimmed.StartsWith("["))
+      {
+        if (LooksLikeOmmJson(content))
+        {
+          var parser = new OmmJsonParser();
+          records = TlesFromOmm(parser.Parse(content), sourceLabel);
+        }
+        else
+        {
+          records =
+            JsonConvert.DeserializeObject<SatnogsDbTleList>(
+              content,
+              JsonSettings)
+            ?? new SatnogsDbTleList();
+        }
       }
       else
       {
-        tles = TlesFromText(content, sourceLabel);
+        records = TlesFromText(content, sourceLabel);
       }
 
-      foreach (SatnogsDbTle tle in tles)
+      foreach (SatnogsDbTle record in records)
       {
-        if (tle.norad_cat_id == null && !string.IsNullOrWhiteSpace(tle.tle1))
-          tle.norad_cat_id = ParseNoradId(tle.tle1);
+        if (record.omm != null)
+        {
+          record.norad_cat_id =
+            checked((int)record.omm.NoradCatID);
+          if (string.IsNullOrWhiteSpace(record.tle0))
+            record.tle0 =
+              string.IsNullOrWhiteSpace(record.omm.ObjectName)
+                ? $"NORAD {record.omm.NoradCatID}"
+                : record.omm.ObjectName;
+          if (record.updated == default)
+            record.updated = record.omm.Epoch;
+        }
+        else if (record.norad_cat_id == null &&
+                 !string.IsNullOrWhiteSpace(record.tle1))
+        {
+          record.norad_cat_id = ParseNoradId(record.tle1);
+        }
 
-        if (string.IsNullOrWhiteSpace(tle.tle_source))
-          tle.tle_source = sourceLabel;
+        if (string.IsNullOrWhiteSpace(record.tle_source))
+          record.tle_source = sourceLabel;
 
-        if (tle.updated == default)
-          tle.updated = DateTime.UtcNow;
+        if (record.updated == default)
+          record.updated = DateTime.UtcNow;
       }
 
-      return tles;
+      return records;
+    }
+
+    internal static bool LooksLikeOmmCsv(string content)
+    {
+      string? header = content
+        .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+        .Select(line => line.Trim())
+        .FirstOrDefault();
+
+      if (header == null) return false;
+
+      return
+        header.Contains("NORAD_CAT_ID", StringComparison.OrdinalIgnoreCase) &&
+        header.Contains("EPOCH", StringComparison.OrdinalIgnoreCase) &&
+        header.Contains("MEAN_MOTION", StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static bool LooksLikeOmmJson(string content)
+    {
+      try
+      {
+        JToken root = JToken.Parse(content);
+        JObject? first =
+          root is JArray array
+            ? array.OfType<JObject>().FirstOrDefault()
+            : null;
+
+        if (first == null) return false;
+
+        return
+          first.GetValue("NORAD_CAT_ID", StringComparison.OrdinalIgnoreCase) != null &&
+          first.GetValue("EPOCH", StringComparison.OrdinalIgnoreCase) != null &&
+          first.GetValue("MEAN_MOTION", StringComparison.OrdinalIgnoreCase) != null;
+      }
+      catch (JsonException)
+      {
+        return false;
+      }
+    }
+
+    internal static SatnogsDbTleList TlesFromOmm(
+      IEnumerable<OmmData> ommRecords,
+      string sourceLabel)
+    {
+      SatnogsDbTleList records = new();
+
+      foreach (OmmData omm in ommRecords)
+      {
+        if (omm.NoradCatID == 0 ||
+            omm.Epoch == DateTime.MinValue ||
+            omm.MeanMotion == 0)
+          continue;
+
+        records.Add(
+          new SatnogsDbTle
+          {
+            tle0 =
+              string.IsNullOrWhiteSpace(omm.ObjectName)
+                ? $"NORAD {omm.NoradCatID}"
+                : omm.ObjectName,
+            tle1 = string.Empty,
+            tle2 = string.Empty,
+            tle_source = sourceLabel,
+            norad_cat_id = checked((int)omm.NoradCatID),
+            updated = omm.Epoch,
+            omm = omm
+          });
+      }
+
+      return records;
     }
 
     private int ApplyTles(
-      IEnumerable<SatnogsDbTle> tles,
-      bool createMissingSatellites)
+      IEnumerable<SatnogsDbTle> records,
+      bool createMissingSatellites,
+      bool manualOverride = false,
+      DateTime? manualExpiresUtc = null)
     {
-      int applied = 0;
+      if (manualOverride && manualExpiresUtc == null)
+        throw new ArgumentException(
+          "Manual orbit overrides require an expiration time.",
+          nameof(manualExpiresUtc));
 
-      foreach (SatnogsDbTle tle in tles)
+      int applied = 0;
+      DateTime now = DateTime.UtcNow;
+
+      foreach (SatnogsDbTle record in records)
       {
-        if (tle.norad_cat_id == null) continue;
+        if (record.norad_cat_id == null) continue;
 
         SatnogsDbSatellite? sat = Satellites
-          .FirstOrDefault(s => s.norad_cat_id == tle.norad_cat_id);
+          .FirstOrDefault(s => s.norad_cat_id == record.norad_cat_id);
 
         if (sat == null && createMissingSatellites)
         {
-          string satId = $"CUSTOM-{tle.norad_cat_id.Value:00000}";
-          string name = NormalizeTleName(tle.tle0, tle.norad_cat_id.Value);
+          string satId = $"CUSTOM-{record.norad_cat_id.Value:00000}";
+          string name = NormalizeTleName(record.tle0, record.norad_cat_id.Value);
 
           sat = new SatnogsDbSatellite
           {
             sat_id = satId,
-            norad_cat_id = tle.norad_cat_id,
+            norad_cat_id = record.norad_cat_id,
             name = name,
             names = string.Empty,
             image = string.Empty,
@@ -1126,9 +1482,9 @@ namespace SkyRoof
             @operator = string.Empty,
             countries = string.Empty,
             telemetries = new SatnogsDbSatellite.Telemetries(),
-            citation = tle.tle_source ?? string.Empty,
+            citation = record.tle_source ?? string.Empty,
             associated_satellites = new List<string>(),
-            updated = tle.updated
+            updated = record.updated
           };
 
           SatelliteList[satId] = sat;
@@ -1136,16 +1492,28 @@ namespace SkyRoof
 
         if (sat == null) continue;
 
-        tle.sat_id = sat.sat_id;
-        sat.SetTle(tle);
-        sat.updated = tle.updated;
+        record.sat_id = sat.sat_id;
+
+        if (manualOverride)
+          sat.SetManualTle(
+            record,
+            manualExpiresUtc!.Value,
+            now);
+        else
+          sat.SetAutomaticTle(
+            record,
+            now);
+
+        sat.updated = sat.Tle?.updated ?? record.updated;
         sat.BuildAllNames();
         sat.SetFlags();
         applied++;
       }
 
+      loaded = SatelliteList.Count > 0;
       return applied;
     }
+
 
     internal static SatnogsDbTleList TlesFromText(
       string tleContent,

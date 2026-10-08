@@ -171,8 +171,8 @@
 },
 "SGP.NET": {
 "type": "Transitive",
-"resolved": "1.4.0",
-"contentHash": "fGKIkw0Af0ZBUHoAnDZ3JVSaSnMSpBF8ferW0RskfW0VC+tHYktt/OhcBNhrsbmdPopiUYJqAdVHJFIM+uZFLQ=="
+"resolved": "1.6.0",
+"contentHash": "zPPeMEyROMgd/GOqUoV0t8anefaX4OrDCf9KCmqXLWWmusx+RRR3mK05MStoj3WbNFS7MVH1I6WFNJS0AXMXXg=="
 },
 "SharpGL": {
 "type": "Transitive",
@@ -277,7 +277,7 @@
 "MultimediaTimer": "[1.0.1, )",
 "NAudio": "[2.3.0, )",
 "Newtonsoft.Json": "[13.0.3, )",
-"SGP.NET": "[1.4.0, )",
+"SGP.NET": "[1.6.0, )",
 "Serilog": "[4.2.0, )",
 "Serilog.Sinks.File": "[6.0.0, )",
 "SharpGL.WinForms": "[3.1.1, )",
