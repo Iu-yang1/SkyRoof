@@ -1487,9 +1487,12 @@ namespace SkyRoof
       // MAIN/SUB remains usable as a local display selector in read-only mode,
       // but do not let it send SCOPE_SELECT until the initial radio readback
       // has established the current state.
+      bool skyCatConfigured =
+        IsSkyCatScopeControlConfigured();
+
       ScopeBandBox.Enabled =
         !LocalHold &&
-        (!skyCatWritable ||
+        (!skyCatConfigured ||
          ScopeReadbackCompletedForSession);
 
       bool enabled =
