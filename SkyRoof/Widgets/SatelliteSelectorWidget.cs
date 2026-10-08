@@ -115,6 +115,20 @@ namespace SkyRoof
       SelectedPassChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    internal void RefreshTransmitters(
+      string? preferredTransmitterId = null)
+    {
+      if (SelectedSatellite == null)
+        return;
+
+      if (!string.IsNullOrWhiteSpace(preferredTransmitterId))
+        ctx.Settings.Satellites.SatelliteCustomizations
+          .GetOrCreate(SelectedSatellite.sat_id)
+          .SelectedTransmitterId = preferredTransmitterId;
+
+      LoadTransmitters();
+    }
+
 
 
 
