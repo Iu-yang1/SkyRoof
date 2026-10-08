@@ -305,7 +305,6 @@ namespace SkyRoof
                 "SkyRoof.IcomLanSpectrumSettings.ScopeDuringTx" or
                 "SkyRoof.IcomLanSpectrumSettings.ScopeCenterType" or
                 "SkyRoof.IcomLanSpectrumSettings.ScopeVbw" or
-                "SkyRoof.IcomLanSpectrumSettings.ScopeRbw" or
                 "SkyRoof.IcomLanSpectrumSettings.ScopeMarkerPosition");
 
         bool advancedControlChanged =
