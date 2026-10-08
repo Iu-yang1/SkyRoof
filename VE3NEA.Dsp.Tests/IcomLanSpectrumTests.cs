@@ -1083,14 +1083,14 @@ namespace VE3NEA.Dsp.Tests
       queue.Count.Should().Be(2);
 
       queue.TryDequeue(
-        out string? main).Should().BeTrue();
-      main.Should().Be(
-        "U SCOPE_REF MAIN 2.0");
-
-      queue.TryDequeue(
         out string? sub).Should().BeTrue();
       sub.Should().Be(
         "U SCOPE_REF SUB -3.5");
+
+      queue.TryDequeue(
+        out string? main).Should().BeTrue();
+      main.Should().Be(
+        "U SCOPE_REF MAIN 2.0");
     }
 
     [Fact]
