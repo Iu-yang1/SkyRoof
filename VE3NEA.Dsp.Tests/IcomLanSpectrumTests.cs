@@ -1013,7 +1013,7 @@ namespace VE3NEA.Dsp.Tests
 
 
     [Fact]
-    public void ScopeCommandQueue_CoalescesLatestValueWithoutReorderingOtherKinds()
+    public void ScopeCommandQueue_CoalescedReplacementMovesToLatestEventPosition()
     {
       var queue =
         new IcomScopeCommandQueue(
@@ -1031,12 +1031,39 @@ namespace VE3NEA.Dsp.Tests
       queue.TryDequeue(
         out string? first).Should().BeTrue();
       first.Should().Be(
+        "U SCOPE_EDGE MAIN 1");
+
+      queue.TryDequeue(
+        out string? second).Should().BeTrue();
+      second.Should().Be(
+        "U SCOPE_MODE MAIN FIXED");
+    }
+
+    [Fact]
+    public void ScopeCommandQueue_LatestModeThenEdgeSequenceKeepsDependencyOrder()
+    {
+      var queue =
+        new IcomScopeCommandQueue(
+          capacity: 8);
+
+      queue.Enqueue(
+        "U SCOPE_EDGE MAIN 1");
+      queue.Enqueue(
+        "U SCOPE_MODE MAIN FIXED");
+      queue.Enqueue(
+        "U SCOPE_EDGE MAIN 2");
+
+      queue.Count.Should().Be(2);
+
+      queue.TryDequeue(
+        out string? first).Should().BeTrue();
+      first.Should().Be(
         "U SCOPE_MODE MAIN FIXED");
 
       queue.TryDequeue(
         out string? second).Should().BeTrue();
       second.Should().Be(
-        "U SCOPE_EDGE MAIN 1");
+        "U SCOPE_EDGE MAIN 2");
     }
 
     [Fact]
