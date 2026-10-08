@@ -705,7 +705,7 @@ namespace SkyRoof
             Clipboard.SetText(
               LastDiagnosticsText);
           }
-          catch (ExternalException)
+          catch (System.Runtime.InteropServices.ExternalException)
           {
             StatusLabel.Text =
               "Could not copy spectrum diagnostics because the clipboard is busy.";
