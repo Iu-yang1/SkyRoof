@@ -297,13 +297,6 @@ namespace SkyRoof
       Button button,
       bool active)
     {
-      button.Font =
-        new Font(
-          button.Font,
-          active
-            ? FontStyle.Bold
-            : FontStyle.Regular);
-
       button.UseVisualStyleBackColor =
         !active;
 
@@ -476,6 +469,15 @@ namespace SkyRoof
       long ticks = frame.TimestampUtc.Ticks;
       if (ticks <= LastRenderedScopeFrameTicks)
         return;
+
+      // HOLD is a local display freeze. Keep consuming capture events so the
+      // transport stays healthy, but freeze the displayed scope state/geometry
+      // together with the trace and waterfall until HOLD is released.
+      if (LocalHold)
+      {
+        LastRenderedScopeFrameTicks = ticks;
+        return;
+      }
 
       ScopeState.Update(frame);
       if (!ScopeState.ShouldDisplay(frame))

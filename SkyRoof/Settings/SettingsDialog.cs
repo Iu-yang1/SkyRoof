@@ -132,6 +132,22 @@ namespace SkyRoof
           ValidateInt(e, 5000, 2000);
           break;
 
+        case "SkyRoof.IcomLanSpectrumSettings.WaterfallRows":
+          ValidateInt(e, 800, 40);
+          break;
+
+        case "SkyRoof.IcomLanSpectrumSettings.SpectrumHeightPercent":
+          ValidateInt(e, 80, 20);
+          break;
+
+        case "SkyRoof.IcomLanSpectrumSettings.WaterfallBrightness":
+          ValidateInt(e, 80, -80);
+          break;
+
+        case "SkyRoof.IcomLanSpectrumSettings.WaterfallContrast":
+          ValidateInt(e, 250, 25);
+          break;
+
         case "SkyRoof.Ft4ConsoleSettings.TxGain":
           ValidateInt(e, 0, -60);
           break;
