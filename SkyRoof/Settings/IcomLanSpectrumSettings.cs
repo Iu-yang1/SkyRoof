@@ -17,6 +17,14 @@ namespace SkyRoof
     DirectLan = 2
   }
 
+  public enum IcomScopeControlPath
+  {
+    Auto = 0,
+    SkyCat = 1,
+    DirectLan = 2,
+    ReadOnly = 3
+  }
+
   public class IcomLanSpectrumSettings
   {
     [DisplayName("Radio IPv4 address")]
@@ -37,6 +45,14 @@ namespace SkyRoof
     [Description("Direct LAN is an experimental, manually started authenticated IC-9700 network session. SkyCAT uses skycatd's loopback scope stream. RS-BA1 passively observes an existing RS-BA1 LAN session.")]
     [DefaultValue(IcomLanSpectrumSource.SkyCat)]
     public IcomLanSpectrumSource Source { get; set; } = IcomLanSpectrumSource.SkyCat;
+
+    // Persist the control route independently from the waveform source. It stays
+    // hidden until the full scope-control UI is implemented, so Phase 1 does not
+    // expose controls that are not wired yet.
+    [Browsable(false)]
+    [DefaultValue(IcomScopeControlPath.Auto)]
+    public IcomScopeControlPath ControlPath { get; set; } =
+      IcomScopeControlPath.Auto;
 
     [DisplayName("SkyCAT scope TCP port")]
     [Description("Loopback TCP port exported by skycatd for native IC-9700 scope frames.")]

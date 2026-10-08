@@ -18,23 +18,25 @@ namespace SkyRoof
     private readonly Label TransportLabel = new();
     private readonly IcomLanSpectrumView SpectrumView = new();
     private readonly System.Windows.Forms.Timer UiTimer = new() { Interval = 500 };
+    private readonly IcomScopeState ScopeState = new();
+    private readonly IcomScopeController ScopeController;
 
     private IcomLanSpectrumCapture? Capture;
     private IcomLanSpectrumCapture? NativeLanAssistCapture;
     private long LastScopeFrames;
     private long LastScopeUpdates;
     private DateTime LastRateTime = DateTime.UtcNow;
-    private DateTime LastScopeOutputRequestUtc = DateTime.MinValue;
-    private bool LastScopeRequestRouted;
     private double ScopeFps;
     private double DisplayFps;
-    private int SelectedScopeBand;
     private long LastRenderedScopeFrameTicks;
     private bool LastStatsUsedNativeLan;
 
     public IcomLanSpectrumPanel(Context ctx)
     {
       this.ctx = ctx;
+      ScopeController =
+        new IcomScopeController(
+          () => ctx.CatControl.RequestIcomScopeOutput());
 
       Text = "Icom LAN Spectrum";
       Name = "IcomLanSpectrumPanel";
@@ -141,7 +143,8 @@ namespace SkyRoof
       ScopeBandBox.Margin = new Padding(0, 3, 8, 3);
       ScopeBandBox.SelectedIndexChanged += (_, _) =>
       {
-        Volatile.Write(ref SelectedScopeBand, Math.Clamp(ScopeBandBox.SelectedIndex, 0, 2));
+        ScopeState.SelectedBand =
+          (IcomLanScopeBand)Math.Clamp(ScopeBandBox.SelectedIndex, 0, 2);
         SaveUiSettings();
       };
       toolbar.Controls.Add(ScopeBandBox);
@@ -201,7 +204,8 @@ namespace SkyRoof
       RadioAddressBox.Text = settings.RadioAddress ?? string.Empty;
       SerialPortBox.Value = Math.Clamp(settings.SerialPort, 1, 65535);
       ScopeBandBox.SelectedIndex = Math.Clamp((int)settings.ScopeBand, 0, 2);
-      Volatile.Write(ref SelectedScopeBand, ScopeBandBox.SelectedIndex);
+      ScopeState.SelectedBand =
+        (IcomLanScopeBand)ScopeBandBox.SelectedIndex;
       UpdateSourceButton();
       SpectrumView.SetHistoryRows(settings.WaterfallRows);
     }
@@ -262,8 +266,8 @@ namespace SkyRoof
       ctx.Settings.SaveToFile();
       UpdateSourceButton();
 
-      LastScopeRequestRouted = false;
-      LastScopeOutputRequestUtc = DateTime.MinValue;
+      ScopeController.Reset();
+      ScopeState.Clear();
       SpectrumView.Clear();
 
       if (wasRunning)
@@ -442,11 +446,9 @@ namespace SkyRoof
       if (ticks <= LastRenderedScopeFrameTicks)
         return;
 
-      IcomLanScopeBand selected =
-        (IcomLanScopeBand)Volatile.Read(ref SelectedScopeBand);
-
-      if (selected == IcomLanScopeBand.Main && frame.Scope != 0) return;
-      if (selected == IcomLanScopeBand.Sub && frame.Scope != 1) return;
+      ScopeState.Update(frame);
+      if (!ScopeState.ShouldDisplay(frame))
+        return;
 
       SpectrumView.PushFrame(frame);
       LastRenderedScopeFrameTicks = ticks;
@@ -583,20 +585,13 @@ namespace SkyRoof
 
     private void RequestScopeOutputIfDue(bool force)
     {
-      if (!UsingSkyCatScopeSource)
-      {
-        LastScopeRequestRouted = false;
-        return;
-      }
+      IcomLanSpectrumSettings settings =
+        ctx.Settings.IcomLanSpectrum;
 
-      DateTime now = DateTime.UtcNow;
-
-      if (!force && (now - LastScopeOutputRequestUtc).TotalSeconds < 2.0)
-        return;
-
-      LastScopeOutputRequestUtc = now;
-
-      LastScopeRequestRouted = ctx.CatControl.RequestIcomScopeOutput();
+      ScopeController.RequestOutputIfDue(
+        settings.Source,
+        settings.ControlPath,
+        force);
     }
 
     internal void ApplySettings()

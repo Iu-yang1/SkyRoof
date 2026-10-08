@@ -272,6 +272,159 @@ namespace VE3NEA.Dsp.Tests
     }
 
 
+    [Fact]
+    public void ScopeGeometry_CenterModeDerivesFrequencyEdges()
+    {
+      var frame = new IcomScopeFrame
+      {
+        Mode = (byte)IcomScopeMode.Center,
+        FrequencyAHz = 435_600_000,
+        FrequencyBHz = 200_000
+      };
+
+      IcomScopeGeometry geometry = frame.Geometry;
+
+      geometry.IsValid.Should().BeTrue();
+      geometry.ModeName.Should().Be("CENTER");
+      geometry.CenterFrequencyHz.Should().Be(435_600_000);
+      geometry.SpanHz.Should().Be(200_000);
+      geometry.LowerFrequencyHz.Should().Be(435_500_000);
+      geometry.UpperFrequencyHz.Should().Be(435_700_000);
+    }
+
+    [Fact]
+    public void ScopeGeometry_FixedModeDerivesCenterAndSpan()
+    {
+      var frame = new IcomScopeFrame
+      {
+        Mode = (byte)IcomScopeMode.Fixed,
+        FrequencyAHz = 430_000_000,
+        FrequencyBHz = 440_000_000
+      };
+
+      IcomScopeGeometry geometry = frame.Geometry;
+
+      geometry.IsValid.Should().BeTrue();
+      geometry.ModeName.Should().Be("FIXED");
+      geometry.CenterFrequencyHz.Should().Be(435_000_000);
+      geometry.SpanHz.Should().Be(10_000_000);
+      geometry.LowerFrequencyHz.Should().Be(430_000_000);
+      geometry.UpperFrequencyHz.Should().Be(440_000_000);
+    }
+
+    [Fact]
+    public void ScopeState_BandSelectionIsIndependentFromCapture()
+    {
+      var state = new IcomScopeState();
+      var main = new IcomScopeFrame
+      {
+        Scope = 0,
+        TimestampUtc = new DateTime(2026, 10, 8, 1, 0, 0, DateTimeKind.Utc)
+      };
+      var sub = new IcomScopeFrame
+      {
+        Scope = 1,
+        TimestampUtc = new DateTime(2026, 10, 8, 1, 0, 1, DateTimeKind.Utc)
+      };
+
+      state.Update(main);
+      state.Update(sub);
+
+      state.SelectedBand = IcomLanScopeBand.Main;
+      state.ShouldDisplay(main).Should().BeTrue();
+      state.ShouldDisplay(sub).Should().BeFalse();
+      state.LatestSelectedFrame.Should().BeSameAs(main);
+
+      state.SelectedBand = IcomLanScopeBand.Sub;
+      state.ShouldDisplay(main).Should().BeFalse();
+      state.ShouldDisplay(sub).Should().BeTrue();
+      state.LatestSelectedFrame.Should().BeSameAs(sub);
+
+      state.SelectedBand = IcomLanScopeBand.Auto;
+      state.LatestSelectedFrame.Should().BeSameAs(sub);
+    }
+
+    [Fact]
+    public void ScopeController_AutoPreservesLegacySourceRouting()
+    {
+      IcomScopeController.ResolveControlPath(
+        IcomLanSpectrumSource.SkyCat,
+        IcomScopeControlPath.Auto).Should().Be(
+          IcomScopeControlPath.SkyCat);
+
+      IcomScopeController.ResolveControlPath(
+        IcomLanSpectrumSource.RsBa1,
+        IcomScopeControlPath.Auto).Should().Be(
+          IcomScopeControlPath.ReadOnly);
+
+      IcomScopeController.ResolveControlPath(
+        IcomLanSpectrumSource.DirectLan,
+        IcomScopeControlPath.Auto).Should().Be(
+          IcomScopeControlPath.DirectLan);
+    }
+
+    [Fact]
+    public void ScopeController_CanUseSkyCatControlWithRsBa1Waveform()
+    {
+      int requestCount = 0;
+      var controller =
+        new IcomScopeController(
+          () =>
+          {
+            requestCount++;
+            return true;
+          });
+
+      bool routed =
+        controller.RequestOutputIfDue(
+          IcomLanSpectrumSource.RsBa1,
+          IcomScopeControlPath.SkyCat,
+          force: true,
+          new DateTime(2026, 10, 8, 1, 0, 0, DateTimeKind.Utc));
+
+      routed.Should().BeTrue();
+      requestCount.Should().Be(1);
+      controller.EffectivePath.Should().Be(
+        IcomScopeControlPath.SkyCat);
+    }
+
+    [Fact]
+    public void ScopeController_RateLimitsScopeReasserts()
+    {
+      int requestCount = 0;
+      var controller =
+        new IcomScopeController(
+          () =>
+          {
+            requestCount++;
+            return true;
+          });
+
+      DateTime start =
+        new(2026, 10, 8, 1, 0, 0, DateTimeKind.Utc);
+
+      controller.RequestOutputIfDue(
+        IcomLanSpectrumSource.SkyCat,
+        IcomScopeControlPath.Auto,
+        force: true,
+        start).Should().BeTrue();
+
+      controller.RequestOutputIfDue(
+        IcomLanSpectrumSource.SkyCat,
+        IcomScopeControlPath.Auto,
+        force: false,
+        start.AddSeconds(1)).Should().BeFalse();
+
+      controller.RequestOutputIfDue(
+        IcomLanSpectrumSource.SkyCat,
+        IcomScopeControlPath.Auto,
+        force: false,
+        start.AddSeconds(2)).Should().BeTrue();
+
+      requestCount.Should().Be(2);
+    }
+
+
     private static byte[] BuildLanUdpPacket(
       IPAddress source,
       IPAddress destination,

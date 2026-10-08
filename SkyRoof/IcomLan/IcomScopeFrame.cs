@@ -15,27 +15,15 @@ namespace SkyRoof
 
     internal string ScopeName => Scope == 1 ? "SUB" : "MAIN";
 
-    internal string ModeName => Mode switch
-    {
-      0 => "CENTER",
-      1 => "FIXED",
-      2 => "SCROLL-C",
-      3 => "SCROLL-F",
-      _ => $"MODE {Mode}"
-    };
+    internal IcomScopeGeometry Geometry =>
+      IcomScopeGeometry.FromFrame(this);
+
+    internal string ModeName => Geometry.ModeName;
 
     internal long CenterFrequencyHz =>
-      Mode == 0
-        ? FrequencyAHz
-        : FrequencyAHz > 0 && FrequencyBHz > FrequencyAHz
-          ? FrequencyAHz + (FrequencyBHz - FrequencyAHz) / 2
-          : 0;
+      Geometry.CenterFrequencyHz;
 
     internal long SpanHz =>
-      Mode == 0
-        ? FrequencyBHz
-        : FrequencyAHz > 0 && FrequencyBHz > FrequencyAHz
-          ? FrequencyBHz - FrequencyAHz
-          : 0;
+      Geometry.SpanHz;
   }
 }
