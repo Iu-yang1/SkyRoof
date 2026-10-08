@@ -76,6 +76,30 @@ namespace SkyRoof
     public IcomScopeSweepSpeed ScopeSweepSpeed { get; set; } =
       IcomScopeSweepSpeed.Fast;
 
+    [DisplayName("Scope during TX")]
+    [Description("IC-9700 CENTER-type scope display while transmitting.")]
+    [DefaultValue(false)]
+    public bool ScopeDuringTx { get; set; }
+
+    [DisplayName("CENTER type display")]
+    [Description("IC-9700 CENTER-type reference: filter center, carrier point, or absolute-frequency carrier point.")]
+    [DefaultValue(IcomScopeCenterType.FilterCenter)]
+    public IcomScopeCenterType ScopeCenterType { get; set; } =
+      IcomScopeCenterType.FilterCenter;
+
+    [DisplayName("Scope VBW")]
+    [Description("IC-9700 scope video bandwidth. The current SkyRoof UI treats this as one operator preference and applies it to MAIN and SUB.")]
+    [DefaultValue(IcomScopeVbw.Wide)]
+    public IcomScopeVbw ScopeVbw { get; set; } =
+      IcomScopeVbw.Wide;
+
+    [DisplayName("Fixed/scroll marker position")]
+    [Description("IC-9700 marker reference for FIXED and SCROLL modes.")]
+    [DefaultValue(IcomScopeMarkerPosition.FilterCenter)]
+    public IcomScopeMarkerPosition ScopeMarkerPosition { get; set; } =
+      IcomScopeMarkerPosition.FilterCenter;
+
+
     [DisplayName("SkyCAT scope TCP port")]
     [Description("Loopback TCP port exported by skycatd for native IC-9700 scope frames.")]
     [DefaultValue(4535)]
