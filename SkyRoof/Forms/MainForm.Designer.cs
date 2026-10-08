@@ -496,7 +496,7 @@
       //
       ThemeLightMNU.Name = "ThemeLightMNU";
       ThemeLightMNU.Size = new Size(180, 22);
-      ThemeLightMNU.Text = "&Light";
+      ThemeLightMNU.Text = "&Light · Pink / Blue";
       ThemeLightMNU.Click += ThemeLightMNU_Click;
       //
       // ThemeDarkMNU

@@ -82,6 +82,32 @@ namespace SkyRoof
     // The color sweep adds the remaining entries.
     private static Color Pick(Color light, Color dark) { return IsDark ? dark : light; }
 
+    // SkyRoof light-theme identity. These three exact colors are the user-facing
+    // palette; the washes/darker inks below are derived companions used where
+    // pure brand colors would not provide enough text or border contrast.
+    public static readonly Color BrandBlue =
+      Color.FromArgb(0x5B, 0xCE, 0xFA);
+    public static readonly Color BrandPink =
+      Color.FromArgb(0xF5, 0xA9, 0xB8);
+    public static readonly Color BrandWhite =
+      Color.White;
+
+    internal static readonly Color LightInk =
+      Color.FromArgb(0x24, 0x31, 0x3A);
+    internal static readonly Color BlueDark =
+      Color.FromArgb(0x17, 0x6A, 0x8C);
+    internal static readonly Color PinkDark =
+      Color.FromArgb(0xA6, 0x47, 0x5B);
+
+    internal static readonly Color BlueWash =
+      Color.FromArgb(0xD6, 0xF3, 0xFE);
+    internal static readonly Color BlueSoft =
+      Color.FromArgb(0xC6, 0xEE, 0xFD);
+    internal static readonly Color PinkWash =
+      Color.FromArgb(0xFD, 0xEA, 0xED);
+    internal static readonly Color PinkSoft =
+      Color.FromArgb(0xFC, 0xE1, 0xE6);
+
     // tooltips: the framework paints them light in both modes, ToolTipEx repaints them
     public static Color TipBack => Pick(SystemColors.Info, SystemColors.ControlLight);
     public static Color TipText => Pick(SystemColors.InfoText, SystemColors.ControlText);
@@ -89,25 +115,25 @@ namespace SkyRoof
     // Section headers in list views, and the rule that trails the header text. The theme paints
     // them a dark blue that the dark surface swallows and offers no color of its own, so
     // ListViewEx paints the header itself; the light values are the ones it used to paint.
-    public static Color ListGroupText => Pick(Color.FromArgb(33, 93, 198), Color.FromArgb(138, 180, 248));
-    public static Color ListGroupRule => Pick(Color.FromArgb(178, 193, 224), Color.FromArgb(45, 45, 45));
+    public static Color ListGroupText => Pick(BlueDark, Color.FromArgb(138, 180, 248));
+    public static Color ListGroupRule => Pick(BlueSoft, Color.FromArgb(45, 45, 45));
 
     // hyperlinks. Blue is barely readable on the dark surface, aqua replaces it there
-    public static Color Link => Pick(Color.Blue, Color.Aqua);
+    public static Color Link => Pick(BlueDark, Color.Aqua);
 
     // Sky view. The plot surface itself is SystemColors.Window and needs no entry here. In the
     // dark theme the disks on it are pulled between two constraints: light enough for the
     // satellite icon (a #0041AC body) to read against them, dark enough for the satellite names,
     // which are WindowText. The values below are the lightest that keep the names at 3:1;
     // going lighter means painting the names dark instead.
-    public static Color SkyRealTimeDisk => Pick(Color.FromArgb(230, 249, 255), Color.FromArgb(120, 138, 155));
-    public static Color SkyOrbitDisk => Pick(Color.FromArgb(242, 242, 242), Color.FromArgb(125, 125, 125));
+    public static Color SkyRealTimeDisk => Pick(BlueWash, Color.FromArgb(120, 138, 155));
+    public static Color SkyOrbitDisk => Pick(PinkWash, Color.FromArgb(125, 125, 125));
 
-    // Band tints, marking the downlink band of a satellite or a transmitter. Dark but still
-    // tinted in the dark theme, and dark enough for WindowText to clear 4.5:1 on them - which is
-    // why text on a tinted row is simply the system text color in both themes.
-    public static Color VhfTint => Pick(Color.LightGoldenrodYellow, Color.FromArgb(86, 74, 30));
-    public static Color UhfTint => Pick(Color.LightCyan, Color.FromArgb(30, 80, 92));
+    // Band tints, marking the downlink band of a satellite or a transmitter. The light theme
+    // uses pink for VHF and blue for UHF; both are deliberately pale washes so WindowText remains
+    // readable. The dark-theme values stay unchanged.
+    public static Color VhfTint => Pick(PinkWash, Color.FromArgb(86, 74, 30));
+    public static Color UhfTint => Pick(BlueWash, Color.FromArgb(30, 80, 92));
 
     // built in Initialize, once IsDark is known: a static field initializer would run at type
     // init, which happens on the way into Initialize itself
@@ -127,12 +153,12 @@ namespace SkyRoof
 
     // QSO entry: the card behind each field, and the field's own ring while untouched - the two
     // share a color on purpose, so an untouched ring disappears into its card
-    public static Color QsoCard => Pick(Color.LightSkyBlue, Color.FromArgb(34, 48, 60));
+    public static Color QsoCard => Pick(BlueWash, Color.FromArgb(34, 48, 60));
 
     // the ring around a field the operator has edited. QsoEntryPanel stores field state in this
     // color and compares against it (plan 4.2), so it must round-trip through BackColor: keep it
     // a single Theme entry, and never restate either value as a FromArgb literal elsewhere
-    public static Color QsoFieldEdited => Pick(Color.Blue, Color.DodgerBlue);
+    public static Color QsoFieldEdited => Pick(PinkDark, Color.DodgerBlue);
 
     // The unfilled part of the FT4 bars. ControlLightLight is white in light mode but #1F1F1F in
     // dark, where the bar then disappears into the panel, so the dark end is silver instead.
@@ -143,16 +169,15 @@ namespace SkyRoof
     public static Color Now => Pick(Color.Green, Color.Lime);
     public static Brush NowBrush { get; private set; } = Brushes.Green;
 
-    // timeline chart: a sky gradient behind the passes, deeper overhead than at the horizon. In
-    // the dark theme both ends move down the same scale, keeping that relationship - and the top
-    // is a muted MidnightBlue rather than a saturated Navy, so the labels on it stay legible
-    public static Color TimelineTop => Pick(Color.SkyBlue, Color.Black);
-    public static Color TimelineBottom => Pick(Color.White, Color.RoyalBlue);
+    // timeline chart: the light theme runs from the exact brand blue overhead to white at the
+    // horizon. The dark theme keeps its existing high-contrast gradient.
+    public static Color TimelineTop => Pick(BrandBlue, Color.Black);
+    public static Color TimelineBottom => Pick(BrandWhite, Color.RoyalBlue);
 
     // Earth view: the space around the globe. The light value is the 0.7 gray the panel always
     // cleared to - darker than the panel around it, and the dark value is lighter than its panel,
     // so the surround stays distinct from the chrome in both themes
-    public static Color EarthSpace => Pick(Color.FromArgb(179, 179, 179), Color.FromArgb(64, 64, 64));
+    public static Color EarthSpace => Pick(PinkSoft, Color.FromArgb(64, 64, 64));
 
     // the DXCC world map is a light bitmap and stays content, not chrome: the fragment shader
     // dims it as a whole in the dark theme rather than recoloring it
@@ -160,17 +185,17 @@ namespace SkyRoof
 
     // frequency scale: the accent marks the pass that is happening now - its label text, the line
     // under the label, and the frame around the active span
-    public static Color ScaleAccent => Pick(Color.Blue, Color.SkyBlue);
+    public static Color ScaleAccent => Pick(BlueDark, Color.SkyBlue);
 
     // the transponder span is a wash over the scale. A 20/255 tint that reads on #F0F0F0
     // disappears on #202020, so the dark alpha is doubled
-    public static Color ScaleActiveSpan => Pick(Color.FromArgb(20, Color.Blue), Color.FromArgb(40, Color.Aqua));
+    public static Color ScaleActiveSpan => Pick(Color.FromArgb(55, BrandPink), Color.FromArgb(40, Color.Aqua));
     public static Color ScaleIdleSpan => Pick(Color.FromArgb(20, Color.Gray), Color.FromArgb(40, Color.Gray));
 
-    // receiver passband: green and lime trade places, since each is invisible against the
-    // other theme's background - lime on #F0F0F0 and green on #202020 are both about 1.5:1
-    public static Color PassbandFill => Pick(Color.FromArgb(200, Color.Lime), Color.FromArgb(200, Color.Green));
-    public static Color PassbandFrame => Pick(Color.Green, Color.Lime);
+    // receiver passband: the light theme uses the blue identity color; the dark theme keeps the
+    // existing green/lime treatment for contrast on the dark surface.
+    public static Color PassbandFill => Pick(Color.FromArgb(95, BrandBlue), Color.FromArgb(200, Color.Green));
+    public static Color PassbandFrame => Pick(BlueDark, Color.Lime);
 
     // Signal Details provenance: the color of a value a decoded frame has confirmed - the field dots, the
     // gear glyph and the dialog's status line. The text is what sets the requirement: LimeGreen carries a
