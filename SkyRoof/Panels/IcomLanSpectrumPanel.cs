@@ -23,6 +23,7 @@ namespace SkyRoof
     private readonly ComboBox SpanEdgeBox = new();
     private readonly NumericUpDown ReferenceBox = new();
     private readonly ComboBox SweepSpeedBox = new();
+    private readonly ComboBox VbwBox = new();
     private readonly Label GeometryLabel = new();
     private readonly Button StartStopBtn = new();
     private readonly Button ClearBtn = new();
@@ -369,6 +370,50 @@ namespace SkyRoof
         };
       toolbar.Controls.Add(SweepSpeedBox);
 
+      toolbar.Controls.Add(
+        new Label
+        {
+          AutoSize = true,
+          Text = "VBW:",
+          Margin = new Padding(0, 7, 3, 0)
+        });
+
+      VbwBox.DropDownStyle =
+        ComboBoxStyle.DropDownList;
+      VbwBox.Width = 72;
+      VbwBox.Items.AddRange(
+        new object[]
+        {
+          "NARROW",
+          "WIDE"
+        });
+      VbwBox.Margin =
+        new Padding(0, 3, 8, 3);
+      VbwBox.SelectedIndexChanged +=
+        (_, _) =>
+        {
+          if (UpdatingScopeControlUi ||
+              VbwBox.SelectedIndex < 0)
+            return;
+
+          IcomScopeVbw vbw =
+            (IcomScopeVbw)VbwBox.SelectedIndex;
+
+          ctx.Settings.IcomLanSpectrum
+            .ScopeVbw =
+            vbw;
+          ctx.Settings.SaveToFile();
+
+          SendScopeControlToBothReceivers(
+            scope =>
+              IcomScopeControlRequest
+                .ForVbw(
+                  scope,
+                  vbw),
+            $"VBW {VbwBox.SelectedItem}");
+        };
+      toolbar.Controls.Add(VbwBox);
+
       GeometryLabel.AutoSize = true;
       GeometryLabel.Text = "Waiting for scope";
       GeometryLabel.ForeColor = SystemColors.GrayText;
@@ -710,6 +755,16 @@ namespace SkyRoof
 
         SweepSpeedBox.SelectedIndex =
           speedIndex;
+
+        int vbwIndex =
+          Math.Clamp(
+            (int)settings.ScopeVbw,
+            0,
+            1);
+        settings.ScopeVbw =
+          (IcomScopeVbw)vbwIndex;
+        VbwBox.SelectedIndex =
+          vbwIndex;
 
         ConfigureSpanEdgeControl(
           SpanEdgeShowsSpan);
@@ -1113,6 +1168,13 @@ namespace SkyRoof
               .ScopeSweepSpeed,
             0,
             2);
+
+        VbwBox.SelectedIndex =
+          Math.Clamp(
+            (int)ctx.Settings.IcomLanSpectrum
+              .ScopeVbw,
+            0,
+            1);
       }
       finally
       {
@@ -1267,6 +1329,8 @@ namespace SkyRoof
       ReferenceBox.Enabled =
         enabled;
       SweepSpeedBox.Enabled =
+        enabled;
+      VbwBox.Enabled =
         enabled;
     }
 
@@ -1699,6 +1763,44 @@ namespace SkyRoof
         IcomScopeControlRequest.ForSweepSpeed(
           1,
           speed));
+
+      IcomScopeVbw vbw =
+        (IcomScopeVbw)Math.Clamp(
+          (int)settings.ScopeVbw,
+          0,
+          1);
+
+      ScopeController.RequestControl(
+        settings.Source,
+        settings.ControlPath,
+        IcomScopeControlRequest.ForVbw(
+          0,
+          vbw));
+
+      ScopeController.RequestControl(
+        settings.Source,
+        settings.ControlPath,
+        IcomScopeControlRequest.ForVbw(
+          1,
+          vbw));
+
+      ScopeController.RequestControl(
+        settings.Source,
+        settings.ControlPath,
+        IcomScopeControlRequest.ForScopeDuringTx(
+          settings.ScopeDuringTx));
+
+      ScopeController.RequestControl(
+        settings.Source,
+        settings.ControlPath,
+        IcomScopeControlRequest.ForCenterType(
+          settings.ScopeCenterType));
+
+      ScopeController.RequestControl(
+        settings.Source,
+        settings.ControlPath,
+        IcomScopeControlRequest.ForMarkerPosition(
+          settings.ScopeMarkerPosition));
 
       double referenceDb =
         NormalizeReferenceLevel(
