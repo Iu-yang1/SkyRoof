@@ -98,10 +98,12 @@ namespace SkyRoof
     // What the radio frequency would be if Doppler correction alone were disabled.
     // Base/transponder position and operator corrections remain included.
     public double DownlinkFrequencyWithoutDoppler =>
-      DownlinkFrequency +
-      (RitEnabled ? RitOffset : 0) +
-      (!IsTerrestrial && SatCust != null && DownlinkManualCorrectionEnabled
-        ? DownlinkManualCorrection : 0);
+      !IsTerrestrial && !HasDownlink
+        ? 0
+        : DownlinkFrequency +
+          (RitEnabled ? RitOffset : 0) +
+          (!IsTerrestrial && SatCust != null && DownlinkManualCorrectionEnabled
+            ? DownlinkManualCorrection : 0);
 
     public double UplinkFrequencyWithoutDoppler =>
       IsTerrestrial || UplinkFrequency <= 0 ? 0 :
@@ -123,12 +125,18 @@ namespace SkyRoof
     // -DownlinkFrequency * DopplerFactor and its time derivative is -DownlinkFrequency * factorRate.
     public double DownlinkDopplerRate =>
       DownlinkDopplerCorrectionEnabled ? -DownlinkFrequency * DopplerEstimator.FactorRate : 0;
-    public bool HasUplink => !IsTerrestrial && UplinkFrequency > 0 && SatnogsDbTransmitter.IsHamFrequency(UplinkFrequency);
+    public bool HasDownlink =>
+      IsTerrestrial ||
+      Tx?.downlink_low.HasValue == true;
+    public bool HasUplink =>
+      !IsTerrestrial &&
+      UplinkFrequency > 0 &&
+      SatnogsDbTransmitter.IsHamFrequency(UplinkFrequency);
     public bool IsTransponder => Tx != null &&
       Tx.downlink_high.HasValue && Tx.downlink_high != Tx.downlink_low &&
       Tx.uplink_low.HasValue && Tx.uplink_high.HasValue;
-    public bool IsCrossBand => HasUplink && 
-      ((SatnogsDbTransmitter.IsUhfFrequency(UplinkFrequency) != SatnogsDbTransmitter.IsUhfFrequency(DownlinkFrequency)) 
+    public bool IsCrossBand => HasDownlink && HasUplink &&
+      ((SatnogsDbTransmitter.IsUhfFrequency(UplinkFrequency) != SatnogsDbTransmitter.IsUhfFrequency(DownlinkFrequency))
       ||
       (SatnogsDbTransmitter.IsVhfFrequency(UplinkFrequency) != SatnogsDbTransmitter.IsVhfFrequency(DownlinkFrequency)));
 
@@ -168,34 +176,54 @@ namespace SkyRoof
 
       else
       {
-        // downlink nominal. Base correction shifts the whole transmitter/transponder passband.
-        double downlinkLow = Tx!.DownlinkLow + DownlinkBaseOffset;
-        DownlinkFrequency = downlinkLow;
-        if (IsTransponder) DownlinkFrequency += TransponderOffset;
+        // A local record may intentionally be uplink-only. Do not synthesize a
+        // 0-Hz downlink or disturb RX/SDR state for such a record.
+        if (Tx?.downlink_low.HasValue == true)
+        {
+          double downlinkLow =
+            Tx.downlink_low.Value +
+            DownlinkBaseOffset;
+          DownlinkFrequency = downlinkLow;
+          if (IsTransponder)
+            DownlinkFrequency += TransponderOffset;
 
-        // downlink corrected
-        CorrectedDownlinkFrequency = DownlinkFrequency;
-        if (RitEnabled) CorrectedDownlinkFrequency += RitOffset;
-        if (DownlinkDopplerCorrectionEnabled) CorrectedDownlinkFrequency *= 1 - DopplerFactor;
-        if (DownlinkManualCorrectionEnabled) CorrectedDownlinkFrequency += DownlinkManualCorrection;
+          CorrectedDownlinkFrequency =
+            DownlinkFrequency;
+          if (RitEnabled)
+            CorrectedDownlinkFrequency += RitOffset;
+          if (DownlinkDopplerCorrectionEnabled)
+            CorrectedDownlinkFrequency *= 1 - DopplerFactor;
+          if (DownlinkManualCorrectionEnabled)
+            CorrectedDownlinkFrequency += DownlinkManualCorrection;
+        }
+        else
+        {
+          DownlinkFrequency = 0;
+          CorrectedDownlinkFrequency = 0;
+          RitEnabled = false;
+          RitOffset = 0;
+        }
 
         // uplink nominal. Apply the same base offset to both passband edges so its width is unchanged.
         if (IsTransponder)
         {
-          double uplinkLow = (double)Tx.uplink_low! + UplinkBaseOffset;
+          double uplinkLow = (double)Tx!.uplink_low! + UplinkBaseOffset;
           double uplinkHigh = (double)Tx.uplink_high! + UplinkBaseOffset;
           UplinkFrequency = Tx.invert ? uplinkHigh - TransponderOffset : uplinkLow + TransponderOffset;
         }
-        else if (Tx.uplink_low.HasValue)
+        else if (Tx?.uplink_low.HasValue == true)
           UplinkFrequency = (double)Tx.uplink_low + UplinkBaseOffset;
-        else UplinkFrequency = 0;
+        else
+          UplinkFrequency = 0;
 
         // uplink corrected
         CorrectedUplinkFrequency = UplinkFrequency;
         if (UplinkFrequency > 0)
         {
-          if (UplinkDopplerCorrectionEnabled) CorrectedUplinkFrequency *= 1 + DopplerFactor;
-          if (UplinkManualCorrectionEnabled) CorrectedUplinkFrequency += UplinkManualCorrection;
+          if (UplinkDopplerCorrectionEnabled)
+            CorrectedUplinkFrequency *= 1 + DopplerFactor;
+          if (UplinkManualCorrectionEnabled)
+            CorrectedUplinkFrequency += UplinkManualCorrection;
           CorrectedUplinkFrequency += XitOffset;
         }
       }
@@ -203,7 +231,11 @@ namespace SkyRoof
 
     public void SetDownlinkBaseFrequency(double frequency)
     {
-      if (IsTerrestrial || Tx == null || TxCust == null) return;
+      if (IsTerrestrial ||
+          !HasDownlink ||
+          Tx == null ||
+          TxCust == null)
+        return;
       DownlinkBaseOffset = checked((long)Math.Round(frequency - DatabaseDownlinkBaseFrequency));
       ComputeFrequencies();
     }
@@ -234,13 +266,20 @@ namespace SkyRoof
     // or the manual correction (transmitter)
     internal double GetDraggableFrequency()
     {
-      if (IsTerrestrial) return DownlinkFrequency;
-      else if (IsTransponder) return TransponderOffset;
-      else return DownlinkManualCorrection;
+      if (!HasDownlink)
+        return 0;
+      if (IsTerrestrial)
+        return DownlinkFrequency;
+      if (IsTransponder)
+        return TransponderOffset;
+      return DownlinkManualCorrection;
     }
 
     internal void SetDraggableFrequency(double freq)
     {
+      if (!HasDownlink)
+        return;
+
       if (IsTerrestrial)
         DownlinkFrequency = freq;
 
@@ -261,6 +300,9 @@ namespace SkyRoof
 
     internal void IncrementDownlinkFrequency(int delta)
     {
+      if (!HasDownlink)
+        return;
+
       // RIT
       if (RitEnabled)
       {

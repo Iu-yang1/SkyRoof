@@ -32,6 +32,10 @@ namespace SkyRoof
     public bool frequency_violation { get; set; }
     public bool unconfirmed { get; set; }
 
+    // Local records are authored by the operator and reapplied from
+    // custom-transmitters.json after every database refresh.
+    public bool local_custom { get; set; }
+
     // canonical downlink mode name mapped from mode_id at import (see ModeMnemonic.ToModeName)
     public string DownlinkMode { get; set; }
 
@@ -43,7 +47,14 @@ namespace SkyRoof
 
 
     internal SatnogsDbSatellite Satellite;
-    internal long DownlinkLow => (long)downlink_low!;
+    internal long DownlinkLow => downlink_low ?? 0;
+
+    internal bool HasDownlink() =>
+      downlink_low.HasValue;
+
+    internal bool HasAnyFrequency() =>
+      downlink_low.HasValue ||
+      uplink_low.HasValue;
 
 
     public string GetTooltipText()
@@ -51,7 +62,7 @@ namespace SkyRoof
       var sb = new StringBuilder();
 
       // all details from the SatNOGS DB (empty fields are skipped)
-      sb.Append("satnogs\n");
+      sb.Append(local_custom ? "local\n" : "satnogs\n");
       AddLine(sb, "Description", description);
       AddLine(sb, "Type", type);
       AddLine(sb, "Status", status);
@@ -115,14 +126,20 @@ namespace SkyRoof
 
     public bool IsVhf(long? freq = null)
     {
-      freq ??= DownlinkLow;
-      return IsVhfFrequency((double)freq);
+      freq ??=
+        downlink_low ??
+        uplink_low;
+      return freq.HasValue &&
+        IsVhfFrequency(freq.Value);
     }
 
     public bool IsUhf(long? freq = null)
     {
-      freq ??= DownlinkLow;
-      return IsUhfFrequency((double)freq);
+      freq ??=
+        downlink_low ??
+        uplink_low;
+      return freq.HasValue &&
+        IsUhfFrequency(freq.Value);
     }
 
     public static bool IsVhfFrequency(double freq)
@@ -245,7 +262,11 @@ namespace SkyRoof
       if (n == "LSB") return Slicer.Mode.LSB;
       if (n is "FM" or "FMN" or "NFM" or "DSB" or "DSTAR" or "SSTV" or "APT" or "DUV")
         return Slicer.Mode.FM;
-      if (n.StartsWith("AFSK") || n == "PSK31" || n == "WSJT" || n == "FT8")
+      if (n.StartsWith("AFSK") ||
+          n == "PSK31" ||
+          n == "WSJT" ||
+          n == "FT4" ||
+          n == "FT8")
         return Slicer.Mode.USB_D;
 
       return Slicer.Mode.FM_D;

@@ -137,7 +137,10 @@ namespace SkyRoof
 
     internal void SetDownlinkBaseFrequency(double frequency)
     {
-      if (RadioLink.IsTerrestrial || RadioLink.TxCust == null) return;
+      if (RadioLink.IsTerrestrial ||
+          !RadioLink.HasDownlink ||
+          RadioLink.TxCust == null)
+        return;
       RadioLink.SetDownlinkBaseFrequency(frequency);
       ctx.Settings.SaveToFile();
       ctx.WaterfallPanel?.RefreshFrequencyLabels();
@@ -235,6 +238,9 @@ namespace SkyRoof
 
     internal void RxTuned()
     {
+      if (!RadioLink.HasDownlink)
+        return;
+
       if (IsCatTuneFeedbackSuppressed())
       {
         RadioLinkToRadio();
@@ -372,28 +378,37 @@ namespace SkyRoof
 
     private void RadioLinkToRadio()
     {
-      // mode in slicer
-      if (ctx.Slicer != null) ctx.Slicer.NewMode = RadioLink.DownlinkMode;
+      // An uplink-only local record must not disturb the receive side. Only
+      // touch the slicer/RX CAT path when a real downlink exists.
+      if (RadioLink.HasDownlink)
+      {
+        if (ctx.Slicer != null)
+          ctx.Slicer.NewMode = RadioLink.DownlinkMode;
+        ctx.CatControl.Rx?.SetRxMode(
+          RadioLink.DownlinkMode);
 
-      // mode in external radio
-      ctx.CatControl.Rx?.SetRxMode(RadioLink.DownlinkMode);
-      ctx.CatControl.Tx?.SetTxMode(RadioLink.UplinkMode);
+        if (ctx.Settings.Transverter.SdrOffsetEnabled)
+          XverterSetSlicerFrequency();
+        else
+          SetSlicerFrequency();
 
-      // ctcss tone of this transmitter in external radio
-      ctx.CatControl.Tx?.SetCtcssTone(RadioLink.CtcssTone, RadioLink.CtcssEnabled);
+        if (ctx.CatControl.Rx != null)
+          SendCatRxFrequency(
+            RadioLink.CorrectedDownlinkFrequency);
+      }
 
-      // freq in slicer
-      if (ctx.Settings.Transverter.SdrOffsetEnabled)
-        XverterSetSlicerFrequency();
-      else
-        SetSlicerFrequency();
+      if (RadioLink.CorrectedUplinkFrequency != 0)
+      {
+        ctx.CatControl.Tx?.SetTxMode(
+          RadioLink.UplinkMode);
+        ctx.CatControl.Tx?.SetCtcssTone(
+          RadioLink.CtcssTone,
+          RadioLink.CtcssEnabled);
 
-      // freq in external radio (with optional transverter CAT offset)
-      if (ctx.CatControl.Rx != null)
-        SendCatRxFrequency(RadioLink.CorrectedDownlinkFrequency);
-
-      if (RadioLink.CorrectedUplinkFrequency != 0 && ctx.CatControl.Tx != null)
-        SendCatTxFrequency(RadioLink.CorrectedUplinkFrequency);
+        if (ctx.CatControl.Tx != null)
+          SendCatTxFrequency(
+            RadioLink.CorrectedUplinkFrequency);
+      }
 
       // refresh the LED labels so the yellow "no matching CAT band" state tracks the active RF
       var transverter = ctx.Settings.Transverter;
@@ -434,12 +449,14 @@ namespace SkyRoof
     // True when RX CAT transverter offset is enabled but the current downlink RF falls outside
     // every configured CAT band — no CAT frequency is being sent in this state.
     public bool IsRxCatTransverterOutOfBand =>
+      RadioLink.HasDownlink &&
       ctx.Settings.Transverter.RxCatOffsetEnabled &&
       ctx.Settings.Transverter.GetCatBand(RadioLink.CorrectedDownlinkFrequency) == null;
 
     // True when TX CAT transverter offset is enabled but the current uplink RF falls outside
     // every configured CAT band — no CAT frequency is being sent in this state.
     public bool IsTxCatTransverterOutOfBand =>
+      RadioLink.CorrectedUplinkFrequency > 0 &&
       ctx.Settings.Transverter.TxCatOffsetEnabled &&
       ctx.Settings.Transverter.GetCatBand(RadioLink.CorrectedUplinkFrequency) == null;
 
@@ -649,6 +666,25 @@ namespace SkyRoof
         DownlinkManualSpinner.BackColor = SystemColors.Control;
 
         DownlinkManualSpinner.Enabled = false;
+        DownlinkModeCombobox.Enabled = true;
+        label3.Enabled = label4.Enabled = false;
+      }
+      else if (!RadioLink.HasDownlink)
+      {
+        DownlinkManualSpinner.Value = 0;
+
+        DownlinkLabel.Text = "No Downlink";
+        DownlinkLabel.ForeColor = SystemColors.GrayText;
+        DownlinkLabel.Font = DownlinkRegularFont;
+
+        DownlinkDopplerCheckbox.Visible = false;
+        DownlinkDopplerLabel.BackColor = SystemColors.Control;
+
+        DownlinkManualCheckbox.Visible = false;
+        DownlinkManualSpinner.BackColor = SystemColors.Control;
+
+        DownlinkManualSpinner.Enabled = false;
+        DownlinkModeCombobox.Enabled = false;
         label3.Enabled = label4.Enabled = false;
       }
       else
@@ -658,6 +694,7 @@ namespace SkyRoof
         DownlinkManualSpinner.Value = (decimal)(RadioLink.DownlinkManualCorrection / 1000d);
 
         DownlinkLabel.Text = "Downlink";
+        DownlinkModeCombobox.Enabled = true;
         DownlinkLabel.ForeColor = SystemColors.ControlText;
         DownlinkLabel.Font = DownlinkRegularFont;
 
@@ -715,7 +752,9 @@ namespace SkyRoof
 
     private void FrequenciesToUi()
     {
-      if (ctx.Settings.Cat.RxCat.ShowCorrectedFrequency)
+      if (!RadioLink.HasDownlink)
+        DownlinkFrequencyLabel.Text = "000,000,000";
+      else if (ctx.Settings.Cat.RxCat.ShowCorrectedFrequency)
         DownlinkFrequencyLabel.Text = $"{RadioLink.CorrectedDownlinkFrequency:n0}*";
       else
         DownlinkFrequencyLabel.Text = $"{RadioLink.DownlinkFrequency:n0}";
@@ -786,6 +825,9 @@ namespace SkyRoof
 
     private string MakeDownlinkTooltip()
     {
+      if (!RadioLink.HasDownlink)
+        return "No Downlink Frequency";
+
       string tooltip = $"Nominal frequency:   {RadioLink.DownlinkFrequency:n0} Hz\n";
 
       if (!RadioLink.IsTerrestrial)
@@ -899,7 +941,10 @@ namespace SkyRoof
 
     internal void ResetDownlinkBaseFrequency()
     {
-      if (RadioLink.IsTerrestrial || RadioLink.TxCust == null) return;
+      if (RadioLink.IsTerrestrial ||
+          !RadioLink.HasDownlink ||
+          RadioLink.TxCust == null)
+        return;
       RadioLink.ResetDownlinkBaseFrequency();
       ctx.Settings.SaveToFile();
       ctx.WaterfallPanel?.RefreshFrequencyLabels();

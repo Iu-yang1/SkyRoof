@@ -296,9 +296,22 @@ namespace SkyRoof
     {
       return Transmitters
         .Where(t => (t.IsVhf() || t.IsUhf()) && t.alive)
-        .GroupBy(t => t.downlink_low)
-        .Select(d => $"{d.Key / 1e6:F3}   {string.Join(", ", d.Select(r => r.mode).Distinct())}")
-        .Order().ToList();
+        .GroupBy(
+          t =>
+            t.downlink_low ??
+            t.uplink_low)
+        .Where(g => g.Key.HasValue)
+        .Select(
+          g =>
+            $"{g.Key!.Value / 1e6:F3}   {string.Join(", ", g.Select(r => r.mode).Distinct())}")
+        .Order()
+        .ToList();
+    }
+
+    internal void RefreshTransmitterDerivedData()
+    {
+      transmittersHint = null;
+      SetFlags();
     }
 
     internal void BuildAllNames()

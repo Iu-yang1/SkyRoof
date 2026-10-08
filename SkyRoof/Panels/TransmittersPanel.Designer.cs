@@ -34,13 +34,14 @@
       columnHeader1 = new ColumnHeader();
       columnHeader3 = new ColumnHeader();
       columnHeader2 = new ColumnHeader();
+      columnHeader4 = new ColumnHeader();
       imageList1 = new ImageList(components);
       SatNameLabel = new Label();
       SuspendLayout();
       // 
       // listView1
       // 
-      listView1.Columns.AddRange(new ColumnHeader[] { columnHeader1, columnHeader3, columnHeader2 });
+      listView1.Columns.AddRange(new ColumnHeader[] { columnHeader1, columnHeader3, columnHeader2, columnHeader4 });
       listView1.Dock = DockStyle.Fill;
       listView1.FullRowSelect = true;
       listView1.LabelWrap = false;
@@ -72,6 +73,11 @@
       // 
       columnHeader2.Text = "Uplink";
       columnHeader2.Width = 120;
+      // 
+      // columnHeader4
+      // 
+      columnHeader4.Text = "Mode";
+      columnHeader4.Width = 90;
       // 
       // imageList1
       // 
@@ -110,6 +116,7 @@
     private ColumnHeader columnHeader1;
     private ColumnHeader columnHeader2;
     private ColumnHeader columnHeader3;
+    private ColumnHeader columnHeader4;
     public Label SatNameLabel;
     private ImageList imageList1;
   }

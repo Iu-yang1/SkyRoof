@@ -107,6 +107,13 @@ namespace SkyRoof
           orbitLayersChanged |= sat.InitializeOrbitLayers(now);
         }
 
+        // The local-transmitter file is authoritative. Satellites.json may already
+        // contain serialized local rows from the previous run; remove/rebuild those
+        // rows from custom-transmitters.json so refreshes never create duplicates
+        // and a future delete/edit operation cannot leave stale cache entries.
+        ApplyCustomTransmitters(
+          rebuild: true);
+
         // the override file is live configuration, not a build-time artifact: apply it on every load so a
         // record saved from the Signal Params dialog takes effect at the next start without a database
         // import (discover_params_plan.md §6.2). ApplyTransmitterOverrides is idempotent, so re-applying
@@ -541,12 +548,16 @@ namespace SkyRoof
             DateTime.UtcNow,
             saveAndNotify: false);
 
+        int localTransmitterCount =
+          ApplyCustomTransmitters();
+
         if (primaryDownloaded ||
             primaryCount > 0 ||
             autoTleCount > 0 ||
             customCount > 0 ||
             celestrakCount > 0 ||
-            expiredManual > 0)
+            expiredManual > 0 ||
+            localTransmitterCount > 0)
         {
           SaveToFile();
           TleUpdated?.Invoke(
@@ -596,7 +607,13 @@ namespace SkyRoof
         DateTime.UtcNow,
         saveAndNotify: false);
 
-      if (autoTleCount + customCount + celestrakCount > 0)
+      int localTransmitterCount =
+        ApplyCustomTransmitters();
+
+      if (autoTleCount +
+          customCount +
+          celestrakCount +
+          localTransmitterCount > 0)
         SaveToFile();
 
       return autoTleCount + customCount + celestrakCount;
@@ -797,6 +814,12 @@ namespace SkyRoof
         // enrichment only — never let a satyaml problem abort the import
         try { ImportSatyaml(); }
         catch (Exception ex) { Log.Warning(ex, "satyaml import failed (enrichment skipped)"); }
+
+        // Re-attach operator-authored transmitter rows before pruning satellites
+        // without radio data. This is what lets a SatNOGS satellite with no
+        // database transmitter survive solely because the operator supplied one.
+        try { ApplyCustomTransmitters(); }
+        catch (Exception ex) { Log.Warning(ex, "local transmitter import failed"); }
 
         // local hand-curated overrides on top of satyaml — enrichment only, never abort the import.
         // Kept here as well as at load time: the import writes Satellites.json, and leaving the manual
@@ -1059,6 +1082,250 @@ namespace SkyRoof
           }
     }
 
+    private string GetCustomTransmittersPath() =>
+      Path.Combine(
+        DataFolder,
+        "custom-transmitters.json");
+
+    private CustomTransmitterDefinitionList LoadCustomTransmitterDefinitions()
+    {
+      string path =
+        GetCustomTransmittersPath();
+      if (!File.Exists(path))
+        return new CustomTransmitterDefinitionList();
+
+      try
+      {
+        return JsonConvert.DeserializeObject<CustomTransmitterDefinitionList>(
+            File.ReadAllText(path),
+            JsonSettings)
+          ?? new CustomTransmitterDefinitionList();
+      }
+      catch (Exception ex)
+      {
+        Log.Error(
+          ex,
+          "Unable to read custom-transmitters.json; keeping the current satellite cache unchanged.");
+        return new CustomTransmitterDefinitionList();
+      }
+    }
+
+    private void SaveCustomTransmitterDefinitions(
+      CustomTransmitterDefinitionList definitions)
+    {
+      File.WriteAllText(
+        GetCustomTransmittersPath(),
+        JsonConvert.SerializeObject(
+          definitions,
+          Formatting.Indented,
+          JsonSettings));
+    }
+
+    internal SatnogsDbTransmitter AddCustomTransmitter(
+      SatnogsDbSatellite satellite,
+      CustomTransmitterDefinition definition)
+    {
+      if (satellite == null)
+        throw new ArgumentNullException(
+          nameof(satellite));
+      if (definition == null)
+        throw new ArgumentNullException(
+          nameof(definition));
+      if (!definition.HasAnyFrequency)
+        throw new ArgumentException(
+          "A local transmitter must have an uplink, a downlink, or both.",
+          nameof(definition));
+
+      definition.uuid =
+        string.IsNullOrWhiteSpace(definition.uuid)
+          ? $"local-{Guid.NewGuid():N}"
+          : definition.uuid.Trim();
+      definition.description =
+        string.IsNullOrWhiteSpace(definition.description)
+          ? "Local transmitter"
+          : definition.description.Trim();
+      definition.mode =
+        string.IsNullOrWhiteSpace(definition.mode)
+          ? "FM"
+          : definition.mode.Trim();
+      definition.sat_id =
+        satellite.sat_id;
+      definition.norad_cat_id =
+        satellite.norad_cat_id;
+      definition.updated_utc =
+        DateTime.UtcNow;
+
+      CustomTransmitterDefinitionList definitions =
+        LoadCustomTransmitterDefinitions();
+
+      // UUID is the stable identity used by SatelliteSettings transmitter
+      // customizations. Never silently create two rows with the same identity.
+      definitions.RemoveAll(
+        d =>
+          string.Equals(
+            d.uuid,
+            definition.uuid,
+            StringComparison.OrdinalIgnoreCase));
+      definitions.Add(
+        definition);
+      SaveCustomTransmitterDefinitions(
+        definitions);
+
+      ApplyCustomTransmitters();
+      SaveToFile();
+
+      SatnogsDbTransmitter? transmitter =
+        satellite.Transmitters.FirstOrDefault(
+          t =>
+            string.Equals(
+              t.uuid,
+              definition.uuid,
+              StringComparison.OrdinalIgnoreCase));
+      if (transmitter == null)
+        throw new InvalidOperationException(
+          "The local transmitter was saved but could not be attached to the selected satellite.");
+
+      Log.Information(
+        "Local transmitter saved: {Satellite} / {Description} ({Uuid})",
+        satellite.name,
+        transmitter.description,
+        transmitter.uuid);
+
+      return transmitter;
+    }
+
+    internal int ApplyCustomTransmitters(
+      bool rebuild = false)
+    {
+      // Satellites.json is a derived cache and can contain last run's local
+      // rows. At startup we rebuild from the authoritative local file. During
+      // ordinary orbit refreshes, retain existing objects so active selector /
+      // RadioLink references stay valid and only attach records that are
+      // missing because a new orbit-only satellite just appeared.
+      if (rebuild)
+        foreach (SatnogsDbSatellite sat in Satellites)
+          sat.Transmitters.RemoveAll(
+            t => t.local_custom);
+
+      CustomTransmitterDefinitionList definitions =
+        LoadCustomTransmitterDefinitions();
+
+      var existingUuids =
+        Satellites
+          .SelectMany(s => s.Transmitters)
+          .Select(t => t.uuid)
+          .Where(id => !string.IsNullOrWhiteSpace(id))
+          .ToHashSet(
+            StringComparer.OrdinalIgnoreCase);
+
+      int applied = 0;
+      foreach (CustomTransmitterDefinition definition in definitions)
+      {
+        if (string.IsNullOrWhiteSpace(definition.uuid) ||
+            string.IsNullOrWhiteSpace(definition.description) ||
+            !definition.HasAnyFrequency)
+          continue;
+
+        if (existingUuids.Contains(
+              definition.uuid))
+          continue;
+
+        SatnogsDbSatellite? sat = null;
+        if (!string.IsNullOrWhiteSpace(definition.sat_id))
+          SatelliteList.TryGetValue(
+            definition.sat_id,
+            out sat);
+
+        // An orbit-only object can later acquire normal SatNOGS metadata and a
+        // different sat_id. NORAD is the stable fallback in that case.
+        if (sat == null &&
+            definition.norad_cat_id.HasValue)
+          sat =
+            Satellites.FirstOrDefault(
+              s => s.norad_cat_id == definition.norad_cat_id);
+
+        if (sat == null)
+          continue;
+
+        SatnogsDbTransmitter tx =
+          CreateCustomTransmitter(
+            definition,
+            sat);
+        sat.Transmitters.Add(
+          tx);
+        existingUuids.Add(
+          tx.uuid);
+        applied++;
+      }
+
+      foreach (SatnogsDbSatellite sat in Satellites)
+      {
+        foreach (SatnogsDbTransmitter tx in sat.Transmitters)
+          tx.Satellite = sat;
+        sat.RefreshTransmitterDerivedData();
+      }
+
+      if (definitions.Count > 0)
+        Log.Information(
+          "Local transmitters: applied {Applied} of {Total} saved record(s).",
+          applied,
+          definitions.Count);
+
+      return applied;
+    }
+
+    internal static SatnogsDbTransmitter CreateCustomTransmitter(
+      CustomTransmitterDefinition definition,
+      SatnogsDbSatellite satellite)
+    {
+      string mode =
+        string.IsNullOrWhiteSpace(definition.mode)
+          ? "FM"
+          : definition.mode.Trim();
+
+      return new SatnogsDbTransmitter
+      {
+        uuid = definition.uuid,
+        description = definition.description.Trim(),
+        alive = true,
+        type =
+          definition.uplink_hz.HasValue &&
+          definition.downlink_hz.HasValue
+            ? "Transceiver"
+            : "Transmitter",
+        uplink_low = definition.uplink_hz,
+        uplink_high = null,
+        uplink_drift = null,
+        downlink_low = definition.downlink_hz,
+        downlink_high = null,
+        downlink_drift = null,
+        mode = mode,
+        mode_id = null,
+        uplink_mode = mode,
+        invert = false,
+        baud = null,
+        sat_id = satellite.sat_id,
+        norad_cat_id = satellite.norad_cat_id,
+        norad_follow_id = null,
+        status = "active",
+        updated =
+          definition.updated_utc == default
+            ? DateTime.UtcNow
+            : definition.updated_utc,
+        citation = "Local user transmitter",
+        service = "Amateur",
+        iaru_coordination = "",
+        iaru_coordination_url = "",
+        itu_notification = new ItuNotification(),
+        frequency_violation = false,
+        unconfirmed = false,
+        DownlinkMode = mode,
+        local_custom = true,
+        Satellite = satellite
+      };
+    }
+
+
     internal void Customize(Dictionary<string, SatelliteCustomization> satelliteCustomizations)
     {
       foreach (var cust in satelliteCustomizations.Values)
@@ -1097,6 +1364,7 @@ namespace SkyRoof
             manualOverride: true,
             manualExpiresUtc: expiresUtc);
 
+        ApplyCustomTransmitters();
         SaveToFile();
         TleUpdated?.Invoke(this, EventArgs.Empty);
         Log.Information(
