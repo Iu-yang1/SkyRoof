@@ -42,6 +42,7 @@ namespace SkyRoof
     private bool SplitterDragging;
     private bool FrequencyTuning;
     private bool TuneUsingRit;
+    private IcomScopeGeometry TuneGestureGeometry;
     private long? PendingTuneFrequencyHz;
     private readonly System.Windows.Forms.Timer TuneCommitTimer =
       new() { Interval = 40 };
@@ -411,14 +412,19 @@ namespace SkyRoof
         GetSpectrumPlotRectangle(
           spectrum);
 
-      if (!TryGetFrequencyAtPoint(
+      if (!TryGetCurrentGeometry(
+            out IcomScopeGeometry geometry) ||
+          !TryGetFrequencyAtPoint(
             e.Location,
             plot,
+            geometry,
             out long frequencyHz))
         return;
 
       Focus();
       FrequencyTuning = true;
+      TuneGestureGeometry =
+        geometry;
       TuneUsingRit =
         ModifierKeys.HasFlag(
           Keys.Control);
@@ -442,6 +448,7 @@ namespace SkyRoof
             MouseButtons.Left)
       {
         FrequencyTuning = false;
+        TuneGestureGeometry = default;
         TuneCommitTimer.Stop();
         FlushPendingTune();
         Capture = false;
@@ -491,6 +498,7 @@ namespace SkyRoof
         if (TryGetFrequencyAtPoint(
               e.Location,
               tuningPlot,
+              TuneGestureGeometry,
               out long frequencyHz))
           PendingTuneFrequencyHz =
             frequencyHz;
@@ -589,29 +597,33 @@ namespace SkyRoof
         return;
 
       FrequencyTuning = false;
+      TuneGestureGeometry = default;
       TuneCommitTimer.Stop();
       FlushPendingTune();
       TuningCompleted?.Invoke();
     }
 
-    private bool TryGetFrequencyAtPoint(
-      Point point,
-      Rectangle plot,
-      out long frequencyHz)
+    private bool TryGetCurrentGeometry(
+      out IcomScopeGeometry geometry)
     {
-      frequencyHz = 0;
-
-      if (!plot.Contains(point))
-        return false;
-
-      IcomScopeGeometry geometry;
-
       lock (DataSync)
         geometry =
           LatestFrame?.Geometry ??
           default;
 
-      if (!geometry.IsValid)
+      return geometry.IsValid;
+    }
+
+    private static bool TryGetFrequencyAtPoint(
+      Point point,
+      Rectangle plot,
+      IcomScopeGeometry geometry,
+      out long frequencyHz)
+    {
+      frequencyHz = 0;
+
+      if (!plot.Contains(point) ||
+          !geometry.IsValid)
         return false;
 
       frequencyHz =
@@ -1330,8 +1342,14 @@ namespace SkyRoof
       IcomScopeGeometry geometry,
       Color textColor)
     {
+      IcomScopeGeometry cursorGeometry =
+        FrequencyTuning &&
+        TuneGestureGeometry.IsValid
+          ? TuneGestureGeometry
+          : geometry;
+
       if (!PointerInside ||
-          !geometry.IsValid ||
+          !cursorGeometry.IsValid ||
           !plot.Contains(
             PointerLocation))
         return;
@@ -1344,7 +1362,7 @@ namespace SkyRoof
           plot.Width - 1);
 
       long frequency =
-        geometry.FrequencyAtFraction(
+        cursorGeometry.FrequencyAtFraction(
           fraction);
 
       int x =
