@@ -190,9 +190,18 @@ namespace VE3NEA.Dsp.Tests
       CwFrameRidgeScanResult result =
         scanner.Scan(snapshot);
 
-      result.PrecisionBatches
-        .SelectMany(x => x.Observations)
-        .Should().BeEmpty();
+      CwRidgeObservation[] noiseObservations =
+        result.PrecisionBatches
+          .SelectMany(x => x.Observations)
+          .ToArray();
+      noiseObservations.Should().BeEmpty(
+        "noise observations were: {0}",
+        string.Join(
+          ", ",
+          noiseObservations.Select(x =>
+            $"{x.CenterSampleIndex}:{x.FrequencyHz:F1}Hz/" +
+            $"{x.SnrDb:F1}dB p={x.ActivityProbability:F2} " +
+            $"portion={x.RidgePortionId}")));
       result.PrecisionBatches
         .Should().Contain(x =>
           x.Observations.Count == 0);
