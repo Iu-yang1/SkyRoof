@@ -172,6 +172,79 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void Scanner_NoiseOnly_DoesNotCreateKalmanMeasurements()
+    {
+      const double seconds = 2.0;
+      int count =
+        (int)Math.Round(seconds * SampleRate);
+      float[] audio = MakeNoise(count, 0.002f);
+
+      var snapshot = new CwAudioSnapshot(
+        SampleRate,
+        T0,
+        count,
+        audio);
+      CwFrameRidgeScanner scanner =
+        NewScanner(500, 1400);
+
+      CwFrameRidgeScanResult result =
+        scanner.Scan(snapshot);
+
+      result.PrecisionBatches
+        .SelectMany(x => x.Observations)
+        .Should().BeEmpty();
+      result.PrecisionBatches
+        .Should().Contain(x =>
+          x.Observations.Count == 0);
+    }
+
+    [Fact]
+    public void ConservativeProfile_DoesNotSplitOneKeyedCarrierIntoSidebands()
+    {
+      float[] audio = MakeKeyedTone(
+        seconds: 2.0,
+        endFrequencyHz: 800,
+        driftHzPerSecond: 0,
+        amplitude: 0.34f,
+        keyPeriodSeconds: 0.14,
+        duty: 0.50);
+
+      var snapshot = new CwAudioSnapshot(
+        SampleRate,
+        T0,
+        audio.Length,
+        audio);
+
+      var scanner = new CwFrameRidgeScanner(
+        new CwFrameRidgeScannerOptions
+        {
+          SampleRate = SampleRate,
+          MinFrequencyHz = 600,
+          MaxFrequencyHz = 1000,
+          FastMinimumSnrDb = 6,
+          PrecisionMinimumSnrDb = 6,
+          PeakDeduplicationHz = 30,
+          MaxPeaksPerFrame = 8,
+          MinimumPortionMeanSnrDb = 7,
+          MinimumPortionContinuity = 0.60,
+          MinimumPortionActivityProbability = 0.58
+        });
+
+      CwFrameRidgeScanResult result =
+        scanner.Scan(snapshot);
+
+      CwRidgeObservation[] observations =
+        result.PrecisionBatches
+          .SelectMany(x => x.Observations)
+          .ToArray();
+      observations.Should().NotBeEmpty();
+      observations.Should().OnlyContain(x =>
+        Math.Abs(x.FrequencyHz - 800) < 30);
+      result.PrecisionBatches.Should().OnlyContain(
+        batch => batch.Observations.Count <= 1);
+    }
+
+    [Fact]
     public void Scanner_EmitsEmptyPrecisionBatchesThroughSilence()
     {
       const double seconds = 1.8;
