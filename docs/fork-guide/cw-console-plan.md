@@ -1,6 +1,6 @@
 # CW Console: full multi-lane Pileup and CI-V keyer implementation plan
 
-**Status: receive core under quantitative validation.** The repository now contains multi-carrier detection/tracking, a dual-resolution frame-level ridge scanner, a bounded ~360 ms fixed-lag beam/MHT, independent multi-lane ONNX/CTC inference, activity-aware interference masks, MergeGroup fallback, and time-aligned incremental transcript reconciliation. Live SDR / WASAPI capture / RS-BA1 render-endpoint loopback PCM now enters the receive core. The remaining work is the periodic analysis/DeepCW worker, dockable CW Console UI, HamNoise integration, and all transmit functionality.
+**Status: receive core under quantitative validation.** The repository now contains multi-carrier detection/tracking, a dual-resolution frame-level ridge scanner, a bounded ~360 ms fixed-lag beam/MHT, independent multi-lane ONNX/CTC inference, activity-aware interference masks, MergeGroup fallback, and time-aligned incremental transcript reconciliation. Live SDR / WASAPI capture / RS-BA1 render-endpoint loopback PCM and the non-blocking receive worker now enter the receive core. The remaining work is the dockable CW Console UI, HamNoise integration, and all transmit functionality.
 
 Chinese: [CW Console 完整规划](../../zh-cn/fork-guide/cw-console-plan.md).
 
@@ -54,7 +54,7 @@ The frame scanner is unit-tested separately for monotonic sample timing, Fast/Pr
 | CW-04 | Multi-frame association + tracking | 3-batch / ~360 ms beam-MHT, AssociationHintId, Kalman/GNN, MergeGroup fallback, up to 8 tracks | Crossing, single-peak merge, one-frame clutter and ID-swap regressions |
 | CW-05 | Per-lane isolation | Bandpass + smooth frequency shift to model's AF passband | Independent audio outputs for 3–5 simultaneous CW carriers |
 | CW-06 | DeepCW + continuous transcript | ONNX Runtime + metadata-faithful STFT/log1p/CTC; OutputFrame timing; committed/provisional text; AssociationHintId ownership | Overlap de-duplication, pre-commit correction, repeated-character and per-lane isolation tests |
-| CW-07 | Load governance | Default 5, configurable up to 8 lanes, bounded inference backlog, selected-lane priority | Measured latency/CPU/RAM and safe overload behavior |
+| CW-07 | Load governance | Independent 120 ms tracker cadence; 6 s DeepCW snapshots / 1 s hop; latest-only single inference; default 5 lanes | Busy inference skips old hops instead of queueing; tracker remains independent; completed/skipped windows are observable |
 | CW-08 | HamNoise | Native CW DLL with bypass and Wet/Dry, optional monitor | Compare raw/denoised per-lane CER |
 | CW-09 | Dockable UI | Waterfall, Pileup grid, selected transcript, TX editor, theme/settings | GitHub Light/Dark, pink-blue-white and layout restore |
 | CW-10 | SkyCAT CW protocol | Constrained main-CAT CW_SEND/CW_ABORT/WPM; CI-V 17 / 17 FF | Unit tests for ACK, timeout, invalid text and abort |
@@ -70,7 +70,7 @@ The frame scanner is unit-tested separately for monotonic sample timing, Fast/Pr
 2. Route exactly one configured source through `CwPcmIngress`; changing source or seeing a backwards wall-clock timestamp starts a clean sample timeline. RS-BA1 loopback captures the whole render-endpoint mix rather than a process-isolated stream, so a dedicated endpoint is recommended. Then enter the bounded, timestamped audio hub. Optionally reduce CW noise with HamNoise; preserve a raw bypass path.
 3. Run the dual-resolution ridge scanner. Fast 15 ms-hop frames form activity/reliable-ridge evidence only; Precision 120 ms-hop observations remain on the monotonic PCM sample axis.
 4. Hold Precision batches in the bounded fixed-lag beam/MHT for about 360 ms, commit the oldest batch with future-validated AssociationHintId labels, then update the labelled Kalman/GNN/MergeGroup tracker. Empty batches follow the same delayed timeline and still advance coast/hold time. For each active lane, extract or spectrally translate the component to DeepCW's model coordinates; classic/monitor audio may use the independent complex DDC path.
-5. Run the publicly available DeepCW ONNX model with lane-specific state and CTC. Map emitted OutputFrames to approximate absolute time, reconcile overlapping windows by sequence-constrained symbol voting, and expose immutable committed text plus a correctable provisional suffix.
+5. Run carrier tracking on its own 120 ms worker. A separate latest-only DeepCW lane takes immutable 6 s snapshots at a nominal 1 s hop; if the previous inference is still running, that hop is skipped rather than queued. Each inference is tagged with the current TimelineGeneration so results from a previous device/source are discarded. Map emitted OutputFrames to approximate absolute time, reconcile overlapping windows by sequence-constrained symbol voting, and expose immutable committed text plus a correctable provisional suffix.
 6. Render all 3–8 lane transcripts simultaneously, with AF frequency, estimated SNR, drift, state and latest call. Show a complete transcript for one selected lane. Mark unresolved co-channel collisions.
 7. Track RF downlink and actual TX uplink separately through SkyRoof's existing Doppler model; do not interpret a tracked AF frequency as an uplink VFO command.
 
@@ -104,7 +104,8 @@ Use synthetic and recorded simultaneous CW WAV at 10/20/30/40 WPM; 3/5/8 carrier
 3. Bounded fixed-lag beam/MHT, multi-frame crossing/merge association and AssociationHintId (**PR #44**).
 4. Incremental CTC timing, overlapping-window voting and real-ONNX streaming benchmark (**PR #45**).
 5. Live SDR / WASAPI capture / RS-BA1 render-endpoint loopback PCM wiring, hot settings rebinding and source timeline isolation (**PR #46**).
-6. Dockable CW Console UI, load governance, HamNoise and settings.
-7. SkyCAT constrained CW protocol and mock serial tests.
-8. Safe TX + satellite CAT integration and supervised bench verification.
-9. End-to-end WAV corpus metrics, bilingual user guide, license audit and release checks.
+6. Decoupled tracker/ONNX receive worker, latest-only inference and TimelineGeneration stale-result suppression (**PR #47**).
+7. Dockable CW Console UI, HamNoise and settings.
+8. SkyCAT constrained CW protocol and mock serial tests.
+9. Safe TX + satellite CAT integration and supervised bench verification.
+10. End-to-end WAV corpus metrics, bilingual user guide, license audit and release checks.
