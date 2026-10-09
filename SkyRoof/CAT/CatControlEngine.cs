@@ -70,6 +70,8 @@ namespace SkyRoof
     private readonly Dictionary<string, string> IcomScopeReadbackValues = new(
       StringComparer.OrdinalIgnoreCase);
     private int IcomScopeReadbackIndex;
+    private readonly object IcomScopeReadbackSync = new();
+    private int IcomScopeReadbackGeneration;
     private volatile bool IcomRfGainReadbackPending;
     private int RequestedIcomRfGain = -1;
     internal bool SupportsIcomRfGain =>
@@ -255,9 +257,13 @@ namespace SkyRoof
     internal void CancelIcomScopeRequests()
     {
       IcomScopeOutputPending = false;
-      IcomScopeReadbackPending = false;
-      IcomScopeReadbackIndex = 0;
-      IcomScopeReadbackValues.Clear();
+      lock (IcomScopeReadbackSync)
+      {
+        IcomScopeReadbackPending = false;
+        IcomScopeReadbackIndex = 0;
+        IcomScopeReadbackValues.Clear();
+        IcomScopeReadbackGeneration++;
+      }
       Volatile.Write(
         ref IcomFixedEdgeReadbackPending,
         null);
@@ -269,11 +275,15 @@ namespace SkyRoof
       if (!SupportsIcomScopeOutput)
         return false;
 
-      if (!IcomScopeReadbackPending)
+      lock (IcomScopeReadbackSync)
       {
-        IcomScopeReadbackIndex = 0;
-        IcomScopeReadbackValues.Clear();
-        IcomScopeReadbackPending = true;
+        if (!IcomScopeReadbackPending)
+        {
+          IcomScopeReadbackIndex = 0;
+          IcomScopeReadbackValues.Clear();
+          IcomScopeReadbackGeneration++;
+          IcomScopeReadbackPending = true;
+        }
       }
       return true;
     }
@@ -995,61 +1005,77 @@ namespace SkyRoof
 
     private void TryReadIcomScopeState()
     {
-      // One CI-V register per CAT cycle, releasing the shared SkyCAT command
-      // lock between reads so WSJT-X PTT and Doppler tuning are not starved
-      // by a 16-register bulk transaction. Failed/unsupported values are
-      // omitted rather than replaced with fabricated radio settings.
+      // A single radio register is queried on this CAT cycle. Do NOT hold
+      // the state lock during socket I/O: UI cancellation stays responsive.
+      // A generation marker discards late responses after Cancel or a write.
       if (!ReferenceEquals(commands, RigCtldCommands.SkyCat))
       {
-        IcomScopeReadbackPending = false;
-        IcomScopeReadbackValues.Clear();
-        IcomScopeReadbackIndex = 0;
+        lock (IcomScopeReadbackSync)
+        {
+          IcomScopeReadbackPending = false;
+          IcomScopeReadbackIndex = 0;
+          IcomScopeReadbackValues.Clear();
+          IcomScopeReadbackGeneration++;
+        }
         return;
       }
 
-      if (IcomScopeReadbackIndex < IcomScopeReadbackFields.Length)
+      string key;
+      int generation;
+      lock (IcomScopeReadbackSync)
       {
-        string key = IcomScopeReadbackFields[IcomScopeReadbackIndex++];
-        string? reply = SendReadCommand($"U SCOPE_READ_FIELD {key}");
+        if (!IcomScopeReadbackPending ||
+            IcomScopeReadbackIndex >= IcomScopeReadbackFields.Length)
+          return;
+        key = IcomScopeReadbackFields[IcomScopeReadbackIndex++];
+        generation = IcomScopeReadbackGeneration;
+      }
+
+      string? reply = SendReadCommand($"U SCOPE_READ_FIELD {key}");
+      string? partial = null;
+      int successful = 0;
+      lock (IcomScopeReadbackSync)
+      {
+        if (!IcomScopeReadbackPending ||
+            generation != IcomScopeReadbackGeneration)
+          return;
+
         if (reply != null && reply.StartsWith(key + "=", StringComparison.Ordinal))
           IcomScopeReadbackValues[key] = reply[(key.Length + 1)..];
         else
           Log.Warning(
-            "SkyCAT scope readback for {Field} unavailable: {Reply}. Other fields will still synchronize.",
+            "SkyCAT scope field {Field} unavailable: {Reply}; continuing other fields.",
             key, reply ?? "<no reply>");
 
-        if (IcomScopeReadbackIndex < IcomScopeReadbackFields.Length)
+        if (IcomScopeReadbackIndex != IcomScopeReadbackFields.Length)
           return;
+
+        IcomScopeReadbackPending = false;
+        IcomScopeReadbackIndex = 0;
+        successful = IcomScopeReadbackValues.Count;
+        if (IcomScopeReadbackValues.ContainsKey("SELECT"))
+          partial = string.Join(";",
+            IcomScopeReadbackValues.Select(kv => $"{kv.Key}={kv.Value}"));
+        IcomScopeReadbackValues.Clear();
       }
 
-      IcomScopeReadbackPending = false;
-      IcomScopeReadbackIndex = 0;
-      if (!IcomScopeReadbackValues.ContainsKey("SELECT"))
+      if (partial == null)
       {
-        Log.Warning("IC-9700 scope selected receiver readback failed; no state is applied.");
-        IcomScopeReadbackValues.Clear();
+        Log.Warning("IC-9700 scope receiver selection unavailable; cannot apply partial state.");
         return;
       }
-
-      string partial = string.Join(";",
-        IcomScopeReadbackValues.Select(kv => $"{kv.Key}={kv.Value}"));
       try
       {
-        IcomScopeReadbackState state =
-          IcomScopeReadbackState.ParsePartial(partial);
+        IcomScopeReadbackState state = IcomScopeReadbackState.ParsePartial(partial);
         IcomScopeReadbackReceived?.Invoke(state);
         if (state.IsPartial)
           Log.Warning(
-            "IC-9700 scope readback was partial ({Received}/{Total}); missing settings remain unchanged.",
-            IcomScopeReadbackValues.Count, IcomScopeReadbackFields.Length);
+            "IC-9700 scope synchronization partial ({Received}/{Total}); missing properties are preserved.",
+            successful, IcomScopeReadbackFields.Length);
       }
       catch (FormatException ex)
       {
         Log.Warning(ex, "Malformed partial scope readback: {Readback}", partial);
-      }
-      finally
-      {
-        IcomScopeReadbackValues.Clear();
       }
     }
 
@@ -1059,10 +1085,14 @@ namespace SkyRoof
     {
       // An operator change invalidates values collected earlier in the batch;
       // restart the next read at SELECT to avoid mixing before/after states.
-      if (IcomScopeReadbackPending)
+      lock (IcomScopeReadbackSync)
       {
-        IcomScopeReadbackIndex = 0;
-        IcomScopeReadbackValues.Clear();
+        if (IcomScopeReadbackPending)
+        {
+          IcomScopeReadbackIndex = 0;
+          IcomScopeReadbackValues.Clear();
+          IcomScopeReadbackGeneration++;
+        }
       }
       if (!ReferenceEquals(
             commands,
