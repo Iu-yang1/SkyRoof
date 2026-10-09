@@ -583,20 +583,21 @@ namespace SkyRoof.CW
       int groupId,
       DateTime utc)
     {
-      if (track.MergeGroupId == 0)
+      bool enteringMerge = track.MergeGroupId == 0;
+      if (enteringMerge)
       {
         track.MergeEntryFrequencyHz =
           track.FrequencyHz;
         track.MergeEntryDriftHzPerSecond =
           track.DriftHzPerSecond;
         track.MergeEntryUtc = utc;
+        track.IdentityAnchorUntilUtc =
+          utc + FixedLagIdentityTime;
       }
 
       track.MergeGroupId = groupId;
       track.IdentityGroupId = groupId;
       track.Ambiguous = true;
-      track.IdentityAnchorUntilUtc =
-        utc + FixedLagIdentityTime;
     }
 
     private void RefreshMergeGroups(DateTime utc)
