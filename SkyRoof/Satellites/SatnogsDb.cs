@@ -1194,6 +1194,75 @@ namespace SkyRoof
       return transmitter;
     }
 
+    internal SatnogsDbTransmitter UpdateCustomTransmitter(
+      SatnogsDbSatellite satellite,
+      SatnogsDbTransmitter transmitter,
+      CustomTransmitterDefinition replacement)
+    {
+      if (satellite == null) throw new ArgumentNullException(nameof(satellite));
+      if (transmitter == null) throw new ArgumentNullException(nameof(transmitter));
+      if (replacement == null) throw new ArgumentNullException(nameof(replacement));
+      if (!transmitter.local_custom ||
+          string.IsNullOrWhiteSpace(transmitter.uuid) ||
+          !satellite.Transmitters.Any(t => ReferenceEquals(t, transmitter)))
+        throw new InvalidOperationException("Only a saved local transmitter belonging to this satellite can be edited.");
+      if (!replacement.HasAnyFrequency)
+        throw new ArgumentException("An uplink and/or downlink frequency is required.", nameof(replacement));
+      if (string.IsNullOrWhiteSpace(replacement.description))
+        throw new ArgumentException("A transmitter name is required.", nameof(replacement));
+
+      CustomTransmitterDefinitionList definitions = LoadCustomTransmitterDefinitions();
+      CustomTransmitterDefinition? persisted = definitions.FirstOrDefault(
+        d => string.Equals(d.uuid, transmitter.uuid, StringComparison.OrdinalIgnoreCase));
+      if (persisted == null)
+        throw new InvalidOperationException("The original local record was not found in custom-transmitters.json.");
+
+      // Stable UUID is essential: saved CTCSS, modes and frequency corrections
+      // are keyed by this ID, and RadioLink can hold this exact runtime object.
+      replacement.uuid = transmitter.uuid;
+      replacement.sat_id = satellite.sat_id;
+      replacement.norad_cat_id = satellite.norad_cat_id;
+      replacement.description = replacement.description.Trim();
+      replacement.mode = string.IsNullOrWhiteSpace(replacement.mode)
+        ? "FM" : replacement.mode.Trim();
+      replacement.updated_utc = DateTime.UtcNow;
+
+      int index = definitions.IndexOf(persisted);
+      definitions[index] = replacement;
+      SaveCustomTransmitterDefinitions(definitions);
+
+      UpdateCustomTransmitterRuntime(transmitter, replacement);
+      satellite.RefreshTransmitterDerivedData();
+      SaveToFile();
+      Log.Information(
+        "Local transmitter edited: {Satellite} / {Description} ({Uuid})",
+        satellite.name, transmitter.description, transmitter.uuid);
+      return transmitter;
+    }
+
+    internal static void UpdateCustomTransmitterRuntime(
+      SatnogsDbTransmitter transmitter,
+      CustomTransmitterDefinition definition)
+    {
+      if (!transmitter.local_custom ||
+          !string.Equals(transmitter.uuid, definition.uuid, StringComparison.OrdinalIgnoreCase))
+        throw new InvalidOperationException("Local transmitter identity does not match.");
+
+      transmitter.description = definition.description.Trim();
+      transmitter.downlink_low = definition.downlink_hz;
+      transmitter.downlink_high = null;
+      transmitter.uplink_low = definition.uplink_hz;
+      transmitter.uplink_high = null;
+      transmitter.mode = definition.mode.Trim();
+      transmitter.DownlinkMode = definition.mode.Trim();
+      transmitter.uplink_mode = definition.mode.Trim();
+      transmitter.mode_id = null;
+      transmitter.invert = false;
+      transmitter.type = definition.downlink_hz.HasValue && definition.uplink_hz.HasValue
+        ? "Transceiver" : "Transmitter";
+      transmitter.updated = definition.updated_utc;
+    }
+
     internal bool DeleteCustomTransmitter(
       SatnogsDbSatellite satellite,
       SatnogsDbTransmitter transmitter)
