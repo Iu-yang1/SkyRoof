@@ -237,8 +237,13 @@ namespace SkyRoof.CW
   /// </summary>
   public sealed class CwPileupFrontEnd
   {
+    private long lastPrecisionSampleIndex = long.MinValue;
+    private IReadOnlyList<CwSignalTrack> latestTracks =
+      Array.Empty<CwSignalTrack>();
+
     public CwAudioHub Audio { get; }
     public CwCandidateDetector Detector { get; }
+    public CwFrameRidgeScanner FrameScanner { get; }
     public CwPileupTrackManager Tracks { get; }
     public double AnalysisSeconds { get; }
 
@@ -246,7 +251,8 @@ namespace SkyRoof.CW
       int sampleRate = SdrConst.AUDIO_SAMPLING_RATE,
       double analysisSeconds = 2.4,
       CwDetectorOptions? detectorOptions = null,
-      CwPileupTrackManager? trackManager = null)
+      CwPileupTrackManager? trackManager = null,
+      CwFrameRidgeScanner? frameScanner = null)
     {
       if (!double.IsFinite(analysisSeconds) || analysisSeconds < 0.5 || analysisSeconds > 10)
         throw new ArgumentOutOfRangeException(nameof(analysisSeconds));
@@ -259,28 +265,90 @@ namespace SkyRoof.CW
         throw new ArgumentException("Detector and PCM sample rates must match.", nameof(detectorOptions));
 
       AnalysisSeconds = analysisSeconds;
-      Audio = new CwAudioHub(sampleRate, Math.Max(analysisSeconds * 2, 6));
+      Audio = new CwAudioHub(
+        sampleRate,
+        Math.Max(analysisSeconds * 2, 6));
       Detector = new CwCandidateDetector(opts);
-      Tracks = trackManager ?? new CwPileupTrackManager();
+      FrameScanner = frameScanner ??
+        new CwFrameRidgeScanner(
+          new CwFrameRidgeScannerOptions
+          {
+            SampleRate = sampleRate,
+            MinFrequencyHz = opts.MinFrequencyHz,
+            MaxFrequencyHz = opts.MaxFrequencyHz,
+            FastMinimumSnrDb = Math.Max(
+              2.0, opts.MinimumSnrDb - 3.0),
+            PrecisionMinimumSnrDb = Math.Max(
+              2.0, opts.MinimumSnrDb - 3.0),
+            PeakDeduplicationHz = Math.Min(
+              opts.PeakDeduplicationHz, 4.0),
+            MaxPeaksPerFrame = opts.MaxCandidates
+          });
+      if (FrameScanner.Options.SampleRate != sampleRate)
+        throw new ArgumentException(
+          "Frame scanner and PCM sample rates must match.",
+          nameof(frameScanner));
+
+      Tracks = trackManager ??
+        new CwPileupTrackManager();
     }
 
     public void AddSamples(float[] data, int count, DateTime utc) =>
       Audio.Append(data, count, utc);
 
-    public IReadOnlyList<CwSignalTrack> Analyze()
+    public IReadOnlyList<CwSignalTrack> Analyze(
+      double knownDopplerRateHzPerSecond = 0)
     {
-      if (!Audio.TrySnapshot(AnalysisSeconds, out CwAudioSnapshot snapshot))
-        return Array.Empty<CwSignalTrack>();
+      if (!Audio.TrySnapshot(
+            AnalysisSeconds,
+            out CwAudioSnapshot snapshot))
+        return latestTracks;
 
-      IReadOnlyList<CwSignalCandidate> candidates =
-        Detector.Detect(snapshot.Samples);
-      return Tracks.Update(snapshot.EndUtc, candidates);
+      CwFrameRidgeScanResult scan =
+        FrameScanner.Scan(
+          snapshot,
+          knownDopplerRateHzPerSecond);
+
+      foreach (CwRidgeObservationBatch batch in
+        scan.PrecisionBatches
+          .Where(x =>
+            x.CenterSampleIndex >
+            lastPrecisionSampleIndex)
+          .OrderBy(x => x.CenterSampleIndex))
+      {
+        long samplesBeforeEnd =
+          snapshot.EndSampleIndex -
+          batch.CenterSampleIndex;
+        DateTime observationUtc =
+          snapshot.EndUtc -
+          TimeSpan.FromSeconds(
+            samplesBeforeEnd /
+            (double)snapshot.SampleRate);
+
+        CwSignalCandidate[] candidates =
+          batch.Observations
+            .Where(x => x.KalmanEligible)
+            .Select(x => x.ToCandidate())
+            .ToArray();
+
+        latestTracks =
+          Tracks.Update(
+            observationUtc,
+            candidates);
+        lastPrecisionSampleIndex =
+          batch.CenterSampleIndex;
+      }
+
+      return latestTracks;
     }
 
     public void Reset()
     {
       Audio.Reset();
       Tracks.Reset();
+      lastPrecisionSampleIndex = long.MinValue;
+      latestTracks =
+        Array.Empty<CwSignalTrack>();
     }
   }
 }
