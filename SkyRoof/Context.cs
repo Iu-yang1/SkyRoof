@@ -40,6 +40,7 @@ namespace SkyRoof
     public WaterfallPanel? WaterfallPanel;
     public QsoEntryPanel? QsoEntryPanel;
     public Ft4ConsolePanel? Ft4ConsolePanel;
+    public CwConsolePanel? CwConsolePanel;
     public RecorderPanel? RecorderPanel;
     public QsoSchedulerPanel? QsoSchedulerPanel;
     public TelemetryPanel? TelemetryPanel;
@@ -65,6 +66,7 @@ namespace SkyRoof
     public void ClosePanels()
     {
       Ft4ConsolePanel?.Close();
+      CwConsolePanel?.Close();
       GroupViewPanel?.Close();
       SatelliteDetailsPanel?.Close();
       PassesPanel?.Close();

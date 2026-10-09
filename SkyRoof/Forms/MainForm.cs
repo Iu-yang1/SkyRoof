@@ -25,10 +25,13 @@ namespace SkyRoof
       new();
     private readonly ToolStripMenuItem ThemeGitHubDarkMNU =
       new();
+    internal readonly ToolStripMenuItem CwConsoleMNU =
+      new();
 
     public MainForm()
     {
       InitializeComponent();
+      ConfigureCwConsoleMenuItem();
       ConfigureGitHubThemeMenuItems();
       AddOrbitSourceMenuItems();
 
@@ -1052,6 +1055,33 @@ namespace SkyRoof
         ctx.Ft4ConsolePanel.Close();
     }
 
+    private void ConfigureCwConsoleMenuItem()
+    {
+      CwConsoleMNU.Name = "CwConsoleMNU";
+      CwConsoleMNU.Text = "&CW Console (RX)";
+      CwConsoleMNU.Click += CwConsoleMNU_Click;
+
+      int ft4Index =
+        GroupViewPanelMNU.DropDownItems.IndexOf(
+          Ft4ConsoleMNU);
+      GroupViewPanelMNU.DropDownItems.Insert(
+        ft4Index >= 0
+          ? ft4Index + 1
+          : GroupViewPanelMNU.DropDownItems.Count,
+        CwConsoleMNU);
+    }
+
+    private void CwConsoleMNU_Click(
+      object? sender,
+      EventArgs e)
+    {
+      if (ctx.CwConsolePanel == null)
+        ShowFloatingPanel(
+          new CwConsolePanel(ctx));
+      else
+        ctx.CwConsolePanel.Close();
+    }
+
     private void RecorderMNU_Click(object sender, EventArgs e)
     {
       if (ctx.RecorderPanel == null)
@@ -1677,6 +1707,7 @@ namespace SkyRoof
         case "SkyRoof.WaterfallPanel": return new WaterfallPanel(ctx);
         case "SkyRoof.QsoEntryPanel": return new QsoEntryPanel(ctx);
         case "SkyRoof.Ft4ConsolePanel": return new Ft4ConsolePanel(ctx);
+        case "SkyRoof.CwConsolePanel": return new CwConsolePanel(ctx);
         case "SkyRoof.RecorderPanel": return new RecorderPanel(ctx);
         case "SkyRoof.QsoSchedulerPanel": return new QsoSchedulerPanel(ctx);
         case "SkyRoof.TelemetryPanel": return new TelemetryPanel(ctx);
