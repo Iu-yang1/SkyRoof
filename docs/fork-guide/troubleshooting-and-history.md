@@ -1,6 +1,6 @@
 # Troubleshooting, security and fork change history
 
-**Language:** English | [简体中文](../../zh-cn/fork-guide/troubleshooting-and-history.md)
+**Language:** English | [简体中文](../zh-cn/fork-guide/troubleshooting-and-history.md)
 
 ## Quick fault isolation
 
