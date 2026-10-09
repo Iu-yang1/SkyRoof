@@ -1,6 +1,6 @@
 # Rotator, PARK routes, interface themes and reliability
 
-**Language:** English | [简体中文](../../zh-cn/fork-guide/rotator-and-ui.md)
+**Language:** English | [简体中文](../zh-cn/fork-guide/rotator-and-ui.md)
 
 ## Hamlib rotctld rotator (PRs #22–23 and #25–28, #34)
 
