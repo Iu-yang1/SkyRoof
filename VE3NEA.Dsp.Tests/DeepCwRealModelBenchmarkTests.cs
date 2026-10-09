@@ -320,13 +320,6 @@ namespace VE3NEA.Dsp.Tests
       )[] modes =
       [
         ("WidebandBaseline", () => null, false),
-        ("LaneDry", () => new IdentityLaneDenoiser(), false),
-        ("LaneHamNoiseClassic", () =>
-          new HamNoiseAudioDenoiser(
-            CwDenoiseMode.HamNoiseClassic), false),
-        ("LaneHamNoiseV2", () =>
-          new HamNoiseAudioDenoiser(
-            CwDenoiseMode.HamNoiseV2), false),
         ("SharedHamNoiseClassic", () =>
           new HamNoiseAudioDenoiser(
             CwDenoiseMode.HamNoiseClassic), true),
@@ -543,7 +536,7 @@ namespace VE3NEA.Dsp.Tests
               DeepCwModelManager.Revision,
             denoiseWet = 1.0,
             architecture =
-              "WidebandBaseline=raw activity-aware soft mask; LaneDry/LaneHamNoise=per-lane DDC at 9.6kHz before DeepCW; SharedHamNoise=resample decode snapshot once to 9.6kHz, denoise once, then retain the existing all-track activity-aware soft mask",
+              "WidebandBaseline=raw activity-aware soft mask; SharedHamNoise=resample the decode snapshot once to 9.6kHz, denoise once after tracking, then retain the existing all-track activity-aware soft mask",
             summary,
             scenarios = results
           },
@@ -1231,26 +1224,6 @@ namespace VE3NEA.Dsp.Tests
       bool CallsignB,
       double ProcessingSeconds,
       double RealTimeFactor);
-
-    private sealed class IdentityLaneDenoiser :
-      ICwAudioDenoiser
-    {
-      public int SampleRate => 9600;
-      public string Name => "Lane dry";
-
-      public float[] Process(
-        ReadOnlySpan<float> input,
-        int sampleRate,
-        double wet = 1.0)
-      {
-        if (sampleRate != SampleRate)
-          throw new ArgumentException(
-            $"Lane dry requires {SampleRate} Hz PCM.",
-            nameof(sampleRate));
-
-        return input.ToArray();
-      }
-    }
 
     private readonly record struct DenoiseAbResult(
       string Mode,
