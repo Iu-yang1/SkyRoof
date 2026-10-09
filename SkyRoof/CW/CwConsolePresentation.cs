@@ -32,6 +32,21 @@ namespace SkyRoof.CW
             false,
             transcript.TrackId);
 
+    internal static string LaneLabel(
+      CwSignalTrack track) =>
+      Identity(track).ToString();
+
+    internal static string LaneDiagnosticLabel(
+      CwSignalTrack track)
+    {
+      CwConsoleLaneIdentity identity =
+        Identity(track);
+
+      return identity.UsesAssociationHint
+        ? $"{identity} · #{track.Id}"
+        : identity.ToString();
+    }
+
     internal static string StateText(
       CwSignalTrack track)
     {
