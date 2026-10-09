@@ -20,7 +20,8 @@ namespace SkyRoof.CW
     DateTime LastSeenUtc,
     bool Confirmed,
     bool Active,
-    bool Ambiguous = false);
+    bool Ambiguous = false,
+    double FrequencySigmaHz = 0);
 
   /// <summary>
   /// Multi-target CW ridge tracker.
@@ -203,7 +204,8 @@ namespace SkyRoof.CW
           t.LastSeenUtc,
           t.SeenCount >= 2 && utc - t.FirstSeenUtc >= ConfirmationDelay,
           t.Active,
-          t.Ambiguous))
+          t.Ambiguous,
+          Math.Sqrt(Math.Max(t.P00, 0))))
         .ToArray();
     }
 
@@ -298,7 +300,7 @@ namespace SkyRoof.CW
       if (trackCount == 0 || peaks.Count == 0) return result;
 
       var memo = new Dictionary<(int Track, int Mask), (double Cost, int Choice)>();
-      const double MissCost = 5.0;
+      const double MissCost = 9.0;
 
       double Solve(int trackIndex, int usedMask)
       {
