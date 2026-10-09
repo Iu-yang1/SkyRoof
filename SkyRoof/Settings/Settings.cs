@@ -71,6 +71,10 @@ namespace SkyRoof
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public Ft4ConsoleSettings Ft4Console { get; set; } = new ();
 
+    [DisplayName("CW Console")]
+    [TypeConverter(typeof(ExpandableObjectConverter))]
+    public CwConsoleSettings CwConsole { get; set; } = new();
+
 
     [DisplayName("Transverter")]
     [Description("Settings for HF rigs and SDRs connected via a VHF/UHF transverter")]
