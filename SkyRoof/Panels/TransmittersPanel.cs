@@ -216,7 +216,25 @@ namespace SkyRoof
 
       try
       {
+        string previousMode = string.IsNullOrWhiteSpace(tx.DownlinkMode)
+          ? tx.mode : tx.DownlinkMode;
         ctx.SatnogsDb.UpdateCustomTransmitter(Satellite, tx, dialog.Definition);
+
+        // Existing user customizations are keyed by stable UUID and may
+        // contain a mode chosen when this local transmitter was first added.
+        // When its authored mode changes, refresh both radio modes without
+        // discarding base offsets, CTCSS or other per-transmitter settings.
+        if (!string.Equals(previousMode, dialog.Definition.mode,
+            StringComparison.OrdinalIgnoreCase) &&
+            ctx.Settings.Satellites.TransmitterCustomizations.TryGetValue(
+              tx.uuid, out TransmitterCustomization? customization))
+        {
+          var mode = ModeMnemonic.ToSlicerMode(
+            null, dialog.Definition.mode, invert: false);
+          customization.DownlinkMode = mode;
+          customization.UplinkMode = mode;
+        }
+
         ContextTransmitter = null;
         ctx.SatelliteSelector.RefreshTransmitters(tx.uuid);
         CreateTransmitterItems();
