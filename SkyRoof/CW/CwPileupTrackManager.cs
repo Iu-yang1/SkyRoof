@@ -257,9 +257,28 @@ namespace SkyRoof.CW
         {
           State track = member.Track;
           track.FrequencyHz += commonCorrection;
+
+          // A shared finite-resolution peak is not a normal point
+          // measurement for either identity. Keep the common centroid useful
+          // but deliberately *inflate* per-track frequency uncertainty to the
+          // unresolved-width scale. Otherwise repeated merged frames make the
+          // filter overconfident and the first correctly associated split
+          // measurement cannot pull the posterior back onto its ridge.
+          double mergedVariance =
+            MeasurementVariance(mergedPeak);
+          double unresolvedSigma = Math.Max(
+            Math.Sqrt(mergedVariance),
+            MergeResolutionHz);
           track.P00 = Math.Max(
             track.P00,
-            MeasurementVariance(mergedPeak));
+            unresolvedSigma * unresolvedSigma);
+          track.P11 = Math.Max(
+            track.P11,
+            Math.Pow(
+              unresolvedSigma /
+              Math.Max(FixedLagIdentityTime.TotalSeconds, 0.05),
+              2));
+
           track.SnrDb =
             0.7 * track.SnrDb +
             0.3 * mergedPeak.SnrDb;
