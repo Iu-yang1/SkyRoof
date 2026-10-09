@@ -2,6 +2,11 @@ name: CW Pileup Real Model Benchmark
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "SkyRoof/CW/**"
+      - "VE3NEA.Dsp.Tests/DeepCwRealModelBenchmarkTests.cs"
+      - ".github/workflows/cw-pileup-benchmark.yml"
 
 permissions:
   contents: read
