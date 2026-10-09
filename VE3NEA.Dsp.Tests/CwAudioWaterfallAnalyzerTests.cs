@@ -68,7 +68,7 @@ namespace VE3NEA.Dsp.Tests
         .Should().Be(samples.Length);
       frame.PowerDb
         .Should().OnlyContain(
-          double.IsFinite);
+          value => float.IsFinite(value));
     }
 
     [Fact]
