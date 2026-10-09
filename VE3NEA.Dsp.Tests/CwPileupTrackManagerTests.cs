@@ -97,6 +97,41 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void TransitionWindow_DoesNotDuplicateMatureTrack()
+    {
+      var tracker = new CwPileupTrackManager(
+        minimumSeparationHz: 8,
+        candidateDeduplicationHz: 2,
+        matchToleranceHz: 45,
+        confirmationDelay: TimeSpan.FromMilliseconds(100));
+
+      CwSignalCandidate Stable(double hz) =>
+        new(
+          hz,
+          30,
+          MeasurementSigmaHz: 2.7,
+          ResolutionHz: 4.17);
+
+      int id = tracker.Update(
+        T0,
+        [Stable(700)])[0].Id;
+      tracker.Update(
+        T0.AddMilliseconds(120),
+        [Stable(700)]);
+
+      // A 240 ms precision window that straddles a real frequency transition
+      // can legitimately contain both the old and new spectral maxima. The
+      // second maximum is evidence for the mature identity, not a new station.
+      var transition = tracker.Update(
+        T0.AddMilliseconds(240),
+        [Stable(700), Stable(708.4)]);
+
+      transition.Should().ContainSingle();
+      transition[0].Id.Should().Be(id);
+      transition[0].Confirmed.Should().BeTrue();
+    }
+
+    [Fact]
     public void NearbyDuplicatePeaks_AreSuppressedWithoutMergingSeparateSignals()
     {
       var tracker = new CwPileupTrackManager(minimumSeparationHz: 30);
