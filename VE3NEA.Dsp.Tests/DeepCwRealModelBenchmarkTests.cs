@@ -255,12 +255,12 @@ namespace VE3NEA.Dsp.Tests
     {
       if (!string.Equals(
             Environment.GetEnvironmentVariable(
-              "SKYROOF_RUN_DEEPCW_BENCHMARK"),
+              "SKYROOF_RUN_HAMNOISE_BENCHMARK"),
             "1",
             StringComparison.Ordinal))
       {
         output.WriteLine(
-          "HamNoise A/B benchmark disabled in normal CI.");
+          "HamNoise A/B benchmark disabled outside the dedicated workflow.");
         return;
       }
 
