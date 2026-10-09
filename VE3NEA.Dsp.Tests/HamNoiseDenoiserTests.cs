@@ -15,7 +15,7 @@ namespace VE3NEA.Dsp.Tests
       // Ordinary developer builds are allowed to omit the optional native
       // backend. Compile Check / benchmark workflows build it before tests,
       // so this test executes there.
-      if (!HamNoiseLaneDenoiser.IsAvailable())
+      if (!HamNoiseAudioDenoiser.IsAvailable())
         return;
 
       const int sampleRate = 9600;
@@ -44,7 +44,7 @@ namespace VE3NEA.Dsp.Tests
       }
 
       var denoiser =
-        new HamNoiseLaneDenoiser(mode);
+        new HamNoiseAudioDenoiser(mode);
 
       float[] output =
         denoiser.Process(
