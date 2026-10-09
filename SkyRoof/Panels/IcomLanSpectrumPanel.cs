@@ -62,7 +62,9 @@ namespace SkyRoof
     private DateTime LastScopeReadbackRequestUtc = DateTime.MinValue;
     private int ScopeReadbackAttempts;
     private const int MaxInitialScopeReadbackAttempts = 3;
-    private static readonly TimeSpan ScopeReadbackRetryDelay = TimeSpan.FromSeconds(8);
+    // The incremental handshake reads 16 individual CI-V registers across CAT
+    // cycles, never monopolizing the PTT/Doppler command lock.
+    private static readonly TimeSpan ScopeReadbackRetryDelay = TimeSpan.FromSeconds(35);
     private bool PendingControlSettingsApply;
     private string LastDiagnosticsText = "Spectrum diagnostics are not available while capture is stopped.";
     private IcomScopeReadbackState? LastScopeReadback;
