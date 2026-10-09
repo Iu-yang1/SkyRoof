@@ -361,12 +361,62 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void MultiLaneDecoder_UsesSharedWindowDenoiserOnceBeforeSoftMask()
+    {
+      DeepCwModelMetadata metadata =
+        DeepCwModelMetadata.Parse(MetadataJson);
+      var tensors =
+        new QueueTensorDecoder("A", "B");
+      var denoiser =
+        new RecordingAudioDenoiser();
+      var decoder =
+        new DeepCwMultiLaneDecoder(
+          metadata,
+          tensors)
+        {
+          MaxLanes = 2,
+          WindowDenoiser = denoiser,
+          DenoiseWet = 0.5
+        };
+
+      float[] audio = MakeKeyedAudio(
+        1.5,
+        (650, 0.30f, 0.14, 0.50),
+        (850, 0.22f, 0.16, 0.50));
+
+      CwSignalTrack[] tracks =
+      [
+        Track(1, 650, 12),
+        Track(2, 850, 11)
+      ];
+
+      IReadOnlyList<DeepCwLaneResult> result =
+        decoder.Decode(
+          audio,
+          SourceRate,
+          T0,
+          tracks);
+
+      result.Should().HaveCount(2);
+      denoiser.Calls.Should().Be(1);
+      denoiser.SampleRates.Should()
+        .ContainSingle()
+        .Which.Should().Be(9600);
+      denoiser.WetValues.Should()
+        .ContainSingle()
+        .Which.Should().BeApproximately(
+          0.5,
+          1e-12);
+      tensors.Calls.Should().Be(2);
+    }
+
+    [Fact]
     public void MultiLaneDecoder_UsesInjectedTimeDomainDenoiserPerSelectedLane()
     {
       DeepCwModelMetadata metadata =
         DeepCwModelMetadata.Parse(MetadataJson);
       var tensors = new QueueTensorDecoder("A", "B");
-      var denoiser = new RecordingLaneDenoiser();
+      var denoiser = new RecordingAudioDenoiser();
       var decoder =
         new DeepCwMultiLaneDecoder(
           metadata,
@@ -448,7 +498,7 @@ namespace VE3NEA.Dsp.Tests
       }
     }
 
-    private sealed class RecordingLaneDenoiser :
+    private sealed class RecordingAudioDenoiser :
       ICwAudioDenoiser
     {
       public int SampleRate => 9600;
