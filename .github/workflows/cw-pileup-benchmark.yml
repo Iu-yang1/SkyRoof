@@ -89,7 +89,7 @@ jobs:
         run: >
           dotnet test VE3NEA.Dsp.Tests/VE3NEA.Dsp.Tests.csproj
           -c Release -p:Platform=x64 --no-restore
-          --filter FullyQualifiedName~DeepCwRealModelBenchmarkTests
+          --filter "FullyQualifiedName~DeepCwRealModelBenchmarkTests|FullyQualifiedName~HamNoiseDenoiserTests"
           --logger "console;verbosity=normal"
 
       - name: Print benchmark metrics
