@@ -1,3 +1,4 @@
+using System.Drawing;
 using VE3NEA;
 
 namespace SkyRoof
@@ -26,7 +27,8 @@ namespace SkyRoof
 
       Text = "PARK Waypoints";
       FormBorderStyle = FormBorderStyle.FixedDialog;
-      StartPosition = FormStartPosition.Manual;
+      // Center over the main SkyRoof window rather than at the mouse cursor.
+      StartPosition = FormStartPosition.CenterParent;
       ShowInTaskbar = false;
       MinimizeBox = false;
       MaximizeBox = false;
@@ -89,8 +91,30 @@ namespace SkyRoof
       AcceptButton = save;
 
       RefreshRoute(0);
-      Location = Cursor.Position;
-      Shown += (_, _) => Utils.EnsureFormVisible(this);
+      Shown += (_, _) =>
+      {
+        // CenterParent resolves after ShowDialog(owner) starts. Clamp the
+        // resulting bounds *entirely* into the owner's monitor working area,
+        // including when the main window straddles displays or is near an edge.
+        Rectangle workingArea = Screen.FromControl(ctx.MainForm).WorkingArea;
+        Bounds = ClampToWorkingArea(Bounds, workingArea);
+      };
+    }
+
+    internal static Rectangle ClampToWorkingArea(
+      Rectangle windowBounds,
+      Rectangle workingArea)
+    {
+      int width = Math.Min(windowBounds.Width, workingArea.Width);
+      int height = Math.Min(windowBounds.Height, workingArea.Height);
+
+      return new Rectangle(
+        Math.Clamp(windowBounds.Left,
+          workingArea.Left, workingArea.Right - width),
+        Math.Clamp(windowBounds.Top,
+          workingArea.Top, workingArea.Bottom - height),
+        width,
+        height);
     }
 
     private Button AddButton(
