@@ -68,7 +68,7 @@ reliability improvements.
 - **[English: Fork Extensions guide](fork-guide/overview.md)**
 - **[简体中文：Fork 扩展功能手册](zh-cn/fork-guide/overview.md)**
 - [Fork download/build information](https://github.com/Iu-yang1/SkyRoof/actions)
-- [GitHub Pages deployment status](https://github.com/Iu-yang1/SkyRoof/deployments)
+- [GitHub Pages publishing history (Actions)](https://github.com/Iu-yang1/SkyRoof/actions/workflows/deploy-docfx.yml)
 
 > The upstream installer and documentation may not include these fork-only
 > additions. Direct IC-9700 authenticated LAN control is experimental; the
