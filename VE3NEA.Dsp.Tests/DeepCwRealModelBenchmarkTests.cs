@@ -313,7 +313,7 @@ namespace VE3NEA.Dsp.Tests
         new("wideband2600_sep25_d10", 2600, 25, 6, 10, -2)
       ];
 
-      (string Name, Func<ICwLaneDenoiser?> Create)[] modes =
+      (string Name, Func<ICwAudioDenoiser?> Create)[] modes =
       [
         ("WidebandBaseline", () => null),
         ("LaneDry", () => new IdentityLaneDenoiser()),
@@ -333,9 +333,9 @@ namespace VE3NEA.Dsp.Tests
       var results =
         new List<DenoiseAbResult>();
 
-      foreach ((string Name, Func<ICwLaneDenoiser?> Create) mode in modes)
+      foreach ((string Name, Func<ICwAudioDenoiser?> Create) mode in modes)
       {
-        ICwLaneDenoiser? denoiser =
+        ICwAudioDenoiser? denoiser =
           mode.Create();
 
         var decoder =
@@ -1210,7 +1210,7 @@ namespace VE3NEA.Dsp.Tests
       double RealTimeFactor);
 
     private sealed class IdentityLaneDenoiser :
-      ICwLaneDenoiser
+      ICwAudioDenoiser
     {
       public int SampleRate => 9600;
       public string Name => "Lane dry";
