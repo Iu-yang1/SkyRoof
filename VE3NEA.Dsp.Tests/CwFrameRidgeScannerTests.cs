@@ -278,10 +278,24 @@ namespace VE3NEA.Dsp.Tests
         scanner.Scan(snapshot);
 
       result.PrecisionBatches.Should().NotBeEmpty();
-      result.PrecisionBatches.Should().Contain(x =>
-        x.CenterSampleIndex >
-          (long)(1.0 * SampleRate) &&
-        x.Observations.Count == 0);
+      result.PrecisionBatches.Should().Contain(
+        x =>
+          x.CenterSampleIndex >
+            (long)(1.0 * SampleRate) &&
+          x.Observations.Count == 0,
+        "late precision batches were: {0}",
+        string.Join(
+          " | ",
+          result.PrecisionBatches
+            .Where(x =>
+              x.CenterSampleIndex >
+                (long)(1.0 * SampleRate))
+            .Select(x =>
+              $"{x.CenterSampleIndex}: " +
+              string.Join(
+                ",",
+                x.Observations.Select(o =>
+                  $"{o.FrequencyHz:F1}/{o.SnrDb:F1}")))));
     }
 
     [Fact]
