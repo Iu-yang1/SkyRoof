@@ -137,7 +137,8 @@ namespace SkyRoof.CW
       IReadOnlyList<CwSignalTrack> allTracks,
       double bandwidthHz = 180,
       double targetCenterHz = 800,
-      double maskFloor = 0.08)
+      double maskFloor = 0.05,
+      double maskSigmaHz = 24)
     {
       ArgumentNullException.ThrowIfNull(allTracks);
       if (!allTracks.Any(t => t.Id == target.Id))
@@ -156,10 +157,13 @@ namespace SkyRoof.CW
         throw new ArgumentOutOfRangeException(nameof(targetCenterHz));
       if (!double.IsFinite(maskFloor) || maskFloor <= 0 || maskFloor > 1)
         throw new ArgumentOutOfRangeException(nameof(maskFloor));
+      if (!double.IsFinite(maskSigmaHz) || maskSigmaHz < 6 ||
+          maskSigmaHz > bandwidthHz / 2.0)
+        throw new ArgumentOutOfRangeException(nameof(maskSigmaHz));
 
       float[] data =
         new float[checked(FrameCount * metadata.FrequencyBins)];
-      double sigma = Math.Max(6, bandwidthHz / 2.355);
+      double sigma = maskSigmaHz;
       double half = bandwidthHz / 2.0;
       double duration = DurationSeconds;
 
