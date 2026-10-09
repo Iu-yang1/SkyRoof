@@ -21,6 +21,13 @@ namespace SkyRoof
     private readonly Label ModelStatusLabel = new();
     private readonly Label WorkerStatusLabel = new();
 
+    private readonly CwAudioWaterfallAnalyzer WaterfallAnalyzer =
+      new();
+    private readonly CwAudioWaterfallView WaterfallView =
+      new();
+    private long waterfallGeneration = -1;
+    private long lastWaterfallSampleIndex = -1;
+
     private readonly DataGridView LaneGrid = new();
     private readonly Label SelectedLaneLabel = new();
     private readonly TextBox CommittedTextBox = new();
@@ -51,8 +58,8 @@ namespace SkyRoof
 
       Text = "CW Console (RX)";
       Name = "CwConsolePanel";
-      ClientSize = new Size(980, 610);
-      MinimumSize = new Size(620, 380);
+      ClientSize = new Size(980, 720);
+      MinimumSize = new Size(620, 500);
 
       BuildUi();
 
@@ -112,7 +119,7 @@ namespace SkyRoof
         {
           Dock = DockStyle.Fill,
           ColumnCount = 1,
-          RowCount = 4,
+          RowCount = 5,
           Padding = new Padding(8)
         };
 
@@ -128,12 +135,16 @@ namespace SkyRoof
           SizeType.AutoSize));
       root.RowStyles.Add(
         new RowStyle(
-          SizeType.Percent,
-          62));
+          SizeType.Absolute,
+          182));
       root.RowStyles.Add(
         new RowStyle(
           SizeType.Percent,
-          38));
+          58));
+      root.RowStyles.Add(
+        new RowStyle(
+          SizeType.Percent,
+          42));
 
       var toolbar =
         new FlowLayoutPanel
@@ -227,16 +238,28 @@ namespace SkyRoof
         0,
         1);
 
+      WaterfallView.Dock =
+        DockStyle.Fill;
+      WaterfallView.Margin =
+        new Padding(
+          0, 0, 0, 6);
+      WaterfallView.LaneClicked +=
+        WaterfallView_LaneClicked;
+      root.Controls.Add(
+        WaterfallView,
+        0,
+        2);
+
       ConfigureLaneGrid();
       root.Controls.Add(
         LaneGrid,
         0,
-        2);
+        3);
 
       root.Controls.Add(
         BuildTranscriptPanel(),
         0,
-        3);
+        4);
 
       Controls.Add(root);
     }
@@ -539,6 +562,7 @@ namespace SkyRoof
       RefreshSourceStatus();
       RefreshWorkerStatus();
       RefreshGrid();
+      RefreshWaterfall();
       RefreshSelectedTranscript();
     }
 
@@ -765,6 +789,92 @@ namespace SkyRoof
           identity.Value;
     }
 
+    private void WaterfallView_LaneClicked(
+      object? sender,
+      CwWaterfallLaneClickedEventArgs e)
+    {
+      selectedIdentity =
+        e.Identity;
+
+      DataGridViewRow? row =
+        LaneGrid.Rows
+          .Cast<DataGridViewRow>()
+          .FirstOrDefault(
+            value =>
+              value.Tag is
+                CwConsoleLaneIdentity identity &&
+              identity == e.Identity);
+
+      if (row != null)
+      {
+        LaneGrid.ClearSelection();
+        row.Selected = true;
+        LaneGrid.CurrentCell =
+          row.Cells[0];
+      }
+
+      RefreshSelectedTranscript();
+    }
+
+    private void RefreshWaterfall()
+    {
+      CwReceiveWorker? worker =
+        ctx.CwReceiveWorker;
+      CwAudioSourceController? audio =
+        ctx.CwAudio;
+      if (worker == null ||
+          audio == null)
+        return;
+
+      CwReceiveWorkerStatus workerStatus =
+        worker.GetStatus();
+
+      if (workerStatus.TimelineGeneration !=
+          waterfallGeneration)
+      {
+        waterfallGeneration =
+          workerStatus.TimelineGeneration;
+        lastWaterfallSampleIndex = -1;
+        WaterfallView.Clear();
+      }
+
+      CwSignalTrack[] trackSnapshot;
+      lock (stateSync)
+        trackSnapshot =
+          latestTracks.ToArray();
+
+      WaterfallView.SetTracks(
+        trackSnapshot,
+        selectedIdentity);
+
+      CwAudioHub hub =
+        audio.Ingress.FrontEnd.Audio;
+
+      const double snapshotSeconds = 0.10;
+      if (!audio.Ingress.Enabled ||
+          !hub.TrySnapshot(
+            snapshotSeconds,
+            out CwAudioSnapshot snapshot) ||
+          snapshot.EndSampleIndex ==
+            lastWaterfallSampleIndex)
+        return;
+
+      try
+      {
+        CwAudioSpectrumFrame frame =
+          WaterfallAnalyzer.Analyze(
+            snapshot);
+        lastWaterfallSampleIndex =
+          snapshot.EndSampleIndex;
+        WaterfallView.Append(frame);
+      }
+      catch (ArgumentException)
+      {
+        // Source/timeline may have reset between status polling and snapshot
+        // analysis. The next UI tick will retry on the new generation.
+      }
+    }
+
     private CwConsoleLaneIdentity?
       SelectedRowIdentity()
     {
@@ -980,6 +1090,8 @@ namespace SkyRoof
       UiTimer.Stop();
       UiTimer.Tick -=
         UiTimer_Tick;
+      WaterfallView.LaneClicked -=
+        WaterfallView_LaneClicked;
 
       modelInstallStop?.Cancel();
 
