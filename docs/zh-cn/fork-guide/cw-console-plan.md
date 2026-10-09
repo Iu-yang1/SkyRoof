@@ -12,6 +12,27 @@
 - Icom LAN Scope 数据是频谱帧，不是连续 PCM。RS-BA1 接收音频应走用户选定的 WASAPI / Loopback，不再争用 CI-V/LAN 音频连接。
 - SkyRoof 与 HamNoise、deepcw-engine 均使用 AGPL-3.0 系列许可，应保留声明和模型版权；网页端 UI 参考布局但不复制授权未明的 React 源码。
 
+## Pileup：多目标跟踪 + 多分量时频分离
+
+Pileup 不再按“每帧峰值最近邻 + 固定矩形滤波”设计，而采用以下组合：
+
+1. **多目标 ridge 状态**：每个 CW 分量维护 \`[f, df/dt]\` 和协方差，用 Kalman 常速度模型跟踪音频频率与 Doppler 漂移。
+2. **全局数据关联**：每个分析时刻对全部 Lane 与全部候选峰统一求最小代价关联（GNN），避免强台/弱台功率交换造成 Track ID 互换。
+3. **出生、QSB coast、死亡**：新峰建立 tentative track；短时漏检继续预测而不立即删除；超时后才终止。近同频只出现一个峰时视为 merged measurement，未被分配的另一轨继续 coast。
+4. **Ambiguous / collision**：预测 ridge 间距低于可分辨阈值时保留两个 Track ID，但标记 Ambiguous；UI 和日志不能把这一状态宣称为已可靠分离。
+5. **ridge-aware soft mask**：对共享 STFT 中的每个 Lane，沿其预测 ridge 构造 Gaussian/Wiener-like 软掩膜，并对所有竞争 Lane 归一化；随后把该 ridge 平移到 DeepCW 约 800 Hz 模型中心。掩膜宽度同时考虑 CW 基本时频宽度和 Kalman 频率不确定度。
+6. **共享 FFT，多路独立推理**：48 kHz 音频只重采样和 STFT 一次，各 Lane 只做软掩膜/频移与独立 DeepCW + CTC，避免 N 路重复 FFT。
+
+该设计吸收了以下公开研究的思路，但不是逐行复现论文算法：
+
+- Wang, Jiang, Zhang, *Random finite set approach to analyzing, detecting, and tracking dynamic time-frequency spectra*（2019，DOI 10.7527/S1000-6893.2018.22600）：将动态时频谱建模为多目标跟踪，处理分量出生/消失、弱分量与近邻模式。
+- Meignen, Pham, McLaughlin, *On Demodulation, Ridge Detection, and Synchrosqueezing for Multicomponent Signals*（IEEE TSP 2017，DOI 10.1109/TSP.2017.2656838）：ridge 提取、demodulation 与 mode reconstruction。
+- Laurent, Meignen, *A Novel Ridge Detector for Nonstationary Multicomponent Signals*（IEEE TSP 2021，DOI 10.1109/TSP.2021.3085113）：噪声下稳健 ridge detection / mode retrieval。
+- Meignen, Laurent, Oberlin, *One or Two Ridges? An Exact Mode Separation Condition for the Gabor Transform*（IEEE SPL 2022，DOI 10.1109/LSP.2022.3226948）：STFT 分辨率不足时两个纯音本来就可能只形成一条 ridge，因此软件必须显式表示“不可分辨/合并”，不能强制生成两个解码结果。
+- García-Fernández et al., *Bayesian Multi-Target Tracking With Merged Measurements Using Labelled Random Finite Sets*（IEEE TSP 2015，DOI 10.1109/TSP.2015.2393843）：近邻目标产生 merged measurement 时应保持轨迹存在性，而不是直接删除未匹配轨迹。
+
+SkyRoof 当前采用 **labelled Kalman + GNN + merge/coast**，而不是完整 GM-PHD/GLMB。原因是 CW Console 的同时目标数很小（默认 5、最多 8），但必须稳定保留 Lane ID；完整 PHD 在这里会增加大量复杂度，而标签管理还需要额外实现。若后续 8 路高杂波基准显示 GNN 明显不足，再考虑 MHT/GLMB 或固定延迟多假设回溯。
+
 ## 完整工作流程表
 
 | 编号 | 模块 / 依赖 | 必须实现 | 验收 |
