@@ -449,7 +449,7 @@ namespace VE3NEA.Dsp.Tests
     }
 
     private sealed class RecordingLaneDenoiser :
-      ICwLaneDenoiser
+      ICwAudioDenoiser
     {
       public int SampleRate => 9600;
       public string Name => "Test denoiser";
