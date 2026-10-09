@@ -346,7 +346,9 @@ namespace SkyRoof
           ctx,
           rotator.GetManualActualBearing());
 
-      dialog.ShowDialog();
+      // A modal owner is required for CenterParent to center on the
+      // application rather than the mouse position or a temporary popup.
+      dialog.ShowDialog(ctx.MainForm);
       RefreshState();
     }
 
