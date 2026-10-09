@@ -175,19 +175,26 @@ namespace SkyRoof.CW
   {
     private readonly DeepCwModelMetadata metadata;
     private readonly IDeepCwTensorDecoder decoder;
+    private readonly CwLaneExtractor laneExtractor;
+    private readonly CwCarrierActivityEstimator activityEstimator;
 
     public int MaxLanes { get; set; } = 5;
-    public double LaneBandwidthHz { get; set; } = 180;
+    public double LaneBandwidthHz { get; set; } = 240;
     public double TargetCenterHz { get; set; } = 800;
 
     public DeepCwMultiLaneDecoder(
       DeepCwModelMetadata metadata,
-      IDeepCwTensorDecoder decoder)
+      IDeepCwTensorDecoder decoder,
+      CwLaneExtractor? laneExtractor = null,
+      CwCarrierActivityEstimator? activityEstimator = null)
     {
       this.metadata = metadata ??
         throw new ArgumentNullException(nameof(metadata));
       this.decoder = decoder ??
         throw new ArgumentNullException(nameof(decoder));
+      this.laneExtractor = laneExtractor ?? new CwLaneExtractor();
+      this.activityEstimator =
+        activityEstimator ?? new CwCarrierActivityEstimator();
       metadata.Validate();
     }
 
@@ -204,27 +211,65 @@ namespace SkyRoof.CW
       if (MaxLanes is < 1 or > 8)
         throw new InvalidOperationException("CW lane count must be 1..8.");
 
-      var selected = tracks
+      CwSignalTrack[] allDetectedTracks = tracks
         .Where(t => t.Confirmed)
+        .Where(t => t.FrequencyHz > laneExtractor.PassbandHz)
+        .Where(t => t.FrequencyHz <
+          sourceSampleRate / 2.0 - laneExtractor.PassbandHz)
+        .OrderBy(t => t.FrequencyHz)
+        .ToArray();
+
+      CwSignalTrack[] decodeSelectedTracks = allDetectedTracks
         .OrderByDescending(t => t.Active)
         .ThenByDescending(t => t.SnrDb)
         .ThenBy(t => t.FrequencyHz)
         .Take(MaxLanes)
         .ToArray();
-      if (selected.Length == 0)
+      if (decodeSelectedTracks.Length == 0)
         return Array.Empty<DeepCwLaneResult>();
 
-      DeepCwFeatureWindow features =
-        DeepCwFeatureWindow.Create(audio, sourceSampleRate, metadata);
-      var results = new List<DeepCwLaneResult>(selected.Length);
-      foreach (CwSignalTrack track in selected)
+      // All reliable tracks contribute an independent activity timeline and
+      // may compete in the mask. Only the resource-selected subset invokes
+      // ONNX. This prevents an unselected sixth strong station from becoming
+      // invisible interference when MaxLanes is five.
+      var signals = new Dictionary<int, CwLaneSignal>();
+      var activityByTrack = new Dictionary<int, float[]>();
+      foreach (CwSignalTrack track in allDetectedTracks)
       {
-        if (track.FrequencyHz <= 0 ||
-            track.FrequencyHz >= metadata.SampleRate / 2.0)
-          continue;
+        CwLaneSignal signal = laneExtractor.Extract(
+          audio,
+          sourceSampleRate,
+          track,
+          metadata.SampleRate,
+          TargetCenterHz);
+        signals.Add(track.Id, signal);
 
-        DeepCwTensor tensor = features.BuildSeparatedLaneTensor(
-          track, selected, LaneBandwidthHz, TargetCenterHz);
+        float[] sampleActivity =
+          activityEstimator.EstimateSampleProbabilities(
+            signal.Envelope, metadata.SampleRate);
+        float[] frameActivity =
+          activityEstimator.ToFrameProbabilities(
+            sampleActivity,
+            metadata.SampleRate,
+            metadata.FftLength,
+            metadata.HopLength);
+        activityByTrack.Add(track.Id, frameActivity);
+      }
+
+      var results =
+        new List<DeepCwLaneResult>(decodeSelectedTracks.Length);
+      foreach (CwSignalTrack track in decodeSelectedTracks)
+      {
+        CwLaneSignal signal = signals[track.Id];
+        DeepCwFeatureWindow features = DeepCwFeatureWindow.Create(
+          signal.Audio, metadata.SampleRate, metadata);
+        DeepCwTensor tensor = features.BuildActivityAwareTensor(
+          track,
+          allDetectedTracks,
+          activityByTrack,
+          TargetCenterHz,
+          LaneBandwidthHz);
+
         DeepCwDecodedText text = decoder.Decode(tensor);
         results.Add(new(
           track.Id,
