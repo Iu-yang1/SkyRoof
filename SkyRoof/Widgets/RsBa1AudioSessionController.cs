@@ -72,6 +72,7 @@ namespace SkyRoof
               try { company = process.MainModule?.FileVersionInfo.CompanyName ?? ""; }
               catch (System.ComponentModel.Win32Exception) { }
               catch (InvalidOperationException) { }
+              catch (System.UnauthorizedAccessException) { }
 
               found.Add(new AudioSessionInfo(
                 process.Id, name, title, device.ID, device.FriendlyName,
@@ -120,11 +121,11 @@ namespace SkyRoof
     {
       // Identify both endpoint and PID to avoid a stale or ambiguous match.
       using var enumerator = new MMDeviceEnumerator();
-      MMDevice? device = enumerator.EnumerateAudioEndPoints(
-        DataFlow.Render, DeviceState.Active)
-        .FirstOrDefault(d => d.ID == target.DeviceId);
-      if (device == null)
-        return false;
+      // Open the exact endpoint rather than enumerating and leaving
+      // temporary MMDevice COM references alive for other output devices.
+      MMDevice device;
+      try { device = enumerator.GetDevice(target.DeviceId); }
+      catch (System.Runtime.InteropServices.COMException) { return false; }
 
       try
       {
