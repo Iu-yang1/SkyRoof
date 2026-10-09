@@ -1,6 +1,6 @@
 # CW Console: full multi-lane Pileup and CI-V keyer implementation plan
 
-**Status: engineering plan and tracking foundation only.** This branch adds a carrier track manager and unit tests. It does **not** yet ship an audio source, neural decoder, real Pileup text decoding, CW Console UI, noise reducer, or an enabled radio transmitter.
+**Status: receive core under quantitative validation.** The repository now contains multi-carrier detection/tracking, calibrated wideband DeepCW feature extraction, independent multi-lane ONNX/CTC inference, activity-aware interference masks, merge-group identity handling and a real-model benchmark. It still does **not** wire live SDR/WASAPI PCM into a CW Console UI, provide continuous transcript reconciliation, HamNoise integration, or enable radio transmission.
 
 Chinese: [CW Console 完整规划](../../zh-cn/fork-guide/cw-console-plan.md).
 
@@ -22,12 +22,20 @@ Pileup is no longer designed as frame-local peak chasing followed by fixed recta
 2. **Global association (GNN)** — all tracks and all spectral candidates are associated jointly per scan so changes in relative signal strength do not swap IDs.
 3. **Birth / coast / death** — new detections create tentative tracks; short QSB or a missed peak coast on prediction; tracks expire only after a hold interval. A single peak produced by two close components is treated as a merged measurement rather than proof that one station disappeared.
 4. **Ambiguity state** — two predicted ridges closer than the resolvable threshold remain two labels but are marked ambiguous/colliding. UI and logging must not claim reliable source separation in that interval.
-5. **Ridge-aware soft TF masks** — each lane receives a Gaussian/Wiener-like mask along its predicted ridge, normalized against competing lanes, then translated to the DeepCW ~800 Hz center. Mask width combines intrinsic CW TF width with Kalman frequency uncertainty.
-6. **Shared STFT, independent inference** — resampling/STFT happens once for the receive window; masks and DeepCW+CTC are lane-specific.
+5. **Activity-aware competing masks** — each confirmed track has a per-frame carrier-on probability derived from ridge energy with a two-state HMM. Soft Gaussian/Wiener-like masks use this probability, so a confirmed but currently key-up station does not steal another station's TF energy.
+6. **All-track interference set, selected inference set** — every reliable track participates in the mask denominator, including lanes that are not selected for ONNX because of CPU limits. Only the top resource-selected lanes run DeepCW.
+7. **Calibrated wideband STFT, independent inference** — the original PCM bandwidth is preserved. At 48 kHz the shared frontend uses a 3840-point / 720-hop periodic-Hann STFT, which has the same 80 ms / 15 ms / 12.5 Hz physical grid as DeepCW's 256 / 48 frontend. Magnitudes are calibrated back to the model domain before lane translation, so AF carriers above 1.6 kHz remain available.
+8. **Merge groups with bounded labelled history** — close tracks are assigned an explicit MergeGroupId. A single finite-resolution peak may update the group's centroid for a short fixed lag while preserving each track's pre-merge frequency/rate identity anchor. This is intentionally a bounded engineering approximation, not a claim of a full GLMB/merged-measurement Bayesian smoother.
 
 The design is inspired by, but does not literally implement, these published methods: Wang/Jiang/Zhang, *Random finite set approach to analyzing, detecting, and tracking dynamic time-frequency spectra* (2019, DOI 10.7527/S1000-6893.2018.22600); Meignen/Pham/McLaughlin, *On Demodulation, Ridge Detection, and Synchrosqueezing for Multicomponent Signals* (IEEE TSP 2017, DOI 10.1109/TSP.2017.2656838); Laurent/Meignen, *A Novel Ridge Detector for Nonstationary Multicomponent Signals* (IEEE TSP 2021, DOI 10.1109/TSP.2021.3085113); Meignen/Laurent/Oberlin, *One or Two Ridges? An Exact Mode Separation Condition for the Gabor Transform* (IEEE SPL 2022, DOI 10.1109/LSP.2022.3226948); and García-Fernández et al., *Bayesian Multi-Target Tracking With Merged Measurements Using Labelled Random Finite Sets* (IEEE TSP 2015, DOI 10.1109/TSP.2015.2393843).
 
-SkyRoof deliberately uses **labelled Kalman + GNN + merge/coast handling** rather than a full GM-PHD/GLMB filter: the problem is bounded to a small number of lanes (default 5, max 8) and the UI needs stable identities. MHT/GLMB or fixed-lag multi-hypothesis smoothing remains an escalation path if dense-clutter benchmarks show that GNN is insufficient.
+SkyRoof deliberately uses **labelled Kalman + GNN + MergeGroup + bounded fixed-lag identity priors** rather than a full GM-PHD/GLMB filter: the problem is bounded to a small number of lanes (default 5, max 8) and the UI needs stable identities. A later frame-level ridge scanner will add sample-index-aligned observations and a true fixed-lag association layer; MHT/GLMB remains an escalation path only if benchmarked ID-switch rates justify the complexity.
+
+## Quantitative acceptance and real-model benchmark
+
+CW changes are gated by a dedicated real `deepcw-engine` ONNX benchmark in addition to unit tests. The benchmark uses deterministic synthetic Morse mixtures and oracle tracks first, so separator/model error is measured independently from detector/tracker identity error. It reports masked and unmasked CER/WER, callsign recognition and real-time factor across fixed 5/10/15/25/40 Hz separations, power imbalance, Doppler-rate cases and a >1.6 kHz wideband lane.
+
+The next end-to-end scanner benchmark will separately report carrier detection recall/false alarms, frequency RMSE, ID switches, CER/WER, callsign accuracy and latency. A lower ID-switch count is not accepted as a decoding improvement if CER or latency regresses materially.
 
 ## Workflow and gates
 
