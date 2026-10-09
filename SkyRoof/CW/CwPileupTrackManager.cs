@@ -326,8 +326,9 @@ namespace SkyRoof.CW
             : 0);
 
         // A mature track that narrowly missed association must not be
-        // duplicated by the birth stage. Use a 3-sigma innovation exclusion
-        // zone for tracks with real history, while newly-created tracks in
+        // duplicated by the birth stage. Use the same 4-sigma innovation
+        // exclusion used by association for tracks with real history, while
+        // newly-created tracks in
         // this same scan still use only the detector/birth-resolution gate.
         // This preserves legitimate close doublets (e.g. 15 Hz) arriving in
         // one frame instead of letting the first newborn suppress the second.
@@ -344,7 +345,7 @@ namespace SkyRoof.CW
               gate,
               Math.Min(
                 MatchToleranceHz,
-                3.0 * innovationSigma));
+                4.0 * innovationSigma));
           }
 
           return Math.Abs(
