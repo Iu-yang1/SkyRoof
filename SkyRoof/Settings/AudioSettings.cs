@@ -8,6 +8,10 @@ namespace SkyRoof
   {
     // non-browsable
     public int SoundcardVolume = -25;
+    // Optional explicit Windows mixer session for RS-BA1 Remote Utility.
+    // Never change the global endpoint volume or an unrelated application.
+    public string? RsBa1PlaybackProcessName;
+    public string? RsBa1PlaybackDeviceId;
     public bool SpeakerEnabled = true;
 
     [DisplayName("Speaker Audio Device")]

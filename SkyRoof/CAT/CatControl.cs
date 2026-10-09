@@ -11,6 +11,7 @@ namespace SkyRoof
 
     internal event Action<IcomScopeReadbackState>?
       IcomScopeReadbackReceived;
+    internal event Action<int>? IcomRfGainReadbackReceived;
     internal event Action<IcomFixedEdgeReadbackState>?
       IcomFixedEdgeReadbackReceived;
 
@@ -52,6 +53,22 @@ namespace SkyRoof
 
       return null;
     }
+
+    internal CatControlEngine? GetIcomRfGainBackend()
+    {
+      if (Rx?.SupportsIcomRfGain == true)
+        return Rx;
+      if (Tx != null && !ReferenceEquals(Tx, Rx) &&
+          Tx.SupportsIcomRfGain)
+        return Tx;
+      return null;
+    }
+
+    internal bool RequestIcomRfGainReadback() =>
+      GetIcomRfGainBackend()?.RequestIcomRfGainReadback() == true;
+
+    internal bool RequestIcomRfGain(int rawGain) =>
+      GetIcomRfGainBackend()?.RequestIcomRfGainWrite(rawGain) == true;
 
     internal bool HasIcomScopeControlBackend =>
       GetIcomScopeControlBackend() != null;
@@ -338,6 +355,8 @@ namespace SkyRoof
       // an RX-only engine never fires it, so the extra subscription is harmless there
       engine.TxTuned += (s, e) => ctx.FrequencyControl.TxTuned();
       engine.StatusChanged += (s, e) => ctx.MainForm.ShowCatStatus();
+      engine.IcomRfGainReadbackReceived +=
+        value => IcomRfGainReadbackReceived?.Invoke(value);
       engine.IcomScopeReadbackReceived +=
         state =>
           IcomScopeReadbackReceived?.Invoke(
@@ -354,6 +373,8 @@ namespace SkyRoof
       var engine = new CatControlEngine(ctx.Settings.Cat.TxCat, ctx.Settings.Cat);
       engine.TxTuned += (s, e) => ctx.FrequencyControl.TxTuned();
       engine.StatusChanged += (s, e) => ctx.MainForm.ShowCatStatus();
+      engine.IcomRfGainReadbackReceived +=
+        value => IcomRfGainReadbackReceived?.Invoke(value);
       engine.IcomScopeReadbackReceived +=
         state =>
           IcomScopeReadbackReceived?.Invoke(

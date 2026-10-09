@@ -58,6 +58,13 @@ namespace SkyRoof
     private readonly IcomScopeCommandQueue IcomScopeControlCommands =
       new(capacity: 32);
     private volatile bool IcomScopeReadbackPending;
+    private volatile bool IcomRfGainReadbackPending;
+    private int RequestedIcomRfGain = -1;
+    internal bool SupportsIcomRfGain =>
+      SupportsIcomScopeOutput &&
+      string.Equals(RadioCapabilities?.model, "IC-9700",
+        StringComparison.OrdinalIgnoreCase);
+    internal event Action<int>? IcomRfGainReadbackReceived;
     private IcomFixedEdgeReadbackRequest? IcomFixedEdgeReadbackPending;
 
     private sealed class IcomFixedEdgeReadbackRequest
@@ -211,6 +218,22 @@ namespace SkyRoof
     internal bool SupportsIcomScopeOutput =>
       ReferenceEquals(commands, RigCtldCommands.SkyCat);
 
+    internal bool RequestIcomRfGainReadback()
+    {
+      if (!SupportsIcomRfGain)
+        return false;
+      IcomRfGainReadbackPending = true;
+      return true;
+    }
+
+    internal bool RequestIcomRfGainWrite(int value)
+    {
+      if (!SupportsIcomRfGain || value is < 0 or > 255)
+        return false;
+      Interlocked.Exchange(ref RequestedIcomRfGain, value);
+      return true;
+    }
+
     public void RequestIcomScopeOutput()
     {
       LogInfo("IC-9700 scope output reassert requested");
@@ -319,6 +342,15 @@ namespace SkyRoof
             out string? scopeCommand))
         TryWriteIcomScopeControl(
           scopeCommand);
+
+      // Latest slider value wins; all radio I/O runs on this CAT thread.
+      int rfGainToWrite = Interlocked.Exchange(
+        ref RequestedIcomRfGain, -1);
+      if (rfGainToWrite >= 0)
+        TryWriteIcomRfGain(rfGainToWrite);
+
+      if (IcomRfGainReadbackPending)
+        TryReadIcomRfGain();
 
       if (IcomScopeReadbackPending)
         TryReadIcomScopeState();
@@ -906,6 +938,41 @@ namespace SkyRoof
       }
     }
 
+
+    private void TryWriteIcomRfGain(int gain)
+    {
+      if (!SupportsIcomRfGain)
+        return;
+
+      if (!SendWriteCommand($"U RF_GAIN {gain}"))
+      {
+        Log.Warning("SkyCAT rejected IC-9700 RF gain: {Gain}", gain);
+        return;
+      }
+
+      // Confirm the actual register value, do not assume command acceptance
+      // implies the physical RF gain knob changed.
+      IcomRfGainReadbackPending = true;
+    }
+
+    private void TryReadIcomRfGain()
+    {
+      IcomRfGainReadbackPending = false;
+      if (!SupportsIcomRfGain)
+        return;
+
+      string? reply = SendReadCommand("U RF_GAIN_READ");
+      if (reply == null || reply.StartsWith("RPRT ", StringComparison.Ordinal) ||
+          !int.TryParse(reply, NumberStyles.None,
+            CultureInfo.InvariantCulture, out int gain) ||
+          gain is < 0 or > 255)
+      {
+        Log.Warning("SkyCAT RF gain readback failed: {Reply}", reply);
+        return;
+      }
+
+      syncContext.Post(_ => IcomRfGainReadbackReceived?.Invoke(gain), null);
+    }
 
     private void TryReadIcomScopeState()
     {
