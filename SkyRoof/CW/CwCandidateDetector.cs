@@ -11,7 +11,7 @@ namespace SkyRoof.CW
     public double MinFrequencyHz { get; init; } = 100;
     public double MaxFrequencyHz { get; init; } = 2000;
     public double MinimumSnrDb { get; init; } = 6;
-    public double ActivitySnrDb { get; init; } = 4;
+    public double MinimumKeyingDepthDb { get; init; } = 3;
     public double MinActiveFraction { get; init; } = 0.08;
     public double MaxActiveFraction { get; init; } = 0.94;
     public int MinimumActivityTransitions { get; init; } = 2;
@@ -83,33 +83,51 @@ namespace SkyRoof.CW
       var snrDb = new double[binCount];
       var activeFractions = new double[binCount];
       var transitions = new int[binCount];
-      double activityRatio = Math.Pow(10, options.ActivitySnrDb / 10.0);
+      var keyingDepthDb = new double[binCount];
+      var temporalScratch = new double[frameCount];
 
       for (int b = 0; b < binCount; b++)
       {
         double signalSum = 0;
         double noiseSum = 0;
-        int active = 0;
-        int transitionCount = 0;
-        bool? previousActive = null;
 
         for (int frame = 0; frame < frameCount; frame++)
         {
           double power = powers[frame, b];
-          double noise = frameNoise[frame];
           signalSum += power;
-          noiseSum += noise;
+          noiseSum += frameNoise[frame];
+          temporalScratch[frame] = power;
+        }
 
-          bool isActive = power >= noise * activityRatio;
+        meanPower[b] = signalSum / frameCount;
+        snrDb[b] = 10 * Math.Log10(
+          Math.Max(signalSum, 1e-20) / Math.Max(noiseSum, 1e-20));
+
+        // A strong CW tone can stay above the global noise floor in every
+        // overlapping FFT frame, even while the key is actually up. Detect
+        // keying from the tone's own temporal power distribution instead.
+        // This also rejects a continuous unmodulated carrier, whose 15th/85th
+        // percentile powers are nearly identical.
+        Array.Sort(temporalScratch);
+        double low = QuantileSorted(temporalScratch, 0.15);
+        double high = QuantileSorted(temporalScratch, 0.85);
+        keyingDepthDb[b] = 10 * Math.Log10(
+          Math.Max(high, 1e-20) / Math.Max(low, 1e-20));
+        double keyThreshold = Math.Sqrt(
+          Math.Max(low, 1e-20) * Math.Max(high, 1e-20));
+
+        int active = 0;
+        int transitionCount = 0;
+        bool? previousActive = null;
+        for (int frame = 0; frame < frameCount; frame++)
+        {
+          bool isActive = powers[frame, b] >= keyThreshold;
           if (isActive) active++;
           if (previousActive.HasValue && previousActive.Value != isActive)
             transitionCount++;
           previousActive = isActive;
         }
 
-        meanPower[b] = signalSum / frameCount;
-        snrDb[b] = 10 * Math.Log10(
-          Math.Max(signalSum, 1e-20) / Math.Max(noiseSum, 1e-20));
         activeFractions[b] = active / (double)frameCount;
         transitions[b] = transitionCount;
       }
@@ -118,6 +136,7 @@ namespace SkyRoof.CW
       for (int b = 1; b < binCount - 1; b++)
       {
         if (snrDb[b] < options.MinimumSnrDb) continue;
+        if (keyingDepthDb[b] < options.MinimumKeyingDepthDb) continue;
         if (activeFractions[b] < options.MinActiveFraction ||
             activeFractions[b] > options.MaxActiveFraction) continue;
         if (transitions[b] < options.MinimumActivityTransitions) continue;
@@ -164,6 +183,16 @@ namespace SkyRoof.CW
         : values[middle];
     }
 
+    private static double QuantileSorted(double[] values, double quantile)
+    {
+      if (values.Length == 0) return 0;
+      double position = Math.Clamp(quantile, 0, 1) * (values.Length - 1);
+      int lower = (int)Math.Floor(position);
+      int upper = Math.Min(values.Length - 1, lower + 1);
+      double fraction = position - lower;
+      return values[lower] * (1 - fraction) + values[upper] * fraction;
+    }
+
     private static void ValidateOptions(CwDetectorOptions value)
     {
       if (value.SampleRate < 1000 || value.SampleRate > 384000)
@@ -176,6 +205,9 @@ namespace SkyRoof.CW
           value.MaxFrequencyHz <= value.MinFrequencyHz ||
           value.MaxFrequencyHz >= value.SampleRate / 2.0)
         throw new ArgumentOutOfRangeException(nameof(value.MaxFrequencyHz));
+      if (!double.IsFinite(value.MinimumKeyingDepthDb) ||
+          value.MinimumKeyingDepthDb < 0)
+        throw new ArgumentOutOfRangeException(nameof(value.MinimumKeyingDepthDb));
       if (value.MinActiveFraction < 0 || value.MinActiveFraction >= 1 ||
           value.MaxActiveFraction <= value.MinActiveFraction ||
           value.MaxActiveFraction > 1)
