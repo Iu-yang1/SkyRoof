@@ -104,7 +104,7 @@ namespace VE3NEA.Dsp.Tests
       MinActiveFraction = 0.10,
       MaxActiveFraction = 0.92,
       MinimumActivityTransitions = 2,
-      MinimumSeparationHz = 30,
+      PeakDeduplicationHz = 30,
       MaxCandidates = 12
     };
 
