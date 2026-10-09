@@ -4,6 +4,7 @@ using NAudio.CoreAudioApi;
 using MathNet.Numerics;
 using Serilog;
 using SGPdotNET.Observation;
+using SkyRoof.CW;
 using VE3NEA;
 using VE3NEA.Clock;
 using WeifenLuo.WinFormsUI.Docking;
@@ -86,6 +87,8 @@ namespace SkyRoof
       ctx.IqVacSoundcard.StateChanged += Soundcard_StateChanged;
 
       ApplyAudioSettings();
+      ctx.CwAudio = new CwAudioSourceController(ctx);
+      ctx.CwAudio.ApplySettings();
       ApplyOutputStreamSettings();
       ApplyKissServerSettings();
       ctx.CatControl.ApplySettings();
@@ -156,6 +159,11 @@ namespace SkyRoof
       ctx.Settings.SaveToFile();
 
       ThemeRenderer = null;
+
+      // Stop optional Windows capture/loopback readers before tearing down
+      // the shared SDR/audio devices they may be observing.
+      ctx.CwAudio?.Dispose();
+      ctx.CwAudio = null;
 
       // dispose sdr and dsp
       ctx.Sdr?.Dispose();
@@ -314,6 +322,7 @@ namespace SkyRoof
     private void Slicer_AudioDataAvailable(object? sender, DataEventArgs<float> e)
     {
       ctx.Ft4ConsolePanel?.AddSamplesFromSdr(e);
+      ctx.CwAudio?.AddSamplesFromSdr(e);
 
       if (ctx.RecorderPanel?.isPlayingBack == true) return;
 
@@ -470,6 +479,10 @@ namespace SkyRoof
       GainWidget.ApplyAfGain();
       ctx.SpeakerSoundcard.Enabled = ctx.Settings.Audio.SpeakerEnabled;
       if (ctx.Slicer != null) ctx.Slicer.Squelch.Enabled = ctx.Settings.Audio.Squelch;
+
+      // The CW loopback endpoint may intentionally inherit the RS-BA1 render
+      // endpoint selected in Audio settings, so re-evaluate it here as well.
+      ctx.CwAudio?.ApplySettings();
     }
 
     internal void ApplyKissServerSettings()

@@ -1,5 +1,6 @@
 ﻿using MathNet.Numerics;
 using VE3NEA;
+using SkyRoof.CW;
 
 namespace SkyRoof
 {
@@ -49,6 +50,7 @@ namespace SkyRoof
     public Slicer? Slicer;
     public CatControl CatControl = new();
     internal PttHotkeyController? PttHotkey;
+    public CwAudioSourceController? CwAudio;
 
     // soundcards
     public readonly OutputSoundcard<float> SpeakerSoundcard = new();
