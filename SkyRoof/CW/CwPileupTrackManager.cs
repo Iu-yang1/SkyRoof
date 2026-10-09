@@ -166,9 +166,15 @@ namespace SkyRoof.CW
       }
 
       // Birth new tracks only from unclaimed, spectrally distinct detections.
-      for (int j = 0; j < clean.Count && tracks.Count < MaxTracks; j++)
+      // Capacity is spent on the strongest unexplained peaks, not on the
+      // lowest-frequency peaks merely because the detector list is sorted.
+      foreach (int j in Enumerable.Range(0, clean.Count)
+        .Where(index => !usedPeaks.Contains(index))
+        .OrderByDescending(index => clean[index].SnrDb)
+        .ThenBy(index => clean[index].FrequencyHz))
       {
-        if (usedPeaks.Contains(j)) continue;
+        if (tracks.Count >= MaxTracks) break;
+
         CwSignalCandidate peak = clean[j];
         if (tracks.Any(t =>
           Math.Abs(t.FrequencyHz - peak.FrequencyHz) < MinimumSeparationHz))
@@ -374,8 +380,12 @@ namespace SkyRoof.CW
       {
         for (int j = i + 1; j < tracks.Count; j++)
         {
-          if (Math.Abs(tracks[i].FrequencyHz - tracks[j].FrequencyHz) >
-              MergeResolutionHz)
+          double separation =
+            Math.Abs(tracks[i].FrequencyHz - tracks[j].FrequencyHz);
+          double uncertaintyOverlap = 2.0 *
+            Math.Sqrt(Math.Max(0, tracks[i].P00 + tracks[j].P00));
+
+          if (separation > MergeResolutionHz + uncertaintyOverlap)
             continue;
 
           tracks[i].Ambiguous = true;
