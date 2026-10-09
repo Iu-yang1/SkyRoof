@@ -6,7 +6,7 @@ Please see:
 - [SkyRoof fork documentation (GitHub Pages)](https://iu-yang1.github.io/SkyRoof/)
 - [Fork extensions — English](https://iu-yang1.github.io/SkyRoof/fork-guide/overview.html)
 - [Fork 扩展功能 — 简体中文](https://iu-yang1.github.io/SkyRoof/zh-cn/fork-guide/overview.html)
-- [Docs deployments](https://github.com/Iu-yang1/SkyRoof/deployments)
+- [Documentation publishing history (Actions)](https://github.com/Iu-yang1/SkyRoof/actions/workflows/deploy-docfx.yml)
 - [SkyRoof Discussion Group](https://groups.google.com/g/skyroof)
 
 <center><br><br>
@@ -22,7 +22,7 @@ ephemerides, persistent Base corrections and editable satellite transmitters,
 extended SkyCAT/RS-BA1 and IC-9700 spectrum integration, feedback-verified
 multi-waypoint rotator PARK, theme variants and Windows audio/RF-gain controls.
 
-See the bilingual [fork documentation](https://iu-yang1.github.io/SkyRoof/);
+See the bilingual [fork documentation](https://iu-yang1.github.io/SkyRoof/). The [DocFX publishing workflow](https://github.com/Iu-yang1/SkyRoof/actions/workflows/deploy-docfx.yml) provides a reliable deployment-history entry even if GitHub's optional Deployments dashboard is unavailable.\n
 the original upstream website does not necessarily document or ship these features.
 The IC-9700 independent Direct LAN scope source remains experimental.
 
