@@ -280,8 +280,12 @@ namespace SkyRoof.CW
               2.0, opts.MinimumSnrDb - 3.0),
             PrecisionMinimumSnrDb = Math.Max(
               2.0, opts.MinimumSnrDb - 3.0),
-            PeakDeduplicationHz = Math.Min(
-              opts.PeakDeduplicationHz, 4.0),
+            // Preserve the caller's detector de-duplication policy.
+            // High-resolution Pileup users can explicitly request 2–4 Hz,
+            // while legacy/robust profiles may intentionally use 20–30 Hz
+            // to reject Morse keying side-lobes.
+            PeakDeduplicationHz =
+              opts.PeakDeduplicationHz,
             MaxPeaksPerFrame = opts.MaxCandidates
           });
       if (FrameScanner.Options.SampleRate != sampleRate)
