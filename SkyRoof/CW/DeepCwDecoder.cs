@@ -168,14 +168,15 @@ namespace SkyRoof.CW
     DateTime WindowEndUtc);
 
   /// <summary>
-  /// Runs one shared FFT/resampling pass and then an independent DeepCW tensor
-  /// + CTC inference for every selected Pileup lane.
+  /// Runs one calibrated wideband STFT, models activity/interference for every
+  /// confirmed track, and invokes DeepCW only for the resource-selected lanes.
+  /// Detection bandwidth is therefore independent from the model's 3.2 kHz
+  /// sample rate.
   /// </summary>
   public sealed class DeepCwMultiLaneDecoder
   {
     private readonly DeepCwModelMetadata metadata;
     private readonly IDeepCwTensorDecoder decoder;
-    private readonly CwLaneExtractor laneExtractor;
     private readonly CwCarrierActivityEstimator activityEstimator;
 
     public int MaxLanes { get; set; } = 5;
@@ -185,14 +186,12 @@ namespace SkyRoof.CW
     public DeepCwMultiLaneDecoder(
       DeepCwModelMetadata metadata,
       IDeepCwTensorDecoder decoder,
-      CwLaneExtractor? laneExtractor = null,
       CwCarrierActivityEstimator? activityEstimator = null)
     {
       this.metadata = metadata ??
         throw new ArgumentNullException(nameof(metadata));
       this.decoder = decoder ??
         throw new ArgumentNullException(nameof(decoder));
-      this.laneExtractor = laneExtractor ?? new CwLaneExtractor();
       this.activityEstimator =
         activityEstimator ?? new CwCarrierActivityEstimator();
       metadata.Validate();
@@ -213,9 +212,9 @@ namespace SkyRoof.CW
 
       CwSignalTrack[] allDetectedTracks = tracks
         .Where(t => t.Confirmed)
-        .Where(t => t.FrequencyHz > laneExtractor.PassbandHz)
-        .Where(t => t.FrequencyHz <
-          sourceSampleRate / 2.0 - laneExtractor.PassbandHz)
+        .Where(t => double.IsFinite(t.FrequencyHz))
+        .Where(t => t.FrequencyHz > 0 &&
+                    t.FrequencyHz < sourceSampleRate / 2.0)
         .OrderBy(t => t.FrequencyHz)
         .ToArray();
 
@@ -228,42 +227,21 @@ namespace SkyRoof.CW
       if (decodeSelectedTracks.Length == 0)
         return Array.Empty<DeepCwLaneResult>();
 
-      // All reliable tracks contribute an independent activity timeline and
-      // may compete in the mask. Only the resource-selected subset invokes
-      // ONNX. This prevents an unselected sixth strong station from becoming
-      // invisible interference when MaxLanes is five.
-      var signals = new Dictionary<int, CwLaneSignal>();
-      var activityByTrack = new Dictionary<int, float[]>();
-      foreach (CwSignalTrack track in allDetectedTracks)
-      {
-        CwLaneSignal signal = laneExtractor.Extract(
-          audio,
-          sourceSampleRate,
-          track,
-          metadata.SampleRate,
-          TargetCenterHz);
-        signals.Add(track.Id, signal);
+      DeepCwWidebandFeatureWindow features =
+        DeepCwWidebandFeatureWindow.Create(
+          audio, sourceSampleRate, metadata);
 
-        float[] sampleActivity =
-          activityEstimator.EstimateSampleProbabilities(
-            signal.Envelope, metadata.SampleRate);
-        float[] frameActivity =
-          activityEstimator.ToFrameProbabilities(
-            sampleActivity,
-            metadata.SampleRate,
-            metadata.FftLength,
-            metadata.HopLength);
-        activityByTrack.Add(track.Id, frameActivity);
-      }
+      IReadOnlyDictionary<int, float[]> activityByTrack =
+        features.EstimateActivities(
+          allDetectedTracks, activityEstimator);
 
+      // allDetectedTracks is intentionally not truncated to MaxLanes. An
+      // unselected strong station must still take part in interference masks.
       var results =
         new List<DeepCwLaneResult>(decodeSelectedTracks.Length);
       foreach (CwSignalTrack track in decodeSelectedTracks)
       {
-        CwLaneSignal signal = signals[track.Id];
-        DeepCwFeatureWindow features = DeepCwFeatureWindow.Create(
-          signal.Audio, metadata.SampleRate, metadata);
-        DeepCwTensor tensor = features.BuildActivityAwareTensor(
+        DeepCwTensor tensor = features.BuildLaneTensor(
           track,
           allDetectedTracks,
           activityByTrack,
