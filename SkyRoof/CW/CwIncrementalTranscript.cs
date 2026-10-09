@@ -633,12 +633,13 @@ namespace SkyRoof.CW
           continue;
         }
 
-        if (cluster.TimestampUtc <=
+        if (cluster.LastObservedWindowEndUtc <=
             abandonCutoff)
         {
-          // A very old one-window hallucination may not block the entire
-          // stable prefix forever. Discard it once its correction horizon has
-          // expired.
+          // Staleness is measured from the last window that actually observed
+          // this cluster, not from the character's absolute transmission time.
+          // An old character may have just received fresh correction evidence
+          // from a heavily overlapping decode window.
           state.Provisional.RemoveAt(0);
           continue;
         }
