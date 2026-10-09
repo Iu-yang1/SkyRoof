@@ -75,7 +75,13 @@ namespace VE3NEA.Dsp.Tests
         (980, 0.22f, 0.17, 0.48));
       frontEnd.AddSamples(first, first.Length, T0);
       var initial = frontEnd.Analyze();
-      initial.Should().HaveCount(2);
+      initial.Should().HaveCount(
+        2,
+        "initial tracks were: {0}",
+        string.Join(
+          ", ",
+          initial.Select(x =>
+            $"#{x.Id} {x.FrequencyHz:F1}Hz {x.SnrDb:F1}dB")));
 
       float[] second = MakeAudio(0.8,
         (708, 0.16f, 0.14, 0.50),
@@ -83,7 +89,14 @@ namespace VE3NEA.Dsp.Tests
       frontEnd.AddSamples(second, second.Length, T0.AddMilliseconds(800));
       var updated = frontEnd.Analyze();
 
-      updated.Should().HaveCount(2);
+      updated.Should().HaveCount(
+        2,
+        "updated tracks were: {0}",
+        string.Join(
+          ", ",
+          updated.Select(x =>
+            $"#{x.Id} {x.FrequencyHz:F1}Hz {x.SnrDb:F1}dB " +
+            $"active={x.Active} confirmed={x.Confirmed}")));
       updated.Select(x => x.Id).Should()
         .BeEquivalentTo(initial.Select(x => x.Id));
       updated.Should().OnlyContain(x => x.Confirmed);
