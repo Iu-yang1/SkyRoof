@@ -313,11 +313,16 @@ namespace VE3NEA.Dsp.Tests
         new("wideband2600_sep25_d10", 2600, 25, 6, 10, -2)
       ];
 
-      CwDenoiseMode[] modes =
+      (string Name, Func<ICwLaneDenoiser?> Create)[] modes =
       [
-        CwDenoiseMode.Bypass,
-        CwDenoiseMode.HamNoiseClassic,
-        CwDenoiseMode.HamNoiseV2
+        ("WidebandBaseline", () => null),
+        ("LaneDry", () => new IdentityLaneDenoiser()),
+        ("HamNoiseClassic", () =>
+          new HamNoiseLaneDenoiser(
+            CwDenoiseMode.HamNoiseClassic)),
+        ("HamNoiseV2", () =>
+          new HamNoiseLaneDenoiser(
+            CwDenoiseMode.HamNoiseV2))
       ];
 
       const string truthA =
@@ -328,14 +333,10 @@ namespace VE3NEA.Dsp.Tests
       var results =
         new List<DenoiseAbResult>();
 
-      foreach (CwDenoiseMode mode in modes)
+      foreach ((string Name, Func<ICwLaneDenoiser?> Create) mode in modes)
       {
         ICwLaneDenoiser? denoiser =
-          mode ==
-            CwDenoiseMode.Bypass
-            ? null
-            : new HamNoiseLaneDenoiser(
-                mode);
+          mode.Create();
 
         var decoder =
           new DeepCwMultiLaneDecoder(
@@ -405,7 +406,7 @@ namespace VE3NEA.Dsp.Tests
           var result =
             new DenoiseAbResult(
               Mode:
-                mode.ToString(),
+                mode.Name,
               Scenario:
                 scenario.Name,
               SeparationHz:
@@ -1207,6 +1208,26 @@ namespace VE3NEA.Dsp.Tests
       bool CallsignB,
       double ProcessingSeconds,
       double RealTimeFactor);
+
+    private sealed class IdentityLaneDenoiser :
+      ICwLaneDenoiser
+    {
+      public int SampleRate => 9600;
+      public string Name => "Lane dry";
+
+      public float[] Process(
+        ReadOnlySpan<float> input,
+        int sampleRate,
+        double wet = 1.0)
+      {
+        if (sampleRate != SampleRate)
+          throw new ArgumentException(
+            $"Lane dry requires {SampleRate} Hz PCM.",
+            nameof(sampleRate));
+
+        return input.ToArray();
+      }
+    }
 
     private readonly record struct DenoiseAbResult(
       string Mode,
