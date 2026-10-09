@@ -14,6 +14,21 @@ The independent deepcw-engine model metadata currently specifies 3,200 Hz, FFT=2
 
 SkyRoof, HamNoise and deepcw-engine are AGPL-family projects. Preserve notices and separately validate redistributable model assets/dependencies; independently implement WinForms UI rather than copying frontend code with no confirmed separate license.
 
+## Pileup architecture: multi-target tracking plus component separation
+
+Pileup is no longer designed as frame-local peak chasing followed by fixed rectangular filters. The implementation uses:
+
+1. **Stateful TF ridges** — every CW component carries a Kalman state \`[frequency, frequency-rate]\` and covariance.
+2. **Global association (GNN)** — all tracks and all spectral candidates are associated jointly per scan so changes in relative signal strength do not swap IDs.
+3. **Birth / coast / death** — new detections create tentative tracks; short QSB or a missed peak coast on prediction; tracks expire only after a hold interval. A single peak produced by two close components is treated as a merged measurement rather than proof that one station disappeared.
+4. **Ambiguity state** — two predicted ridges closer than the resolvable threshold remain two labels but are marked ambiguous/colliding. UI and logging must not claim reliable source separation in that interval.
+5. **Ridge-aware soft TF masks** — each lane receives a Gaussian/Wiener-like mask along its predicted ridge, normalized against competing lanes, then translated to the DeepCW ~800 Hz center. Mask width combines intrinsic CW TF width with Kalman frequency uncertainty.
+6. **Shared STFT, independent inference** — resampling/STFT happens once for the receive window; masks and DeepCW+CTC are lane-specific.
+
+The design is inspired by, but does not literally implement, these published methods: Wang/Jiang/Zhang, *Random finite set approach to analyzing, detecting, and tracking dynamic time-frequency spectra* (2019, DOI 10.7527/S1000-6893.2018.22600); Meignen/Pham/McLaughlin, *On Demodulation, Ridge Detection, and Synchrosqueezing for Multicomponent Signals* (IEEE TSP 2017, DOI 10.1109/TSP.2017.2656838); Laurent/Meignen, *A Novel Ridge Detector for Nonstationary Multicomponent Signals* (IEEE TSP 2021, DOI 10.1109/TSP.2021.3085113); Meignen/Laurent/Oberlin, *One or Two Ridges? An Exact Mode Separation Condition for the Gabor Transform* (IEEE SPL 2022, DOI 10.1109/LSP.2022.3226948); and García-Fernández et al., *Bayesian Multi-Target Tracking With Merged Measurements Using Labelled Random Finite Sets* (IEEE TSP 2015, DOI 10.1109/TSP.2015.2393843).
+
+SkyRoof deliberately uses **labelled Kalman + GNN + merge/coast handling** rather than a full GM-PHD/GLMB filter: the problem is bounded to a small number of lanes (default 5, max 8) and the UI needs stable identities. MHT/GLMB or fixed-lag multi-hypothesis smoothing remains an escalation path if dense-clutter benchmarks show that GNN is insufficient.
+
 ## Workflow and gates
 
 | ID | Stage | Deliverable | Acceptance gate |
