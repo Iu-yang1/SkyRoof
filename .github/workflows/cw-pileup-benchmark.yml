@@ -5,9 +5,6 @@ on:
   pull_request:
     paths:
       - "SkyRoof/CW/**"
-      - "native/HamNoiseBridge/**"
-      - "scripts/build-hamnoise.ps1"
-      - "Vendor/HamNoise/**"
       - "VE3NEA.Dsp.Tests/DeepCwRealModelBenchmarkTests.cs"
       - ".github/workflows/cw-pileup-benchmark.yml"
 
@@ -27,10 +24,6 @@ jobs:
 
       - name: Setup NuGet
         uses: NuGet/setup-nuget@fd55a6f3b34392fa83fde1454582407d8c714123 # v4.0
-
-      - name: Build pinned HamNoise CW backend
-        shell: pwsh
-        run: ./scripts/build-hamnoise.ps1
 
       - name: Download WinDivert 2.2.2 x64
         shell: powershell
@@ -89,20 +82,16 @@ jobs:
         run: >
           dotnet test VE3NEA.Dsp.Tests/VE3NEA.Dsp.Tests.csproj
           -c Release -p:Platform=x64 --no-restore
-          --filter "FullyQualifiedName~DeepCwRealModelBenchmarkTests|FullyQualifiedName~HamNoiseDenoiserTests"
+          --filter FullyQualifiedName~RealDeepCw_PileupSeparatorBaseline
           --logger "console;verbosity=normal"
 
       - name: Print benchmark metrics
         shell: powershell
-        run: |
-          Get-ChildItem artifacts -Filter "*.json" | ForEach-Object {
-            Write-Host "===== $($_.Name) ====="
-            Get-Content $_.FullName
-          }
+        run: Get-Content $env:DEEPCW_BENCHMARK_OUTPUT
 
       - name: Upload benchmark metrics
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cw-pileup-real-model-benchmark
-          path: artifacts/*.json
+          path: artifacts/cw-pileup-benchmark.json
           if-no-files-found: error
