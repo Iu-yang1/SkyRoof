@@ -2400,13 +2400,24 @@ namespace SkyRoof
       long tunedFrequencyHz,
       string label)
     {
-      if (tunedFrequencyHz <= 0)
+      if (!geometry.IsValid)
+        return;
+
+      // In CENTER mode the vertical RX/TX reference follows the radio's
+      // reported spectrum center, not a potentially stale SkyRoof CAT/RIT
+      // frequency. In FIXED modes it marks the selected radio frequency.
+      bool centerMode =
+        geometry.Mode is
+          IcomScopeMode.Center or
+          IcomScopeMode.ScrollCenter;
+
+      if (!centerMode && tunedFrequencyHz <= 0)
         return;
 
       long rawFrequency =
-        checked(
-          tunedFrequencyHz -
-          displayOffsetHz);
+        centerMode
+          ? geometry.CenterFrequencyHz
+          : checked(tunedFrequencyHz - displayOffsetHz);
 
       if (!geometry.ContainsFrequency(
             rawFrequency))
@@ -2575,17 +2586,11 @@ namespace SkyRoof
           textSize.Width + 8,
           textSize.Height + 6);
 
+      // Instrument overlays must be legible independent of the outer
+      // WinForms theme. The former light-theme white fill on the dark
+      // spectrum produced an unreadable, prominent white rectangle.
       using var boxBrush =
-        new SolidBrush(
-          Theme.IsDark
-            ? Color.FromArgb(
-                220,
-                24,
-                28,
-                32)
-            : Color.FromArgb(
-                238,
-                Theme.BrandWhite));
+        new SolidBrush(Color.FromArgb(243, 20, 27, 36));
 
       using var boxPen =
         new Pen(
