@@ -94,6 +94,9 @@ namespace SkyRoof.CW
 
     public int MinimumPortionFrames { get; init; } = 3;
     public int MaximumPortionGapFrames { get; init; } = 1;
+    public double MinimumPortionMeanSnrDb { get; init; } = 7.0;
+    public double MinimumPortionContinuity { get; init; } = 0.60;
+    public double MinimumPortionActivityProbability { get; init; } = 0.58;
     public double MaxRidgeSlopeHzPerSecond { get; init; } = 120;
     public double PrecisionAssociationGateHz { get; init; } = 28;
   }
@@ -406,6 +409,21 @@ namespace SkyRoof.CW
             power));
         }
 
+        // A conservative profile (e.g. legacy 20–30 Hz
+        // de-duplication) explicitly says that nearby spectral structure is
+        // not intended to become separate carriers. In that mode broaden the
+        // rejection radius to suppress periodic Morse keying side-lobe
+        // families. High-resolution profiles (2–4 Hz) keep the requested
+        // narrow radius so a real 15 Hz doublet remains separable.
+        double resolutionGuard = 2.0 * binHz;
+        bool conservativeProfile =
+          options.PeakDeduplicationHz >= resolutionGuard;
+        double suppressionHz = conservativeProfile
+          ? 2.0 * options.PeakDeduplicationHz
+          : Math.Max(
+              options.PeakDeduplicationHz,
+              0.55 * binHz);
+
         var selected = new List<FramePeak>();
         foreach (FramePeak peak in rawPeaks
           .OrderByDescending(x => x.SnrDb)
@@ -414,7 +432,7 @@ namespace SkyRoof.CW
           if (selected.Any(x =>
             Math.Abs(
               x.FrequencyHz - peak.FrequencyHz) <
-            options.PeakDeduplicationHz))
+            suppressionHz))
             continue;
 
           selected.Add(peak);
@@ -611,6 +629,19 @@ namespace SkyRoof.CW
           Math.Clamp(
             meanActivity * (0.6 + 0.4 * continuity),
             0, 1);
+
+        // Per-frame noise maxima are common even several dB above the median
+        // periodogram floor. A Kalman-eligible carrier must first survive as
+        // a reliable short ridge portion. This is the RRP-inspired
+        // false-alarm barrier: continuity, accumulated SNR and activity are
+        // evaluated jointly instead of promoting every local maximum.
+        if (meanSnr <
+              options.MinimumPortionMeanSnrDb ||
+            continuity <
+              options.MinimumPortionContinuity ||
+            activity <
+              options.MinimumPortionActivityProbability)
+          continue;
 
         portions.Add(new(
           mutable.Id,
@@ -901,6 +932,21 @@ namespace SkyRoof.CW
       if (value.MaximumPortionGapFrames is < 0 or > 8)
         throw new ArgumentOutOfRangeException(
           nameof(value.MaximumPortionGapFrames));
+      if (!double.IsFinite(value.MinimumPortionMeanSnrDb) ||
+          value.MinimumPortionMeanSnrDb < -10)
+        throw new ArgumentOutOfRangeException(
+          nameof(value.MinimumPortionMeanSnrDb));
+      if (!double.IsFinite(value.MinimumPortionContinuity) ||
+          value.MinimumPortionContinuity <= 0 ||
+          value.MinimumPortionContinuity > 1)
+        throw new ArgumentOutOfRangeException(
+          nameof(value.MinimumPortionContinuity));
+      if (!double.IsFinite(
+            value.MinimumPortionActivityProbability) ||
+          value.MinimumPortionActivityProbability < 0 ||
+          value.MinimumPortionActivityProbability > 1)
+        throw new ArgumentOutOfRangeException(
+          nameof(value.MinimumPortionActivityProbability));
       if (!double.IsFinite(
             value.MaxRidgeSlopeHzPerSecond) ||
           value.MaxRidgeSlopeHzPerSecond <= 0)
