@@ -52,6 +52,8 @@ namespace SkyRoof
       ctx.AutoSelector.ctx = ctx;
       ctx.AutoSelector.Initialize();
       ctx.CatControl.ctx = ctx;
+      ctx.CatControl.IcomRfGainReadbackReceived +=
+        GainWidget.ApplyRadioRfGainReadback;
       ctx.RotatorControl.ctx = ctx;
       SatellitePhotoWidget.ctx = ctx;
       ctx.AmsatStatusLoader.ctx = ctx;
@@ -87,6 +89,7 @@ namespace SkyRoof
       ApplyOutputStreamSettings();
       ApplyKissServerSettings();
       ctx.CatControl.ApplySettings();
+      GainWidget.ApplyRfGain();
       ctx.RotatorControl.ApplySettings();
       ctx.PttHotkey = new PttHotkeyController(ctx);
 
@@ -1705,6 +1708,7 @@ namespace SkyRoof
       ctx.Sdr?.Retry();
       ctx.CatControl.Rx?.Retry();
       ctx.CatControl.Tx?.Retry();
+      GainWidget.RefreshControlBindings();
       ctx.Announcer.AnnouncePasses();
       ctx.AutoSelector.Tick();
       ctx.AutoSelectionPanel?.UpdateStatus();
