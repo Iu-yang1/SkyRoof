@@ -55,7 +55,8 @@ namespace VE3NEA.Dsp.Tests
       output.Should()
         .HaveCount(input.Length);
       output.Should()
-        .OnlyContain(float.IsFinite);
+        .OnlyContain(
+          value => float.IsFinite(value));
       Rms(output).Should()
         .BeGreaterThan(1e-5);
     }
