@@ -313,16 +313,26 @@ namespace VE3NEA.Dsp.Tests
         new("wideband2600_sep25_d10", 2600, 25, 6, 10, -2)
       ];
 
-      (string Name, Func<ICwAudioDenoiser?> Create)[] modes =
+      (
+        string Name,
+        Func<ICwAudioDenoiser?> Create,
+        bool SharedWindow
+      )[] modes =
       [
-        ("WidebandBaseline", () => null),
-        ("LaneDry", () => new IdentityLaneDenoiser()),
-        ("HamNoiseClassic", () =>
+        ("WidebandBaseline", () => null, false),
+        ("LaneDry", () => new IdentityLaneDenoiser(), false),
+        ("LaneHamNoiseClassic", () =>
           new HamNoiseLaneDenoiser(
-            CwDenoiseMode.HamNoiseClassic)),
-        ("HamNoiseV2", () =>
+            CwDenoiseMode.HamNoiseClassic), false),
+        ("LaneHamNoiseV2", () =>
           new HamNoiseLaneDenoiser(
-            CwDenoiseMode.HamNoiseV2))
+            CwDenoiseMode.HamNoiseV2), false),
+        ("SharedHamNoiseClassic", () =>
+          new HamNoiseLaneDenoiser(
+            CwDenoiseMode.HamNoiseClassic), true),
+        ("SharedHamNoiseV2", () =>
+          new HamNoiseLaneDenoiser(
+            CwDenoiseMode.HamNoiseV2), true)
       ];
 
       const string truthA =
@@ -333,7 +343,11 @@ namespace VE3NEA.Dsp.Tests
       var results =
         new List<DenoiseAbResult>();
 
-      foreach ((string Name, Func<ICwAudioDenoiser?> Create) mode in modes)
+      foreach ((
+        string Name,
+        Func<ICwAudioDenoiser?> Create,
+        bool SharedWindow
+      ) mode in modes)
       {
         ICwAudioDenoiser? denoiser =
           mode.Create();
@@ -346,7 +360,16 @@ namespace VE3NEA.Dsp.Tests
             MaxLanes = 2,
             LaneBandwidthHz = 240,
             TargetCenterHz = 800,
-            LaneDenoiser = denoiser,
+            WindowDenoiser =
+              mode.SharedWindow
+                ? denoiser
+                : null,
+            LaneDenoiser =
+              !mode.SharedWindow &&
+              mode.Name !=
+                "WidebandBaseline"
+                ? denoiser
+                : null,
             DenoiseWet = 1.0
           };
 
@@ -520,7 +543,7 @@ namespace VE3NEA.Dsp.Tests
               DeepCwModelManager.Revision,
             denoiseWet = 1.0,
             architecture =
-              "WidebandBaseline=activity-aware soft mask; LaneDry=per-lane DDC at 9.6kHz with no denoise; HamNoise modes share the LaneDry path then denoise before the DeepCW frontend",
+              "WidebandBaseline=raw activity-aware soft mask; LaneDry/LaneHamNoise=per-lane DDC at 9.6kHz before DeepCW; SharedHamNoise=resample decode snapshot once to 9.6kHz, denoise once, then retain the existing all-track activity-aware soft mask",
             summary,
             scenarios = results
           },
