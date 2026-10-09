@@ -189,7 +189,7 @@ namespace SkyRoof.CW
         track.Ambiguous = false;
       }
 
-      UpdateMergeGroupsBeforeAssociation(utc);
+      RefreshMergeGroups(utc);
 
       // Exact global min-cost association is inexpensive here because the
       // product limit is tiny (normally <=8 tracks and <=16 detector peaks).
@@ -305,6 +305,11 @@ namespace SkyRoof.CW
         });
       }
 
+      // Refresh again from posterior states. This is essential when the
+      // current precision observation is the first evidence that two ridges
+      // have entered the finite-resolution merge region: the group must exist
+      // before the next scan can present a single merged peak.
+      RefreshMergeGroups(utc);
       MarkMergedOrAmbiguousTracks();
 
       return tracks
@@ -438,7 +443,7 @@ namespace SkyRoof.CW
         double anchorResidual =
           candidate.FrequencyHz - anchorPrediction;
         identityPenalty =
-          0.45 * anchorResidual * anchorResidual /
+          2.0 * anchorResidual * anchorResidual /
           (anchorSigma * anchorSigma);
       }
 
@@ -523,7 +528,7 @@ namespace SkyRoof.CW
       track.SnrDb = 0.35 * track.SnrDb + 0.65 * candidate.SnrDb;
     }
 
-    private void UpdateMergeGroupsBeforeAssociation(DateTime utc)
+    private void RefreshMergeGroups(DateTime utc)
     {
       if (tracks.Count < 2) return;
 
