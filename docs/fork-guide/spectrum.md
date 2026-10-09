@@ -1,6 +1,6 @@
 # IC-9700 spectrum and waterfall
 
-**Language:** English | [简体中文](../../zh-cn/fork-guide/spectrum.md)
+**Language:** English | [简体中文](../zh-cn/fork-guide/spectrum.md)
 
 The fork introduces a dockable **Icom LAN Spectrum** panel separate from SkyRoof's original SDR waterfall. It consumes IC-9700 CI-V **27 00** scope data (normally a **475-bin** spectrum sweep) and provides a scope trace, optional waterfall, frequency markers, peak hold, averaging and display controls. It is not a replacement for the original SDR's baseband samples or a demodulator.
 
