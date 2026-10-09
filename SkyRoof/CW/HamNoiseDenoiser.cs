@@ -84,12 +84,12 @@ namespace SkyRoof.CW
   }
 
   /// <summary>
-  /// Optional per-lane HamNoise backend. SkyRoof always performs carrier
-  /// detection/tracking on the untouched 48 kHz receive stream. This backend
-  /// only sees one DDC-isolated lane after it has been translated to the
-  /// DeepCW center frequency and resampled to HamNoise's 9.6 kHz rate.
+  /// Optional HamNoise audio backend. SkyRoof always performs carrier
+  /// detection/tracking on the untouched raw receive stream. The backend is
+  /// used only by explicit decode experiments, either once on a 9.6 kHz
+  /// inference snapshot or after one tracked lane has been DDC-isolated.
   /// </summary>
-  public sealed class HamNoiseLaneDenoiser :
+  public sealed class HamNoiseAudioDenoiser :
     ICwAudioDenoiser
   {
     public CwDenoiseMode Mode { get; }
@@ -99,7 +99,7 @@ namespace SkyRoof.CW
         ? "HamNoise CW V2"
         : "HamNoise CW Classic";
 
-    public HamNoiseLaneDenoiser(
+    public HamNoiseAudioDenoiser(
       CwDenoiseMode mode)
     {
       if (mode is not (
