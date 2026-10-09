@@ -153,7 +153,7 @@ public sealed class CustomTransmitterTests
         Assert.Equal(145850000L, tx.uplink_low);
         Assert.Equal("FM_D", tx.DownlinkMode);
         Assert.Equal(Slicer.Mode.FM_D,
-          SatnogsDbTransmitter.ModeMnemonic.ToSlicerMode(
+          ModeMnemonic.ToSlicerMode(
             null, tx.DownlinkMode, false));
     }
 
@@ -164,7 +164,7 @@ public sealed class CustomTransmitterTests
     public void FmDigitalNamesMapToFmDigitalRadioMode(string mode)
     {
         Assert.Equal(Slicer.Mode.FM_D,
-          SatnogsDbTransmitter.ModeMnemonic.ToSlicerMode(null, mode, false));
+          ModeMnemonic.ToSlicerMode(null, mode, false));
     }
 
     [Fact]
