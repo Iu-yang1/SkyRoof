@@ -317,6 +317,22 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void WindowedSincResampler_LongWindow_DoesNotOverflowOutputLength()
+    {
+      float[] input =
+        new float[8 * SourceRate];
+
+      float[] output =
+        CwWindowedSincResampler.Resample(
+          input,
+          SourceRate,
+          9600);
+
+      output.Should()
+        .HaveCount(8 * 9600);
+    }
+
+    [Fact]
     public void WindowedSincResampler_PreservesLowFrequencyTone()
     {
       float[] input = MakeKeyedAudio(
