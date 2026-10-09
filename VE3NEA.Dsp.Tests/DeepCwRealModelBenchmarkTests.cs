@@ -520,7 +520,7 @@ namespace VE3NEA.Dsp.Tests
               DeepCwModelManager.Revision,
             denoiseWet = 1.0,
             architecture =
-              "Bypass=wideband activity-aware soft mask; HamNoise=per-lane DDC at 9.6kHz then denoise then DeepCW frontend",
+              "WidebandBaseline=activity-aware soft mask; LaneDry=per-lane DDC at 9.6kHz with no denoise; HamNoise modes share the LaneDry path then denoise before the DeepCW frontend",
             summary,
             scenarios = results
           },
