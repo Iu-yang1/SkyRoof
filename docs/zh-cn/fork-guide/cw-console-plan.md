@@ -1,6 +1,6 @@
 # CW Console：多路 Pileup 解码与自动拍发实施规划
 
-**状态：接收核心正在量化验证。** 仓库现已具备多载波检测/跟踪、基于单调 PCM 采样序号的双分辨率 Frame-level Ridge Scanner、校准宽带 DeepCW 特征、多 Lane 独立 ONNX/CTC 推理、活动感知干扰 mask、MergeGroup 身份保持与真实模型基准。尚未完成的是 CW Console 的实时 SDR/WASAPI/RS-BA1 PCM 接线、连续转录协调、HamNoise 集成，以及任何电台发射功能。
+**状态：接收核心正在量化验证。** 仓库现已具备多载波检测/跟踪、基于单调 PCM 采样序号的双分辨率 Frame-level Ridge Scanner、360 ms 有界 fixed-lag beam/MHT、多 Lane 独立 ONNX/CTC 推理、活动感知干扰 mask、MergeGroup fallback 与真实模型基准。尚未完成的是 CW Console 的实时 SDR/WASAPI/RS-BA1 PCM 接线、连续转录协调、HamNoise 集成，以及任何电台发射功能。
 
 参考：[deepcw-engine](https://github.com/e04/deepcw-engine) 是**正式 CW 解码模型**，包含 model.onnx、model.onnx.json 与推理示例；[web-deep-cw-decoder](https://github.com/e04/web-deep-cw-decoder) 提供多路检测与 Pileup 结构参考；[HamNoise](https://github.com/e04/HamNoise) 提供可选神经降噪 C 核心。英文方案见 [English plan](../../fork-guide/cw-console-plan.md)。
 
@@ -23,9 +23,10 @@ Pileup 不再按“每帧峰值最近邻 + 固定矩形滤波”设计，而采�
 5. **activity-aware competing mask**：每条 Confirmed Track 另外维护逐帧载波活动概率，由 ridge 能量经两状态 HMM 得到；Confirmed 但当前停键的台站不会继续无条件瓜分其它 Lane 的时频能量。软掩膜仍沿预测 ridge 使用 Gaussian/Wiener-like 权重，并结合 Kalman 频率不确定度。
 6. **AllDetectedTracks 与 DecodeSelectedTracks 分离**：全部可靠 Track 都参加干扰/竞争 mask；只有按资源预算选中的默认 5、最多 8 路执行 ONNX，未选中的强邻台不会从分母中消失。
 7. **校准的宽带共享 STFT**：不再先把整段接收音频降到 3.2 kHz。48 kHz PCM 使用 3840 点 FFT / 720 点 hop，对应与 DeepCW 官方 256 / 48 完全相同的 80 ms 窗、15 ms hop 和 12.5 Hz 格点，并按 FFT 长度比例校准幅度后再映射到模型 400–1200 Hz 输入。因此 1600 Hz 以上的 AF CW 载波不会在抗混叠阶段提前丢失。
-8. **MergeGroup + 有界身份历史**：有限分辨率导致两个 ridge 形成一个峰时，显式保留 MergeGroupId，并在短固定滞后内只对组中心做有限更新，同时保留每条轨迹进入 merge 前的频率/频率变化率身份锚点。共享单峰期间会主动扩大每条 Track 的频率协方差，避免滤波器过度自信，使重新分离后的可靠观测能够快速拉回正确 ridge。
+8. **MergeGroup fallback**：有限分辨率导致两个 ridge 形成一个峰时，tracker 内部仍显式保留 MergeGroupId、pre-merge ridge anchor，并在共享单峰期间膨胀协方差，作为 MHT 之外的短时保护层。
 9. **双分辨率 Frame Scanner**：Fast STFT 使用 80 ms 窗 / 15 ms hop，仅提供活动状态和短 ridge portion 连续性证据，明确禁止作为逐帧 Kalman measurement；Precision STFT 使用 240 ms 窗 / 120 ms hop，输出采样序号对齐的频率、SNR、分辨率、测量方差和活动概率，是唯一送入 tracker 的帧级测量流。
 10. **相关性与 chirp 感知的测量方差**：Precision measurement sigma 会针对重叠窗相关性和 240 ms 窗内残余 chirp smear 膨胀；可选输入公共 Doppler rate，在 STFT 前进行去 chirp，输出频率再映射回原始 AF 频率轴。
+11. **真正的 fixed-lag 多帧关联**：Precision batch 在进入 Kalman/GNN 前先通过默认 3 个未来 batch（约 360 ms）的 bounded beam/MHT。它同时保留多组全局关联假设，根据频率创新、局部速度、速度变化、SNR、活动概率和 ridge-portion 连续性累计代价；只在 lag 到期后为最老 batch 提交稳定的 `AssociationHintId`。新轨至少需要两帧未来支持，单帧 clutter 不允许直接 birth。
 11. **借鉴 RRP 的短可靠 ridge portion，而非照搬 MATLAB**：Fast 局部极大值先按前后连续性连接成短 ridge portion，再交给长期跟踪；不移植 Laurent/Meignen 的 basin/spline 优化，也不采用其 spline 不允许交叉的限制，因此 SkyRoof 仍支持真实的频率交叉。
 
 该设计吸收了以下公开研究的思路，但不是逐行复现论文算法：
@@ -36,7 +37,7 @@ Pileup 不再按“每帧峰值最近邻 + 固定矩形滤波”设计，而采�
 - Meignen, Laurent, Oberlin, *One or Two Ridges? An Exact Mode Separation Condition for the Gabor Transform*（IEEE SPL 2022，DOI 10.1109/LSP.2022.3226948）：STFT 分辨率不足时两个纯音本来就可能只形成一条 ridge，因此软件必须显式表示“不可分辨/合并”，不能强制生成两个解码结果。
 - García-Fernández et al., *Bayesian Multi-Target Tracking With Merged Measurements Using Labelled Random Finite Sets*（IEEE TSP 2015，DOI 10.1109/TSP.2015.2393843）：近邻目标产生 merged measurement 时应保持轨迹存在性，而不是直接删除未匹配轨迹。
 
-SkyRoof 当前采用 **labelled Kalman + GNN + MergeGroup + 有界 fixed-lag 身份先验**，而不是完整 GM-PHD/GLMB。原因是 CW Console 的同时目标数很小（默认 5、最多 8），但必须稳定保留 Lane ID。Frame-level Scanner 现已提供基于采样序号对齐的 observation 与短可靠 ridge portion；只有后续端到端基准仍显示明显 ID switch 时，才考虑完整多假设 fixed-lag、MHT 或 GLMB。
+SkyRoof 当前采用 **Frame Ridge Scanner → bounded fixed-lag beam/MHT → labelled Kalman/GNN → MergeGroup fallback**，而不是完整 GM-PHD/GLMB。默认只保留约 360 ms 的未来 Precision observation 和有限数量全局假设，因此能在 5–8 路桌面场景中处理 crossing / merge，又不会引入完整 GLMB 的状态爆炸。只有端到端基准仍显示明显 ID switch 时，才需要考虑更重的 MHT/GLMB。
 
 ## 量化验收与真实 ONNX 基准
 
@@ -52,7 +53,7 @@ Frame-level Scanner 另外通过单元测试验证单调 sample-index 时间轴�
 | 01 | 音频输入 | SDR Slicer、WASAPI、RS-BA1 播放设备 Loopback | 切换/拔插无卡死；音频线程不堵塞 |
 | 02 | PCM 引擎 | Float32、有界队列、采样序号单调时间轴、保留 48 kHz 宽带 PCM；仅在每路模型入口映射到 DeepCW 特征域 | 断流恢复、积压受限、>1.6 kHz Lane 不丢失 |
 | 03 | Frame Ridge Scanner | Fast 80/15 ms ridge portions + Precision 240/120 ms observation、sample-index 时间轴、Doppler 去 chirp | Fast 帧不反复压缩 Kalman 协方差；近频与静默 coast 均有回归测试 |
-| 04 | 载波跟踪 | ID、Doppler 漂移、QSB Hold、去重、MergeGroup / fixed-lag 身份保持、最多 8 路 | crossing / merged-measurement 测试保持 labelled identity |
+| 04 | 多帧关联 + 载波跟踪 | 3-batch / ~360 ms beam-MHT、AssociationHintId、Kalman/GNN、MergeGroup fallback、最多 8 路 | crossing、单峰 merge、单帧 clutter、ID swap 回归测试 |
 | 05 | 多路隔离 | 每 Lane 50–300 Hz 带通、NCO 频移到 DeepCW 可识别音调 | 3–5 路可独立提取 |
 | 06 | 多路推理 | ONNX Runtime + 按元数据 STFT/log1p/CTC、独立流式 pending/confirmed | 每 Lane 都解码文字，防止串台/重复 |
 | 07 | 性能调度 | 默认最多 5 路，上限 8；选中路优先，超过容量主动降级 | CPU/RAM/延迟有上限 |
@@ -80,7 +81,7 @@ Frame-level Scanner 另外通过单元测试验证单调 sample-index 时间轴�
 
 ## 解码管线
 
-SDR PCM / 选定 WASAPI / RS-BA1 Loopback → 48 kHz 有界宽带音频 Hub →（可选 HamNoise）→ Fast 80/15 ms ridge portions + Precision 240/120 ms observations → 仅 Precision batch 驱动 CwPileupTrackManager / fixed-lag association（空 batch 也推进 coast 时间）→ 校准宽带 STFT + activity-aware all-track soft mask（经典解码器/监听可另走每 Lane DDC）→ deepcw-engine ONNX → 独立 CTC 转录 → Pileup 列表/选中路文本/QSO 辅助。
+SDR PCM / 选定 WASAPI / RS-BA1 Loopback → 48 kHz 有界宽带音频 Hub →（可选 HamNoise）→ Fast 80/15 ms ridge portions + Precision 240/120 ms observations → 3-batch bounded beam/MHT → 带 AssociationHintId 的 Precision batch → CwPileupTrackManager / Kalman/GNN / MergeGroup fallback（空 batch 也推进 coast 时间）→ 校准宽带 STFT + activity-aware all-track soft mask（经典解码器/监听可另走每 Lane DDC）→ deepcw-engine ONNX → 独立 CTC 转录 → Pileup 列表/选中路文本/QSO 辅助。
 
 候选 AF 频率不等于 RF 下行频率；正确的接收音调到射频转换取决于 CW/CW-R 与解调方式。音频推理不得直接操作 TX VFO。
 
@@ -94,6 +95,7 @@ SkyCAT 现有 4532 主 CAT 通道独占 RS-BA1 虚拟 COM 并串行仲裁，新�
 
 1. Track Manager + 多路 DeepCW 接收核心 + 可靠性修复与真实模型 benchmark（**PR #41 / #42 已合并**）。
 2. 双分辨率 Frame Ridge Scanner、sample-index 时间轴、Precision-only Kalman 更新（**PR #43**）。
+3. bounded fixed-lag beam/MHT、多帧 crossing/merge 关联与 AssociationHintId（**PR #44**）。
 3. Incremental CTC / Transcript 协调，以及实时 SDR/WASAPI/RS-BA1 PCM 接线。
 4. CW Console + 性能调度 + HamNoise（完整停靠 UI 和本地降噪）。
 5. SkyCAT CW CI-V 协议（白名单/错误处理/模拟器）。

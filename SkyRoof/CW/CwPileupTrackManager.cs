@@ -10,7 +10,8 @@ namespace SkyRoof.CW
     double SnrDb,
     double MeasurementSigmaHz = 0,
     double ResolutionHz = 0,
-    double ActivityProbability = 1);
+    double ActivityProbability = 1,
+    int AssociationHintId = 0);
 
   /// <summary>
   /// Stable identity and observed state of one independently decodable CW lane.
@@ -28,7 +29,8 @@ namespace SkyRoof.CW
     bool Ambiguous = false,
     double FrequencySigmaHz = 0,
     int MergeGroupId = 0,
-    double IdentityConfidence = 1);
+    double IdentityConfidence = 1,
+    int AssociationHintId = 0);
 
   /// <summary>
   /// Multi-target CW ridge tracker.
@@ -70,6 +72,7 @@ namespace SkyRoof.CW
       public double LastMeasurementFrequencyHz;
       public DateTime LastMeasurementUtc;
       public double ObservedDriftHzPerSecond;
+      public int AssociationHintId;
     }
 
     private readonly List<State> tracks = new();
@@ -371,7 +374,9 @@ namespace SkyRoof.CW
           Active = true,
           LastMeasurementFrequencyHz = peak.FrequencyHz,
           LastMeasurementUtc = utc,
-          ObservedDriftHzPerSecond = 0
+          ObservedDriftHzPerSecond = 0,
+          AssociationHintId =
+            peak.AssociationHintId
         });
       }
 
@@ -391,7 +396,8 @@ namespace SkyRoof.CW
           t.Ambiguous,
           Math.Sqrt(Math.Max(t.P00, 0)),
           t.MergeGroupId,
-          IdentityConfidence(t, utc)))
+          IdentityConfidence(t, utc),
+          t.AssociationHintId))
         .ToArray();
     }
 
@@ -479,18 +485,63 @@ namespace SkyRoof.CW
       if (Math.Abs(residual) > MatchToleranceHz)
         return double.PositiveInfinity;
 
-      double innovationVariance = track.P00 + MeasurementVariance(candidate);
-      double nis = residual * residual / Math.Max(innovationVariance, 1e-9);
+      double innovationVariance =
+        track.P00 + MeasurementVariance(candidate);
+      double nis =
+        residual * residual /
+        Math.Max(innovationVariance, 1e-9);
 
-      // 4-sigma statistical gate in addition to the hard Hz gate.
-      if (nis > 16) return double.PositiveInfinity;
+      bool sameHint =
+        candidate.AssociationHintId != 0 &&
+        track.AssociationHintId != 0 &&
+        candidate.AssociationHintId ==
+          track.AssociationHintId;
+      bool differentHint =
+        candidate.AssociationHintId != 0 &&
+        track.AssociationHintId != 0 &&
+        candidate.AssociationHintId !=
+          track.AssociationHintId;
+
+      // Normal observations retain the strict 4-sigma statistical gate.
+      // A same-Hint observation has already survived the fixed-lag MHT using
+      // future frames, so it may recover from an overconfident/stale Kalman
+      // posterior as long as the hard physical Hz gate above is still met.
+      if (nis > 16 && !sameHint)
+        return double.PositiveInfinity;
+
+      if (sameHint && nis > 16)
+      {
+        double recoverySigma =
+          Math.Max(
+            Math.Sqrt(innovationVariance),
+            MatchToleranceHz / 3.0);
+        nis =
+          residual * residual /
+          (recoverySigma * recoverySigma);
+      }
 
       // Frequency continuity dominates. SNR continuity is only a weak feature:
       // fading should never cause IDs to swap solely because strengths cross.
       double snrPenalty =
-        Math.Min(Math.Abs(candidate.SnrDb - track.SnrDb), 30) / 30.0;
+        Math.Min(
+          Math.Abs(
+            candidate.SnrDb -
+            track.SnrDb),
+          30) / 30.0;
 
-      return nis + 0.12 * snrPenalty;
+      double hintCost = 0;
+      if (sameHint)
+        hintCost = -1.5;
+      else if (differentHint)
+      {
+        // A mismatched future-validated identity should be less attractive
+        // than a normal miss, so crossing tracks coast instead of swapping.
+        hintCost = 10.0;
+      }
+
+      return nis +
+        0.12 * snrPenalty +
+        hintCost;
     }
 
     private int[] SolveGlobalAssignment(
@@ -582,9 +633,78 @@ namespace SkyRoof.CW
       track.LastMeasurementFrequencyHz =
         candidate.FrequencyHz;
       track.LastMeasurementUtc = utc;
+      if (candidate.AssociationHintId != 0 &&
+          (track.AssociationHintId == 0 ||
+           track.AssociationHintId ==
+             candidate.AssociationHintId))
+      {
+        track.AssociationHintId =
+          candidate.AssociationHintId;
+      }
 
-      double r = MeasurementVariance(candidate);
-      double innovation = candidate.FrequencyHz - track.FrequencyHz;
+      double r =
+        MeasurementVariance(candidate);
+      double innovation =
+        candidate.FrequencyHz -
+        track.FrequencyHz;
+
+      bool sameHint =
+        candidate.AssociationHintId != 0 &&
+        track.AssociationHintId != 0 &&
+        candidate.AssociationHintId ==
+          track.AssociationHintId;
+
+      if (sameHint)
+      {
+        double currentSigma =
+          Math.Sqrt(
+            Math.Max(
+              track.P00 + r,
+              1e-9));
+
+        if (Math.Abs(innovation) >
+            3.0 * currentSigma)
+        {
+          // The multi-frame path says the identity is reliable while the
+          // single-state filter says it is statistically impossible. Treat
+          // that contradiction as underestimated state uncertainty, not as a
+          // reason to ignore future-validated evidence.
+          double requiredSigma =
+            Math.Min(
+              MatchToleranceHz / 2.0,
+              Math.Abs(innovation) / 2.5);
+          double requiredP00 =
+            Math.Max(
+              0,
+              requiredSigma *
+              requiredSigma - r);
+          track.P00 =
+            Math.Max(
+              track.P00,
+              requiredP00);
+
+          // Velocity uncertainty must grow with the position correction or
+          // the next prediction immediately becomes overconfident again.
+          double dtSinceMeasurement =
+            track.LastMeasurementUtc != default &&
+            utc > track.LastMeasurementUtc
+              ? (utc -
+                 track.LastMeasurementUtc)
+                .TotalSeconds
+              : 0.12;
+          dtSinceMeasurement =
+            Math.Max(
+              dtSinceMeasurement,
+              0.05);
+          track.P11 =
+            Math.Max(
+              track.P11,
+              requiredP00 /
+              (dtSinceMeasurement *
+               dtSinceMeasurement));
+        }
+      }
+
       double s = track.P00 + r;
       double k0 = track.P00 / s;
       double k1 = track.P01 / s;
