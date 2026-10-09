@@ -66,8 +66,12 @@ namespace VE3NEA.Dsp.Tests
         logits, [1, path.Length, metadata.NumClasses], metadata);
 
       decoded.Text.Should().Be("CQ C");
+      decoded.OutputFrameCount.Should().Be(path.Length);
       decoded.Symbols.Select(x => x.Character)
         .Should().Equal('C', 'Q', ' ', 'C');
+      decoded.Symbols.Should().OnlyContain(x =>
+        x.Confidence > 0.99 &&
+        x.Confidence <= 1);
     }
 
     [Fact]

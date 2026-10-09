@@ -5,19 +5,28 @@ namespace SkyRoof.CW
 {
   public readonly record struct DeepCwDecodedSymbol(
     char Character,
-    int OutputFrame);
+    int OutputFrame,
+    double Confidence = 1);
 
   public sealed class DeepCwDecodedText
   {
     public string Text { get; }
     public IReadOnlyList<DeepCwDecodedSymbol> Symbols { get; }
+    public int OutputFrameCount { get; }
 
     public DeepCwDecodedText(
       string text,
-      IReadOnlyList<DeepCwDecodedSymbol> symbols)
+      IReadOnlyList<DeepCwDecodedSymbol> symbols,
+      int outputFrameCount = 0)
     {
       Text = text;
       Symbols = symbols;
+      OutputFrameCount =
+        outputFrameCount > 0
+          ? outputFrameCount
+          : (symbols.Count == 0
+              ? 0
+              : symbols.Max(x => x.OutputFrame) + 1);
     }
   }
 
@@ -49,13 +58,29 @@ namespace SkyRoof.CW
       {
         int offset = t * classes;
         int best = 0;
+        int second = -1;
         float bestValue = logits[offset];
+        float secondValue = float.NegativeInfinity;
+
         for (int c = 1; c < classes; c++)
         {
-          if (logits[offset + c] <= bestValue) continue;
-          best = c;
-          bestValue = logits[offset + c];
+          float value = logits[offset + c];
+          if (value > bestValue)
+          {
+            second = best;
+            secondValue = bestValue;
+            best = c;
+            bestValue = value;
+          }
+          else if (value > secondValue)
+          {
+            second = c;
+            secondValue = value;
+          }
         }
+
+        if (second < 0)
+          secondValue = bestValue - 20;
 
         if (best == metadata.BlankIndex)
         {
@@ -69,15 +94,32 @@ namespace SkyRoof.CW
           if (token.Length > 0)
           {
             char ch = token[0];
+
+            // The model output is named log_probs, but we intentionally expose
+            // a pairwise top-vs-runner-up confidence rather than claiming this
+            // value is a calibrated posterior probability.
+            double margin =
+              Math.Clamp(
+                bestValue - secondValue,
+                -30f, 30f);
+            double confidence =
+              1.0 / (1.0 + Math.Exp(-margin));
+
             chars.Add(ch);
-            symbols.Add(new(ch, t));
+            symbols.Add(new(
+              ch,
+              t,
+              confidence));
           }
         }
 
         previous = best;
       }
 
-      return new(new string(chars.ToArray()), symbols);
+      return new(
+        new string(chars.ToArray()),
+        symbols,
+        timeSteps);
     }
   }
 
@@ -165,7 +207,11 @@ namespace SkyRoof.CW
     string Text,
     bool Active,
     bool Ambiguous,
-    DateTime WindowEndUtc);
+    DateTime WindowEndUtc,
+    int AssociationHintId = 0,
+    IReadOnlyList<DeepCwDecodedSymbol>? Symbols = null,
+    int OutputFrameCount = 0,
+    double WindowDurationSeconds = 0);
 
   /// <summary>
   /// Runs one calibrated wideband STFT, models activity/interference for every
@@ -255,7 +301,11 @@ namespace SkyRoof.CW
           text.Text,
           track.Active,
           track.Ambiguous,
-          windowEndUtc));
+          windowEndUtc,
+          track.AssociationHintId,
+          text.Symbols,
+          text.OutputFrameCount,
+          features.DurationSeconds));
       }
 
       return results;

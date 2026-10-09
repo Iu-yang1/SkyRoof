@@ -201,6 +201,26 @@ namespace VE3NEA.Dsp.Tests
       results.Max(x => x.RealTimeFactor)
         .Should().BeLessThan(1.0);
 
+      StreamingBenchmarkResult streaming =
+        RunStreamingTranscriptBenchmark(
+          metadata,
+          decoder);
+
+      output.WriteLine(
+        "STREAMING " +
+        JsonSerializer.Serialize(streaming));
+
+      streaming.StreamingCerA.Should()
+        .BeLessThan(streaming.NaiveConcatCerA);
+      streaming.StreamingCerB.Should()
+        .BeLessThan(streaming.NaiveConcatCerB);
+      streaming.StreamingCerA.Should()
+        .BeLessThanOrEqualTo(0.45);
+      streaming.StreamingCerB.Should()
+        .BeLessThanOrEqualTo(0.45);
+      streaming.RealTimeFactor.Should()
+        .BeLessThan(1.0);
+
       if (!string.IsNullOrWhiteSpace(reportPath))
       {
         string? directory =
@@ -220,13 +240,275 @@ namespace VE3NEA.Dsp.Tests
               referenceNoiseBandwidthHz = 2500,
               keyedSignalPowerIncludesDutyCycle = true,
               oracleTracks = true,
-              scenarios = results
+              scenarios = results,
+              streamingTranscript = streaming
             },
             new JsonSerializerOptions
             {
               WriteIndented = true
             }));
       }
+    }
+
+    private StreamingBenchmarkResult
+      RunStreamingTranscriptBenchmark(
+        DeepCwModelMetadata metadata,
+        DeepCwMultiLaneDecoder decoder)
+    {
+      const double totalSeconds = 10.0;
+      const double windowSeconds = 6.0;
+      const double hopSeconds = 1.0;
+      const string truthA = "CQ DE K1ABC";
+      const string truthB = "CQ DE W9XYZ";
+
+      int count =
+        (int)Math.Round(
+          totalSeconds * SampleRate);
+      float[] envelopeA =
+        BuildMorseEnvelope(
+          truthA,
+          24,
+          count,
+          startSeconds: 1.20);
+      float[] envelopeB =
+        BuildMorseEnvelope(
+          truthB,
+          27,
+          count,
+          startSeconds: 1.40);
+
+      float[] laneA =
+        SynthesizeLane(
+          envelopeA,
+          0.12,
+          780,
+          0);
+      float[] laneB =
+        SynthesizeLane(
+          envelopeB,
+          0.12,
+          820,
+          0);
+
+      // Keep this benchmark focused on transcript reconciliation rather than
+      // absolute sensitivity. +4 dB in 2.5 kHz still exercises the 40 Hz
+      // two-lane separator while producing repeatable overlapping decodes.
+      double signalRms =
+        Rms(laneA);
+      double noiseRms2500 =
+        signalRms /
+        Math.Sqrt(
+          Math.Pow(10, 4.0 / 10.0));
+      double fullBandNoiseRms =
+        noiseRms2500 *
+        Math.Sqrt(
+          (SampleRate / 2.0) /
+          2500.0);
+
+      var random =
+        new Random(20261009);
+      float[] audio =
+        new float[count];
+      float peak = 0;
+      for (int i = 0; i < count; i++)
+      {
+        float value =
+          laneA[i] +
+          laneB[i] +
+          (float)(
+            NextGaussian(random) *
+            fullBandNoiseRms);
+        audio[i] = value;
+        peak = Math.Max(
+          peak,
+          Math.Abs(value));
+      }
+
+      if (peak > 0.92f)
+      {
+        float scale =
+          0.92f / peak;
+        for (int i = 0; i < audio.Length; i++)
+          audio[i] *= scale;
+      }
+
+      DateTime origin =
+        new(
+          2026, 10, 9,
+          0, 0, 0,
+          DateTimeKind.Utc);
+
+      CwSignalTrack trackA =
+        new(
+          101,
+          780,
+          16,
+          0,
+          origin,
+          origin,
+          Confirmed: true,
+          Active: true,
+          Ambiguous: false,
+          FrequencySigmaHz: 2,
+          MergeGroupId: 0,
+          IdentityConfidence: 1,
+          AssociationHintId: 1001);
+
+      CwSignalTrack trackB =
+        new(
+          202,
+          820,
+          16,
+          0,
+          origin,
+          origin,
+          Confirmed: true,
+          Active: true,
+          Ambiguous: false,
+          FrequencySigmaHz: 2,
+          MergeGroupId: 0,
+          IdentityConfidence: 1,
+          AssociationHintId: 2002);
+
+      var transcripts =
+        new CwIncrementalTranscriptCoordinator(
+          new CwTranscriptOptions
+          {
+            SymbolMatchToleranceSeconds =
+              0.26,
+            CommitLagSeconds = 0.9,
+            AbandonAfterSeconds = 2.8,
+            MinimumConfirmations = 2,
+            MinimumConsensus = 0.58,
+            MinimumAverageConfidence = 0.50,
+            CommittedMatchRetentionSeconds = 8
+          });
+      var continuous =
+        new CwContinuousDeepCwDecoder(
+          decoder,
+          transcripts);
+
+      var rawA = new List<string>();
+      var rawB = new List<string>();
+      var stopwatch =
+        Stopwatch.StartNew();
+      int windowSamples =
+        (int)Math.Round(
+          windowSeconds * SampleRate);
+
+      for (double endSeconds = windowSeconds;
+           endSeconds <= totalSeconds + 1e-9;
+           endSeconds += hopSeconds)
+      {
+        int endSample =
+          (int)Math.Round(
+            endSeconds * SampleRate);
+        int startSample =
+          endSample - windowSamples;
+
+        CwContinuousDecodeBatch batch =
+          continuous.Decode(
+            audio.AsSpan(
+              startSample,
+              windowSamples),
+            SampleRate,
+            origin.AddSeconds(endSeconds),
+            [trackA, trackB]);
+
+        DeepCwLaneResult a =
+          batch.LaneResults.Single(
+            x => x.AssociationHintId == 1001);
+        DeepCwLaneResult b =
+          batch.LaneResults.Single(
+            x => x.AssociationHintId == 2002);
+        rawA.Add(a.Text);
+        rawB.Add(b.Text);
+      }
+
+      stopwatch.Stop();
+
+      CwTranscriptSnapshot finalA =
+        continuous.Transcripts.Get(
+          trackA.Id,
+          trackA.AssociationHintId)
+        ?? throw new InvalidOperationException(
+          "Streaming transcript A missing.");
+      CwTranscriptSnapshot finalB =
+        continuous.Transcripts.Get(
+          trackB.Id,
+          trackB.AssociationHintId)
+        ?? throw new InvalidOperationException(
+          "Streaming transcript B missing.");
+
+      string naiveA =
+        string.Concat(rawA);
+      string naiveB =
+        string.Concat(rawB);
+      string stableA =
+        finalA.Text;
+      string stableB =
+        finalB.Text;
+
+      return new(
+        WindowSeconds:
+          windowSeconds,
+        HopSeconds:
+          hopSeconds,
+        WindowCount:
+          rawA.Count,
+        TruthA:
+          truthA,
+        RawWindowsA:
+          rawA.ToArray(),
+        NaiveConcatA:
+          naiveA,
+        NaiveConcatCerA:
+          CharacterErrorRate(
+            truthA,
+            naiveA),
+        StreamingA:
+          stableA,
+        StreamingCerA:
+          CharacterErrorRate(
+            truthA,
+            stableA),
+        StreamingWerA:
+          WordErrorRate(
+            truthA,
+            stableA),
+        CallsignA:
+          ContainsCallsign(
+            stableA,
+            "K1ABC"),
+        TruthB:
+          truthB,
+        RawWindowsB:
+          rawB.ToArray(),
+        NaiveConcatB:
+          naiveB,
+        NaiveConcatCerB:
+          CharacterErrorRate(
+            truthB,
+            naiveB),
+        StreamingB:
+          stableB,
+        StreamingCerB:
+          CharacterErrorRate(
+            truthB,
+            stableB),
+        StreamingWerB:
+          WordErrorRate(
+            truthB,
+            stableB),
+        CallsignB:
+          ContainsCallsign(
+            stableB,
+            "W9XYZ"),
+        ProcessingSeconds:
+          stopwatch.Elapsed.TotalSeconds,
+        RealTimeFactor:
+          stopwatch.Elapsed.TotalSeconds /
+          totalSeconds);
     }
 
     private static string RequiredEnvironment(
@@ -618,6 +900,29 @@ namespace VE3NEA.Dsp.Tests
           ['8'] = "---..",
           ['9'] = "----."
         };
+
+    private readonly record struct StreamingBenchmarkResult(
+      double WindowSeconds,
+      double HopSeconds,
+      int WindowCount,
+      string TruthA,
+      string[] RawWindowsA,
+      string NaiveConcatA,
+      double NaiveConcatCerA,
+      string StreamingA,
+      double StreamingCerA,
+      double StreamingWerA,
+      bool CallsignA,
+      string TruthB,
+      string[] RawWindowsB,
+      string NaiveConcatB,
+      double NaiveConcatCerB,
+      string StreamingB,
+      double StreamingCerB,
+      double StreamingWerB,
+      bool CallsignB,
+      double ProcessingSeconds,
+      double RealTimeFactor);
 
     private readonly record struct BenchmarkScenario(
       string Name,
