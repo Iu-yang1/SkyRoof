@@ -195,6 +195,13 @@ namespace SkyRoof.CW
       // product limit is tiny (normally <=8 tracks and <=16 detector peaks).
       int[] assignments = SolveGlobalAssignment(
         tracks, clean, utc);
+
+      // Measurement geometry can reveal a finite-resolution encounter before
+      // the filtered posterior means have converged. Capture the labelled
+      // pre-merge state *before* applying those close measurements.
+      RefreshMergeGroupsFromAssignments(
+        utc, assignments, clean);
+
       var usedPeaks = new HashSet<int>();
       var handledTracks = new HashSet<int>();
 
@@ -305,11 +312,6 @@ namespace SkyRoof.CW
         });
       }
 
-      // Refresh again from posterior states. This is essential when the
-      // current precision observation is the first evidence that two ridges
-      // have entered the finite-resolution merge region: the group must exist
-      // before the next scan can present a single merged peak.
-      RefreshMergeGroups(utc);
       MarkMergedOrAmbiguousTracks();
 
       return tracks
@@ -528,6 +530,85 @@ namespace SkyRoof.CW
       track.SnrDb = 0.35 * track.SnrDb + 0.65 * candidate.SnrDb;
     }
 
+    private void RefreshMergeGroupsFromAssignments(
+      DateTime utc,
+      IReadOnlyList<int> assignments,
+      IReadOnlyList<CwSignalCandidate> peaks)
+    {
+      for (int i = 0; i < tracks.Count; i++)
+      {
+        int pi = assignments[i];
+        if (pi < 0) continue;
+
+        for (int j = i + 1; j < tracks.Count; j++)
+        {
+          int pj = assignments[j];
+          if (pj < 0 || pi == pj) continue;
+
+          CwSignalCandidate a = peaks[pi];
+          CwSignalCandidate b = peaks[pj];
+          double separation =
+            Math.Abs(a.FrequencyHz - b.FrequencyHz);
+          double measurementOverlap = 2.0 * Math.Sqrt(
+            MeasurementVariance(a) +
+            MeasurementVariance(b));
+          double threshold =
+            MergeResolutionHz +
+            Math.Min(MergeResolutionHz, measurementOverlap);
+
+          if (separation > threshold)
+            continue;
+
+          int groupId;
+          if (tracks[i].MergeGroupId != 0 &&
+              tracks[j].MergeGroupId != 0)
+            groupId = Math.Min(
+              tracks[i].MergeGroupId,
+              tracks[j].MergeGroupId);
+          else
+            groupId = tracks[i].MergeGroupId != 0
+              ? tracks[i].MergeGroupId
+              : tracks[j].MergeGroupId != 0
+                ? tracks[j].MergeGroupId
+                : nextMergeGroupId++;
+
+          AssignToMergeGroup(
+            tracks[i], groupId, utc);
+          AssignToMergeGroup(
+            tracks[j], groupId, utc);
+
+          // If two existing components just joined, normalize every member to
+          // the surviving label so a 3+ station cluster has one MergeGroupId.
+          foreach (State track in tracks)
+          {
+            if (track.MergeGroupId == tracks[i].MergeGroupId ||
+                track.MergeGroupId == tracks[j].MergeGroupId)
+              track.MergeGroupId = groupId;
+          }
+        }
+      }
+    }
+
+    private void AssignToMergeGroup(
+      State track,
+      int groupId,
+      DateTime utc)
+    {
+      if (track.MergeGroupId == 0)
+      {
+        track.MergeEntryFrequencyHz =
+          track.FrequencyHz;
+        track.MergeEntryDriftHzPerSecond =
+          track.DriftHzPerSecond;
+        track.MergeEntryUtc = utc;
+      }
+
+      track.MergeGroupId = groupId;
+      track.Ambiguous = true;
+      track.IdentityAnchorUntilUtc =
+        utc + FixedLagIdentityTime;
+    }
+
     private void RefreshMergeGroups(DateTime utc)
     {
       if (tracks.Count < 2) return;
@@ -592,18 +673,8 @@ namespace SkyRoof.CW
           inAnyGroup[index] = true;
           track.Ambiguous = true;
 
-          if (track.MergeGroupId == 0)
-          {
-            track.MergeEntryFrequencyHz =
-              track.FrequencyHz;
-            track.MergeEntryDriftHzPerSecond =
-              track.DriftHzPerSecond;
-            track.MergeEntryUtc = utc;
-          }
-
-          track.MergeGroupId = groupId;
-          track.IdentityAnchorUntilUtc =
-            utc + FixedLagIdentityTime;
+          AssignToMergeGroup(
+            track, groupId, utc);
         }
       }
 
