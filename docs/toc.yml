@@ -1,8 +1,12 @@
 pdf: false
-name: SkyRoof Wehsite
+name: SkyRoof Website
 items:
     - name: Download
       href: download.md
+    - name: Fork Extensions — English
+      href: fork-guide/
+    - name: Fork 扩展功能 — 简体中文
+      href: zh-cn/fork-guide/
     - name: User's Guide
       href: users_guide/
     - name: Credits

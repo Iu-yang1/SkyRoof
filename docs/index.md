@@ -56,6 +56,24 @@ The main features of SkyRoof are:
 
 The program can work without an SDR, or even without any radio at all, but many useful functions are not available in this mode.
 
+## Fork extensions · Fork 扩展文档
+
+This site includes the original SkyRoof user guide and the additional features
+implemented in the **[Iu-yang1/SkyRoof](https://github.com/Iu-yang1/SkyRoof)** fork,
+based on upstream v1.55. The fork-specific material covers custom orbit sources,
+JPL Moon/Sun/Venus targets, persisted Base frequencies, editable transmitters,
+SkyCAT/RS-BA1, IC-9700 scope, rotator PARK routes, themes, AF/RF gain and
+reliability improvements.
+
+- **[English: Fork Extensions guide](fork-guide/overview.md)**
+- **[简体中文：Fork 扩展功能手册](zh-cn/fork-guide/overview.md)**
+- [Fork download/build information](https://github.com/Iu-yang1/SkyRoof/actions)
+- [GitHub Pages deployment status](https://github.com/Iu-yang1/SkyRoof/deployments)
+
+> The upstream installer and documentation may not include these fork-only
+> additions. Direct IC-9700 authenticated LAN control is experimental; the
+> RS-BA1 passive spectrum source and SkyCAT CAT integration are separate.
+
 ## See Also
 
 - [System Requirements](users_guide/system_requirements.md)

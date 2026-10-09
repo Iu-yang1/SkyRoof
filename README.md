@@ -2,7 +2,11 @@
 
 Please see:
 
-- [SkyRoof Website](https://ve3nea.github.io/SkyRoof)
+- [SkyRoof upstream Website](https://ve3nea.github.io/SkyRoof)
+- [SkyRoof fork documentation (GitHub Pages)](https://iu-yang1.github.io/SkyRoof/)
+- [Fork extensions — English](https://iu-yang1.github.io/SkyRoof/fork-guide/overview.html)
+- [Fork 扩展功能 — 简体中文](https://iu-yang1.github.io/SkyRoof/zh-cn/fork-guide/overview.html)
+- [Docs deployments](https://github.com/Iu-yang1/SkyRoof/deployments)
 - [SkyRoof Discussion Group](https://groups.google.com/g/skyroof)
 
 <center><br><br>
@@ -10,6 +14,17 @@ Please see:
 ![SkyRoof](docs/images/skyroof_icon.png)
 
 </center>
+
+## Fork extensions
+
+This fork is based on upstream v1.55 and adds custom orbit sources and JPL
+ephemerides, persistent Base corrections and editable satellite transmitters,
+extended SkyCAT/RS-BA1 and IC-9700 spectrum integration, feedback-verified
+multi-waypoint rotator PARK, theme variants and Windows audio/RF-gain controls.
+
+See the bilingual [fork documentation](https://iu-yang1.github.io/SkyRoof/);
+the original upstream website does not necessarily document or ship these features.
+The IC-9700 independent Direct LAN scope source remains experimental.
 
 ## Building The Solution
 

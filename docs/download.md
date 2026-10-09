@@ -1,5 +1,18 @@
 # Download
 
+## Which build do I need?
+
+For the **Iu-yang1/SkyRoof fork extensions** described in the
+[English](fork-guide/overview.md) and
+[Chinese](zh-cn/fork-guide/overview.md) guides, use the
+[SkyRoof fork GitHub Actions](https://github.com/Iu-yang1/SkyRoof/actions)
+or [fork Releases](https://github.com/Iu-yang1/SkyRoof/releases) when available.
+A successful Compile Check may provide an **unsigned test installer**; it is not
+the signed upstream v1.55 installer. See
+[docs deployment status](https://github.com/Iu-yang1/SkyRoof/deployments).
+
+The section below lists the **upstream VE3NEA releases**, not fork-specific builds.
+
 <br>
 
 ### Current Version

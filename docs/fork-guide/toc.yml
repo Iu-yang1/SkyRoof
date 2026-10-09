@@ -1,0 +1,14 @@
+name: Fork Extensions (English)
+items:
+  - name: Overview and installation
+    href: overview.md
+  - name: Satellite data and tuning
+    href: satellite-data-and-tuning.md
+  - name: CAT, FT4 and radio integration
+    href: radio-and-ft4.md
+  - name: IC-9700 spectrum
+    href: spectrum.md
+  - name: Rotator, themes and operations
+    href: rotator-and-ui.md
+  - name: Troubleshooting and change history
+    href: troubleshooting-and-history.md

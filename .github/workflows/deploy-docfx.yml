@@ -5,7 +5,11 @@ on:
     branches: [ master ]
     paths:
       - 'docs/**'
+      - '.github/workflows/deploy-docfx.yml'
+  workflow_dispatch:
 
+# The legacy gh-pages publishing action requires write access to contents.
+# A named job environment creates a real GitHub Deployment with a site URL.
 permissions:
   contents: write
 
@@ -16,6 +20,9 @@ concurrency:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: https://iu-yang1.github.io/SkyRoof/
 
     steps:
       - name: Checkout repository
@@ -35,6 +42,9 @@ jobs:
       - name: Build PDF
         run: docfx pdf docs/docfx.json
 
+      # This step publishes the built DocFX HTML to the already configured
+      # gh-pages branch. The job's github-pages environment records a
+      # visible deployment and public site URL in the repository sidebar.
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
         with:
