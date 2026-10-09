@@ -168,7 +168,8 @@ namespace VE3NEA.Dsp.Tests
       var merged = tracker.Update(T0.AddSeconds(2),
         [new(800, 13)]);
       merged.Should().HaveCount(2);
-      merged.Should().OnlyContain(x => x.Active && x.Ambiguous);
+      merged.Should().OnlyContain(x => x.Ambiguous);
+      merged.Count(x => x.Active).Should().Be(1);
       merged.Select(x => x.MergeGroupId)
         .Distinct().Should().ContainSingle()
         .Which.Should().BeGreaterThan(0);
