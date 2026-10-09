@@ -293,6 +293,30 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void LaneExtractor_LongWindow_DoesNotOverflowOutputLength()
+    {
+      float[] audio =
+        new float[8 * SourceRate];
+      var extractor =
+        new CwLaneExtractor();
+
+      CwLaneSignal lane =
+        extractor.Extract(
+          audio,
+          SourceRate,
+          Track(9, 800, 12),
+          outputSampleRate: 9600,
+          targetCenterHz: 800);
+
+      lane.Audio.Should()
+        .HaveCount(8 * 9600);
+      lane.Envelope.Should()
+        .HaveCount(8 * 9600);
+      lane.SampleRate.Should()
+        .Be(9600);
+    }
+
+    [Fact]
     public void WindowedSincResampler_PreservesLowFrequencyTone()
     {
       float[] input = MakeKeyedAudio(
