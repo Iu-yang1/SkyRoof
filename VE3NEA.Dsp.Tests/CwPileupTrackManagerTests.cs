@@ -173,7 +173,7 @@ namespace VE3NEA.Dsp.Tests
       tracker.Update(T0.AddMilliseconds(500),
         [new(712, 3), new(738, 24)]);
       var result = tracker.Update(T0.AddSeconds(1),
-        [new(724, 2), new(726, 26)]);
+        [new(720, 2), new(730, 26)]);
 
       result.Single(x => x.Id == lowId)
         .DriftHzPerSecond.Should().BeGreaterThan(0);
