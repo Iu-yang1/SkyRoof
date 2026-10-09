@@ -13,11 +13,20 @@ namespace SkyRoof
     private readonly Button CancelBtn = new();
 
     internal CustomTransmitterDefinition? Definition { get; private set; }
+    private readonly string? ExistingUuid;
+
+    private static string FormatMHz(long? hertz) =>
+      hertz.HasValue
+        ? (hertz.Value / 1_000_000M).ToString("0.000000", CultureInfo.InvariantCulture)
+        : "";
 
     internal CustomTransmitterDialog(
-      SatnogsDbSatellite satellite)
+      SatnogsDbSatellite satellite,
+      SatnogsDbTransmitter? existing = null)
     {
-      Text = $"New Transmitter — {satellite.name}";
+      Text = existing == null
+        ? $"New Transmitter — {satellite.name}"
+        : $"Edit Local Transmitter — {satellite.name}";
       FormBorderStyle = FormBorderStyle.FixedToolWindow;
       StartPosition = FormStartPosition.Manual;
       ShowInTaskbar = false;
@@ -31,7 +40,9 @@ namespace SkyRoof
         AutoSize = false,
         Location = new Point(12, 10),
         Size = new Size(332, 32),
-        Text = "Create a local transmitter. Leave either frequency blank when only one direction exists.",
+        Text = existing == null
+          ? "Create a local transmitter. Leave either frequency blank when only one direction exists."
+          : "Edit this local transmitter. Its UUID and saved corrections are preserved.",
         TextAlign = ContentAlignment.MiddleLeft
       };
       Controls.Add(info);
@@ -65,6 +76,7 @@ namespace SkyRoof
         {
           "FM",
           "FMN",
+          "FM_D",
           "USB",
           "LSB",
           "CW",
@@ -79,7 +91,20 @@ namespace SkyRoof
           "SSTV"
         });
       ModeBox.Text = "FM";
+      if (existing != null)
+      {
+        if (!existing.local_custom)
+          throw new ArgumentException("Only locally created transmitters can be edited.", nameof(existing));
+        NameBox.Text = existing.description;
+        DownlinkBox.Text = FormatMHz(existing.downlink_low);
+        UplinkBox.Text = FormatMHz(existing.uplink_low);
+        ModeBox.Text = string.IsNullOrWhiteSpace(existing.DownlinkMode)
+          ? existing.mode
+          : existing.DownlinkMode;
+      }
       Controls.Add(ModeBox);
+
+      ExistingUuid = existing?.uuid;
 
       var unitsHint = new Label
       {
@@ -186,6 +211,7 @@ namespace SkyRoof
       Definition =
         new CustomTransmitterDefinition
         {
+          uuid = ExistingUuid ?? $"local-{Guid.NewGuid():N}",
           description = name,
           downlink_hz = downlink,
           uplink_hz = uplink,
