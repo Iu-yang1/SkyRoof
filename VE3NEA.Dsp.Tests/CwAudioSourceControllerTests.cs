@@ -100,6 +100,38 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void Ingress_SameSourceDifferentDeviceStartsNewGeneration()
+    {
+      var ingress = new CwPcmIngress();
+      ingress.Configure(
+        true,
+        CwReceiveAudioSource.WasapiCapture,
+        "capture-A");
+
+      float[] first = new float[4800];
+      ingress.Append(
+        CwReceiveAudioSource.WasapiCapture,
+        first,
+        first.Length,
+        T0);
+
+      long generation =
+        ingress.TimelineGeneration;
+
+      ingress.Configure(
+        true,
+        CwReceiveAudioSource.WasapiCapture,
+        "capture-B");
+
+      ingress.TimelineGeneration
+        .Should().Be(generation + 1);
+      ingress.AcceptedSamples.Should().Be(0);
+      ingress.FrontEnd.Audio.TotalSamplesWritten
+        .Should().Be(0);
+      ingress.SourceIdentity.Should().Be("capture-B");
+    }
+
+    [Fact]
     public void Ingress_BackwardUtcResetsTimelineAndKeepsNewBlock()
     {
       var ingress = new CwPcmIngress();
