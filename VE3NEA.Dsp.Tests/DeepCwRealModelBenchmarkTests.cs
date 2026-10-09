@@ -72,8 +72,8 @@ namespace VE3NEA.Dsp.Tests
       var results = new List<BenchmarkResult>();
       foreach (BenchmarkScenario scenario in scenarios)
       {
-        const string truthA = "CQ DE K1ABC K1ABC";
-        const string truthB = "CQ DE W9XYZ W9XYZ";
+        const string truthA = "CQ DE K1ABC";
+        const string truthB = "CQ DE W9XYZ";
 
         GeneratedMix mix = GenerateMix(
           scenario,
@@ -219,7 +219,7 @@ namespace VE3NEA.Dsp.Tests
       double endB =
         scenario.CenterFrequencyHz +
         scenario.SeparationHz / 2.0;
-      double ampA = 0.30;
+      double ampA = 0.12;
       double ampB = ampA *
         Math.Pow(10, scenario.PowerDeltaDb / 20.0);
 
@@ -248,12 +248,23 @@ namespace VE3NEA.Dsp.Tests
       var random = new Random(
         StableHash(scenario.Name));
       float[] mix = new float[count];
+      float peak = 0;
       for (int i = 0; i < count; i++)
       {
         double gaussian =
           NextGaussian(random);
         mix[i] = laneA[i] + laneB[i] +
           (float)(gaussian * fullBandNoiseRms);
+        peak = Math.Max(peak, Math.Abs(mix[i]));
+      }
+
+      // DeepCW's WAV reference path maps PCM to roughly [-1, 1]. Normalize
+      // only when needed; this preserves all relative powers and SNRs.
+      if (peak > 0.92f)
+      {
+        float scale = 0.92f / peak;
+        for (int i = 0; i < mix.Length; i++)
+          mix[i] *= scale;
       }
 
       return new(
