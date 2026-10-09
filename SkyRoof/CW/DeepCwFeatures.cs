@@ -163,7 +163,10 @@ namespace SkyRoof.CW
 
       float[] data =
         new float[checked(FrameCount * metadata.FrequencyBins)];
-      double sigma = maskSigmaHz;
+      double targetSigma = Math.Clamp(
+        Math.Sqrt(maskSigmaHz * maskSigmaHz +
+                  4 * target.FrequencySigmaHz * target.FrequencySigmaHz),
+        8, bandwidthHz / 2.0);
       double half = bandwidthHz / 2.0;
       double duration = DurationSeconds;
 
@@ -196,15 +199,20 @@ namespace SkyRoof.CW
           }
 
           double targetWeight = GaussianWeight(
-            sourceHz - targetRidgeHz, sigma);
+            sourceHz - targetRidgeHz, targetSigma);
           double denominator = maskFloor;
           foreach (CwSignalTrack competitor in allTracks)
           {
             if (!competitor.Confirmed) continue;
             double competitorRidge = competitor.FrequencyHz +
               competitor.DriftHzPerSecond * relativeToEnd;
+            double competitorSigma = Math.Clamp(
+              Math.Sqrt(maskSigmaHz * maskSigmaHz +
+                        4 * competitor.FrequencySigmaHz *
+                        competitor.FrequencySigmaHz),
+              8, bandwidthHz / 2.0);
             denominator += GaussianWeight(
-              sourceHz - competitorRidge, sigma);
+              sourceHz - competitorRidge, competitorSigma);
           }
 
           double mask = targetWeight / Math.Max(denominator, 1e-12);
