@@ -161,7 +161,7 @@ namespace VE3NEA.Dsp.Tests
 
       double a = MeanBin(wideTensor, center);
       double b = MeanBin(reference, center);
-      Math.Abs(a - b) / Math.Max(b, 1e-9)
+      (Math.Abs(a - b) / Math.Max(b, 1e-9))
         .Should().BeLessThan(0.18);
     }
 
@@ -200,9 +200,9 @@ namespace VE3NEA.Dsp.Tests
         ridge, 0.015, 0.06);
 
       p.Skip(26).Take(10).Average()
-        .Should().BeGreaterThan(0.75);
+        .Should().BeGreaterThan(0.75f);
       p.TakeLast(8).Average()
-        .Should().BeLessThan(0.25);
+        .Should().BeLessThan(0.25f);
     }
 
     [Fact]
