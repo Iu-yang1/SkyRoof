@@ -360,7 +360,7 @@ namespace VE3NEA.Dsp.Tests
         PrecisionMinimumSnrDb = 4,
         PeakDeduplicationHz = 2.5,
         MaxPeaksPerFrame = 12,
-        MinimumPortionFrames = 3,
+        MinimumPortionFrames = 4,
         MaximumPortionGapFrames = 1,
         MaxRidgeSlopeHzPerSecond = 80,
         PrecisionAssociationGateHz = 28
