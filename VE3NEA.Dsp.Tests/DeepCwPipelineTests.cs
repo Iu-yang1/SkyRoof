@@ -99,6 +99,40 @@ namespace VE3NEA.Dsp.Tests
         .BeGreaterThan(MeanBin(emptyLane, center) * 3);
     }
 
+
+    [Fact]
+    public void RidgeSoftMask_SuppressesStrongerNeighborInWeakLane()
+    {
+      DeepCwModelMetadata metadata =
+        DeepCwModelMetadata.Parse(MetadataJson);
+      float[] audio = MakeKeyedAudio(
+        6.0,
+        (700, 0.40f, 0.14, 0.50),
+        (740, 0.15f, 0.17, 0.47));
+
+      DeepCwFeatureWindow features =
+        DeepCwFeatureWindow.Create(audio, SourceRate, metadata);
+      CwSignalTrack strong = Track(1, 700, 18);
+      CwSignalTrack weak = Track(2, 740, 7);
+      CwSignalTrack[] tracks = [strong, weak];
+
+      DeepCwTensor weakLane = features.BuildSeparatedLaneTensor(
+        weak, tracks, bandwidthHz: 180, targetCenterHz: 800,
+        maskFloor: 0.05, maskSigmaHz: 24);
+
+      double binHz = metadata.SampleRate /
+        (double)metadata.FftLength;
+      int center = (int)Math.Round(
+        (800 - metadata.MinFrequencyHz) / binHz);
+      int strongLeakBin = center -
+        (int)Math.Round((740 - 700) / binHz);
+
+      // Despite the neighboring carrier being ~8.5 dB stronger, the weak
+      // lane's translated ridge should dominate its own separated tensor.
+      MeanBin(weakLane, center).Should()
+        .BeGreaterThan(MeanBin(weakLane, strongLeakBin));
+    }
+
     [Fact]
     public void WindowedSincResampler_PreservesLowFrequencyTone()
     {
