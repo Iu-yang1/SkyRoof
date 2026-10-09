@@ -18,6 +18,9 @@ namespace SkyRoof
   public class RotatorControlEngine : ControlEngine
   {
     public volatile Bearing? RequestedBearing, LastReadBearing, LastWrittenBearing;
+    private long LastSuccessfulBearingReadTicks;
+    public DateTime LastSuccessfulBearingReadUtc =>
+      new DateTime(Interlocked.Read(ref LastSuccessfulBearingReadTicks), DateTimeKind.Utc);
     private volatile bool stopRequested = false;
     private volatile bool stopNotSupported = false;
 
@@ -34,6 +37,7 @@ namespace SkyRoof
       // and the last accepted target are no longer known; resend any pending target.
       LastReadBearing = null;
       LastWrittenBearing = null;
+      Interlocked.Exchange(ref LastSuccessfulBearingReadTicks, 0);
       return true;
     }
 
@@ -137,6 +141,9 @@ namespace SkyRoof
         azimuth * Math.PI / 180.0,
         elevation * Math.PI / 180.0);
 
+      // Every successful 'p' reply is a fresh observation, including when
+      // the antenna is stationary. PARK uses this for two-sample arrival.
+      Interlocked.Exchange(ref LastSuccessfulBearingReadTicks, DateTime.UtcNow.Ticks);
       if (bearing == LastReadBearing) return;
 
       LastReadBearing = bearing;

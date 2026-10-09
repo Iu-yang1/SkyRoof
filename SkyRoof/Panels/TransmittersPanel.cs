@@ -15,6 +15,8 @@ namespace SkyRoof
     private readonly ContextMenuStrip TransmitterMenu = new();
     private readonly ToolStripMenuItem DeleteTransmitterMNU =
       new("Delete Transmitter");
+    private readonly ToolStripMenuItem EditTransmitterMNU =
+      new("Edit Transmitter...");
     private SatnogsDbTransmitter? ContextTransmitter;
 
     public TransmittersPanel()
@@ -142,11 +144,14 @@ namespace SkyRoof
 
       DeleteTransmitterMNU.Click += (_, _) =>
         DeleteSelectedLocalTransmitter();
+      EditTransmitterMNU.Click += (_, _) =>
+        EditSelectedLocalTransmitter();
 
       TransmitterMenu.Items.AddRange(
         [
           add,
           new ToolStripSeparator(),
+          EditTransmitterMNU,
           DeleteTransmitterMNU
         ]);
       TransmitterMenu.Opening += (_, _) =>
@@ -178,6 +183,9 @@ namespace SkyRoof
       SatnogsDbTransmitter? tx =
         GetSelectedLocalTransmitter();
 
+      EditTransmitterMNU.Enabled = tx != null;
+      EditTransmitterMNU.Text =
+        tx == null ? "Edit Transmitter..." : $"Edit {tx.description}...";
       DeleteTransmitterMNU.Enabled =
         tx != null;
       DeleteTransmitterMNU.Text =
@@ -191,6 +199,62 @@ namespace SkyRoof
       return ContextTransmitter?.local_custom == true
         ? ContextTransmitter
         : null;
+    }
+
+    private void EditSelectedLocalTransmitter()
+    {
+      if (Satellite == null)
+        return;
+
+      SatnogsDbTransmitter? tx = GetSelectedLocalTransmitter();
+      if (tx == null)
+        return;
+
+      using var dialog = new CustomTransmitterDialog(Satellite, tx);
+      if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Definition == null)
+        return;
+
+      try
+      {
+        string previousMode = string.IsNullOrWhiteSpace(tx.DownlinkMode)
+          ? tx.mode : tx.DownlinkMode;
+        ctx.SatnogsDb.UpdateCustomTransmitter(Satellite, tx, dialog.Definition);
+
+        // Existing user customizations are keyed by stable UUID and may
+        // contain a mode chosen when this local transmitter was first added.
+        // When its authored mode changes, refresh both radio modes without
+        // discarding base offsets, CTCSS or other per-transmitter settings.
+        if (!string.Equals(previousMode, dialog.Definition.mode,
+            StringComparison.OrdinalIgnoreCase) &&
+            ctx.Settings.Satellites.TransmitterCustomizations.TryGetValue(
+              tx.uuid, out TransmitterCustomization? customization))
+        {
+          var mode = ModeMnemonic.ToSlicerMode(
+            null, dialog.Definition.mode, invert: false);
+          customization.DownlinkMode = mode;
+          customization.UplinkMode = mode;
+        }
+
+        ContextTransmitter = null;
+        ctx.SatelliteSelector.RefreshTransmitters(tx.uuid);
+        CreateTransmitterItems();
+        foreach (ListViewItem item in listView1.Items)
+          if (item.Tag is SatnogsDbTransmitter row && row.uuid == tx.uuid)
+          {
+            item.Selected = true;
+            item.Focused = true;
+            item.EnsureVisible();
+            break;
+          }
+        ctx.Settings.SaveToFile();
+      }
+      catch (Exception ex)
+      {
+        Log.Error(ex, "Unable to edit local transmitter.");
+        MessageBox.Show(this,
+          $"Unable to edit the transmitter.\n\n{ex.Message}",
+          "Edit Local Transmitter", MessageBoxButtons.OK, MessageBoxIcon.Error);
+      }
     }
 
     private void DeleteSelectedLocalTransmitter()

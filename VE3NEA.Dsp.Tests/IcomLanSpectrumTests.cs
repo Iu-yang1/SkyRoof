@@ -8,6 +8,38 @@ namespace VE3NEA.Dsp.Tests
   public class IcomLanSpectrumTests
   {
     [Fact]
+    public void CenterMarkerFollowsScopeGeometryRatherThanStaleCatFrequency()
+    {
+      var center = new IcomScopeFrame {
+        Mode = (byte)IcomScopeMode.Center,
+        FrequencyAHz = 436217020,
+        FrequencyBHz = 25000
+      };
+      IcomLanSpectrumView.ResolveMarkerRawFrequency(
+        center.Geometry, 436200000, 0).Should().Be(436217020);
+
+      var scroll = new IcomScopeFrame {
+        Mode = (byte)IcomScopeMode.ScrollCenter,
+        FrequencyAHz = 436200000,
+        FrequencyBHz = 436225000
+      };
+      IcomLanSpectrumView.ResolveMarkerRawFrequency(
+        scroll.Geometry, 436212000, 0).Should().Be(436212500);
+    }
+
+    [Fact]
+    public void FixedMarkerTracksCorrectedReceiverFrequency()
+    {
+      var frame = new IcomScopeFrame {
+        Mode = (byte)IcomScopeMode.Fixed,
+        FrequencyAHz = 435000000,
+        FrequencyBHz = 437000000
+      };
+      IcomLanSpectrumView.ResolveMarkerRawFrequency(
+        frame.Geometry, 436210000, 1000).Should().Be(436209000);
+    }
+
+    [Fact]
     public void DirectLanPasscode_UsesIcomCredentialSubstitution()
     {
       byte[] encoded = IcomLanDirectSession.EncodePasscode("abc");

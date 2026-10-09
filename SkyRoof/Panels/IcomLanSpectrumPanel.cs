@@ -59,6 +59,10 @@ namespace SkyRoof
     private int PendingEdgeSyncScope = -1;
     private bool ScopeReadbackCompletedForSession;
     private bool ScopeReadbackRequestedForSession;
+    private DateTime LastScopeReadbackRequestUtc = DateTime.MinValue;
+    private int ScopeReadbackAttempts;
+    private const int MaxInitialScopeReadbackAttempts = 3;
+    private static readonly TimeSpan ScopeReadbackRetryDelay = TimeSpan.FromSeconds(8);
     private bool PendingControlSettingsApply;
     private string LastDiagnosticsText = "Spectrum diagnostics are not available while capture is stopped.";
     private IcomScopeReadbackState? LastScopeReadback;
@@ -1049,6 +1053,8 @@ namespace SkyRoof
       LastStatsUsedNativeLan = false;
       ScopeReadbackCompletedForSession = false;
       ScopeReadbackRequestedForSession = false;
+      ScopeReadbackAttempts = 0;
+      LastScopeReadbackRequestUtc = DateTime.MinValue;
       PendingControlSettingsApply = false;
       LastScopeReadback = null;
       LastScopeReadbackUtc = null;
@@ -1113,6 +1119,8 @@ namespace SkyRoof
       PendingEdgeSyncScope = -1;
       ScopeReadbackCompletedForSession = false;
       ScopeReadbackRequestedForSession = false;
+      ScopeReadbackAttempts = 0;
+      LastScopeReadbackRequestUtc = DateTime.MinValue;
       PendingControlSettingsApply = false;
       LastScopeReadback = null;
       LastScopeReadbackUtc = null;
@@ -1479,10 +1487,12 @@ namespace SkyRoof
     {
       bool skyCatWritable =
         CanUseSkyCatScopeControl();
+      // Explicit operator changes may go to an available SkyCAT backend
+      // before SCOPE_READ succeeds. Saved defaults are still synchronized
+      // only after a successful initial readback.
       bool writeReady =
         !LocalHold &&
-        skyCatWritable &&
-        ScopeReadbackCompletedForSession;
+        skyCatWritable;
 
       // MAIN/SUB remains usable as a local display selector in read-only mode,
       // but do not let it send SCOPE_SELECT until the initial radio readback
@@ -1490,10 +1500,7 @@ namespace SkyRoof
       bool skyCatConfigured =
         IsSkyCatScopeControlConfigured();
 
-      ScopeBandBox.Enabled =
-        !LocalHold &&
-        (!skyCatConfigured ||
-         ScopeReadbackCompletedForSession);
+      ScopeBandBox.Enabled = !LocalHold;
 
       bool enabled =
         writeReady &&
@@ -1524,9 +1531,17 @@ namespace SkyRoof
     {
       if (LocalHold ||
           ScopeReadbackCompletedForSession ||
-          ScopeReadbackRequestedForSession ||
-          !CanUseSkyCatScopeControl())
+          !CanUseSkyCatScopeControl() ||
+          ScopeReadbackAttempts >= MaxInitialScopeReadbackAttempts)
         return;
+
+      if (ScopeReadbackRequestedForSession)
+      {
+        if (DateTime.UtcNow - LastScopeReadbackRequestUtc <
+            ScopeReadbackRetryDelay)
+          return;
+        ScopeReadbackRequestedForSession = false;
+      }
 
       RequestScopeReadback();
       UpdateScopeControlAvailability();
@@ -1541,8 +1556,9 @@ namespace SkyRoof
       if (ctx.CatControl
           .RequestIcomScopeReadback())
       {
-        ScopeReadbackRequestedForSession =
-          true;
+        ScopeReadbackRequestedForSession = true;
+        LastScopeReadbackRequestUtc = DateTime.UtcNow;
+        ScopeReadbackAttempts++;
         StatusLabel.Text =
           "Reading IC-9700 scope settings through SkyCAT…";
       }
@@ -1588,6 +1604,8 @@ namespace SkyRoof
 
       ScopeReadbackCompletedForSession =
         true;
+      ScopeReadbackRequestedForSession = true;
+      ScopeReadbackAttempts = 0;
 
       byte activeScope;
       if (!TryGetControlScope(
@@ -2151,6 +2169,8 @@ namespace SkyRoof
           false;
         ScopeReadbackRequestedForSession =
           false;
+        ScopeReadbackAttempts = 0;
+        LastScopeReadbackRequestUtc = DateTime.MinValue;
         LastScopeReadback = null;
         LastScopeReadbackUtc = null;
         PendingEdgeSyncScope = -1;
@@ -2163,8 +2183,8 @@ namespace SkyRoof
           IsSkyCatScopeControlConfigured() &&
           scopeBackend != null)
       {
-        RequestScopeOutputIfDue(
-          force: true);
+        // Do not flood SCOPE_DATA every 500 ms while readback is missing.
+        RequestScopeOutputIfDue(force: false);
         RequestInitialScopeReadbackIfNeeded();
       }
 
@@ -2274,7 +2294,9 @@ namespace SkyRoof
             ? " (backend offline)"
             : resolvedControlPath == IcomScopeControlPath.SkyCat &&
               !ScopeReadbackCompletedForSession
-              ? " (waiting sync)"
+              ? ScopeReadbackAttempts >= MaxInitialScopeReadbackAttempts
+                ? " (sync failed; manual controls available)"
+                : " (waiting sync; manual controls available)"
               : "";
 
       StatsLabel.Text =

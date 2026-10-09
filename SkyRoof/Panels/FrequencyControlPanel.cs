@@ -531,6 +531,30 @@ namespace SkyRoof
     {
       if (ctx == null) return;
 
+      RadioLink link = ctx.FrequencyControl.RadioLink;
+      if (link.IsTerrestrial ||
+          (uplink ? !link.HasUplink : !link.HasDownlink))
+        return;
+
+      string direction = uplink ? "uplink" : "downlink";
+      double current = uplink
+        ? link.BaseUplinkFrequency
+        : link.BaseDownlinkFrequency;
+      double reference = uplink
+        ? link.DatabaseUplinkBaseFrequency
+        : link.DatabaseDownlinkBaseFrequency;
+
+      if (MessageBox.Show(
+          this,
+          $"Reset {direction} Base to the downloaded transmitter database value?\n\n" +
+          $"Current: {current:N0} Hz\nDatabase: {reference:N0} Hz\n\n" +
+          "The saved manual Base correction for this direction will be discarded.",
+          "Confirm Reset to Database",
+          MessageBoxButtons.YesNo,
+          MessageBoxIcon.Warning,
+          MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+        return;
+
       if (uplink)
         ctx.FrequencyControl.ResetUplinkBaseFrequency();
       else

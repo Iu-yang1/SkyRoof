@@ -11,6 +11,12 @@ namespace SkyRoof
     private AzElEntryDialog Dialog = new();
     private OptimizedRotationPath? Path;
     private Bearing? SatBearing;
+    private RotatorParkSequence? ParkSequence;
+
+    internal bool IsParking => ParkSequence != null;
+    internal string ParkProgressText => ParkSequence == null
+      ? "PARK"
+      : $"PARK {ParkSequence.Index + 1}/{ParkSequence.Count}";
 
     // set while auto-selection programmatically engages tracking for a specific pass, so the checkbox
     // handler keeps that exact pass instead of rebuilding the path from GetNextPass
@@ -67,6 +73,7 @@ namespace SkyRoof
     {
       if (sat == Path?.Satellite) return;
 
+      CancelParkSequence(stopMotor: false);
       engine?.StopRotation();
 
       if (sat == null)
@@ -102,6 +109,7 @@ namespace SkyRoof
 
     internal void Advance()
     {
+      AdvanceParkSequence();
       if (Path == null) return;
 
       SatBearing = Path.GetSatelliteBearing()?.Normalize();
@@ -154,6 +162,8 @@ namespace SkyRoof
     {
       if (engine == null || bearing == null) return;
 
+      // Satellite tracking or other commands supersede an active PARK route.
+      CancelParkSequence(stopMotor: false);
       var sanitizedBearing = Sanitize(bearing);
       engine.RotateTo(sanitizedBearing);
     }
@@ -164,6 +174,7 @@ namespace SkyRoof
     public void TrackPass(SatellitePass? pass)
     {
       if (engine == null || pass == null) return;
+      CancelParkSequence(stopMotor: true);
 
       Path = new(pass, ctx.Settings.Rotator, AntBearing);
       TrackCheckbox.Enabled = true;
@@ -182,6 +193,7 @@ namespace SkyRoof
 
     public void StopRotation()
     {
+      CancelParkSequence(stopMotor: false);
       TrackCheckbox.Checked = false;
       engine?.StopRotation();
     }
@@ -244,7 +256,7 @@ namespace SkyRoof
       // build on the last manual command so press-and-hold feels continuous
       // even while the physical rotator is still catching up.
       Bearing? basis =
-        TrackCheckbox.Checked
+        IsParking || TrackCheckbox.Checked
           ? GetManualActualBearing() ??
             GetManualTargetBearing()
           : GetManualTargetBearing() ??
@@ -259,11 +271,81 @@ namespace SkyRoof
 
     internal void ManualPark()
     {
-      if (IsManualControlLocked) return;
+      if (engine == null || !engine.IsRunning || IsManualControlLocked)
+        return;
 
-      ManualMoveToDegrees(
-        ctx.Settings.Rotator.ParkAzimuth,
-        ctx.Settings.Rotator.ParkElevation);
+      var actual = GetManualActualBearing();
+      if (actual == null ||
+          DateTime.UtcNow - engine.LastSuccessfulBearingReadUtc >
+            TimeSpan.FromSeconds(12))
+        return;
+
+      var settings = ctx.Settings.Rotator;
+      var waypoints = settings.ParkWaypoints?.Count > 0
+        ? settings.ParkWaypoints.Select(
+            w => ((double)w.Azimuth, (double)w.Elevation)).ToList()
+        : new List<(double, double)> {
+            (settings.ParkAzimuth, settings.ParkElevation) };
+
+      // Reject an invalid/out-of-range route rather than silently sending
+      // potentially dangerous substitute positions to physical hardware.
+      if (waypoints.Any(w =>
+          !double.IsFinite(w.Item1) || !double.IsFinite(w.Item2) ||
+          w.Item1 < settings.MinAzimuth ||
+          w.Item1 > settings.MaxAzimuth ||
+          w.Item2 < settings.MinElevation ||
+          w.Item2 > settings.MaxElevation))
+        return;
+
+      if (TrackCheckbox.Checked)
+        TrackCheckbox.Checked = false;
+
+      ParkSequence = new RotatorParkSequence(waypoints, DateTime.UtcNow);
+      IssueParkWaypoint();
+    }
+
+    private void CancelParkSequence(bool stopMotor)
+    {
+      if (ParkSequence == null)
+        return;
+      ParkSequence = null;
+      if (stopMotor)
+        engine?.StopRotation();
+    }
+
+    private void IssueParkWaypoint()
+    {
+      if (engine == null || ParkSequence == null)
+        return;
+      var target = ParkSequence.Current;
+      engine.RotateTo(Sanitize(new Bearing(
+        target.Az * Trig.RinD,
+        target.El * Trig.RinD)));
+    }
+
+    private void AdvanceParkSequence()
+    {
+      if (ParkSequence == null)
+        return;
+
+      RotatorParkSequence sequence = ParkSequence;
+      var actual = GetManualActualBearing();
+      DateTime readUtc = engine?.LastSuccessfulBearingReadUtc ?? DateTime.MinValue;
+
+      ParkSequenceProgress result = sequence.Observe(
+        DateTime.UtcNow,
+        readUtc,
+        actual?.AzDeg ?? double.NaN,
+        actual?.ElDeg ?? double.NaN,
+        engine?.IsRunning == true && !TrackCheckbox.Checked);
+
+      if (result == ParkSequenceProgress.NextWaypoint)
+        IssueParkWaypoint();
+      else if (result == ParkSequenceProgress.Completed ||
+               result == ParkSequenceProgress.Aborted)
+      {
+        CancelParkSequence(stopMotor: true);
+      }
     }
 
     internal static (
@@ -352,6 +434,7 @@ namespace SkyRoof
 
       if (TrackCheckbox.Checked)
       {
+        CancelParkSequence(stopMotor: true);
         // auto-selection already set the exact pass in TrackPass; only rebuild for a manual check
         if (!settingTrack && Path != null)
         {
@@ -446,6 +529,7 @@ namespace SkyRoof
 
     private void Engine_StatusChanged(object? sender, EventArgs e)
     {
+      AdvanceParkSequence();
       // ant bearing color
       BearingToUi();
 
@@ -454,6 +538,7 @@ namespace SkyRoof
 
     private void Engine_BearingChanged(object? sender, EventArgs e)
     {
+      AdvanceParkSequence();
       BearingToUi();
       ctx.SkyViewPanel?.Refresh();
     }

@@ -100,4 +100,48 @@ public sealed class RotatorManualControlTests
         Assert.Equal(123.4, target.AzimuthDeg, 6);
         Assert.Equal(56.7, target.ElevationDeg, 6);
     }
+
+    [Fact]
+    public void ParkEditorBoundsStayInsideOwnerMonitorWhenNearBottomRight()
+    {
+        Rectangle workingArea = new(1920, 0, 1920, 1040);
+        Rectangle window = new(3530, 920, 490, 345);
+
+        Rectangle actual = ParkPositionDialog.ClampToWorkingArea(
+            window, workingArea);
+
+        Assert.Equal(new Rectangle(3350, 695, 490, 345), actual);
+    }
+
+    [Fact]
+    public void ParkEditorClampSupportsNegativeMonitorCoordinates()
+    {
+        Rectangle workingArea = new(-1920, -1080, 1920, 1040);
+        Rectangle window = new(-2180, -1260, 490, 345);
+
+        Rectangle actual = ParkPositionDialog.ClampToWorkingArea(
+            window, workingArea);
+
+        Assert.Equal(new Rectangle(-1920, -1080, 490, 345), actual);
+    }
+
+    [Fact]
+    public void ParkEditorKeepsValidCenteredBoundsUnchanged()
+    {
+        Rectangle workingArea = new(0, 0, 1920, 1040);
+        Rectangle centered = new(715, 347, 490, 345);
+
+        Assert.Equal(centered,
+            ParkPositionDialog.ClampToWorkingArea(centered, workingArea));
+    }
+
+    [Fact]
+    public void ParkEditorShrinkFitsVerySmallWorkingArea()
+    {
+        Rectangle workingArea = new(0, 0, 400, 300);
+        Rectangle original = new(300, 250, 490, 345);
+
+        Assert.Equal(new Rectangle(0, 0, 400, 300),
+            ParkPositionDialog.ClampToWorkingArea(original, workingArea));
+    }
 }
