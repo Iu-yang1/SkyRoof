@@ -89,6 +89,9 @@ namespace SkyRoof
       ApplyAudioSettings();
       ctx.CwAudio = new CwAudioSourceController(ctx);
       ctx.CwAudio.ApplySettings();
+      ctx.CwReceiveWorker =
+        new CwReceiveWorker(ctx.CwAudio.Ingress);
+      ctx.CwReceiveWorker.Start();
       ApplyOutputStreamSettings();
       ApplyKissServerSettings();
       ctx.CatControl.ApplySettings();
@@ -160,8 +163,13 @@ namespace SkyRoof
 
       ThemeRenderer = null;
 
-      // Stop optional Windows capture/loopback readers before tearing down
-      // the shared SDR/audio devices they may be observing.
+      // Stop decode/tracking first: it owns background work over the
+      // ingress and may still hold an immutable ONNX snapshot.
+      ctx.CwReceiveWorker?.Dispose();
+      ctx.CwReceiveWorker = null;
+
+      // Then stop optional Windows capture/loopback readers before tearing
+      // down the shared SDR/audio devices they may be observing.
       ctx.CwAudio?.Dispose();
       ctx.CwAudio = null;
 
