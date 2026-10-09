@@ -56,6 +56,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Optional HamNoise CW denoise backend. CI/release builds this DLL from
+         the pinned upstream AGPL source via scripts/build-hamnoise.ps1.
+         Ordinary local managed builds remain valid when it is absent. -->
+    <None Include="..\Vendor\HamNoise\x64\hamnoise_skyroof.dll"
+          Link="hamnoise_skyroof.dll"
+          Condition="Exists('..\Vendor\HamNoise\x64\hamnoise_skyroof.dll')">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- WinDivert is downloaded from the official v2.2.2 release by the CI/installer
          workflow. Local source builds remain possible without it; the Icom LAN Spectrum
          panel reports a clear runtime error until these two x64 files are present. -->
