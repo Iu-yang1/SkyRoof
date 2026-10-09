@@ -5,7 +5,12 @@ using System.Linq;
 namespace SkyRoof.CW
 {
   /// <summary>A peak measured by a CW detector, in audio-frequency Hz.</summary>
-  public readonly record struct CwSignalCandidate(double FrequencyHz, double SnrDb);
+  public readonly record struct CwSignalCandidate(
+    double FrequencyHz,
+    double SnrDb,
+    double MeasurementSigmaHz = 0,
+    double ResolutionHz = 0,
+    double ActivityProbability = 1);
 
   /// <summary>
   /// Stable identity and observed state of one independently decodable CW lane.
@@ -61,7 +66,17 @@ namespace SkyRoof.CW
     private int nextId = 1;
 
     public int MaxTracks { get; }
-    public double MinimumSeparationHz { get; }
+    /// <summary>
+    /// Minimum separation used only when deciding whether an unexplained
+    /// candidate may create a new labelled track. It is not a detector peak
+    /// de-duplication threshold and not a statement of STFT resolution.
+    /// </summary>
+    public double TrackBirthGateHz { get; }
+
+    [Obsolete("Use TrackBirthGateHz; detector de-duplication is separate.")]
+    public double MinimumSeparationHz => TrackBirthGateHz;
+
+    public double CandidateDeduplicationHz { get; }
     public double MatchToleranceHz { get; }
     public TimeSpan ConfirmationDelay { get; }
     public TimeSpan HoldTime { get; }
@@ -80,13 +95,14 @@ namespace SkyRoof.CW
 
     public CwPileupTrackManager(
       int maxTracks = 8,
-      double minimumSeparationHz = 25,
+      double minimumSeparationHz = 8,
       double matchToleranceHz = 40,
       TimeSpan? confirmationDelay = null,
       TimeSpan? holdTime = null,
       double processAccelerationSigma = 8,
       double baseMeasurementSigmaHz = 3,
-      double mergeResolutionHz = 18)
+      double mergeResolutionHz = 18,
+      double candidateDeduplicationHz = 2)
     {
       if (maxTracks is < 1 or > 32)
         throw new ArgumentOutOfRangeException(nameof(maxTracks));
@@ -94,6 +110,9 @@ namespace SkyRoof.CW
         throw new ArgumentOutOfRangeException(nameof(minimumSeparationHz));
       if (!double.IsFinite(matchToleranceHz) || matchToleranceHz <= 0)
         throw new ArgumentOutOfRangeException(nameof(matchToleranceHz));
+      if (!double.IsFinite(candidateDeduplicationHz) ||
+          candidateDeduplicationHz <= 0)
+        throw new ArgumentOutOfRangeException(nameof(candidateDeduplicationHz));
       if (!double.IsFinite(processAccelerationSigma) || processAccelerationSigma <= 0)
         throw new ArgumentOutOfRangeException(nameof(processAccelerationSigma));
       if (!double.IsFinite(baseMeasurementSigmaHz) || baseMeasurementSigmaHz <= 0)
@@ -102,7 +121,8 @@ namespace SkyRoof.CW
         throw new ArgumentOutOfRangeException(nameof(mergeResolutionHz));
 
       MaxTracks = maxTracks;
-      MinimumSeparationHz = minimumSeparationHz;
+      TrackBirthGateHz = minimumSeparationHz;
+      CandidateDeduplicationHz = candidateDeduplicationHz;
       MatchToleranceHz = matchToleranceHz;
       ConfirmationDelay = confirmationDelay ?? TimeSpan.FromMilliseconds(400);
       HoldTime = holdTime ?? TimeSpan.FromSeconds(5);
@@ -136,7 +156,7 @@ namespace SkyRoof.CW
       previousUpdateUtc = utc;
       tracks.RemoveAll(t => utc - t.LastSeenUtc > HoldTime);
 
-      var clean = SuppressDuplicateCandidates(candidates);
+      var clean = PrepareCandidates(candidates);
 
       // Predict every live ridge to this scan before doing any association.
       foreach (State track in tracks)
@@ -176,8 +196,11 @@ namespace SkyRoof.CW
         if (tracks.Count >= MaxTracks) break;
 
         CwSignalCandidate peak = clean[j];
+        double birthGate = Math.Max(
+          TrackBirthGateHz,
+          peak.ResolutionHz > 0 ? peak.ResolutionHz * 0.5 : 0);
         if (tracks.Any(t =>
-          Math.Abs(t.FrequencyHz - peak.FrequencyHz) < MinimumSeparationHz))
+          Math.Abs(t.FrequencyHz - peak.FrequencyHz) < birthGate))
           continue;
 
         tracks.Add(new State
@@ -215,9 +238,12 @@ namespace SkyRoof.CW
         .ToArray();
     }
 
-    private List<CwSignalCandidate> SuppressDuplicateCandidates(
+    private List<CwSignalCandidate> PrepareCandidates(
       IEnumerable<CwSignalCandidate> candidates)
     {
+      // The detector owns spectral peak de-duplication. The tracker only
+      // removes effectively identical numerical duplicates so that a precise
+      // scanner may legitimately present two resolvable ridges 10–20 Hz apart.
       var clean = new List<CwSignalCandidate>();
       foreach (CwSignalCandidate candidate in candidates
         .Where(c => double.IsFinite(c.FrequencyHz) &&
@@ -228,10 +254,9 @@ namespace SkyRoof.CW
       {
         if (clean.All(c =>
           Math.Abs(c.FrequencyHz - candidate.FrequencyHz) >=
-          MinimumSeparationHz))
+          CandidateDeduplicationHz))
           clean.Add(candidate);
 
-        // Bound association complexity independently of detector settings.
         if (clean.Count >= 16) break;
       }
 
@@ -270,6 +295,16 @@ namespace SkyRoof.CW
       // High SNR approaches the FFT/interpolation floor; weak peaks receive a
       // wider likelihood so they are not discarded by an unrealistically
       // sharp gate. Clamp to keep pathological dB values harmless.
+      if (double.IsFinite(candidate.MeasurementSigmaHz) &&
+          candidate.MeasurementSigmaHz > 0)
+      {
+        double supplied = Math.Clamp(
+          candidate.MeasurementSigmaHz,
+          BaseMeasurementSigmaHz * 0.25,
+          MatchToleranceHz);
+        return supplied * supplied;
+      }
+
       double snrLinear = Math.Pow(
         10, Math.Clamp(candidate.SnrDb, -20, 60) / 10.0);
       double sigma = BaseMeasurementSigmaHz +
