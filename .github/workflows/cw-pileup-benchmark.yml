@@ -94,11 +94,15 @@ jobs:
 
       - name: Print benchmark metrics
         shell: powershell
-        run: Get-Content $env:DEEPCW_BENCHMARK_OUTPUT
+        run: |
+          Get-ChildItem artifacts -Filter "*.json" | ForEach-Object {
+            Write-Host "===== $($_.Name) ====="
+            Get-Content $_.FullName
+          }
 
       - name: Upload benchmark metrics
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cw-pileup-real-model-benchmark
-          path: artifacts/cw-pileup-benchmark.json
+          path: artifacts/*.json
           if-no-files-found: error
