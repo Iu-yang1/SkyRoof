@@ -445,9 +445,48 @@ namespace VE3NEA.Dsp.Tests
         .AssociationHintId.Should().Be(101);
       crossed.Single(x => x.Id == fallingId)
         .AssociationHintId.Should().Be(202);
-      crossed.Single(x => x.Id == risingId)
+
+      // The fixed-lag hint protects identity immediately, but a Kalman
+      // posterior is allowed to lag the geometric crossing for a frame or
+      // two. Subsequent correctly labelled measurements must pull the states
+      // through the crossing without exchanging IDs.
+      tracker.Update(
+        T0.AddMilliseconds(480),
+        [
+          new CwSignalCandidate(
+            830, 20,
+            MeasurementSigmaHz: 2,
+            ResolutionHz: 4,
+            AssociationHintId: 101),
+          new CwSignalCandidate(
+            770, 7,
+            MeasurementSigmaHz: 2,
+            ResolutionHz: 4,
+            AssociationHintId: 202)
+        ]);
+
+      var settled = tracker.Update(
+        T0.AddMilliseconds(600),
+        [
+          new CwSignalCandidate(
+            845, 18,
+            MeasurementSigmaHz: 2,
+            ResolutionHz: 4,
+            AssociationHintId: 101),
+          new CwSignalCandidate(
+            755, 9,
+            MeasurementSigmaHz: 2,
+            ResolutionHz: 4,
+            AssociationHintId: 202)
+        ]);
+
+      settled.Single(x => x.Id == risingId)
+        .AssociationHintId.Should().Be(101);
+      settled.Single(x => x.Id == fallingId)
+        .AssociationHintId.Should().Be(202);
+      settled.Single(x => x.Id == risingId)
         .FrequencyHz.Should().BeGreaterThan(
-          crossed.Single(x => x.Id == fallingId)
+          settled.Single(x => x.Id == fallingId)
             .FrequencyHz);
     }
 
