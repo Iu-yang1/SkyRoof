@@ -47,6 +47,8 @@ CW 算法变更除了普通单元测试，还必须运行专门的真实 `deepcw
 
 Frame-level Scanner 另外通过单元测试验证单调 sample-index 时间轴、Fast/Precision 分工、近频分辨、静默期间 coast 时间推进和 Doppler 去 chirp。连续 Transcript 还用真实 ONNX 的 40 Hz 双 Lane、6 秒窗/1 秒 hop 滑动基准同时记录 naive 字符串拼接 CER 与稳定 Transcript CER/WER，从而量化窗口去重和字符纠错的实际收益。下一层端到端 corpus benchmark 将继续统计 detection recall / false alarm、Frequency RMSE、ID switch、最终 CER/WER、呼号准确率和延迟。**Track ID 更稳定并不自动等于解码更好**：如果 fixed-lag 降低 ID switch 却明显增加 CER 或实时延迟，则不能作为默认配置直接验收。
 
+**PR #50 HamNoise 真实模型 A/B 结论（Wet=1，固定 HamNoise `1af3a77b...` / DeepCW `8e264d24...`）：** 当前 wideband soft-mask baseline 的平均 CER/WER 为 **0.2273 / 0.2381**，完整呼号 **18/28**，mean RTF **0.0618**。per-lane DDC 的 LaneDry 为 CER **0.4513**；Classic 改善到 **0.4221**，V2 改善到 **0.3669**，说明 HamNoise 对同一 per-lane 路径有净收益，但两者都无法弥补丢失 all-track soft mask 的损失，且 Lane V2 mean RTF **2.1088**，超过实时。把 HamNoise 改为 **tracker 之后、整个 decode snapshot 只执行一次，再保留原 soft mask** 后，Shared Classic 仍退化到 CER **0.3896** / 呼号 **8/28**；Shared V2 的 CER **0.2273** 与 baseline 持平且 mean RTF **0.4260** 仍可实时，但 WER 升到 **0.3214**、呼号降到 **15/28**，因此仍不进入 UI/Release。对这 14 个 synthetic case 做后验组合时，“最近邻 ≤10 Hz 才启用 Shared V2”可得到 CER **0.1981**、WER **0.2381**、呼号 **18/28**，但这只是研究候选，必须先用更密的间隔/功率差/Doppler 网格和录音 corpus 独立验证，不能据此自动启用。
+
 ## 完整工作流程表
 
 | 编号 | 模块 / 依赖 | 必须实现 | 验收 |
@@ -59,7 +61,7 @@ Frame-level Scanner 另外通过单元测试验证单调 sample-index 时间轴�
 | 05 | 多路隔离 | 每 Lane 50–300 Hz 带通、NCO 频移到 DeepCW 可识别音调 | 3–5 路可独立提取 |
 | 06 | 多路推理 + 连续转录 | ONNX Runtime + 元数据 STFT/log1p/CTC；OutputFrame 时间对齐；Committed/Provisional；AssociationHintId 归属 | 重叠窗口不重复；误字可在提交前纠正；重复字符不误合并；每 Lane 独立 |
 | 07 | 性能调度 | tracker 独立 120 ms cadence；DeepCW 6 s snapshot / 1 s hop；latest-only 单实例推理；默认最多 5 路 | ONNX 忙时跳过旧 hop 不排队；tracker 不被推理阻塞；状态统计 completed/skipped windows |
-| 08 | 降噪研究 | 固定 HamNoise revision 的 Classic/CW V2 native bridge、per-lane DDC 实验路径、LaneDry/Raw A/B | 专用 real-model benchmark 比较 CER/WER/Callsign/RTF；未证明优于现有 wideband soft-mask 前不进入 UI/Release |
+| 08 | 降噪研究 | 固定 HamNoise revision 的 Classic/CW V2 native bridge、per-lane DDC 与 shared decode-window 两种 placement、LaneDry/Raw A/B | 独立 HamNoise workflow 比较 CER/WER/Callsign/RTF；当前 Shared V2 仅 CER 持平、WER/呼号退化，因此不进入 UI/Release |
 | 09 | WinForms UI | RX-only DockContent：Start/Stop、三源选择、模型状态/安装、Pileup 表、selected committed/provisional transcript、worker 指标、独立 AF waterfall、lane overlay、±2σ uncertainty band | RX UI 不拥有 tracker/ONNX 资源；waterfall FFT 仅消费 PCM snapshot；关闭窗口不停止后台接收；TX 控件在安全 TX 阶段前不存在 |
 | 10 | SkyCAT CW | 受控 CW_SEND/CW_ABORT/CW_SPEED；IC-9700 CI-V 17 和 17 FF | 30 字符分包、异常、ACK、超时模拟测试 |
 | 11 | TX 状态机 | Idle→Armed→Queued→Sending→Stopping/Failed，F1–F8 宏、WPM、Break-in | 默认 TX 关；STOP 优先清队列；ACK 不冒充拍发完成 |
@@ -83,7 +85,7 @@ Frame-level Scanner 另外通过单元测试验证单调 sample-index 时间轴�
 
 ## 解码管线
 
-SDR 48 kHz Slicer / 选定 WASAPI Capture / RS-BA1 render-endpoint Loopback（多声道混单声道并重采样到 48 kHz）→ CwPcmIngress 源隔离与时间线保护 → 48 kHz 有界宽带音频 Hub → Fast 80/15 ms ridge portions + Precision 240/120 ms observations → 3-batch bounded beam/MHT → 带 AssociationHintId 的 Precision batch → CwPileupTrackManager / Kalman/GNN / MergeGroup fallback（空 batch 也推进 coast 时间）→ 默认：校准宽带 STFT + activity-aware all-track soft mask → latest-only DeepCW；实验 benchmark：对选中 Track 使用 CwLaneExtractor DDC/隔离到 9.6 kHz → LaneDry 或 HamNoise Classic/CW V2 → DeepCW frontend。HamNoise **从不位于 tracker 前面**，因此不会改变检测/跟踪统计。之后统一进入带 OutputFrame/置信度的 CTC → Incremental Transcript（稳定前缀 + provisional 后缀）→ Pileup 列表/选中路文本/QSO 辅助。
+SDR 48 kHz Slicer / 选定 WASAPI Capture / RS-BA1 render-endpoint Loopback（多声道混单声道并重采样到 48 kHz）→ CwPcmIngress 源隔离与时间线保护 → 48 kHz 有界宽带音频 Hub → Fast 80/15 ms ridge portions + Precision 240/120 ms observations → 3-batch bounded beam/MHT → 带 AssociationHintId 的 Precision batch → CwPileupTrackManager / Kalman/GNN / MergeGroup fallback（空 batch 也推进 coast 时间）→ 默认：校准宽带 STFT + activity-aware all-track soft mask → latest-only DeepCW。HamNoise 只存在于 **tracker 之后的 benchmark 分支**：A) 对选中 Track 用 CwLaneExtractor DDC 到 9.6 kHz，再做 LaneDry/Classic/V2；或 B) 将整个 immutable decode snapshot 重采样到 9.6 kHz，只运行一次 Shared Classic/V2，然后继续使用原 all-track soft mask。两种 placement 都不会改变检测/跟踪统计。之后统一进入带 OutputFrame/置信度的 CTC → Incremental Transcript（稳定前缀 + provisional 后缀）→ Pileup 列表/选中路文本/QSO 辅助。
 
 候选 AF 频率不等于 RF 下行频率；正确的接收音调到射频转换取决于 CW/CW-R 与解调方式。音频推理不得直接操作 TX VFO。
 
@@ -105,7 +107,7 @@ SkyCAT 现有 4532 主 CAT 通道独占 RS-BA1 虚拟 COM 并串行仲裁，新�
 6. tracker / ONNX 解耦的 receive worker、latest-only inference、TimelineGeneration 过期结果抑制（**PR #47**）。
 7. RX-only Dockable CW Console：源/模型/worker 状态、Pileup Lane grid、selected committed/provisional transcript、停靠恢复（**PR #48**）。
 8. CW AF waterfall、稳定 lane overlay、±2σ uncertainty band、约 10 FPS 独立 UI 刷新（**PR #49**）。
-9. HamNoise benchmark-only 实验后端：固定 revision native bridge、Classic/CW V2、LaneDry 对照、真实 DeepCW CER/WER/Callsign/RTF A/B；同时修复 8 s 48 kHz→9.6 kHz LaneExtractor 输出长度的 Int32 乘法溢出（**PR #50**）。
+9. HamNoise benchmark-only 实验后端：固定 revision native bridge、per-lane/shared Classic 与 CW V2、LaneDry 对照、独立 real-model A/B workflow；量化结论暂不进入 UI/Release。同时修复 8 s 长窗口在 **CwLaneExtractor** 和 **CwWindowedSincResampler** 两处 48 kHz→9.6 kHz 输出长度计算的 Int32 乘法溢出（**PR #50**）。
 10. SkyCAT CW CI-V 协议（白名单/错误处理/模拟器）。
 11. 安全 TX + SAT 与 CI-V 协同（受控实机验收后启用）。
 12. 端到端 WAV corpus 指标、中英文用户指南、许可证与正式发布。
