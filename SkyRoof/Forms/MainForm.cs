@@ -4,6 +4,7 @@ using NAudio.CoreAudioApi;
 using MathNet.Numerics;
 using Serilog;
 using SGPdotNET.Observation;
+using SkyRoof.CW;
 using VE3NEA;
 using VE3NEA.Clock;
 using WeifenLuo.WinFormsUI.Docking;
