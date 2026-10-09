@@ -559,32 +559,34 @@ namespace SkyRoof.CW
           if (separation > threshold)
             continue;
 
+          int oldGroupI = tracks[i].MergeGroupId;
+          int oldGroupJ = tracks[j].MergeGroupId;
           int groupId;
-          if (tracks[i].MergeGroupId != 0 &&
-              tracks[j].MergeGroupId != 0)
-            groupId = Math.Min(
-              tracks[i].MergeGroupId,
-              tracks[j].MergeGroupId);
+          if (oldGroupI != 0 && oldGroupJ != 0)
+            groupId = Math.Min(oldGroupI, oldGroupJ);
           else
-            groupId = tracks[i].MergeGroupId != 0
-              ? tracks[i].MergeGroupId
-              : tracks[j].MergeGroupId != 0
-                ? tracks[j].MergeGroupId
+            groupId = oldGroupI != 0
+              ? oldGroupI
+              : oldGroupJ != 0
+                ? oldGroupJ
                 : nextMergeGroupId++;
+
+          // If two existing components just joined, normalize every member to
+          // the surviving label before updating the current pair.
+          if (oldGroupI != 0 || oldGroupJ != 0)
+          {
+            foreach (State track in tracks)
+            {
+              if (track.MergeGroupId == oldGroupI ||
+                  track.MergeGroupId == oldGroupJ)
+                track.MergeGroupId = groupId;
+            }
+          }
 
           AssignToMergeGroup(
             tracks[i], groupId, utc);
           AssignToMergeGroup(
             tracks[j], groupId, utc);
-
-          // If two existing components just joined, normalize every member to
-          // the surviving label so a 3+ station cluster has one MergeGroupId.
-          foreach (State track in tracks)
-          {
-            if (track.MergeGroupId == tracks[i].MergeGroupId ||
-                track.MergeGroupId == tracks[j].MergeGroupId)
-              track.MergeGroupId = groupId;
-          }
         }
       }
     }
