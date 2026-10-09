@@ -100,7 +100,7 @@ namespace VE3NEA.Dsp.Tests
       MinFrequencyHz = 300,
       MaxFrequencyHz = 1500,
       MinimumSnrDb = 7,
-      ActivitySnrDb = 5,
+      MinimumKeyingDepthDb = 3,
       MinActiveFraction = 0.10,
       MaxActiveFraction = 0.92,
       MinimumActivityTransitions = 2,
