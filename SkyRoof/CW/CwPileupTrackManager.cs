@@ -10,7 +10,8 @@ namespace SkyRoof.CW
     double SnrDb,
     double MeasurementSigmaHz = 0,
     double ResolutionHz = 0,
-    double ActivityProbability = 1);
+    double ActivityProbability = 1,
+    bool BirthEligible = true);
 
   /// <summary>
   /// Stable identity and observed state of one independently decodable CW lane.
