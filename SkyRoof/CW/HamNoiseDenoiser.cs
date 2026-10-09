@@ -9,7 +9,7 @@ namespace SkyRoof.CW
     HamNoiseV2
   }
 
-  public interface ICwLaneDenoiser
+  public interface ICwAudioDenoiser
   {
     int SampleRate { get; }
     string Name { get; }
@@ -90,7 +90,7 @@ namespace SkyRoof.CW
   /// DeepCW center frequency and resampled to HamNoise's 9.6 kHz rate.
   /// </summary>
   public sealed class HamNoiseLaneDenoiser :
-    ICwLaneDenoiser
+    ICwAudioDenoiser
   {
     public CwDenoiseMode Mode { get; }
     public int SampleRate { get; }
