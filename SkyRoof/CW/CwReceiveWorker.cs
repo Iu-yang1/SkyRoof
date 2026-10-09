@@ -126,6 +126,8 @@ namespace SkyRoof.CW
     private readonly CwPcmIngress ingress;
     private readonly CwReceiveWorkerOptions options;
     private readonly Func<ICwInferenceSession?> sessionFactory;
+    private readonly Func<double, IReadOnlyList<CwSignalTrack>>
+      trackAnalyzer;
 
     private CancellationTokenSource? stop;
     private Task? trackingTask;
@@ -164,6 +166,7 @@ namespace SkyRoof.CW
       : this(
           ingress,
           options,
+          null,
           null)
     {
     }
@@ -171,7 +174,9 @@ namespace SkyRoof.CW
     internal CwReceiveWorker(
       CwPcmIngress ingress,
       CwReceiveWorkerOptions? options,
-      Func<ICwInferenceSession?>? sessionFactory)
+      Func<ICwInferenceSession?>? sessionFactory,
+      Func<double, IReadOnlyList<CwSignalTrack>>?
+        trackAnalyzer)
     {
       this.ingress =
         ingress ??
@@ -199,6 +204,12 @@ namespace SkyRoof.CW
           return new DeepCwInferenceSession(
             this.options);
         });
+
+      this.trackAnalyzer =
+        trackAnalyzer ??
+        (dopplerRate =>
+          this.ingress.FrontEnd.Analyze(
+            dopplerRate));
     }
 
     public CwReceiveWorkerOptions Options =>
@@ -346,7 +357,7 @@ namespace SkyRoof.CW
         try
         {
           IReadOnlyList<CwSignalTrack> tracks =
-            ingress.FrontEnd.Analyze(
+            trackAnalyzer(
               Volatile.Read(
                 ref knownDopplerRateHzPerSecond));
 
