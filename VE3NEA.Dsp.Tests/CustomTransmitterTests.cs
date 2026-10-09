@@ -124,6 +124,65 @@ public sealed class CustomTransmitterTests
     }
 
     [Fact]
+    public void EditingLocalTransmitterKeepsUuidAndExistingObject()
+    {
+        var satellite = new SatnogsDbSatellite {
+          sat_id = "TEST-SAT", norad_cat_id = 12345, name = "TEST"
+        };
+        var original = new CustomTransmitterDefinition {
+          uuid = "local-stable", description = "Old",
+          downlink_hz = 436210000L, mode = "FM"
+        };
+        SatnogsDbTransmitter tx =
+          SatnogsDb.CreateCustomTransmitter(original, satellite);
+        var reference = tx;
+
+        var replacement = new CustomTransmitterDefinition {
+          uuid = "local-stable", description = "Digital downlink",
+          downlink_hz = 436220000L,
+          uplink_hz = 145850000L,
+          mode = "FM_D",
+          updated_utc = DateTime.UtcNow
+        };
+        SatnogsDb.UpdateCustomTransmitterRuntime(tx, replacement);
+
+        Assert.Same(reference, tx);
+        Assert.Equal("local-stable", tx.uuid);
+        Assert.Equal("Digital downlink", tx.description);
+        Assert.Equal(436220000L, tx.downlink_low);
+        Assert.Equal(145850000L, tx.uplink_low);
+        Assert.Equal("FM_D", tx.DownlinkMode);
+        Assert.Equal(Slicer.Mode.FM_D,
+          SatnogsDbTransmitter.ModeMnemonic.ToSlicerMode(
+            null, tx.DownlinkMode, false));
+    }
+
+    [Theory]
+    [InlineData("FM_D")]
+    [InlineData("FM-D")]
+    [InlineData("FM DATA")]
+    public void FmDigitalNamesMapToFmDigitalRadioMode(string mode)
+    {
+        Assert.Equal(Slicer.Mode.FM_D,
+          SatnogsDbTransmitter.ModeMnemonic.ToSlicerMode(null, mode, false));
+    }
+
+    [Fact]
+    public void EditingRejectsDifferentUuid()
+    {
+        var satellite = new SatnogsDbSatellite { sat_id = "TEST" };
+        var original = new CustomTransmitterDefinition {
+          uuid = "local-a", description = "A", downlink_hz = 145900000
+        };
+        SatnogsDbTransmitter tx = SatnogsDb.CreateCustomTransmitter(original, satellite);
+        Assert.Throws<InvalidOperationException>(() =>
+          SatnogsDb.UpdateCustomTransmitterRuntime(tx,
+            new CustomTransmitterDefinition {
+              uuid = "local-b", description = "B", downlink_hz = 145910000
+            }));
+    }
+
+    [Fact]
     public void RemovingLocalDefinitionOnlyDeletesMatchingUuid()
     {
         var definitions =
