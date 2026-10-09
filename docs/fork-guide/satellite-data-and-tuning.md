@@ -1,6 +1,6 @@
 # Satellite data, ephemerides, transmitters and frequency tuning
 
-**Language:** English | [简体中文](../../zh-cn/fork-guide/satellite-data-and-tuning.md)
+**Language:** English | [简体中文](../zh-cn/fork-guide/satellite-data-and-tuning.md)
 
 ## Multiple satellite/orbit sources (PRs #8, #17–18 and #24)
 
