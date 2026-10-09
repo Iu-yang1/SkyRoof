@@ -164,6 +164,7 @@ namespace SkyRoof.CW
     double InputFrequencyHz,
     string Text,
     bool Active,
+    bool Ambiguous,
     DateTime WindowEndUtc);
 
   /// <summary>
@@ -222,14 +223,15 @@ namespace SkyRoof.CW
             track.FrequencyHz >= metadata.SampleRate / 2.0)
           continue;
 
-        DeepCwTensor tensor = features.BuildLaneTensor(
-          track.FrequencyHz, LaneBandwidthHz, TargetCenterHz);
+        DeepCwTensor tensor = features.BuildSeparatedLaneTensor(
+          track, selected, LaneBandwidthHz, TargetCenterHz);
         DeepCwDecodedText text = decoder.Decode(tensor);
         results.Add(new(
           track.Id,
           track.FrequencyHz,
           text.Text,
           track.Active,
+          track.Ambiguous,
           windowEndUtc));
       }
 
