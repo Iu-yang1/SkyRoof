@@ -243,6 +243,7 @@ namespace SkyRoof.CW
 
     public CwAudioHub Audio { get; }
     public CwCandidateDetector Detector { get; }
+    public CwCandidateDetector BirthValidator { get; }
     public CwFrameRidgeScanner FrameScanner { get; }
     public CwPileupTrackManager Tracks { get; }
     public double AnalysisSeconds { get; }
@@ -269,6 +270,28 @@ namespace SkyRoof.CW
         sampleRate,
         Math.Max(analysisSeconds * 2, 6));
       Detector = new CwCandidateDetector(opts);
+      BirthValidator = new CwCandidateDetector(
+        new CwDetectorOptions
+        {
+          SampleRate = sampleRate,
+          FftSize = opts.FftSize,
+          HopSize = opts.HopSize,
+          MinFrequencyHz = opts.MinFrequencyHz,
+          MaxFrequencyHz = opts.MaxFrequencyHz,
+          MinimumSnrDb = Math.Max(
+            3.0, opts.MinimumSnrDb - 1.5),
+          MinimumKeyingDepthDb =
+            opts.MinimumKeyingDepthDb,
+          MinActiveFraction = opts.MinActiveFraction,
+          MaxActiveFraction = opts.MaxActiveFraction,
+          MinimumActivityTransitions =
+            opts.MinimumActivityTransitions,
+          PeakDeduplicationHz = Math.Min(
+            opts.PeakDeduplicationHz, 8.0),
+          MaxCandidates = Math.Max(
+            opts.MaxCandidates, 16)
+        });
+
       FrameScanner = frameScanner ??
         new CwFrameRidgeScanner(
           new CwFrameRidgeScannerOptions
@@ -312,6 +335,8 @@ namespace SkyRoof.CW
         FrameScanner.Scan(
           snapshot,
           knownDopplerRateHzPerSecond);
+      IReadOnlyList<CwSignalCandidate> birthEvidence =
+        BirthValidator.Detect(snapshot.Samples);
 
       foreach (CwRidgeObservationBatch batch in
         scan.PrecisionBatches
@@ -330,10 +355,9 @@ namespace SkyRoof.CW
             (double)snapshot.SampleRate);
 
         CwSignalCandidate[] candidates =
-          batch.Observations
-            .Where(x => x.KalmanEligible)
-            .Select(x => x.ToCandidate())
-            .ToArray();
+          BuildBirthValidatedCandidates(
+            batch.Observations,
+            birthEvidence);
 
         latestTracks =
           Tracks.Update(
@@ -344,6 +368,71 @@ namespace SkyRoof.CW
       }
 
       return latestTracks;
+    }
+
+    private static CwSignalCandidate[]
+      BuildBirthValidatedCandidates(
+        IReadOnlyList<CwRidgeObservation> observations,
+        IReadOnlyList<CwSignalCandidate> birthEvidence)
+    {
+      CwRidgeObservation[] eligible = observations
+        .Where(x => x.KalmanEligible)
+        .OrderBy(x => x.FrequencyHz)
+        .ToArray();
+      if (eligible.Length == 0)
+        return Array.Empty<CwSignalCandidate>();
+
+      var validated = new bool[eligible.Length];
+      var usedObservation = new bool[eligible.Length];
+
+      // A coarse keyed-carrier detection may validate only one precision
+      // maximum in a batch. This suppresses the modulation sideband family
+      // without deleting those measurements from updates of existing tracks.
+      foreach (CwSignalCandidate evidence in birthEvidence
+        .OrderByDescending(x => x.SnrDb))
+      {
+        int best = -1;
+        double bestDistance =
+          double.PositiveInfinity;
+        double gate = Math.Max(
+          8.0,
+          evidence.ResolutionHz > 0
+            ? 1.25 * evidence.ResolutionHz
+            : 12.0);
+
+        for (int i = 0; i < eligible.Length; i++)
+        {
+          if (usedObservation[i]) continue;
+          double distance = Math.Abs(
+            eligible[i].FrequencyHz -
+            evidence.FrequencyHz);
+          if (distance > gate ||
+              distance >= bestDistance)
+            continue;
+          bestDistance = distance;
+          best = i;
+        }
+
+        if (best >= 0)
+        {
+          validated[best] = true;
+          usedObservation[best] = true;
+        }
+      }
+
+      var result =
+        new CwSignalCandidate[eligible.Length];
+      for (int i = 0; i < eligible.Length; i++)
+      {
+        CwSignalCandidate candidate =
+          eligible[i].ToCandidate();
+        result[i] = candidate with
+        {
+          BirthEligible = validated[i]
+        };
+      }
+
+      return result;
     }
 
     public void Reset()
