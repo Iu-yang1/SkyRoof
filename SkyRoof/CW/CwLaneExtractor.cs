@@ -195,6 +195,69 @@ namespace SkyRoof.CW
       return result;
     }
 
+    /// <summary>
+    /// Two-state forward HMM over per-frame ridge magnitude. Adjacent STFT
+    /// frames may be highly overlapped; this estimator is used for carrier
+    /// keying probability only and is not fed back as an independent Kalman
+    /// measurement.
+    /// </summary>
+    public float[] EstimateFrameProbabilities(
+      ReadOnlySpan<float> ridgeMagnitude,
+      double frameIntervalSeconds,
+      double expectedStateDurationSeconds = 0.06)
+    {
+      if (!double.IsFinite(frameIntervalSeconds) ||
+          frameIntervalSeconds <= 0)
+        throw new ArgumentOutOfRangeException(nameof(frameIntervalSeconds));
+      if (!double.IsFinite(expectedStateDurationSeconds) ||
+          expectedStateDurationSeconds <= frameIntervalSeconds)
+        throw new ArgumentOutOfRangeException(
+          nameof(expectedStateDurationSeconds));
+      if (ridgeMagnitude.Length == 0) return [];
+
+      double[] sorted = ridgeMagnitude
+        .ToArray()
+        .Select(x => (double)x * x)
+        .OrderBy(x => x)
+        .ToArray();
+      double low = QuantileSorted(sorted, LowQuantile);
+      double high = QuantileSorted(sorted, HighQuantile);
+      double dynamic = Math.Max(high - low, 1e-12);
+
+      double transition = Math.Clamp(
+        frameIntervalSeconds / expectedStateDurationSeconds,
+        0.02, 0.45);
+      double pOn = 0.1;
+      float[] result = new float[ridgeMagnitude.Length];
+
+      for (int i = 0; i < ridgeMagnitude.Length; i++)
+      {
+        double power = ridgeMagnitude[i] * ridgeMagnitude[i];
+        double normalized = Math.Clamp(
+          (power - low) / dynamic, 0, 1);
+        double smooth =
+          normalized * normalized * (3 - 2 * normalized);
+
+        // Keep both likelihoods nonzero so a single noisy frame cannot force
+        // an irreversible state decision.
+        double likelihoodOn = 0.03 + 0.94 * smooth;
+        double likelihoodOff = 0.03 + 0.94 * (1 - smooth);
+
+        double predictedOn =
+          pOn * (1 - transition) +
+          (1 - pOn) * transition;
+        double numerator = predictedOn * likelihoodOn;
+        double denominator =
+          numerator + (1 - predictedOn) * likelihoodOff;
+        pOn = denominator <= 1e-12
+          ? predictedOn
+          : numerator / denominator;
+        result[i] = (float)Math.Clamp(pOn, 0, 1);
+      }
+
+      return result;
+    }
+
     public float[] ToFrameProbabilities(
       ReadOnlySpan<float> sampleProbabilities,
       int sampleRate,
