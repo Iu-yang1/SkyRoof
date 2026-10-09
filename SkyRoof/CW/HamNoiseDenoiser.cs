@@ -159,8 +159,10 @@ namespace SkyRoof.CW
       if (wet == 0)
         return dry;
 
+      int expectedLength =
+        dry.Length;
       float[] enhanced =
-        new float[dry.Length];
+        new float[expectedLength];
 
       int status =
         Mode ==
@@ -179,6 +181,21 @@ namespace SkyRoof.CW
       if (status != 0)
         throw new InvalidOperationException(
           $"{Name} failed with status {status}.");
+
+      if (enhanced.Length != expectedLength)
+        throw new InvalidOperationException(
+          $"{Name} changed the managed output length from " +
+          $"{expectedLength} to {enhanced.Length}.");
+
+      for (int i = 0;
+           i < enhanced.Length;
+           i++)
+      {
+        if (!float.IsFinite(
+              enhanced[i]))
+          throw new InvalidOperationException(
+            $"{Name} produced a non-finite sample at index {i}.");
+      }
 
       if (wet >= 1)
         return enhanced;
