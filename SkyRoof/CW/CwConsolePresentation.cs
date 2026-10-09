@@ -52,8 +52,10 @@ namespace SkyRoof.CW
             transcript.ProvisionalText))
         return transcript.CommittedText;
 
+      // Preserve decoded whitespace exactly. The bracket is UI chrome,
+      // not text content, so never inject or trim a semantic CW space here.
       return transcript.CommittedText +
-        " ⟦" +
+        "⟦" +
         transcript.ProvisionalText +
         "⟧";
     }
