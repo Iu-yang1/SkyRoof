@@ -69,6 +69,22 @@
 "resolved": "5.0.0",
 "contentHash": "pg1W2VwaEQMAiTpGK840hZgzavnqjlCMTVSbtVCXVyT+7AX4mc1o89SPv4TBlAjhgCOo9c1Y+jZ5m3ti2YgGgA=="
 },
+"Microsoft.ML.OnnxRuntime": {
+"type": "Transitive",
+"resolved": "1.30.0",
+"contentHash": "RaF3KjPXB/IbNvvrcQtrxS/NZjB9dEHnZQTsdJCLP5Fnn1Jj3LomeqR1mMAoRFKinJ0pIe85PLhLlfGBYqzgWA==",
+"dependencies": {
+"Microsoft.ML.OnnxRuntime.Managed": "1.30.0"
+}
+},
+"Microsoft.ML.OnnxRuntime.Managed": {
+"type": "Transitive",
+"resolved": "1.30.0",
+"contentHash": "KHW+vp+i4Mdf6RhIsMvurTVepafXHjg8/VQ0o6sa2wEK0KzV/4iEoRTUvsymcRP+XPAM/r6kZCaTADdV6Xn4RA==",
+"dependencies": {
+"System.Numerics.Tensors": "9.0.0"
+}
+},
 "Microsoft.CodeCoverage": {
 "type": "Transitive",
 "resolved": "17.11.1",
@@ -211,6 +227,11 @@
 "resolved": "4.5.0",
 "contentHash": "221clPs1445HkTBZPL+K9sDBdJRB8UN8rgjO3ztB0CQ26z//fmJXtlsr6whGatscsKGBrhJl5bwJuKSA8mwFOw=="
 },
+"System.Numerics.Tensors": {
+"type": "Transitive",
+"resolved": "9.0.0",
+"contentHash": "hyJB4UlpAi19Xr9AXzu2NuagKC4lPfHObNMEAA0HmqFz2rX7wKgzeYzO/jM/eBHDhnUGFFEjk5cOoJaxqg5J4A=="
+},
 "System.Security.Cryptography.ProtectedData": {
 "type": "Transitive",
 "resolved": "4.4.0",
@@ -274,6 +295,7 @@
 "DockPanelSuite.ThemeVS2015": "[3.1.1, )",
 "MathNet.Filtering": "[0.7.0, )",
 "MathNet.Numerics": "[5.0.0, )",
+"Microsoft.ML.OnnxRuntime": "[1.30.0, )",
 "MultimediaTimer": "[1.0.1, )",
 "NAudio": "[2.3.0, )",
 "Newtonsoft.Json": "[13.0.3, )",
