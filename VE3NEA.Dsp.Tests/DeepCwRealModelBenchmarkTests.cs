@@ -61,12 +61,23 @@ namespace VE3NEA.Dsp.Tests
 
       BenchmarkScenario[] scenarios =
       [
-        new("sep40_equal", 800, 40, 0, 0, -2),
-        new("sep25_8db", 800, 25, 8, 0, -2),
-        new("sep15_8db_drift5", 800, 15, 8, 5, -2),
-        new("sep10_10db_drift10", 800, 10, 10, 10, -2),
-        new("sep5_10db_drift20", 800, 5, 10, 20, -2),
-        new("wideband2600_sep25", 2600, 25, 6, 10, -2)
+        new("static_equal_sep40", 800, 40, 0, 0, -2),
+        new("static_equal_sep25", 800, 25, 0, 0, -2),
+        new("static_equal_sep15", 800, 15, 0, 0, -2),
+        new("static_equal_sep10", 800, 10, 0, 0, -2),
+        new("static_equal_sep5", 800, 5, 0, 0, -2),
+
+        new("static_8db_sep40", 800, 40, 8, 0, -2),
+        new("static_8db_sep25", 800, 25, 8, 0, -2),
+        new("static_8db_sep15", 800, 15, 8, 0, -2),
+        new("static_8db_sep10", 800, 10, 8, 0, -2),
+        new("static_8db_sep5", 800, 5, 8, 0, -2),
+
+        new("doppler5_sep25_8db", 800, 25, 8, 5, -2),
+        new("doppler10_sep25_8db", 800, 25, 8, 10, -2),
+        new("doppler20_sep25_8db", 800, 25, 8, 20, -2),
+
+        new("wideband2600_sep25_d10", 2600, 25, 6, 10, -2)
       ];
 
       var results = new List<BenchmarkResult>();
@@ -111,10 +122,26 @@ namespace VE3NEA.Dsp.Tests
           .FirstOrDefault(x => x.TrackId == 1).Text ?? "";
         string textB = decoded
           .FirstOrDefault(x => x.TrackId == 2).Text ?? "";
-        double cerA = CharacterErrorRate(
-          truthA, textA);
-        double cerB = CharacterErrorRate(
-          truthB, textB);
+
+        // Oracle-track unmasked reference. This isolates the gain/loss from
+        // the activity-aware competitive mask rather than conflating it with
+        // the ONNX model itself.
+        DeepCwWidebandFeatureWindow wide =
+          DeepCwWidebandFeatureWindow.Create(
+            mix.Audio, SampleRate, metadata);
+        var unmaskedSw = Stopwatch.StartNew();
+        string unmaskedA = onnx.Decode(
+          wide.BuildUnmaskedLaneTensor(tracks[0])).Text;
+        string unmaskedB = onnx.Decode(
+          wide.BuildUnmaskedLaneTensor(tracks[1])).Text;
+        unmaskedSw.Stop();
+
+        double cerA = CharacterErrorRate(truthA, textA);
+        double cerB = CharacterErrorRate(truthB, textB);
+        double unmaskedCerA =
+          CharacterErrorRate(truthA, unmaskedA);
+        double unmaskedCerB =
+          CharacterErrorRate(truthB, unmaskedB);
 
         var result = new BenchmarkResult(
           scenario.Name,
@@ -126,12 +153,23 @@ namespace VE3NEA.Dsp.Tests
           truthA,
           textA,
           cerA,
+          WordErrorRate(truthA, textA),
+          ContainsCallsign(textA, "K1ABC"),
+          unmaskedA,
+          unmaskedCerA,
+          WordErrorRate(truthA, unmaskedA),
           truthB,
           textB,
           cerB,
+          WordErrorRate(truthB, textB),
+          ContainsCallsign(textB, "W9XYZ"),
+          unmaskedB,
+          unmaskedCerB,
+          WordErrorRate(truthB, unmaskedB),
           sw.Elapsed.TotalSeconds,
-          sw.Elapsed.TotalSeconds /
-            DurationSeconds);
+          sw.Elapsed.TotalSeconds / DurationSeconds,
+          unmaskedSw.Elapsed.TotalSeconds,
+          unmaskedSw.Elapsed.TotalSeconds / DurationSeconds);
         results.Add(result);
 
         output.WriteLine(
@@ -142,7 +180,26 @@ namespace VE3NEA.Dsp.Tests
       results.Should().OnlyContain(x =>
         double.IsFinite(x.CerA) &&
         double.IsFinite(x.CerB) &&
-        double.IsFinite(x.RealTimeFactor));
+        double.IsFinite(x.UnmaskedCerA) &&
+        double.IsFinite(x.UnmaskedCerB) &&
+        double.IsFinite(x.RealTimeFactor) &&
+        double.IsFinite(x.UnmaskedRealTimeFactor));
+
+      // Hard sanity/regression gates are deliberately limited to clearly
+      // resolvable reference cases. Dense 5–25 Hz Pileup remains a measured
+      // research curve rather than an artificial "must decode" assertion.
+      BenchmarkResult easy = results.Single(
+        x => x.Scenario == "static_equal_sep40");
+      easy.CerA.Should().BeLessThanOrEqualTo(0.20);
+      easy.CerB.Should().BeLessThanOrEqualTo(0.20);
+
+      BenchmarkResult wideband = results.Single(
+        x => x.Scenario == "wideband2600_sep25_d10");
+      wideband.CerA.Should().BeLessThanOrEqualTo(0.25);
+      wideband.CerB.Should().BeLessThanOrEqualTo(0.25);
+
+      results.Max(x => x.RealTimeFactor)
+        .Should().BeLessThan(1.0);
 
       if (!string.IsNullOrWhiteSpace(reportPath))
       {
@@ -445,6 +502,49 @@ namespace VE3NEA.Dsp.Tests
             ' ',
             StringSplitOptions.RemoveEmptyEntries));
 
+    private static double WordErrorRate(
+      string truth,
+      string decoded)
+    {
+      string[] a = NormalizeText(truth)
+        .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+      string[] b = NormalizeText(decoded)
+        .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+      int[,] d = new int[a.Length + 1, b.Length + 1];
+
+      for (int i = 0; i <= a.Length; i++)
+        d[i, 0] = i;
+      for (int j = 0; j <= b.Length; j++)
+        d[0, j] = j;
+
+      for (int i = 1; i <= a.Length; i++)
+      {
+        for (int j = 1; j <= b.Length; j++)
+        {
+          int cost = string.Equals(
+            a[i - 1], b[j - 1],
+            StringComparison.Ordinal) ? 0 : 1;
+          d[i, j] = Math.Min(
+            Math.Min(
+              d[i - 1, j] + 1,
+              d[i, j - 1] + 1),
+            d[i - 1, j - 1] + cost);
+        }
+      }
+
+      return d[a.Length, b.Length] /
+        (double)Math.Max(1, a.Length);
+    }
+
+    private static bool ContainsCallsign(
+      string decoded,
+      string callsign) =>
+      NormalizeText(decoded)
+        .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+        .Contains(
+          callsign.ToUpperInvariant(),
+          StringComparer.Ordinal);
+
     private static double Rms(
       IReadOnlyList<float> values)
     {
@@ -542,10 +642,22 @@ namespace VE3NEA.Dsp.Tests
       string TruthA,
       string DecodedA,
       double CerA,
+      double WerA,
+      bool CallsignA,
+      string UnmaskedDecodedA,
+      double UnmaskedCerA,
+      double UnmaskedWerA,
       string TruthB,
       string DecodedB,
       double CerB,
+      double WerB,
+      bool CallsignB,
+      string UnmaskedDecodedB,
+      double UnmaskedCerB,
+      double UnmaskedWerB,
       double ProcessingSeconds,
-      double RealTimeFactor);
+      double RealTimeFactor,
+      double UnmaskedProcessingSeconds,
+      double UnmaskedRealTimeFactor);
   }
 }
