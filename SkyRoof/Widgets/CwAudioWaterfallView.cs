@@ -327,6 +327,14 @@ namespace SkyRoof
           DashStyle =
             DashStyle.Dash
         };
+      using var holdPen =
+        new Pen(
+          SystemColors.GrayText,
+          1.25f)
+        {
+          DashStyle =
+            DashStyle.Dot
+        };
 
       foreach (CwSignalTrack track
         in tracks)
@@ -348,11 +356,57 @@ namespace SkyRoof
             ? selectedPen
             : track.Ambiguous
               ? ambiguousPen
-              : normalPen;
+              : !track.Active
+                ? holdPen
+                : normalPen;
 
         float x =
           FrequencyToX(
             track.FrequencyHz);
+
+        if (track.FrequencySigmaHz > 0 &&
+            double.IsFinite(
+              track.FrequencySigmaHz))
+        {
+          double lowHz =
+            track.FrequencyHz -
+            2 * track.FrequencySigmaHz;
+          double highHz =
+            track.FrequencyHz +
+            2 * track.FrequencySigmaHz;
+          float lowX =
+            FrequencyToX(lowHz);
+          float highX =
+            FrequencyToX(highHz);
+          float left =
+            Math.Min(lowX, highX);
+          float width =
+            Math.Max(
+              1,
+              Math.Abs(
+                highX - lowX));
+
+          Color bandColor =
+            track.Ambiguous
+              ? Theme.SpectrumPeak
+              : pen.Color;
+          using var sigmaBrush =
+            new SolidBrush(
+              Color.FromArgb(
+                selectedIdentity.HasValue &&
+                identity ==
+                  selectedIdentity.Value
+                  ? 54
+                  : 30,
+                bandColor));
+
+          g.FillRectangle(
+            sigmaBrush,
+            left,
+            body.Top,
+            width,
+            body.Height);
+        }
 
         g.DrawLine(
           pen,
@@ -362,7 +416,8 @@ namespace SkyRoof
           body.Bottom);
 
         string lane =
-          $"#{track.Id}";
+          CwConsolePresentation.LaneLabel(
+            track);
         using var backBrush =
           new SolidBrush(
             Color.FromArgb(
