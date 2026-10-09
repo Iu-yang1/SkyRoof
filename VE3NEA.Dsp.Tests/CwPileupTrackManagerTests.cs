@@ -114,6 +114,73 @@ namespace VE3NEA.Dsp.Tests
       backwards.Should().Throw<ArgumentException>();
     }
 
+
+    [Fact]
+    public void CrossingRidges_WithMergedMeasurement_PreserveTrackIdentity()
+    {
+      var tracker = new CwPileupTrackManager(
+        minimumSeparationHz: 10,
+        matchToleranceHz: 70,
+        mergeResolutionHz: 22);
+
+      var start = tracker.Update(T0,
+        [new(700, 12), new(900, 12)]);
+      int risingId = start.Single(x => x.FrequencyHz < 800).Id;
+      int fallingId = start.Single(x => x.FrequencyHz > 800).Id;
+
+      tracker.Update(T0.AddMilliseconds(500),
+        [new(730, 10), new(870, 14)]);
+      tracker.Update(T0.AddSeconds(1),
+        [new(760, 9), new(840, 15)]);
+      var close = tracker.Update(T0.AddMilliseconds(1500),
+        [new(792, 8), new(808, 16)]);
+
+      close.Should().Contain(x => x.Id == risingId);
+      close.Should().Contain(x => x.Id == fallingId);
+      close.Should().OnlyContain(x => x.Ambiguous);
+
+      // Finite spectral resolution can merge two ridges into one observation.
+      // The unobserved target must coast instead of being deleted.
+      var merged = tracker.Update(T0.AddSeconds(2),
+        [new(800, 13)]);
+      merged.Should().HaveCount(2);
+      merged.Count(x => x.Active).Should().Be(1);
+
+      // After the crossing, order in frequency has reversed. Identity must
+      // follow predicted ridge velocity, not sorted frequency or signal power.
+      var separated = tracker.Update(T0.AddMilliseconds(2500),
+        [new(748, 18), new(852, 6)]);
+
+      CwSignalTrack rising = separated.Single(x => x.Id == risingId);
+      CwSignalTrack falling = separated.Single(x => x.Id == fallingId);
+      rising.FrequencyHz.Should().BeGreaterThan(falling.FrequencyHz);
+      rising.DriftHzPerSecond.Should().BeGreaterThan(0);
+      falling.DriftHzPerSecond.Should().BeLessThan(0);
+    }
+
+    [Fact]
+    public void GlobalAssociation_DoesNotLetStrongPeakStealWeakTrack()
+    {
+      var tracker = new CwPileupTrackManager(
+        minimumSeparationHz: 8,
+        matchToleranceHz: 45);
+
+      var start = tracker.Update(T0,
+        [new(700, 20), new(750, 4)]);
+      int lowId = start.Single(x => x.FrequencyHz < 725).Id;
+      int highId = start.Single(x => x.FrequencyHz > 725).Id;
+
+      tracker.Update(T0.AddMilliseconds(500),
+        [new(712, 3), new(738, 24)]);
+      var result = tracker.Update(T0.AddSeconds(1),
+        [new(720, 2), new(730, 26)]);
+
+      result.Single(x => x.Id == lowId)
+        .DriftHzPerSecond.Should().BeGreaterThan(0);
+      result.Single(x => x.Id == highId)
+        .DriftHzPerSecond.Should().BeLessThan(0);
+    }
+
     [Fact]
     public void Reset_RemovesTracksAndReinitializesIds()
     {
