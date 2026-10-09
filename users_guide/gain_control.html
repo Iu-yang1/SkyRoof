@@ -94,11 +94,42 @@
         <article data-uid="">
 <h1 id="gain-control">Gain Control</h1>
 
-<p>The Gain Control panel on the toolbar has two sliders to control the RF and AF gain:</p>
-<p><img src="../images/gain_control.png" alt="Gain Control Panel"></p>
-<p>The <strong>RF Gain</strong> slider is enabled only if the <strong>Single Gain</strong> setting is set to <strong>true</strong> in
-<a href="setting_up_sdr.html">SDR settings</a>.</p>
-<p>To adjust the gain, click on the slider, or spin the mouse wheel over it, or drag the thumb control.</p>
+<p>The toolbar has <strong>RF GAIN</strong> and <strong>AF GAIN</strong> controls. They change different
+targets depending on the active receive/control backend.</p>
+<h2 id="local-sdr">Local SDR</h2>
+<ul>
+<li><strong>RF GAIN</strong> adjusts the gain of the selected SoapySDR receiver, when that
+device supports gain control.</li>
+<li><strong>AF GAIN</strong> adjusts SkyRoof's own local playback soundcard gain, using
+the existing -50 to 0 dB slider. This does not change other applications'
+audio, and is saved independently of RS-BA1 audio.</li>
+</ul>
+<h2 id="ic-9700-with-skycat--rs-ba1-remote-utility">IC-9700 with SkyCAT + RS-BA1 Remote Utility</h2>
+<ul>
+<li><strong>RF GAIN</strong> writes the IC-9700's hardware RF gain over the existing SkyCAT
+CAT connection using CI-V <code>14 02</code> (<code>U RF_GAIN &lt;0..255&gt;</code>).
+The slider displays 0–100%, maps that to the rig's 0–255 range, and
+periodically reads back <code>U RF_GAIN_READ</code>. This requires a SkyCAT
+version that supports those two commands. Merely receiving the spectrum
+from RS-BA1/WinDivert does not imply that the CAT link is connected.</li>
+<li><strong>AF GAIN</strong> changes <strong>only the Windows Volume Mixer audio session</strong> used by
+the RS-BA1 Remote Utility playback process. It does <em>not</em> use CI-V
+<code>14 01</code>, alter the IC-9700's hardware AF level, or change Windows
+endpoint/system master volume.</li>
+<li>RS-BA1 Remote Utility usually owns the remote receive-audio stream.
+If its session is not identified automatically, <strong>right-click the
+AF GAIN heading or readout</strong> while Remote Utility is playing audio,
+then select the RS-BA1 playback application and output device. The
+selection persists in SkyRoof audio settings.</li>
+<li>When the selected session is missing or ambiguous, AF GAIN is disabled;
+no other application audio is changed. If the session is muted in Windows
+Volume Mixer, unmute it there first.</li>
+<li>If RF GAIN is disabled, verify that SkyRoof's RX (or TX) CAT settings
+connect to SkyCAT for model <code>IC-9700</code>, not to a generic rigctld endpoint.
+Radio gain readback and write rejections appear in SkyRoof/SkyCAT logs.</li>
+</ul>
+<p>These controls work independently of the Icom LAN Spectrum window's
+RS-BA1 passive-capture or SkyCAT waveform data source.</p>
 
 </article>
 
