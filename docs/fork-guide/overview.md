@@ -1,6 +1,6 @@
 # SkyRoof fork: overview and installation
 
-**Language:** English | [简体中文](../../zh-cn/fork-guide/overview.md)
+**Language:** English | [简体中文](../zh-cn/fork-guide/overview.md)
 
 This guide documents **[Iu-yang1/SkyRoof](https://github.com/Iu-yang1/SkyRoof)** at the fork's `master` branch, based on the upstream **VE3NEA/SkyRoof v1.55** codebase. It describes the implemented fork additions; it does not imply they are available in [upstream VE3NEA/SkyRoof](https://github.com/VE3NEA/SkyRoof). The original [English user guide](../users_guide/overview.md) remains the reference for basic panels, SDR operation, telemetry, SSTV/SSDV, FT4, ADIF, satellite groups and general settings.
 
