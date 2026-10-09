@@ -260,6 +260,10 @@ namespace SkyRoof
       if (n == "CW") return Slicer.Mode.CW;
       if (n == "USB" || n == "SSB") return Slicer.Mode.USB;
       if (n == "LSB") return Slicer.Mode.LSB;
+      // IC-9700 FM DATA (FM-D) is distinct from ordinary voice FM.
+      if (n is "FM_D" or "FM-D" or "FMD" or "FM DATA") return Slicer.Mode.FM_D;
+      if (n is "USB_D" or "USB-D" or "USBD") return Slicer.Mode.USB_D;
+      if (n is "LSB_D" or "LSB-D" or "LSBD") return Slicer.Mode.LSB_D;
       if (n is "FM" or "FMN" or "NFM" or "DSB" or "DSTAR" or "SSTV" or "APT" or "DUV")
         return Slicer.Mode.FM;
       if (n.StartsWith("AFSK") ||
