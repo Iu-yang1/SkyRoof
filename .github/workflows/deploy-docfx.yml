@@ -2,28 +2,27 @@ name: Deploy DocFX Site to GitHub Pages
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
     paths:
       - 'docs/**'
       - '.github/workflows/deploy-docfx.yml'
   workflow_dispatch:
 
-# The legacy gh-pages publishing action requires write access to contents.
-# A named job environment creates a real GitHub Deployment with a site URL.
+# Upload an artifact and call the official Pages API. Pushing to gh-pages with
+# GITHUB_TOKEN alone does not trigger GitHub's branch-based Pages publication.
+# One-time setup: Settings > Pages > Build and deployment > Source: GitHub Actions.
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
 concurrency:
-  group: 'pages'
-  cancel-in-progress: true
+  group: pages
+  cancel-in-progress: false
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: https://iu-yang1.github.io/SkyRoof/
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -36,18 +35,35 @@ jobs:
       - name: Install DocFX
         run: dotnet tool install -g docfx
 
-      - name: Build DocFX site
+      - name: Build DocFX HTML
         run: docfx build docs/docfx.json
-        
+
       - name: Build PDF
         run: docfx pdf docs/docfx.json
 
-      # This step publishes the built DocFX HTML to the already configured
-      # gh-pages branch. The job's github-pages environment records a
-      # visible deployment and public site URL in the repository sidebar.
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
+      - name: Verify English and Chinese entry points
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s docs/_site/index.html
+          test -s docs/_site/fork-guide/overview.html
+          test -s docs/_site/zh-cn/fork-guide/overview.html
+          test -s docs/_site/fork-guide/spectrum.html
+          test -s docs/_site/zh-cn/fork-guide/spectrum.html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: docs/_site
-          publish_branch: gh-pages
+          path: docs/_site
+
+  deploy:
+    name: Publish website
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publish to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

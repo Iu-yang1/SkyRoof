@@ -59,6 +59,17 @@ Changes below reflect **merged pull requests**, not every experimental branch. T
 
 Non-merged PRs and unmerged experimental feature branches are **not** documented as shipped. GitHub Light/Dark theme code is present in the current `master` and covered by theme regression tests; no claim is made that all future UI ideas are complete.
 
+## GitHub Pages returns 404 after a successful DocFX build
+
+The old workflow pushed compiled HTML to the `gh-pages` branch using the default `GITHUB_TOKEN`. That commit **does not trigger** GitHub's branch-based Pages build. Even when the branch contains an `index.html`, GitHub Pages may return 404 if the actual website was never published or the Pages source is not configured.
+
+1. An administrator opens [Settings → Pages](https://github.com/Iu-yang1/SkyRoof/settings/pages) and selects **Build and deployment → Source: GitHub Actions** (not `gh-pages` branch publishing).
+2. Run [Deploy DocFX Site to GitHub Pages](https://github.com/Iu-yang1/SkyRoof/actions/workflows/deploy-docfx.yml) from `master`, or push a change under `docs/`.
+3. Check **Publish website** (the official `actions/deploy-pages` step) completes successfully; a DocFX build or a committed `gh-pages` branch is insufficient.
+4. Open [the site](https://iu-yang1.github.io/SkyRoof/), [English guide](https://iu-yang1.github.io/SkyRoof/fork-guide/overview.html) and [中文手册](https://iu-yang1.github.io/SkyRoof/zh-cn/fork-guide/overview.html). If needed, use the [Actions deployment history](https://github.com/Iu-yang1/SkyRoof/actions/workflows/deploy-docfx.yml) to inspect the error.
+
+The official deployment job creates the `github-pages` environment and outputs the published page URL. GitHub's repository Deployments dashboard is a separate interface and may be unavailable even when the Actions run is accessible.
+
 ## Responsible operation, security and deployment
 
 - Avoid releasing logs containing RS-BA1/Icom authentication tokens, direct LAN passwords, IP topology or unredacted packets. Windows DPAPI protects supported persisted credentials; the settings backup should still be handled privately.
