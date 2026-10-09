@@ -25,6 +25,7 @@ namespace SkyRoof
       AfSessionMenu.Opening += (_, _) => PopulateAudioSessionMenu();
       AfGainSlider.ContextMenuStrip = AfSessionMenu;
       AfGainLabel.ContextMenuStrip = AfSessionMenu;
+      label2.ContextMenuStrip = AfSessionMenu;
       GainTips.SetToolTip(AfGainSlider,
         "RF remote mode: controls RS-BA1 Remote Utility in Windows Volume Mixer. " +
         "Right-click to select the audio session.");
