@@ -74,6 +74,33 @@ namespace VE3NEA.Dsp.Tests
             transcript));
     }
 
+    [Fact]
+    public void LaneLabels_PreferStableAssociationHintButKeepTrackDiagnostic()
+    {
+      CwSignalTrack hinted =
+        Track(
+          id: 17,
+          hintId: 404);
+      CwSignalTrack fallback =
+        Track(
+          id: 23,
+          hintId: 0);
+
+      CwConsolePresentation.LaneLabel(
+          hinted)
+        .Should().Be("H404");
+      CwConsolePresentation.LaneDiagnosticLabel(
+          hinted)
+        .Should().Be("H404 · #17");
+
+      CwConsolePresentation.LaneLabel(
+          fallback)
+        .Should().Be("T23");
+      CwConsolePresentation.LaneDiagnosticLabel(
+          fallback)
+        .Should().Be("T23");
+    }
+
     [Theory]
     [InlineData(
       false, true, "Active")]
