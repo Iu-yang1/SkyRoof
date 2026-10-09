@@ -59,6 +59,17 @@ Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
 
 **没有合并的 PR 和实验分支不会被当作已经发布的功能。** GitHub Light/Dark 主题实现及其测试已存在于当前 `master`；不意味着所有未来设想的 UI 均已完成。
 
+## GitHub Pages 文档 404（即使 DocFX 构建成功）
+
+旧版流程通过默认 `GITHUB_TOKEN` 将 DocFX 生成的 HTML 推送至 `gh-pages` 分支，但**这种提交不会自动触发 GitHub Pages 的分支发布**。即使 `gh-pages/index.html` 已存在，如果站点未真正部署、发布源未配置，访问文档仍可能返回 404。
+
+1. 管理员进入 [Settings → Pages](https://github.com/Iu-yang1/SkyRoof/settings/pages)，将 **Build and deployment → Source** 设为 **GitHub Actions**，而不是选择 `gh-pages` 分支。
+2. 在 `master` 分支手动触发 [Deploy DocFX Site to GitHub Pages](https://github.com/Iu-yang1/SkyRoof/actions/workflows/deploy-docfx.yml)，或提交 `docs/` 下的更改。
+3. 确认 **Publish website** 任务中的官方 `actions/deploy-pages` 发布成功；单纯完成 DocFX 构建或推送 `gh-pages` 不代表站点已上线。
+4. 核对[文档首页](https://iu-yang1.github.io/SkyRoof/)、[英文手册](https://iu-yang1.github.io/SkyRoof/fork-guide/overview.html)、[中文手册](https://iu-yang1.github.io/SkyRoof/zh-cn/fork-guide/overview.html)。如果仍为 404，在 [Actions 工作流](https://github.com/Iu-yang1/SkyRoof/actions/workflows/deploy-docfx.yml) 检查失败步骤。
+
+官方部署任务会生成 `github-pages` 环境，并返回实际网站 URL。仓库的 Deployments 页面与 Actions 历史不是同一入口，即使前者不可用，也应以正式发布任务的结果为准。
+
 ## 安全与发布说明
 
 - 不要公开 RS-BA1/Icom 登录令牌、Direct LAN 密码、网络拓扑及未脱敏的抓包数据。DPAPI 可以保护受支持的已保存凭据，但配置备份仍属于敏感文件。
