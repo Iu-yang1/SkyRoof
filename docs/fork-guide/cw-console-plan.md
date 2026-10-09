@@ -1,6 +1,6 @@
 # CW Console: full multi-lane Pileup and CI-V keyer implementation plan
 
-**Status: receive core under quantitative validation.** The repository now contains multi-carrier detection/tracking, a dual-resolution frame-level ridge scanner, a bounded ~360 ms fixed-lag beam/MHT, independent multi-lane ONNX/CTC inference, activity-aware interference masks, MergeGroup fallback, and time-aligned incremental transcript reconciliation. It still does **not** wire live SDR/WASAPI PCM into the CW Console UI, integrate HamNoise, or enable radio transmission.
+**Status: receive core under quantitative validation.** The repository now contains multi-carrier detection/tracking, a dual-resolution frame-level ridge scanner, a bounded ~360 ms fixed-lag beam/MHT, independent multi-lane ONNX/CTC inference, activity-aware interference masks, MergeGroup fallback, and time-aligned incremental transcript reconciliation. Live SDR / WASAPI capture / RS-BA1 render-endpoint loopback PCM now enters the receive core. The remaining work is the periodic analysis/DeepCW worker, dockable CW Console UI, HamNoise integration, and all transmit functionality.
 
 Chinese: [CW Console 完整规划](../../zh-cn/fork-guide/cw-console-plan.md).
 
@@ -48,7 +48,7 @@ The frame scanner is unit-tested separately for monotonic sample timing, Fast/Pr
 | ID | Stage | Deliverable | Acceptance gate |
 |---|---|---|---|
 | CW-00 | Baseline and license | CI SHA, restore path and model provenance | Existing FT4/spectrum/rotator unchanged |
-| CW-01 | Receive sources | SDR slicer, WASAPI selected endpoint, RS-BA1 loopback | Reconnect/device switch without blocking |
+| CW-01 | Receive sources | SDR Slicer, WASAPI capture, RS-BA1 render-endpoint loopback, source-isolated timeline, disabled-by-default receive | CI source-isolation/switch/clock rollback tests; live device rebinding without blocking audio callbacks |
 | CW-02 | PCM pipeline | Bounded Float32 samples, UTC tags, anti-aliased resampling | Slow inference never blocks audio callback |
 | CW-03 | Frame ridge scanner | Fast 80/15 ms ridge portions + Precision 240/120 ms observations, sample-index timeline, Doppler de-chirp | Fast frames never over-update Kalman; close carriers and silent coast are regression-tested |
 | CW-04 | Multi-frame association + tracking | 3-batch / ~360 ms beam-MHT, AssociationHintId, Kalman/GNN, MergeGroup fallback, up to 8 tracks | Crossing, single-peak merge, one-frame clutter and ID-swap regressions |
@@ -66,8 +66,8 @@ The frame scanner is unit-tested separately for monotonic sample timing, Fast/Pr
 
 ## Receive workflow
 
-1. Capture Float32 PCM from SDR, selected Windows audio capture, or RS-BA1 playback loopback. Icom LAN Spectrum frames contain trace points, **not decodable PCM**.
-2. Enter a bounded, timestamped audio hub. Optionally reduce CW noise with HamNoise; preserve a raw bypass path.
+1. Capture Float32 PCM from the existing 48 kHz SDR Slicer, a selected Windows WASAPI capture endpoint, or RS-BA1 render-endpoint loopback. Loopback is downmixed and resampled to mono 48 kHz before the shared ingress. Icom LAN Spectrum frames contain trace points, **not decodable PCM**.
+2. Route exactly one configured source through `CwPcmIngress`; changing source or seeing a backwards wall-clock timestamp starts a clean sample timeline. RS-BA1 loopback captures the whole render-endpoint mix rather than a process-isolated stream, so a dedicated endpoint is recommended. Then enter the bounded, timestamped audio hub. Optionally reduce CW noise with HamNoise; preserve a raw bypass path.
 3. Run the dual-resolution ridge scanner. Fast 15 ms-hop frames form activity/reliable-ridge evidence only; Precision 120 ms-hop observations remain on the monotonic PCM sample axis.
 4. Hold Precision batches in the bounded fixed-lag beam/MHT for about 360 ms, commit the oldest batch with future-validated AssociationHintId labels, then update the labelled Kalman/GNN/MergeGroup tracker. Empty batches follow the same delayed timeline and still advance coast/hold time. For each active lane, extract or spectrally translate the component to DeepCW's model coordinates; classic/monitor audio may use the independent complex DDC path.
 5. Run the publicly available DeepCW ONNX model with lane-specific state and CTC. Map emitted OutputFrames to approximate absolute time, reconcile overlapping windows by sequence-constrained symbol voting, and expose immutable committed text plus a correctable provisional suffix.
@@ -103,7 +103,7 @@ Use synthetic and recorded simultaneous CW WAV at 10/20/30/40 WPM; 3/5/8 carrier
 2. Dual-resolution Frame Ridge Scanner, sample-index timeline and precision-only Kalman updates (**PR #43**).
 3. Bounded fixed-lag beam/MHT, multi-frame crossing/merge association and AssociationHintId (**PR #44**).
 4. Incremental CTC timing, overlapping-window voting and real-ONNX streaming benchmark (**PR #45**).
-5. Live SDR/WASAPI/RS-BA1 PCM wiring.
+5. Live SDR / WASAPI capture / RS-BA1 render-endpoint loopback PCM wiring, hot settings rebinding and source timeline isolation (**PR #46**).
 6. Dockable CW Console UI, load governance, HamNoise and settings.
 7. SkyCAT constrained CW protocol and mock serial tests.
 8. Safe TX + satellite CAT integration and supervised bench verification.
