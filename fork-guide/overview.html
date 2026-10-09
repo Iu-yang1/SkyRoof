@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>SkyRoof fork: overview and installation | SkyRoof </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="SkyRoof fork: overview and installation | SkyRoof ">
+      
+      
+      <link rel="icon" href="../images/SkyRoof.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/Iu-yang1/SkyRoof/blob/master/docs/fork-guide/overview.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-1MMW827H44"></script>
+      <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments); }
+        gtag('js', new Date());
+        gtag('config', 'G-1MMW827H44');
+      </script>
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../images/s_over_the_globe.svg" alt="SkyRoof">
+            SkyRoof
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="skyroof-fork-overview-and-installation">SkyRoof fork: overview and installation</h1>
+
+<p><strong>Language:</strong> English | <a href="../zh-cn/fork-guide/overview.html">简体中文</a></p>
+<p>This guide documents <strong><a href="https://github.com/Iu-yang1/SkyRoof">Iu-yang1/SkyRoof</a></strong> at the fork's <code>master</code> branch, based on the upstream <strong>VE3NEA/SkyRoof v1.55</strong> codebase. It describes the implemented fork additions; it does not imply they are available in <a href="https://github.com/VE3NEA/SkyRoof">upstream VE3NEA/SkyRoof</a>. The original <a href="../users_guide/overview.html">English user guide</a> remains the reference for basic panels, SDR operation, telemetry, SSTV/SSDV, FT4, ADIF, satellite groups and general settings.</p>
+<h2 id="installation-and-supported-environment">Installation and supported environment</h2>
+<ul>
+<li><strong>Platform:</strong> SkyRoof is a Windows desktop application built with .NET 10 / Windows Forms. Build the <code>SkyRoof.sln</code> using the toolchain and Windows build configuration documented by the <a href="https://github.com/Iu-yang1/SkyRoof">repository</a>. Check the current <a href="https://github.com/Iu-yang1/SkyRoof/actions/workflows/compile-check.yml">Compile Check</a> before using a particular commit.</li>
+<li><strong>Distribution:</strong> See the <a href="https://github.com/Iu-yang1/SkyRoof/releases">fork's Releases</a>, <a href="https://github.com/Iu-yang1/SkyRoof/actions">Actions</a> and the original <a href="../download.html">Download</a> page. A successful compile-check or unsigned test-installer artifact is <strong>not necessarily a signed public release</strong>. The upstream v1.55 installer does <strong>not</strong> include all fork additions.</li>
+<li><strong>Optional dependencies:</strong> <a href="https://github.com/Iu-yang1/SkyCAT">SkyCAT fork</a> for CAT/CI-V, <a href="https://www.icomjapan.com/">RS-BA1</a> for IC-9700 remote operation, Hamlib <code>rotctld</code> for a rotator, and <strong>WinDivert</strong> for passive LAN spectrum capture. Each feature has separate setup requirements.</li>
+<li><strong>Before first launch:</strong> Set the correct station location and radio interfaces. For TX or moving antennas, start with PTT disengaged and the rotator in a safe position.</li>
+</ul>
+<h2 id="what-the-fork-adds">What the fork adds</h2>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Features available in this fork</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Satellite data</td>
+<td>Configurable SatNOGS, CelesTrak OMM CSV, manual TLE/OMM sources, AutoTLE fallback; JPL DE440s/DE421 or compatible local BSP kernel for Moon/Sun/Venus</td>
+</tr>
+<tr>
+<td>Frequency and Doppler</td>
+<td>Persistent per-transmitter base-frequency corrections, separate uplink/downlink controls, base/reset actions, tuning bar and corrected versus non-Doppler displays</td>
+</tr>
+<tr>
+<td>Transmitters</td>
+<td>Locally defined, editable and removable transmitter records; uplink-only, downlink-only and two-way entries</td>
+</tr>
+<tr>
+<td>CAT and remote</td>
+<td>SkyCAT integration, hardened CAT/PTT transitions, global physical/HID PTT key, CTCSS handling, FT4 safety updates and NAudio/WASAPI migration</td>
+</tr>
+<tr>
+<td>IC-9700 spectrum</td>
+<td>New dockable scope with native SkyCAT source, RS-BA1 passive LAN capture and experimental independent Direct LAN; spectrum/waterfall and scope settings</td>
+</tr>
+<tr>
+<td>Rotator</td>
+<td>Improved Hamlib rotctld state handling, manual direction-wheel card, tracking lockout and feedback-verified multi-waypoint PARK routes</td>
+</tr>
+<tr>
+<td>Interface</td>
+<td>Light theme with blue/pink/white design (<code>#5BCEFA</code>, <code>#F5A9B8</code>, <code>#FFFFFF</code>), GitHub Light/Dark themes, RF gain via SkyCAT and selected RS-BA1 Windows playback AF gain</td>
+</tr>
+<tr>
+<td>Reliability</td>
+<td>Recoverable settings backups, protected saved credentials, source validation and regression-tested packaging and Windows CI</td>
+</tr>
+</tbody>
+</table>
+<h2 id="recommended-ic-9700-coexistence-architecture">Recommended IC-9700 coexistence architecture</h2>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Connection</th>
+<th>Ownership</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RS-BA1 Remote Utility</td>
+<td>IC-9700 LAN and its virtual CI-V COM</td>
+<td>Remote LAN session, radio audio</td>
+</tr>
+<tr>
+<td>SkyCAT <code>skycatd</code></td>
+<td>One RS-BA1 CI-V virtual COM</td>
+<td>Serial command queue and client arbitration</td>
+</tr>
+<tr>
+<td>SkyRoof CAT</td>
+<td><code>127.0.0.1:4532</code></td>
+<td>Satellite tuning, Doppler and radio control</td>
+</tr>
+<tr>
+<td>WSJT-X (optional)</td>
+<td>SkyCAT <code>127.0.0.1:4534</code></td>
+<td>Restricted rigctl proxy</td>
+</tr>
+<tr>
+<td>SkyRoof native scope (optional)</td>
+<td>SkyCAT <code>127.0.0.1:4535</code> or passive RS-BA1 LAN</td>
+<td>Spectrum samples</td>
+</tr>
+<tr>
+<td>Remote Control Switch (optional)</td>
+<td>SkyCAT <code>127.0.0.1:4537</code></td>
+<td>Restricted auxiliary radio settings; no VFO/tuning/PTT</td>
+</tr>
+<tr>
+<td>Hamlib rotctld</td>
+<td>Default <code>127.0.0.1:4533</code></td>
+<td>Antenna pointing</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Important:</strong> Distinct TCP ports do <strong>not</strong> create separate radio CI-V links. Only one program should own the underlying virtual COM. See <a href="radio-and-ft4.html">CAT and FT4</a>, <a href="spectrum.html">spectrum</a> and the <a href="https://iu-yang1.github.io/SkyCAT/skycatd.html">SkyCAT guide</a>.</p>
+<h2 id="guide-navigation">Guide navigation</h2>
+<p><a href="satellite-data-and-tuning.html">Satellite data and tuning</a> · <a href="radio-and-ft4.html">CAT, FT4 and remote</a> · <a href="spectrum.html">IC-9700 spectrum</a> · <a href="rotator-and-ui.html">Rotator and interface</a> · <a href="troubleshooting-and-history.html">Troubleshooting and PR history</a>.</p>
+<p><strong>Feature-status convention:</strong> A capability described as <strong>experimental</strong> is present in source code but should not be treated as production-ready. Pages describe the current repository implementation, not a promise that every radio/firmware supports every command.</p>
+
+</article>
+
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

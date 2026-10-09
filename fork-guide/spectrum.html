@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>IC-9700 spectrum and waterfall | SkyRoof </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="IC-9700 spectrum and waterfall | SkyRoof ">
+      
+      
+      <link rel="icon" href="../images/SkyRoof.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/Iu-yang1/SkyRoof/blob/master/docs/fork-guide/spectrum.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-1MMW827H44"></script>
+      <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments); }
+        gtag('js', new Date());
+        gtag('config', 'G-1MMW827H44');
+      </script>
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../images/s_over_the_globe.svg" alt="SkyRoof">
+            SkyRoof
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="ic-9700-spectrum-and-waterfall">IC-9700 spectrum and waterfall</h1>
+
+<p><strong>Language:</strong> English | <a href="../zh-cn/fork-guide/spectrum.html">简体中文</a></p>
+<p>The fork introduces a dockable <strong>Icom LAN Spectrum</strong> panel separate from SkyRoof's original SDR waterfall. It consumes IC-9700 CI-V <strong>27 00</strong> scope data (normally a <strong>475-bin</strong> spectrum sweep) and provides a scope trace, optional waterfall, frequency markers, peak hold, averaging and display controls. It is not a replacement for the original SDR's baseband samples or a demodulator.</p>
+<p>Open <strong>Icom LAN Spectrum</strong> from the application's panel/window menu. Configure <strong>Tools → Settings → Icom LAN Spectrum</strong> first.</p>
+<h2 id="choose-the-source-separately-from-the-control-path">Choose the source separately from the control path</h2>
+<table>
+<thead>
+<tr>
+<th>Source in settings</th>
+<th>Requirements</th>
+<th>Important behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>SkyCat</strong></td>
+<td>SkyCAT's native scope TCP stream at <code>127.0.0.1:4535</code>; active SkyCAT CI-V connection</td>
+<td>Scope data emitted from the existing SkyCAT serial transport; does not start another IC-9700 LAN session</td>
+</tr>
+<tr>
+<td><strong>RsBa1</strong></td>
+<td>RS-BA1 running, LAN CI-V traffic, installed WinDivert, appropriate privileges</td>
+<td><strong>Passive UDP sniffing</strong> of RS-BA1's existing session; does not log in to the radio; may stop when RS-BA1 or its spectrum output closes</td>
+</tr>
+<tr>
+<td><strong>DirectLan</strong></td>
+<td>Radio IP, LAN credentials, available remote session</td>
+<td><strong>Experimental authenticated client</strong>; manual Start only, can conflict with RS-BA1; avoid running both as competing remote clients</td>
+</tr>
+</tbody>
+</table>
+<p>The <strong>Scope control path</strong> is a <strong>different</strong> setting: <code>Auto</code>, <code>SkyCat</code>, <code>DirectLan</code> or <code>ReadOnly</code>. Auto follows the selected source, but <strong>passive RS-BA1 is read-only in Auto</strong>. To control scope settings while observing passive RS-BA1 frames, explicitly choose <strong>SkyCat</strong> and maintain SkyCAT CAT access. <code>ReadOnly</code> never writes scope controls.</p>
+<p><strong>Recommended with RS-BA1 + SkyRoof:</strong> choose <strong>RsBa1</strong> as waveform source and <strong>SkyCat</strong> as control path when the currently connected SkyCAT supports IC-9700 scope commands. If no control path is available, continue in read-only mode. Do <strong>not</strong> open the experimental independent Direct LAN session merely to improve FPS.</p>
+<h2 id="instrument-style-scope-controls">Instrument-style scope controls</h2>
+<p>The updated panel includes a trace and optional waterfall with adjustable splitter height, zoom, scroll, hold/peak-hold reset, and:</p>
+<ul>
+<li>MAIN / SUB or Auto scope band selection;</li>
+<li>CENTER / FIXED / SCROLL display mode, supported spans, fixed-edge selection, reference level;</li>
+<li>sweep speed, VBW, TX display, center reference and marker placement where accepted by the radio;</li>
+<li>local spectrum averaging and smoothing, waterfall brightness/contrast/palette/history;</li>
+<li>radio-frequency markers and mouse-assisted tuning where the active CAT mode permits writes.</li>
+</ul>
+<p>Frequency/control readback is <strong>incremental</strong>: the application asks SkyCAT for one verified field per CAT cycle and preserves partial readback if a radio/firmware does not support a register. This avoids monopolizing the CAT/PTT path while reading many scope registers. A failed individual readback does not mean all settings are confirmed; the panel can indicate synchronization pending or read-only.</p>
+<p>The <strong>local displayed frame rate</strong> is not necessarily the IC-9700's complete sweep rate. With RS-BA1 LAN, a complete 475-bin <code>27 00</code> frame may arrive as a single CI-V message, while the virtual COM path may deliver multiple serial chunks. The assembler supports both paths, but should not promise a fixed FPS.</p>
+<h2 id="windivert-and-permissions">WinDivert and permissions</h2>
+<p>Passive RS-BA1 capture needs a compatible <strong>WinDivert DLL/driver</strong> and administrative rights to capture supported UDP traffic. The Windows installer/workflow prepares <strong>WinDivert 2.2.2 x64</strong>. During reinstall, an already-loaded <code>WinDivert64.sys</code> may remain in use; do not remove the live driver or terminate RS-BA1 blindly. Reuse a compatible existing driver when supported, or stop the dependent applications before changing the driver.</p>
+<p>There are three typical independent failure causes:</p>
+<ol>
+<li>RS-BA1 closes its spectrum window or session, so passive waveform traffic no longer exists;</li>
+<li>SkyCAT is connected for CAT but <strong>4535</strong> has no native scope frames (serial scope readback/source limitations);</li>
+<li>The scope is receiving frames, but <strong>control</strong> is read-only/unavailable. A visible trace does not prove a setting was written to the radio.</li>
+</ol>
+<p>Treat Direct LAN as <strong>lab/experimental</strong> only. Credentials are protected in saved settings, but never publish network login details or raw authenticated packet dumps in bug reports.</p>
+<p>More background: <a href="https://iu-yang1.github.io/SkyCAT/skycatd.html">SkyCAT documentation</a> · <a href="../users_guide/waterfall_display.html">original SDR waterfall</a>.</p>
+
+</article>
+
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>SkyRoof Fork：概览与安装 | SkyRoof </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="SkyRoof Fork：概览与安装 | SkyRoof ">
+      
+      
+      <link rel="icon" href="../../images/SkyRoof.ico">
+      <link rel="stylesheet" href="../../public/docfx.min.css">
+      <link rel="stylesheet" href="../../public/main.css">
+      <meta name="docfx:navrel" content="../../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/Iu-yang1/SkyRoof/blob/master/docs/zh-cn/fork-guide/overview.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-1MMW827H44"></script>
+      <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments); }
+        gtag('js', new Date());
+        gtag('config', 'G-1MMW827H44');
+      </script>
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../../index.html">
+            <img id="logo" class="svg" src="../../images/s_over_the_globe.svg" alt="SkyRoof">
+            SkyRoof
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="skyroof-fork概览与安装">SkyRoof Fork：概览与安装</h1>
+
+<p><strong>语言：</strong> <a href="../../fork-guide/overview.html">English</a> | 简体中文</p>
+<p>本文档对应 <strong><a href="https://github.com/Iu-yang1/SkyRoof">Iu-yang1/SkyRoof</a></strong> 的 <code>master</code>，以 <strong>VE3NEA/SkyRoof v1.55</strong> 上游代码为基线，介绍 <strong>fork 内已经合并的功能</strong>，不代表上游 <a href="https://github.com/VE3NEA/SkyRoof">VE3NEA/SkyRoof</a> 也提供这些扩展。原来的<a href="../../users_guide/overview.html">英文用户手册</a>仍适用于基础面板、SDR 接收、遥测、SSTV/SSDV、FT4、ADIF 和卫星分组等通用功能。</p>
+<h2 id="安装与运行环境">安装与运行环境</h2>
+<ul>
+<li><strong>平台：</strong> Windows 桌面，基于 .NET 10 / Windows Forms。构建 <code>SkyRoof.sln</code> 时应使用仓库相应的 Windows/.NET 构建工具链；建议先核对 <a href="https://github.com/Iu-yang1/SkyRoof/actions/workflows/compile-check.yml">Compile Check</a>。</li>
+<li><strong>获取程序：</strong> 参阅 fork <a href="https://github.com/Iu-yang1/SkyRoof/releases">Releases</a>、<a href="https://github.com/Iu-yang1/SkyRoof/actions">Actions</a> 及原有<a href="../../download.html">下载说明</a>。<strong>通过编译测试的构建产物或未签名测试安装包不等于正式签名发行版</strong>；上游 v1.55 安装包不包含 fork 的全部扩展。</li>
+<li><strong>可选依赖：</strong> <a href="https://github.com/Iu-yang1/SkyCAT">SkyCAT fork</a> 提供 CAT/CI-V；RS-BA1 提供 IC-9700 LAN 远控；Hamlib <code>rotctld</code> 提供转台接口；<strong>WinDivert</strong> 用于被动 LAN 频谱。</li>
+<li><strong>首次使用：</strong> 配置台站位置与正确的 CAT、音频、转台设备。发射及转动天线之前，先确保 PTT 未按下且转台处于安全方位。</li>
+</ul>
+<h2 id="自-fork-以来的主要扩展">自 fork 以来的主要扩展</h2>
+<table>
+<thead>
+<tr>
+<th>领域</th>
+<th>已经合并的功能</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>卫星与轨道</td>
+<td>自定义 SatNOGS、CelesTrak OMM CSV、手动 TLE/OMM 来源、AutoTLE 后备；JPL DE440s/DE421 或本地 BSP 对月球、太阳、金星的计算</td>
+</tr>
+<tr>
+<td>频率/多普勒</td>
+<td>分上下行保存的 Base 频率校正、返回基准、重置数据库、参考频率滑动调谐、已校正和未应用多普勒的频率显示</td>
+</tr>
+<tr>
+<td>转发器</td>
+<td>本地创建、编辑、删除转发器；允许只有上行、只有下行或两者都有</td>
+</tr>
+<tr>
+<td>CAT/远控</td>
+<td>SkyCAT 连接、可靠 CAT/PTT、物理/HID 快捷 PTT、CTCSS、FT4 安全改进、NAudio/WASAPI</td>
+</tr>
+<tr>
+<td>IC-9700 频谱</td>
+<td>独立停靠频谱页、SkyCAT 原生源、RS-BA1 被动 LAN 源、<strong>实验性</strong>独立 Direct LAN；示波与瀑布设置</td>
+</tr>
+<tr>
+<td>转台</td>
+<td>rotctld 反馈及重试、方向轮快捷卡、跟踪期间手动操作锁定、按真实反馈逐点执行的多航点 PARK</td>
+</tr>
+<tr>
+<td>主题与增益</td>
+<td>粉蓝白浅色配色（<code>#5BCEFA</code>、<code>#F5A9B8</code>、<code>#FFFFFF</code>）、GitHub Light/Dark、SkyCAT RF GAIN 和指定 RS-BA1 播放会话的 AF GAIN</td>
+</tr>
+<tr>
+<td>安全与可靠性</td>
+<td>设置备份恢复、敏感凭据保护、下载数据校验和 Windows 构建测试</td>
+</tr>
+</tbody>
+</table>
+<h2 id="ic-9700-三软件并行的推荐架构">IC-9700 三软件并行的推荐架构</h2>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>接口</th>
+<th>控制职责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RS-BA1 Remote Utility</td>
+<td>IC-9700 LAN、虚拟 CI-V COM</td>
+<td>LAN 会话、电台音频</td>
+</tr>
+<tr>
+<td>SkyCAT <code>skycatd</code></td>
+<td>独占一个 RS-BA1 虚拟 COM</td>
+<td>CAT 指令串行仲裁</td>
+</tr>
+<tr>
+<td>SkyRoof CAT</td>
+<td><code>127.0.0.1:4532</code></td>
+<td>卫星频率、模式、多普勒和电台控制</td>
+</tr>
+<tr>
+<td>WSJT-X（可选）</td>
+<td><code>127.0.0.1:4534</code></td>
+<td>受限 rigctl 代理</td>
+</tr>
+<tr>
+<td>SkyRoof 频谱（可选）</td>
+<td>SkyCAT <code>127.0.0.1:4535</code> 或 RS-BA1 被动 LAN</td>
+<td>频谱帧</td>
+</tr>
+<tr>
+<td>Remote Control Switch（可选）</td>
+<td><code>127.0.0.1:4537</code></td>
+<td>输入源、压缩器、功率等辅助设置，不操作 VFO/PTT</td>
+</tr>
+<tr>
+<td>Hamlib rotctld</td>
+<td>默认 <code>127.0.0.1:4533</code></td>
+<td>天线指向</td>
+</tr>
+</tbody>
+</table>
+<p><strong>特别注意：</strong> 不同 TCP 端口仍然共用同一条电台 CI-V 串口链路，不能让多个程序直接争抢虚拟 COM。参阅 <a href="radio-and-ft4.html">CAT 与 FT4</a>、<a href="spectrum.html">频谱</a>和 <a href="https://iu-yang1.github.io/SkyCAT/zh-cn/skycatd.html">SkyCAT 中文指南</a>。</p>
+<h2 id="文档目录">文档目录</h2>
+<p><a href="satellite-data-and-tuning.html">卫星数据与频率</a> · <a href="radio-and-ft4.html">CAT、FT4 与远控</a> · <a href="spectrum.html">IC-9700 频谱</a> · <a href="rotator-and-ui.html">转台与主题</a> · <a href="troubleshooting-and-history.html">排障与 PR 历史</a>。</p>
+<p><strong>功能状态说明：</strong> “实验性”指相关代码已经存在，但尚不应视为稳定生产方案；具体 CI-V 能力还取决于电台机型及固件。</p>
+
+</article>
+
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>IC-9700 原生频谱与瀑布 | SkyRoof </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="IC-9700 原生频谱与瀑布 | SkyRoof ">
+      
+      
+      <link rel="icon" href="../../images/SkyRoof.ico">
+      <link rel="stylesheet" href="../../public/docfx.min.css">
+      <link rel="stylesheet" href="../../public/main.css">
+      <meta name="docfx:navrel" content="../../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/Iu-yang1/SkyRoof/blob/master/docs/zh-cn/fork-guide/spectrum.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-1MMW827H44"></script>
+      <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments); }
+        gtag('js', new Date());
+        gtag('config', 'G-1MMW827H44');
+      </script>
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../../index.html">
+            <img id="logo" class="svg" src="../../images/s_over_the_globe.svg" alt="SkyRoof">
+            SkyRoof
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="ic-9700-原生频谱与瀑布">IC-9700 原生频谱与瀑布</h1>
+
+<p><strong>语言：</strong> <a href="../../fork-guide/spectrum.html">English</a> | 简体中文</p>
+<p>fork 新增可停靠的 <strong>Icom LAN Spectrum</strong> 面板，与原来的 SDR 宽带瀑布独立。它接收 IC-9700 的 CI-V <strong><code>27 00</code></strong> 频谱帧，完整扫描通常为 <strong>475 点</strong>，显示频谱曲线、瀑布、频率标记、峰值保持、平均和显示调节。它不是 SDR 基带采样，也不能代替接收机解调。</p>
+<p>通过程序的面板/窗口菜单打开 <strong>Icom LAN Spectrum</strong>，先在 <strong>Tools → Settings → Icom LAN Spectrum</strong> 配置数据源。</p>
+<h2 id="频谱来源与写入控制链分开选择">频谱来源与写入控制链分开选择</h2>
+<table>
+<thead>
+<tr>
+<th>Scope source</th>
+<th>依赖</th>
+<th>实际行为</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>SkyCat</strong></td>
+<td>SkyCAT 的 <code>127.0.0.1:4535</code> 原生二进制频谱流；有效 CI-V 链路</td>
+<td>直接复用 SkyCAT 当前串口流，不另建 IC-9700 LAN 会话</td>
+</tr>
+<tr>
+<td><strong>RsBa1</strong></td>
+<td>RS-BA1 已开启、LAN 上有 CI-V 数据、WinDivert、相应权限</td>
+<td><strong>被动抓取</strong> RS-BA1 现有 UDP 会话，不登录电台；关闭 RS-BA1 或它的频谱窗口后，数据可能停止</td>
+</tr>
+<tr>
+<td><strong>DirectLan</strong></td>
+<td>电台 IP、LAN 账号密码及空闲会话资源</td>
+<td><strong>实验性独立鉴权客户端</strong>，只能手动启动，可能与现有 RS-BA1 会话冲突</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Scope control path</strong> 是另外一个选项：<code>Auto</code>、<code>SkyCat</code>、<code>DirectLan</code>、<code>ReadOnly</code>。Auto 会按来源选择控制路径，但 <strong>Auto + 被动 RS-BA1 通常是只读</strong>。希望被动接收 RS-BA1 频谱，同时用 SkyCAT 改变频谱模式时，需要将 control path 显式设成 <strong>SkyCat</strong> 并保持 CAT 连接。<code>ReadOnly</code> 完全不写入频谱控制指令。</p>
+<p><strong>RS-BA1 与 SkyRoof 并行时推荐：</strong> <code>Source = RsBa1</code>，<code>Control path = SkyCat</code>（前提是 SkyCAT 已连接且支持对应 CI-V scope 指令）。没有可用控制通道就维持只读。<strong>不要仅为了提高帧率启动实验性 Direct LAN 争用会话</strong>。</p>
+<h2 id="频谱控制和显示">频谱控制和显示</h2>
+<p>新版面板提供本地瀑布与曲线分割比例、缩放、hold/peak hold 与清除，及：</p>
+<ul>
+<li>MAIN/SUB/Auto 波形选取；</li>
+<li>CENTER、FIXED、SCROLL 范围模式、span、边界组和参考电平；</li>
+<li>扫描速度、VBW、TX 时频谱、CENTER 标记参考等（以电台实际支持为准）；</li>
+<li>本地平均/平滑、瀑布亮度/对比度/色表/历史行数；</li>
+<li>与 CAT 状态相关的频率标记和鼠标调谐。</li>
+</ul>
+<p>频谱状态采用<strong>增量读回</strong>：每个 CAT 周期只查询一项并验证答复，允许个别不支持的寄存器缺失而保留其他已确认字段，避免长时间占用与 PTT 共用的命令锁。某次读回失败不能表示所有选项都已成功同步；界面可能显示正在同步或只读。</p>
+<p><strong>界面 FPS 不等于电台完整扫描 FPS。</strong> RS-BA1 LAN 可能把 475 点 <code>27 00</code> 一次性发送，而虚拟 COM 可能将一个扫描拆成多条消息；程序集兼容不同形式，但不保证恒定帧率。</p>
+<h2 id="windivert-与管理员权限">WinDivert 与管理员权限</h2>
+<p>RS-BA1 被动捕获需要兼容的 <strong>WinDivert DLL/驱动</strong>及管理员权限。构建/安装链采用 <strong>WinDivert 2.2.2 x64</strong>。重装时 <code>WinDivert64.sys</code> 可能已由某程序加载；不要随意删除正在使用的驱动或盲目结束 RS-BA1。请使用受支持的同版本复用方案，或先正常关闭依赖程序再替换。</p>
+<p>常见三种不同故障：</p>
+<ol>
+<li>关闭 RS-BA1 频谱或会话后，不再有被动扫描帧；</li>
+<li>SkyCAT 普通 CAT 可用，但原生 <code>4535</code> 频谱没有有效数据；</li>
+<li>已经显示频谱，但 scope control path 处于只读或者电台拒绝写入。</li>
+</ol>
+<p><strong>Direct LAN 目前仅限实验验证</strong>；即使凭据在设置文件中受到保护，也不要在公开 Issue 上传未经脱敏的登录信息或原始鉴权网络报文。</p>
+<p>更多：<a href="https://iu-yang1.github.io/SkyCAT/zh-cn/skycatd.html">SkyCAT</a> · <a href="../../users_guide/waterfall_display.html">原 SDR 瀑布</a>。</p>
+
+</article>
+
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

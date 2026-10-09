@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Rotator, PARK routes, interface themes and reliability | SkyRoof </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Rotator, PARK routes, interface themes and reliability | SkyRoof ">
+      
+      
+      <link rel="icon" href="../images/SkyRoof.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/Iu-yang1/SkyRoof/blob/master/docs/fork-guide/rotator-and-ui.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-1MMW827H44"></script>
+      <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments); }
+        gtag('js', new Date());
+        gtag('config', 'G-1MMW827H44');
+      </script>
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../images/s_over_the_globe.svg" alt="SkyRoof">
+            SkyRoof
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="rotator-park-routes-interface-themes-and-reliability">Rotator, PARK routes, interface themes and reliability</h1>
+
+<p><strong>Language:</strong> English | <a href="../zh-cn/fork-guide/rotator-and-ui.html">简体中文</a></p>
+<h2 id="hamlib-rotctld-rotator-prs-2223-and-2528-34">Hamlib rotctld rotator (PRs #22–23 and #25–28, #34)</h2>
+<p>Configure <strong>Settings → Rotator Control</strong> with the <code>rotctld</code> host and TCP port, normally <strong>127.0.0.1:4533</strong>; adjust azimuth/elevation limits, offsets and step size to the <em>real mechanical antenna and cable geometry</em>. A typical external rotator can be served by Hamlib with GS-232B-compatible hardware. The correct COM port, baud rate and protocol are configured in <code>rotctld</code>, not on SkyRoof's TCP side.</p>
+<p>The improved rotator driver retries movement sensibly, parses rotctld replies, avoids redundant <strong>Track</strong> actions and handles stop/disconnect transitions. A new direction-wheel popup is available from the rotator/status right-click entry for manual jog; its directional buttons and PARK action are intended for situations when automatic antenna tracking is not active.</p>
+<p><strong>Safety:</strong> Manual jog is locked while SkyRoof is actively tracking a satellite pass. Stopping tracking may be necessary before enabling manual controls. Always observe the antenna and stop motion if limits or offsets are wrong.</p>
+<h3 id="ordered-multi-waypoint-park">Ordered multi-waypoint PARK</h3>
+<p>Right-click <strong>PARK</strong> to edit the saved route/preset. The editor supports ordered <strong>Add / Update / Delete / Move</strong> waypoints (azimuth + elevation), with a single target still supported for compatibility. SkyRoof executes the route <strong>sequentially</strong>, not as simultaneous AZ/EL jumps across all waypoints.</p>
+<p>The PARK state machine proceeds only after <strong>two separate, fresh rotctld position replies</strong> within approximately <strong>1.5°</strong> of the current target. It aborts if feedback becomes stale (over <strong>12 s</strong>), is invalid, disconnects, or the current leg exceeds <strong>5 minutes</strong>. Azimuth is compared as a <strong>mechanical angle</strong> — no modulo 360 normalization for a 450-degree rotator. The route is cancelled by tracking/manual jog/STOP as appropriate. Do not interpret a rotctld command ACK as proof the antenna moved.</p>
+<h2 id="interface-saved-configuration-and-themes-prs-1213-and-3035">Interface, saved configuration and themes (PRs #12–13 and #30–35)</h2>
+<p>Under <strong>Tools → Theme</strong>, current choices include <strong>System</strong>, <strong>Light</strong>, <strong>Dark</strong>, <strong>GitHub Light</strong> and <strong>GitHub Dark</strong>. The fork's light palette includes <strong><code>#5BCEFA</code> blue</strong>, <strong><code>#F5A9B8</code> pink</strong>, and <strong><code>#FFFFFF</code> white</strong>. The two GitHub themes use their respective light/dark design tokens.</p>
+<p>Theme mode is persisted in <code>Settings.json</code> and initialized <strong>before</strong> creating the dock host; depending on the UI toolkit, changing it may require restart or re-creation of views. The spectrum's instrument trace may use its own high-contrast presentation independent of the general application theme.</p>
+<p>The UI stores docking layout, group/list widths and settings. Settings writes are made with temporary-file replacement and a <code>Settings.json.bak</code> backup. A damaged file can be preserved as a redacted <code>.damaged-*.json</code> copy, then recovered from backup or defaults. Sensitive stored credentials are protected with Windows DPAPI where supported and legacy plaintext fields are migrated.</p>
+<p>The top toolbar supports IC-9700 <strong>RF gain through SkyCAT</strong>, and separately selected <strong>RS-BA1 playback-session AF gain</strong>. See <a href="radio-and-ft4.html">CAT and FT4</a> for these distinctly scoped controls.</p>
+<h2 id="maintenance-notes">Maintenance notes</h2>
+<ul>
+<li>Source and UI feature tests are maintained in the Windows <a href="https://github.com/Iu-yang1/SkyRoof/actions/workflows/compile-check.yml">Compile Check</a> workflow.</li>
+<li>The WinDivert installer packaging path checks a pinned upstream archive hash and supports compatible in-use driver handling.</li>
+<li>The application remains compatible with upstream SDR, telemetry, SSTV, SSDV, QSO logging/ADIF, recording and pass planning workflows unless explicitly noted. See <a href="../users_guide/overview.html">the original user guide</a>.</li>
+</ul>
+<p>See <a href="../users_guide/rotator_control.html">Rotator Control</a>, <a href="../users_guide/setting_up_rotator_control.html">Setting Up Rotator Control</a> and <a href="../users_guide/data_folder.html">Data Folder</a>.</p>
+
+</article>
+
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -32,6 +32,79 @@
       "version": ""
     },
     {
+      "type": "Conceptual",
+      "source_relative_path": "fork-guide/overview.md",
+      "output": {
+        ".html": {
+          "relative_path": "fork-guide/overview.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "fork-guide/radio-and-ft4.md",
+      "output": {
+        ".html": {
+          "relative_path": "fork-guide/radio-and-ft4.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "fork-guide/rotator-and-ui.md",
+      "output": {
+        ".html": {
+          "relative_path": "fork-guide/rotator-and-ui.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "fork-guide/satellite-data-and-tuning.md",
+      "output": {
+        ".html": {
+          "relative_path": "fork-guide/satellite-data-and-tuning.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "fork-guide/spectrum.md",
+      "output": {
+        ".html": {
+          "relative_path": "fork-guide/spectrum.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Toc",
+      "source_relative_path": "fork-guide/toc.yml",
+      "output": {
+        ".html": {
+          "relative_path": "fork-guide/toc.html"
+        },
+        ".json": {
+          "relative_path": "fork-guide/toc.json"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "fork-guide/troubleshooting-and-history.md",
+      "output": {
+        ".html": {
+          "relative_path": "fork-guide/troubleshooting-and-history.html"
+        }
+      },
+      "version": ""
+    },
+    {
       "type": "Resource",
       "source_relative_path": "images/IC-9700-TX.png",
       "output": {
@@ -1863,6 +1936,79 @@
       "output": {
         ".html": {
           "relative_path": "users_guide/waterfall_display.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "zh-cn/fork-guide/overview.md",
+      "output": {
+        ".html": {
+          "relative_path": "zh-cn/fork-guide/overview.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "zh-cn/fork-guide/radio-and-ft4.md",
+      "output": {
+        ".html": {
+          "relative_path": "zh-cn/fork-guide/radio-and-ft4.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "zh-cn/fork-guide/rotator-and-ui.md",
+      "output": {
+        ".html": {
+          "relative_path": "zh-cn/fork-guide/rotator-and-ui.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "zh-cn/fork-guide/satellite-data-and-tuning.md",
+      "output": {
+        ".html": {
+          "relative_path": "zh-cn/fork-guide/satellite-data-and-tuning.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "zh-cn/fork-guide/spectrum.md",
+      "output": {
+        ".html": {
+          "relative_path": "zh-cn/fork-guide/spectrum.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Toc",
+      "source_relative_path": "zh-cn/fork-guide/toc.yml",
+      "output": {
+        ".html": {
+          "relative_path": "zh-cn/fork-guide/toc.html"
+        },
+        ".json": {
+          "relative_path": "zh-cn/fork-guide/toc.json"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "zh-cn/fork-guide/troubleshooting-and-history.md",
+      "output": {
+        ".html": {
+          "relative_path": "zh-cn/fork-guide/troubleshooting-and-history.html"
         }
       },
       "version": ""
