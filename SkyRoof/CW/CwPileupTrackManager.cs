@@ -10,7 +10,8 @@ namespace SkyRoof.CW
     double SnrDb,
     double MeasurementSigmaHz = 0,
     double ResolutionHz = 0,
-    double ActivityProbability = 1);
+    double ActivityProbability = 1,
+    int AssociationHintId = 0);
 
   /// <summary>
   /// Stable identity and observed state of one independently decodable CW lane.
@@ -28,7 +29,8 @@ namespace SkyRoof.CW
     bool Ambiguous = false,
     double FrequencySigmaHz = 0,
     int MergeGroupId = 0,
-    double IdentityConfidence = 1);
+    double IdentityConfidence = 1,
+    int AssociationHintId = 0);
 
   /// <summary>
   /// Multi-target CW ridge tracker.
@@ -70,6 +72,7 @@ namespace SkyRoof.CW
       public double LastMeasurementFrequencyHz;
       public DateTime LastMeasurementUtc;
       public double ObservedDriftHzPerSecond;
+      public int AssociationHintId;
     }
 
     private readonly List<State> tracks = new();
@@ -371,7 +374,9 @@ namespace SkyRoof.CW
           Active = true,
           LastMeasurementFrequencyHz = peak.FrequencyHz,
           LastMeasurementUtc = utc,
-          ObservedDriftHzPerSecond = 0
+          ObservedDriftHzPerSecond = 0,
+          AssociationHintId =
+            peak.AssociationHintId
         });
       }
 
@@ -391,7 +396,8 @@ namespace SkyRoof.CW
           t.Ambiguous,
           Math.Sqrt(Math.Max(t.P00, 0)),
           t.MergeGroupId,
-          IdentityConfidence(t, utc)))
+          IdentityConfidence(t, utc),
+          t.AssociationHintId))
         .ToArray();
     }
 
@@ -490,7 +496,21 @@ namespace SkyRoof.CW
       double snrPenalty =
         Math.Min(Math.Abs(candidate.SnrDb - track.SnrDb), 30) / 30.0;
 
-      return nis + 0.12 * snrPenalty;
+      double hintCost = 0;
+      if (candidate.AssociationHintId != 0 &&
+          track.AssociationHintId != 0)
+      {
+        // Fixed-lag hints are already future-validated. A mismatch should be
+        // more expensive than the normal miss cost, so a track normally
+        // coasts instead of swapping identity at a crossing. The frequency
+        // gate above still has final authority over physical plausibility.
+        hintCost =
+          candidate.AssociationHintId == track.AssociationHintId
+            ? -0.75
+            : 10.0;
+      }
+
+      return nis + 0.12 * snrPenalty + hintCost;
     }
 
     private int[] SolveGlobalAssignment(
@@ -582,6 +602,14 @@ namespace SkyRoof.CW
       track.LastMeasurementFrequencyHz =
         candidate.FrequencyHz;
       track.LastMeasurementUtc = utc;
+      if (candidate.AssociationHintId != 0 &&
+          (track.AssociationHintId == 0 ||
+           track.AssociationHintId ==
+             candidate.AssociationHintId))
+      {
+        track.AssociationHintId =
+          candidate.AssociationHintId;
+      }
 
       double r = MeasurementVariance(candidate);
       double innovation = candidate.FrequencyHz - track.FrequencyHz;
