@@ -73,6 +73,30 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void ResolvableFifteenHertzCandidates_CanCreateSeparateTracks()
+    {
+      var tracker = new CwPileupTrackManager(
+        minimumSeparationHz: 8,
+        candidateDeduplicationHz: 2);
+
+      var result = tracker.Update(T0,
+      [
+        new CwSignalCandidate(
+          700, 14,
+          MeasurementSigmaHz: 2,
+          ResolutionHz: 12.5),
+        new CwSignalCandidate(
+          715, 11,
+          MeasurementSigmaHz: 2,
+          ResolutionHz: 12.5)
+      ]);
+
+      result.Should().HaveCount(2);
+      result.Select(x => x.FrequencyHz)
+        .Should().BeEquivalentTo([700, 715]);
+    }
+
+    [Fact]
     public void NearbyDuplicatePeaks_AreSuppressedWithoutMergingSeparateSignals()
     {
       var tracker = new CwPileupTrackManager(minimumSeparationHz: 30);
