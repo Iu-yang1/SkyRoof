@@ -1,6 +1,6 @@
 # CAT, IC-9700 remote control, PTT and FT4
 
-**Language:** English | [简体中文](../../zh-cn/fork-guide/radio-and-ft4.md)
+**Language:** English | [简体中文](../zh-cn/fork-guide/radio-and-ft4.md)
 
 ## CAT architecture
 
