@@ -113,14 +113,19 @@ namespace SkyRoof
         {
           ActiveAudioSession = session;
           AfGainSlider.Enabled = true;
-          UpdatingSliders = true;
-          try
+          // Do not jump the thumb to a delayed Windows mixer readback
+          // while the operator is still dragging it.
+          if (!AfGainSlider.Capture)
           {
-            AfGainSlider.Value = Math.Clamp(
-              RsBa1AudioSessionController.ScalarToGainDb(scalar),
-              AfGainSlider.Minimum, AfGainSlider.Maximum);
+            UpdatingSliders = true;
+            try
+            {
+              AfGainSlider.Value = Math.Clamp(
+                RsBa1AudioSessionController.ScalarToGainDb(scalar),
+                AfGainSlider.Minimum, AfGainSlider.Maximum);
+            }
+            finally { UpdatingSliders = false; }
           }
-          finally { UpdatingSliders = false; }
           AfGainLabel.Text = $"{AfGainSlider.Value} dB";
           GainTips.SetToolTip(AfGainSlider,
             $"Windows mixer: {session!.DisplayText}. Right-click to select another session.");
