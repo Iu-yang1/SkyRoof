@@ -1,0 +1,107 @@
+name: CW HamNoise A/B Benchmark
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "SkyRoof/CW/HamNoiseDenoiser.cs"
+      - "SkyRoof/CW/DeepCwDecoder.cs"
+      - "SkyRoof/CW/CwLaneExtractor.cs"
+      - "SkyRoof/CW/DeepCwFeatures.cs"
+      - "native/HamNoiseBridge/**"
+      - "scripts/build-hamnoise.ps1"
+      - "VE3NEA.Dsp.Tests/HamNoiseDenoiserTests.cs"
+      - "VE3NEA.Dsp.Tests/DeepCwRealModelBenchmarkTests.cs"
+      - ".github/workflows/cw-hamnoise-benchmark.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@fd55a6f3b34392fa83fde1454582407d8c714123 # v4.0
+
+      - name: Build pinned HamNoise CW backend
+        shell: pwsh
+        run: ./scripts/build-hamnoise.ps1
+
+      - name: Download WinDivert 2.2.2 x64
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $url = "https://github.com/basil00/WinDivert/releases/download/v2.2.2/WinDivert-2.2.2-A.zip"
+          $zip = Join-Path $env:RUNNER_TEMP "WinDivert-2.2.2-A.zip"
+          $extract = Join-Path $env:RUNNER_TEMP "WinDivert-2.2.2-A"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          $expectedSha256 = "63cb41763bb4b20f600b6de04e991a9c2be73279e317d4d82f237b150c5f3f15"
+          $actualSha256 = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha256 -ne $expectedSha256) {
+            throw "WinDivert archive SHA-256 mismatch"
+          }
+          Expand-Archive -Path $zip -DestinationPath $extract -Force
+          $dll = Get-ChildItem $extract -Recurse -File -Filter "WinDivert.dll" |
+            Where-Object { $_.FullName -match "[\\/]x64[\\/]" } |
+            Select-Object -First 1
+          $sys = Get-ChildItem $extract -Recurse -File -Filter "WinDivert64.sys" |
+            Select-Object -First 1
+          $dest = Join-Path $env:GITHUB_WORKSPACE "Vendor\WinDivert\x64"
+          New-Item -ItemType Directory -Path $dest -Force | Out-Null
+          Copy-Item $dll.FullName (Join-Path $dest "WinDivert.dll") -Force
+          Copy-Item $sys.FullName (Join-Path $dest "WinDivert64.sys") -Force
+
+      - name: Restore packages
+        run: nuget restore SkyRoof.sln -LockedMode
+
+      - name: Build benchmark target
+        run: msbuild SkyRoof.sln /m /p:Configuration=Release /p:Platform=x64
+
+      - name: Download pinned DeepCW model
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $revision = "8e264d243bbd4467bd19f3f28292219405b47e0e"
+          $dir = Join-Path $env:RUNNER_TEMP "deepcw"
+          New-Item -ItemType Directory -Path $dir -Force | Out-Null
+          $base = "https://raw.githubusercontent.com/e04/deepcw-engine/$revision"
+          $model = Join-Path $dir "model.onnx"
+          $metadata = Join-Path $dir "model.onnx.json"
+          Invoke-WebRequest -Uri "$base/model.onnx" -OutFile $model
+          Invoke-WebRequest -Uri "$base/model.onnx.json" -OutFile $metadata
+          if ((Get-Item $model).Length -ne 15139839) {
+            throw "Pinned DeepCW model size mismatch"
+          }
+          Get-Content $metadata | ConvertFrom-Json | Out-Null
+          "DEEPCW_MODEL_PATH=$model" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "DEEPCW_METADATA_PATH=$metadata" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "DEEPCW_BENCHMARK_OUTPUT=$env:GITHUB_WORKSPACE\artifacts\cw-pileup-benchmark.json" |
+            Out-File -FilePath $env:GITHUB_ENV -Append
+          "SKYROOF_RUN_HAMNOISE_BENCHMARK=1" |
+            Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Run HamNoise native smoke tests and real ONNX A/B
+        run: >
+          dotnet test VE3NEA.Dsp.Tests/VE3NEA.Dsp.Tests.csproj
+          -c Release -p:Platform=x64 --no-restore
+          --filter "FullyQualifiedName~RealDeepCw_HamNoiseClassicV2_AB|FullyQualifiedName~HamNoiseDenoiserTests"
+          --logger "console;verbosity=normal"
+
+      - name: Print HamNoise metrics
+        shell: powershell
+        run: Get-Content artifacts\cw-hamnoise-ab.json
+
+      - name: Upload HamNoise metrics
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cw-hamnoise-ab-benchmark
+          path: artifacts/cw-hamnoise-ab.json
+          if-no-files-found: error
