@@ -4,6 +4,13 @@ namespace SkyRoof
 {
   internal sealed class IcomScopeReadbackState
   {
+    // A field may be absent because the radio firmware rejected its query.
+    // Never apply fallback values to SkyRoof settings as real radio state.
+    internal IReadOnlySet<string>? FieldsPresent { get; private set; }
+    internal bool IsPartial => FieldsPresent != null && FieldsPresent.Count < 16;
+    internal bool HasField(string key) =>
+      FieldsPresent == null || FieldsPresent.Contains(key);
+
     internal byte SelectedScope { get; init; }
 
     internal IcomScopeMode MainMode { get; init; }
@@ -122,6 +129,44 @@ namespace SkyRoof
           ParseMarkerPosition(
             Get(values, "MARKER"))
       };
+    }
+
+    internal static IcomScopeReadbackState ParsePartial(string text)
+    {
+      // Keep Parse() strict for legacy full readback and existing tests.
+      // Neutral fillers below are ONLY for parsing a partial object. Callers
+      // must use HasField() before applying a property to radio/UI settings.
+      var defaults = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+      {
+        ["SELECT"] = "MAIN",
+        ["MAIN.MODE"] = "CENTER", ["MAIN.SPAN"] = "25000",
+        ["MAIN.EDGE"] = "1", ["MAIN.REF"] = "0.0",
+        ["MAIN.SPEED"] = "FAST", ["MAIN.VBW"] = "WIDE",
+        ["SUB.MODE"] = "CENTER", ["SUB.SPAN"] = "25000",
+        ["SUB.EDGE"] = "1", ["SUB.REF"] = "0.0",
+        ["SUB.SPEED"] = "FAST", ["SUB.VBW"] = "WIDE",
+        ["TX"] = "0", ["CENTER"] = "FILTER", ["MARKER"] = "FILTER"
+      };
+
+      var received = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+      foreach (string field in text.Split(';',
+        StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+      {
+        int separator = field.IndexOf('=');
+        if (separator <= 0 || separator == field.Length - 1)
+          throw new FormatException($"Invalid partial scope field '{field}'.");
+        string key = field[..separator];
+        if (!defaults.ContainsKey(key) || !received.Add(key))
+          throw new FormatException($"Unknown/duplicate partial scope field '{key}'.");
+        defaults[key] = field[(separator + 1)..];
+      }
+
+      if (!received.Contains("SELECT"))
+        throw new FormatException("Partial scope response requires SELECT.");
+      var parsed = Parse(string.Join(";",
+        defaults.Select(kv => $"{kv.Key}={kv.Value}")));
+      parsed.FieldsPresent = received;
+      return parsed;
     }
 
     private static string Get(
