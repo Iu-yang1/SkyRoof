@@ -231,9 +231,16 @@ namespace SkyRoof.CW
     public double TargetCenterHz { get; set; } = 800;
 
     /// <summary>
-    /// Null preserves the default shared wideband activity-aware mask path.
-    /// A non-null backend enables the experimental per-lane time-domain path:
-    /// DDC/isolation -> optional denoise -> model-faithful DeepCW frontend.
+    /// Optional decode-window denoiser. Tracking still runs on untouched raw
+    /// PCM; only the immutable inference snapshot is resampled to this
+    /// backend's rate, denoised once, and then passed through the existing
+    /// all-track activity-aware wideband separator.
+    /// </summary>
+    public ICwAudioDenoiser? WindowDenoiser { get; set; }
+
+    /// <summary>
+    /// Optional per-lane experiment: DDC/isolation -> denoise -> standard
+    /// DeepCW frontend. This is mutually exclusive with WindowDenoiser.
     /// </summary>
     public ICwAudioDenoiser? LaneDenoiser { get; set; }
 
@@ -291,16 +298,52 @@ namespace SkyRoof.CW
           DenoiseWet > 1)
         throw new InvalidOperationException(
           "CW denoise wet mix must be in the range 0..1.");
+      if (WindowDenoiser != null &&
+          LaneDenoiser != null)
+        throw new InvalidOperationException(
+          "CW window and per-lane denoisers are mutually exclusive.");
 
       DeepCwWidebandFeatureWindow? widebandFeatures = null;
       IReadOnlyDictionary<int, float[]>? activityByTrack = null;
 
       if (LaneDenoiser == null)
       {
+        ReadOnlySpan<float> widebandAudio =
+          audio;
+        int widebandSampleRate =
+          sourceSampleRate;
+        float[]? windowProcessed = null;
+
+        if (WindowDenoiser != null)
+        {
+          if (allDetectedTracks.Any(track =>
+                track.FrequencyHz >=
+                  WindowDenoiser.SampleRate / 2.0))
+            throw new InvalidOperationException(
+              "A tracked CW carrier exceeds the shared denoiser Nyquist rate.");
+
+          float[] resampled =
+            CwWindowedSincResampler.Resample(
+              audio,
+              sourceSampleRate,
+              WindowDenoiser.SampleRate);
+
+          windowProcessed =
+            WindowDenoiser.Process(
+              resampled,
+              WindowDenoiser.SampleRate,
+              DenoiseWet);
+
+          widebandAudio =
+            windowProcessed;
+          widebandSampleRate =
+            WindowDenoiser.SampleRate;
+        }
+
         widebandFeatures =
           DeepCwWidebandFeatureWindow.Create(
-            audio,
-            sourceSampleRate,
+            widebandAudio,
+            widebandSampleRate,
             metadata);
 
         activityByTrack =
