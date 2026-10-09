@@ -97,6 +97,11 @@ namespace SkyRoof
             frame.PowerDb,
             0.985));
 
+      writeRow =
+        (writeRow - 1 +
+         HistoryRows) %
+        HistoryRows;
+
       for (int x = 0;
            x < waterfall.Width;
            x++)
@@ -119,9 +124,6 @@ namespace SkyRoof
           HeatColor(level));
       }
 
-      writeRow =
-        (writeRow + 1) %
-        HistoryRows;
       hasRows = true;
       Invalidate();
     }
@@ -168,10 +170,14 @@ namespace SkyRoof
       e.Graphics.FillRectangle(
         SystemBrushes.Control,
         scale);
-      e.Graphics.FillRectangle(
+      using (var background =
         new SolidBrush(
-          Theme.SpectrumBackground),
-        body);
+          Theme.SpectrumBackground))
+      {
+        e.Graphics.FillRectangle(
+          background,
+          body);
+      }
 
       DrawScale(
         e.Graphics,
@@ -196,38 +202,28 @@ namespace SkyRoof
       g.PixelOffsetMode =
         PixelOffsetMode.Half;
 
-      int newest =
-        (writeRow - 1 +
-         HistoryRows) %
-        HistoryRows;
+      // New rows are written backwards. writeRow therefore always points
+      // at the newest row and the chronological ring starts there.
+      int firstCount =
+        HistoryRows - writeRow;
+      int secondCount =
+        writeRow;
 
-      // Present newest row at the top. The ring is rendered in at most two
-      // vertical segments, without copying the bitmap on every append.
-      int upperCount =
-        newest + 1;
-      int lowerCount =
-        HistoryRows -
-        upperCount;
-
-      if (upperCount > 0)
+      if (firstCount > 0)
       {
         Rectangle source =
           new(
             0,
-            0,
+            writeRow,
             waterfall.Width,
-            upperCount);
+            firstCount);
         Rectangle dest =
           new(
             body.Left,
-            body.Top +
-              (int)Math.Round(
-                lowerCount *
-                body.Height /
-                (double)HistoryRows),
+            body.Top,
             body.Width,
             (int)Math.Ceiling(
-              upperCount *
+              firstCount *
               body.Height /
               (double)HistoryRows));
         g.DrawImage(
@@ -237,23 +233,26 @@ namespace SkyRoof
           GraphicsUnit.Pixel);
       }
 
-      if (lowerCount > 0)
+      if (secondCount > 0)
       {
         Rectangle source =
           new(
             0,
-            newest + 1,
+            0,
             waterfall.Width,
-            lowerCount);
+            secondCount);
+        int top =
+          body.Top +
+          (int)Math.Round(
+            firstCount *
+            body.Height /
+            (double)HistoryRows);
         Rectangle dest =
           new(
             body.Left,
-            body.Top,
+            top,
             body.Width,
-            (int)Math.Ceiling(
-              lowerCount *
-              body.Height /
-              (double)HistoryRows));
+            body.Bottom - top);
         g.DrawImage(
           waterfall,
           dest,
@@ -408,7 +407,7 @@ namespace SkyRoof
       double frequency =
         XToFrequency(e.X);
 
-      CwSignalTrack? nearest =
+      CwSignalTrack[] visible =
         tracks
           .Where(x =>
             x.FrequencyHz >=
@@ -419,11 +418,13 @@ namespace SkyRoof
             Math.Abs(
               x.FrequencyHz -
               frequency))
-          .Cast<CwSignalTrack?>()
-          .FirstOrDefault();
+          .ToArray();
 
-      if (!nearest.HasValue)
+      if (visible.Length == 0)
         return;
+
+      CwSignalTrack nearest =
+        visible[0];
 
       double hzPerPixel =
         (maxFrequencyHz -
@@ -437,7 +438,7 @@ namespace SkyRoof
           hzPerPixel * 18);
 
       if (Math.Abs(
-            nearest.Value.FrequencyHz -
+            nearest.FrequencyHz -
             frequency) >
           pickGateHz)
         return;
@@ -446,8 +447,8 @@ namespace SkyRoof
         this,
         new CwWaterfallLaneClickedEventArgs(
           CwConsolePresentation.Identity(
-            nearest.Value),
-          nearest.Value.FrequencyHz));
+            nearest),
+          nearest.FrequencyHz));
     }
 
     private float FrequencyToX(
