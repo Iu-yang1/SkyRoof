@@ -73,6 +73,30 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void ResolvableFifteenHertzCandidates_CanCreateSeparateTracks()
+    {
+      var tracker = new CwPileupTrackManager(
+        minimumSeparationHz: 8,
+        candidateDeduplicationHz: 2);
+
+      var result = tracker.Update(T0,
+      [
+        new CwSignalCandidate(
+          700, 14,
+          MeasurementSigmaHz: 2,
+          ResolutionHz: 12.5),
+        new CwSignalCandidate(
+          715, 11,
+          MeasurementSigmaHz: 2,
+          ResolutionHz: 12.5)
+      ]);
+
+      result.Should().HaveCount(2);
+      result.Select(x => x.FrequencyHz)
+        .Should().BeEquivalentTo([700, 715]);
+    }
+
+    [Fact]
     public void NearbyDuplicatePeaks_AreSuppressedWithoutMergingSeparateSignals()
     {
       var tracker = new CwPileupTrackManager(minimumSeparationHz: 30);
@@ -144,7 +168,12 @@ namespace VE3NEA.Dsp.Tests
       var merged = tracker.Update(T0.AddSeconds(2),
         [new(800, 13)]);
       merged.Should().HaveCount(2);
+      merged.Should().OnlyContain(x => x.Ambiguous);
       merged.Count(x => x.Active).Should().Be(1);
+      merged.Select(x => x.MergeGroupId)
+        .Distinct().Should().ContainSingle()
+        .Which.Should().BeGreaterThan(0);
+      merged.Should().OnlyContain(x => x.IdentityConfidence < 1);
 
       // After the crossing, order in frequency has reversed. Identity must
       // follow predicted ridge velocity, not sorted frequency or signal power.
@@ -154,6 +183,129 @@ namespace VE3NEA.Dsp.Tests
       CwSignalTrack rising = separated.Single(x => x.Id == risingId);
       CwSignalTrack falling = separated.Single(x => x.Id == fallingId);
       rising.FrequencyHz.Should().BeGreaterThan(falling.FrequencyHz);
+      rising.DriftHzPerSecond.Should().BeGreaterThan(0);
+      falling.DriftHzPerSecond.Should().BeLessThan(0);
+    }
+
+    [Fact]
+    public void MergeGroup_SharedPeakPreservesBothVelocitiesWithinFixedLag()
+    {
+      var tracker = new CwPileupTrackManager(
+        minimumSeparationHz: 6,
+        matchToleranceHz: 60,
+        mergeResolutionHz: 16,
+        fixedLagIdentityTime: TimeSpan.FromMilliseconds(400));
+
+      var start = tracker.Update(
+        T0, [new(760, 12), new(840, 12)]);
+      int risingId = start[0].Id;
+      int fallingId = start[1].Id;
+
+      tracker.Update(
+        T0.AddMilliseconds(100),
+        [new(772, 12), new(828, 12)]);
+      tracker.Update(
+        T0.AddMilliseconds(200),
+        [new(785, 12), new(815, 12)]);
+      var close = tracker.Update(
+        T0.AddMilliseconds(300),
+        [new(795, 11), new(805, 13)]);
+
+      close.Should().HaveCount(2);
+      close.Select(x => x.MergeGroupId)
+        .Distinct().Should().ContainSingle()
+        .Which.Should().BeGreaterThan(0);
+
+      double risingBefore =
+        close.Single(x => x.Id == risingId).DriftHzPerSecond;
+      double fallingBefore =
+        close.Single(x => x.Id == fallingId).DriftHzPerSecond;
+
+      var merged = tracker.Update(
+        T0.AddMilliseconds(380),
+        [new CwSignalCandidate(
+          800, 14,
+          MeasurementSigmaHz: 4,
+          ResolutionHz: 18)]);
+
+      merged.Should().OnlyContain(x =>
+        x.Active && x.Ambiguous &&
+        x.MergeGroupId != 0 &&
+        x.IdentityConfidence < 0.6);
+      Math.Sign(merged.Single(x => x.Id == risingId)
+        .DriftHzPerSecond).Should().Be(Math.Sign(risingBefore));
+      Math.Sign(merged.Single(x => x.Id == fallingId)
+        .DriftHzPerSecond).Should().Be(Math.Sign(fallingBefore));
+    }
+
+    [Fact]
+    public void MergeGroup_AfterFixedLag_DoesNotShareOnePeakForever()
+    {
+      var tracker = new CwPileupTrackManager(
+        minimumSeparationHz: 6,
+        matchToleranceHz: 60,
+        mergeResolutionHz: 18,
+        fixedLagIdentityTime: TimeSpan.FromMilliseconds(250));
+
+      tracker.Update(
+        T0, [new(780, 12), new(820, 12)]);
+      tracker.Update(
+        T0.AddMilliseconds(100),
+        [new(790, 12), new(810, 12)]);
+      tracker.Update(
+        T0.AddMilliseconds(180),
+        [new(798, 12), new(802, 12)]);
+
+      // First merged observation is inside the labelled-history horizon.
+      var inside = tracker.Update(
+        T0.AddMilliseconds(240),
+        [new(800, 13)]);
+      inside.Count(x => x.Active).Should().Be(2);
+
+      // By 700 ms the same single peak must not keep both labels observed.
+      // One track may update; the other must coast on prediction.
+      var expired = tracker.Update(
+        T0.AddMilliseconds(700),
+        [new(800, 13)]);
+      expired.Should().HaveCount(2);
+      expired.Count(x => x.Active).Should().Be(1);
+    }
+
+    [Fact]
+    public void MergeGroup_SplitUsesPreMergeIdentityAnchor()
+    {
+      var tracker = new CwPileupTrackManager(
+        minimumSeparationHz: 6,
+        matchToleranceHz: 70,
+        mergeResolutionHz: 18,
+        fixedLagIdentityTime: TimeSpan.FromMilliseconds(400));
+
+      var start = tracker.Update(
+        T0, [new(760, 12), new(840, 12)]);
+      int risingId = start[0].Id;
+      int fallingId = start[1].Id;
+
+      tracker.Update(
+        T0.AddMilliseconds(100),
+        [new(775, 8), new(825, 18)]);
+      tracker.Update(
+        T0.AddMilliseconds(200),
+        [new(790, 20), new(810, 6)]);
+      tracker.Update(
+        T0.AddMilliseconds(270),
+        [new(800, 14)]);
+
+      var split = tracker.Update(
+        T0.AddMilliseconds(360),
+        [new(785, 22), new(815, 5)]);
+
+      CwSignalTrack rising =
+        split.Single(x => x.Id == risingId);
+      CwSignalTrack falling =
+        split.Single(x => x.Id == fallingId);
+
+      rising.FrequencyHz.Should().BeGreaterThan(
+        falling.FrequencyHz);
       rising.DriftHzPerSecond.Should().BeGreaterThan(0);
       falling.DriftHzPerSecond.Should().BeLessThan(0);
     }

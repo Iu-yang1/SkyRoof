@@ -134,6 +134,161 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void WidebandFrontend_IsCalibratedToModelRateReference()
+    {
+      DeepCwModelMetadata metadata =
+        DeepCwModelMetadata.Parse(MetadataJson);
+      float[] audio = MakeKeyedAudio(
+        2.0, (800, 0.35f, 0.14, 0.52));
+
+      DeepCwWidebandFeatureWindow wide =
+        DeepCwWidebandFeatureWindow.Create(
+          audio, SourceRate, metadata);
+      DeepCwTensor wideTensor =
+        wide.BuildUnmaskedLaneTensor(Track(1, 800, 15));
+
+      float[] modelRate = CwWindowedSincResampler.Resample(
+        audio, SourceRate, metadata.SampleRate);
+      DeepCwTensor reference =
+        DeepCwFeatureWindow.Create(
+          modelRate, metadata.SampleRate, metadata)
+        .BuildStandardTensor();
+
+      wideTensor.Dimensions.Should().Equal(reference.Dimensions);
+      int center = (int)Math.Round(
+        (800 - metadata.MinFrequencyHz) /
+        (metadata.SampleRate / (double)metadata.FftLength));
+
+      double a = MeanBin(wideTensor, center);
+      double b = MeanBin(reference, center);
+      (Math.Abs(a - b) / Math.Max(b, 1e-9))
+        .Should().BeLessThan(0.18);
+    }
+
+    [Fact]
+    public void WidebandFrontend_PreservesLaneAboveModelNyquist()
+    {
+      DeepCwModelMetadata metadata =
+        DeepCwModelMetadata.Parse(MetadataJson);
+      float[] audio = MakeKeyedAudio(
+        2.0, (2600, 0.32f, 0.15, 0.52));
+
+      DeepCwWidebandFeatureWindow wide =
+        DeepCwWidebandFeatureWindow.Create(
+          audio, SourceRate, metadata);
+      DeepCwTensor lane =
+        wide.BuildUnmaskedLaneTensor(Track(7, 2600, 14));
+
+      int center = (int)Math.Round(
+        (800 - metadata.MinFrequencyHz) /
+        (metadata.SampleRate / (double)metadata.FftLength));
+      StrongestBin(lane).Should().BeInRange(
+        center - 1, center + 1);
+      MeanBin(lane, center).Should().BeGreaterThan(0.25);
+    }
+
+    [Fact]
+    public void CarrierActivityHmm_SeparatesKeyDownAndKeyUpFrames()
+    {
+      var estimator = new CwCarrierActivityEstimator();
+      float[] ridge = Enumerable.Repeat(0.01f, 20)
+        .Concat(Enumerable.Repeat(1.0f, 24))
+        .Concat(Enumerable.Repeat(0.01f, 24))
+        .ToArray();
+
+      float[] p = estimator.EstimateFrameProbabilities(
+        ridge, 0.015, 0.06);
+
+      p.Skip(26).Take(10).Average()
+        .Should().BeGreaterThan(0.75f);
+      p.TakeLast(8).Average()
+        .Should().BeLessThan(0.25f);
+    }
+
+    [Fact]
+    public void ActivityAwareMask_DoesNotLetKeyUpTrackStealEnergy()
+    {
+      DeepCwModelMetadata metadata =
+        DeepCwModelMetadata.Parse(MetadataJson);
+      float[] audio = MakeKeyedAudio(
+        2.0,
+        (800, 0.30f, 0.14, 0.50),
+        (840, 0.26f, 0.14, 0.50));
+      DeepCwWidebandFeatureWindow wide =
+        DeepCwWidebandFeatureWindow.Create(
+          audio, SourceRate, metadata);
+
+      CwSignalTrack target = Track(1, 800, 16);
+      CwSignalTrack neighbor = Track(2, 840, 14);
+      CwSignalTrack[] tracks = [target, neighbor];
+      int frames = wide.FrameCount;
+
+      var neighborOff = new Dictionary<int, float[]>
+      {
+        [target.Id] = Enumerable.Repeat(1f, frames).ToArray(),
+        [neighbor.Id] = new float[frames]
+      };
+      var neighborOn = new Dictionary<int, float[]>
+      {
+        [target.Id] = Enumerable.Repeat(1f, frames).ToArray(),
+        [neighbor.Id] = Enumerable.Repeat(1f, frames).ToArray()
+      };
+
+      DeepCwTensor offTensor = wide.BuildLaneTensor(
+        target, tracks, neighborOff);
+      DeepCwTensor onTensor = wide.BuildLaneTensor(
+        target, tracks, neighborOn);
+
+      int center = (int)Math.Round(
+        (800 - metadata.MinFrequencyHz) /
+        (metadata.SampleRate / (double)metadata.FftLength));
+      MeanBin(offTensor, center).Should()
+        .BeGreaterThan(MeanBin(onTensor, center));
+    }
+
+    [Fact]
+    public void UnselectedTrack_StillParticipatesInInterferenceMask()
+    {
+      DeepCwModelMetadata metadata =
+        DeepCwModelMetadata.Parse(MetadataJson);
+      float[] audio = MakeKeyedAudio(
+        2.0,
+        (800, 0.32f, 0.14, 0.50),
+        (840, 0.25f, 0.14, 0.50));
+
+      CwSignalTrack target = Track(1, 800, 20);
+      CwSignalTrack neighbor = Track(2, 840, 10);
+
+      var withNeighborCapture = new CapturingTensorDecoder("A");
+      var withNeighbor =
+        new DeepCwMultiLaneDecoder(metadata, withNeighborCapture)
+        {
+          MaxLanes = 1
+        };
+      withNeighbor.Decode(
+        audio, SourceRate, T0, [target, neighbor]);
+
+      var targetOnlyCapture = new CapturingTensorDecoder("A");
+      var targetOnly =
+        new DeepCwMultiLaneDecoder(metadata, targetOnlyCapture)
+        {
+          MaxLanes = 1
+        };
+      targetOnly.Decode(
+        audio, SourceRate, T0, [target]);
+
+      withNeighborCapture.Tensors.Should().ContainSingle();
+      targetOnlyCapture.Tensors.Should().ContainSingle();
+
+      int neighborBin = (int)Math.Round(
+        (840 - metadata.MinFrequencyHz) /
+        (metadata.SampleRate / (double)metadata.FftLength));
+      MeanBin(withNeighborCapture.Tensors[0], neighborBin)
+        .Should().BeLessThan(
+          MeanBin(targetOnlyCapture.Tensors[0], neighborBin));
+    }
+
+    [Fact]
     public void WindowedSincResampler_PreservesLowFrequencyTone()
     {
       float[] input = MakeKeyedAudio(
@@ -195,6 +350,24 @@ namespace VE3NEA.Dsp.Tests
         T0.AddSeconds(-2), T0,
         Confirmed: true,
         Active: true);
+
+    private sealed class CapturingTensorDecoder :
+      IDeepCwTensorDecoder
+    {
+      private readonly string text;
+      public List<DeepCwTensor> Tensors { get; } = [];
+
+      public CapturingTensorDecoder(string text) =>
+        this.text = text;
+
+      public DeepCwDecodedText Decode(DeepCwTensor tensor)
+      {
+        Tensors.Add(tensor);
+        return new(
+          text,
+          Array.Empty<DeepCwDecodedSymbol>());
+      }
+    }
 
     private sealed class QueueTensorDecoder : IDeepCwTensorDecoder
     {

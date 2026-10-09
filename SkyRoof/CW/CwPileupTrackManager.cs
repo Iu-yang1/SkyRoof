@@ -5,7 +5,12 @@ using System.Linq;
 namespace SkyRoof.CW
 {
   /// <summary>A peak measured by a CW detector, in audio-frequency Hz.</summary>
-  public readonly record struct CwSignalCandidate(double FrequencyHz, double SnrDb);
+  public readonly record struct CwSignalCandidate(
+    double FrequencyHz,
+    double SnrDb,
+    double MeasurementSigmaHz = 0,
+    double ResolutionHz = 0,
+    double ActivityProbability = 1);
 
   /// <summary>
   /// Stable identity and observed state of one independently decodable CW lane.
@@ -21,7 +26,9 @@ namespace SkyRoof.CW
     bool Confirmed,
     bool Active,
     bool Ambiguous = false,
-    double FrequencySigmaHz = 0);
+    double FrequencySigmaHz = 0,
+    int MergeGroupId = 0,
+    double IdentityConfidence = 1);
 
   /// <summary>
   /// Multi-target CW ridge tracker.
@@ -54,14 +61,34 @@ namespace SkyRoof.CW
       public int SeenCount;
       public bool Active;
       public bool Ambiguous;
+      public int MergeGroupId;
+      public int IdentityGroupId;
+      public double MergeEntryFrequencyHz;
+      public double MergeEntryDriftHzPerSecond;
+      public DateTime MergeEntryUtc;
+      public DateTime IdentityAnchorUntilUtc;
+      public double LastMeasurementFrequencyHz;
+      public DateTime LastMeasurementUtc;
+      public double ObservedDriftHzPerSecond;
     }
 
     private readonly List<State> tracks = new();
     private DateTime? previousUpdateUtc;
     private int nextId = 1;
+    private int nextMergeGroupId = 1;
 
     public int MaxTracks { get; }
-    public double MinimumSeparationHz { get; }
+    /// <summary>
+    /// Minimum separation used only when deciding whether an unexplained
+    /// candidate may create a new labelled track. It is not a detector peak
+    /// de-duplication threshold and not a statement of STFT resolution.
+    /// </summary>
+    public double TrackBirthGateHz { get; }
+
+    [Obsolete("Use TrackBirthGateHz; detector de-duplication is separate.")]
+    public double MinimumSeparationHz => TrackBirthGateHz;
+
+    public double CandidateDeduplicationHz { get; }
     public double MatchToleranceHz { get; }
     public TimeSpan ConfirmationDelay { get; }
     public TimeSpan HoldTime { get; }
@@ -78,15 +105,24 @@ namespace SkyRoof.CW
     /// </summary>
     public double MergeResolutionHz { get; }
 
+    /// <summary>
+    /// Short labelled-history horizon used when a finite-resolution peak may
+    /// represent more than one ridge. This is an identity prior, not a claim
+    /// of a full Bayesian fixed-lag smoother.
+    /// </summary>
+    public TimeSpan FixedLagIdentityTime { get; }
+
     public CwPileupTrackManager(
       int maxTracks = 8,
-      double minimumSeparationHz = 25,
+      double minimumSeparationHz = 8,
       double matchToleranceHz = 40,
       TimeSpan? confirmationDelay = null,
       TimeSpan? holdTime = null,
       double processAccelerationSigma = 8,
       double baseMeasurementSigmaHz = 3,
-      double mergeResolutionHz = 18)
+      double mergeResolutionHz = 18,
+      double candidateDeduplicationHz = 2,
+      TimeSpan? fixedLagIdentityTime = null)
     {
       if (maxTracks is < 1 or > 32)
         throw new ArgumentOutOfRangeException(nameof(maxTracks));
@@ -94,6 +130,9 @@ namespace SkyRoof.CW
         throw new ArgumentOutOfRangeException(nameof(minimumSeparationHz));
       if (!double.IsFinite(matchToleranceHz) || matchToleranceHz <= 0)
         throw new ArgumentOutOfRangeException(nameof(matchToleranceHz));
+      if (!double.IsFinite(candidateDeduplicationHz) ||
+          candidateDeduplicationHz <= 0)
+        throw new ArgumentOutOfRangeException(nameof(candidateDeduplicationHz));
       if (!double.IsFinite(processAccelerationSigma) || processAccelerationSigma <= 0)
         throw new ArgumentOutOfRangeException(nameof(processAccelerationSigma));
       if (!double.IsFinite(baseMeasurementSigmaHz) || baseMeasurementSigmaHz <= 0)
@@ -102,14 +141,21 @@ namespace SkyRoof.CW
         throw new ArgumentOutOfRangeException(nameof(mergeResolutionHz));
 
       MaxTracks = maxTracks;
-      MinimumSeparationHz = minimumSeparationHz;
+      TrackBirthGateHz = minimumSeparationHz;
+      CandidateDeduplicationHz = candidateDeduplicationHz;
       MatchToleranceHz = matchToleranceHz;
       ConfirmationDelay = confirmationDelay ?? TimeSpan.FromMilliseconds(400);
       HoldTime = holdTime ?? TimeSpan.FromSeconds(5);
       ProcessAccelerationSigma = processAccelerationSigma;
       BaseMeasurementSigmaHz = baseMeasurementSigmaHz;
       MergeResolutionHz = mergeResolutionHz;
+      FixedLagIdentityTime =
+        fixedLagIdentityTime ?? TimeSpan.FromMilliseconds(350);
 
+      if (FixedLagIdentityTime <= TimeSpan.Zero ||
+          FixedLagIdentityTime > TimeSpan.FromSeconds(2))
+        throw new ArgumentOutOfRangeException(
+          nameof(fixedLagIdentityTime));
       if (ConfirmationDelay < TimeSpan.Zero)
         throw new ArgumentOutOfRangeException(nameof(confirmationDelay));
       if (HoldTime <= TimeSpan.Zero)
@@ -121,6 +167,7 @@ namespace SkyRoof.CW
       tracks.Clear();
       previousUpdateUtc = null;
       nextId = 1;
+      nextMergeGroupId = 1;
     }
 
     public IReadOnlyList<CwSignalTrack> Update(
@@ -136,7 +183,7 @@ namespace SkyRoof.CW
       previousUpdateUtc = utc;
       tracks.RemoveAll(t => utc - t.LastSeenUtc > HoldTime);
 
-      var clean = SuppressDuplicateCandidates(candidates);
+      var clean = PrepareCandidates(candidates);
 
       // Predict every live ridge to this scan before doing any association.
       foreach (State track in tracks)
@@ -146,19 +193,115 @@ namespace SkyRoof.CW
         track.Ambiguous = false;
       }
 
+      RefreshMergeGroups(utc);
+
       // Exact global min-cost association is inexpensive here because the
       // product limit is tiny (normally <=8 tracks and <=16 detector peaks).
-      int[] assignments = SolveGlobalAssignment(tracks, clean);
+      int[] assignments = SolveGlobalAssignment(
+        tracks, clean, utc);
+
+      // Global GNN decides which measurements are physically plausible.
+      // Fixed-lag history is then used only to permute already-accepted peaks
+      // inside a merge group, never to create misses or new detections.
+      RefineAssignmentsWithinIdentityGroups(
+        utc, assignments, clean);
+
+      // Measurement geometry can reveal a finite-resolution encounter before
+      // the filtered posterior means have converged. Capture the labelled
+      // pre-merge state *before* applying those close measurements.
+      RefreshMergeGroupsFromAssignments(
+        utc, assignments, clean);
+      ReleaseResolvedMergeGroups(
+        utc, assignments, clean);
+
       var usedPeaks = new HashSet<int>();
+      var handledTracks = new HashSet<int>();
+
+      // A close pair can produce one finite-resolution peak. For a short,
+      // bounded lag, treat that peak as evidence for the merge group instead
+      // of forcing it onto exactly one identity. Apply only a common centroid
+      // correction so the pre-merge relative frequency/velocity survives.
+      foreach (IGrouping<int, (State Track, int Index)> group in tracks
+        .Select((track, index) => (Track: track, Index: index))
+        .Where(x => x.Track.MergeGroupId != 0)
+        .GroupBy(x => x.Track.MergeGroupId))
+      {
+        var members = group.ToArray();
+        int[] assignedPeaks = members
+          .Select(x => assignments[x.Index])
+          .Where(x => x >= 0)
+          .Distinct()
+          .ToArray();
+
+        DateTime mergeStart = members
+          .Min(x => x.Track.MergeEntryUtc);
+        bool withinLag =
+          utc - mergeStart <= FixedLagIdentityTime;
+        if (!withinLag ||
+            assignedPeaks.Length != 1 ||
+            members.Length < 2)
+          continue;
+
+        int peakIndex = assignedPeaks[0];
+        CwSignalCandidate mergedPeak = clean[peakIndex];
+        double predictedCentroid =
+          members.Average(x => x.Track.FrequencyHz);
+        double residual =
+          mergedPeak.FrequencyHz - predictedCentroid;
+        double commonCorrection = Math.Clamp(
+          0.25 * residual,
+          -MergeResolutionHz / 2.0,
+          MergeResolutionHz / 2.0);
+
+        foreach (var member in members)
+        {
+          State track = member.Track;
+          track.FrequencyHz += commonCorrection;
+
+          // A shared finite-resolution peak is not a normal point
+          // measurement for either identity. Keep the common centroid useful
+          // but deliberately *inflate* per-track frequency uncertainty to the
+          // unresolved-width scale. Otherwise repeated merged frames make the
+          // filter overconfident and the first correctly associated split
+          // measurement cannot pull the posterior back onto its ridge.
+          double mergedVariance =
+            MeasurementVariance(mergedPeak);
+          double unresolvedSigma = Math.Max(
+            Math.Sqrt(mergedVariance),
+            MergeResolutionHz);
+          track.P00 = Math.Max(
+            track.P00,
+            unresolvedSigma * unresolvedSigma);
+          track.P11 = Math.Max(
+            track.P11,
+            Math.Pow(
+              unresolvedSigma /
+              Math.Max(FixedLagIdentityTime.TotalSeconds, 0.05),
+              2));
+
+          track.SnrDb =
+            0.7 * track.SnrDb +
+            0.3 * mergedPeak.SnrDb;
+          track.LastSeenUtc = utc;
+          track.Active = true;
+          track.Ambiguous = true;
+          if (track.SeenCount > 1)
+            track.SeenCount++;
+          handledTracks.Add(member.Index);
+        }
+
+        usedPeaks.Add(peakIndex);
+      }
 
       for (int i = 0; i < tracks.Count; i++)
       {
+        if (handledTracks.Contains(i)) continue;
         int peakIndex = assignments[i];
         if (peakIndex < 0) continue;
 
         State track = tracks[i];
         CwSignalCandidate peak = clean[peakIndex];
-        UpdateMeasurement(track, peak);
+        UpdateMeasurement(track, peak, utc);
         track.LastSeenUtc = utc;
         track.Active = true;
         track.SeenCount++;
@@ -176,8 +319,11 @@ namespace SkyRoof.CW
         if (tracks.Count >= MaxTracks) break;
 
         CwSignalCandidate peak = clean[j];
+        double birthGate = Math.Max(
+          TrackBirthGateHz,
+          peak.ResolutionHz > 0 ? peak.ResolutionHz * 0.5 : 0);
         if (tracks.Any(t =>
-          Math.Abs(t.FrequencyHz - peak.FrequencyHz) < MinimumSeparationHz))
+          Math.Abs(t.FrequencyHz - peak.FrequencyHz) < birthGate))
           continue;
 
         tracks.Add(new State
@@ -193,7 +339,10 @@ namespace SkyRoof.CW
           LastSeenUtc = utc,
           StateUtc = utc,
           SeenCount = 1,
-          Active = true
+          Active = true,
+          LastMeasurementFrequencyHz = peak.FrequencyHz,
+          LastMeasurementUtc = utc,
+          ObservedDriftHzPerSecond = 0
         });
       }
 
@@ -211,13 +360,18 @@ namespace SkyRoof.CW
           t.SeenCount >= 2 && utc - t.FirstSeenUtc >= ConfirmationDelay,
           t.Active,
           t.Ambiguous,
-          Math.Sqrt(Math.Max(t.P00, 0))))
+          Math.Sqrt(Math.Max(t.P00, 0)),
+          t.MergeGroupId,
+          IdentityConfidence(t, utc)))
         .ToArray();
     }
 
-    private List<CwSignalCandidate> SuppressDuplicateCandidates(
+    private List<CwSignalCandidate> PrepareCandidates(
       IEnumerable<CwSignalCandidate> candidates)
     {
+      // The detector owns spectral peak de-duplication. The tracker only
+      // removes effectively identical numerical duplicates so that a precise
+      // scanner may legitimately present two resolvable ridges 10–20 Hz apart.
       var clean = new List<CwSignalCandidate>();
       foreach (CwSignalCandidate candidate in candidates
         .Where(c => double.IsFinite(c.FrequencyHz) &&
@@ -228,10 +382,9 @@ namespace SkyRoof.CW
       {
         if (clean.All(c =>
           Math.Abs(c.FrequencyHz - candidate.FrequencyHz) >=
-          MinimumSeparationHz))
+          CandidateDeduplicationHz))
           clean.Add(candidate);
 
-        // Bound association complexity independently of detector settings.
         if (clean.Count >= 16) break;
       }
 
@@ -270,6 +423,16 @@ namespace SkyRoof.CW
       // High SNR approaches the FFT/interpolation floor; weak peaks receive a
       // wider likelihood so they are not discarded by an unrealistically
       // sharp gate. Clamp to keep pathological dB values harmless.
+      if (double.IsFinite(candidate.MeasurementSigmaHz) &&
+          candidate.MeasurementSigmaHz > 0)
+      {
+        double supplied = Math.Clamp(
+          candidate.MeasurementSigmaHz,
+          BaseMeasurementSigmaHz * 0.25,
+          MatchToleranceHz);
+        return supplied * supplied;
+      }
+
       double snrLinear = Math.Pow(
         10, Math.Clamp(candidate.SnrDb, -20, 60) / 10.0);
       double sigma = BaseMeasurementSigmaHz +
@@ -278,7 +441,10 @@ namespace SkyRoof.CW
       return sigma * sigma;
     }
 
-    private double AssociationCost(State track, CwSignalCandidate candidate)
+    private double AssociationCost(
+      State track,
+      CwSignalCandidate candidate,
+      DateTime utc)
     {
       double residual = candidate.FrequencyHz - track.FrequencyHz;
       if (Math.Abs(residual) > MatchToleranceHz)
@@ -294,12 +460,14 @@ namespace SkyRoof.CW
       // fading should never cause IDs to swap solely because strengths cross.
       double snrPenalty =
         Math.Min(Math.Abs(candidate.SnrDb - track.SnrDb), 30) / 30.0;
+
       return nis + 0.12 * snrPenalty;
     }
 
     private int[] SolveGlobalAssignment(
       IReadOnlyList<State> liveTracks,
-      IReadOnlyList<CwSignalCandidate> peaks)
+      IReadOnlyList<CwSignalCandidate> peaks,
+      DateTime utc)
     {
       int trackCount = liveTracks.Count;
       var result = Enumerable.Repeat(-1, trackCount).ToArray();
@@ -324,7 +492,7 @@ namespace SkyRoof.CW
           if ((usedMask & bit) != 0) continue;
 
           double association = AssociationCost(
-            liveTracks[trackIndex], peaks[j]);
+            liveTracks[trackIndex], peaks[j], utc);
           if (!double.IsFinite(association)) continue;
 
           double candidateCost =
@@ -352,8 +520,40 @@ namespace SkyRoof.CW
       return result;
     }
 
-    private void UpdateMeasurement(State track, CwSignalCandidate candidate)
+    private void UpdateMeasurement(
+      State track,
+      CwSignalCandidate candidate,
+      DateTime utc)
     {
+      if (track.LastMeasurementUtc != default &&
+          utc > track.LastMeasurementUtc)
+      {
+        double dtObserved =
+          (utc - track.LastMeasurementUtc).TotalSeconds;
+        if (dtObserved >= 0.005)
+        {
+          double instantaneous =
+            (candidate.FrequencyHz -
+             track.LastMeasurementFrequencyHz) /
+            dtObserved;
+
+          // Identity history is allowed a wider slope range than the Kalman
+          // state clamp. It is used only for short fixed-lag label recovery,
+          // not as the physical tracker state.
+          instantaneous = Math.Clamp(
+            instantaneous, -400, 400);
+          track.ObservedDriftHzPerSecond =
+            track.ObservedDriftHzPerSecond == 0
+              ? instantaneous
+              : 0.35 * track.ObservedDriftHzPerSecond +
+                0.65 * instantaneous;
+        }
+      }
+
+      track.LastMeasurementFrequencyHz =
+        candidate.FrequencyHz;
+      track.LastMeasurementUtc = utc;
+
       double r = MeasurementVariance(candidate);
       double innovation = candidate.FrequencyHz - track.FrequencyHz;
       double s = track.P00 + r;
@@ -374,18 +574,345 @@ namespace SkyRoof.CW
       track.SnrDb = 0.35 * track.SnrDb + 0.65 * candidate.SnrDb;
     }
 
-    private void MarkMergedOrAmbiguousTracks()
+    private void RefreshMergeGroupsFromAssignments(
+      DateTime utc,
+      IReadOnlyList<int> assignments,
+      IReadOnlyList<CwSignalCandidate> peaks)
     {
+      for (int i = 0; i < tracks.Count; i++)
+      {
+        int pi = assignments[i];
+        if (pi < 0) continue;
+
+        for (int j = i + 1; j < tracks.Count; j++)
+        {
+          int pj = assignments[j];
+          if (pj < 0 || pi == pj) continue;
+
+          CwSignalCandidate a = peaks[pi];
+          CwSignalCandidate b = peaks[pj];
+          double separation =
+            Math.Abs(a.FrequencyHz - b.FrequencyHz);
+          double measurementOverlap = 2.0 * Math.Sqrt(
+            MeasurementVariance(a) +
+            MeasurementVariance(b));
+          double threshold =
+            MergeResolutionHz +
+            Math.Min(MergeResolutionHz, measurementOverlap);
+
+          if (separation > threshold)
+            continue;
+
+          int oldGroupI = tracks[i].MergeGroupId;
+          int oldGroupJ = tracks[j].MergeGroupId;
+          int groupId;
+          if (oldGroupI != 0 && oldGroupJ != 0)
+            groupId = Math.Min(oldGroupI, oldGroupJ);
+          else
+            groupId = oldGroupI != 0
+              ? oldGroupI
+              : oldGroupJ != 0
+                ? oldGroupJ
+                : nextMergeGroupId++;
+
+          // If two existing components just joined, normalize every member to
+          // the surviving label before updating the current pair.
+          if (oldGroupI != 0 || oldGroupJ != 0)
+          {
+            foreach (State track in tracks)
+            {
+              if (track.MergeGroupId == oldGroupI ||
+                  track.MergeGroupId == oldGroupJ)
+                track.MergeGroupId = groupId;
+            }
+          }
+
+          AssignToMergeGroup(
+            tracks[i], groupId, utc, a);
+          AssignToMergeGroup(
+            tracks[j], groupId, utc, b);
+        }
+      }
+    }
+
+    private void AssignToMergeGroup(
+      State track,
+      int groupId,
+      DateTime utc,
+      CwSignalCandidate? entryMeasurement = null)
+    {
+      bool enteringMerge = track.MergeGroupId == 0;
+      bool sameFrameAnchorUpgrade =
+        track.MergeEntryUtc == utc &&
+        entryMeasurement.HasValue;
+
+      if (enteringMerge || sameFrameAnchorUpgrade)
+      {
+        if (entryMeasurement is CwSignalCandidate measurement)
+        {
+          double observedSlope =
+            track.ObservedDriftHzPerSecond;
+
+          if (track.LastMeasurementUtc != default &&
+              utc > track.LastMeasurementUtc)
+          {
+            double dtObserved =
+              (utc - track.LastMeasurementUtc).TotalSeconds;
+            if (dtObserved >= 0.005)
+            {
+              observedSlope =
+                (measurement.FrequencyHz -
+                 track.LastMeasurementFrequencyHz) /
+                dtObserved;
+            }
+          }
+
+          track.MergeEntryFrequencyHz =
+            measurement.FrequencyHz;
+          track.MergeEntryDriftHzPerSecond =
+            Math.Clamp(
+              Math.Abs(observedSlope) >= 1
+                ? observedSlope
+                : track.DriftHzPerSecond,
+              -400, 400);
+        }
+        else
+        {
+          track.MergeEntryFrequencyHz =
+            track.FrequencyHz;
+          track.MergeEntryDriftHzPerSecond =
+            Math.Abs(track.ObservedDriftHzPerSecond) >= 1
+              ? track.ObservedDriftHzPerSecond
+              : track.DriftHzPerSecond;
+        }
+
+        track.MergeEntryUtc = utc;
+        track.IdentityAnchorUntilUtc =
+          utc + FixedLagIdentityTime;
+      }
+
+      track.MergeGroupId = groupId;
+      track.IdentityGroupId = groupId;
+      track.Ambiguous = true;
+    }
+
+    private void RefreshMergeGroups(DateTime utc)
+    {
+      if (tracks.Count < 2) return;
+
+      var adjacency = new bool[tracks.Count, tracks.Count];
       for (int i = 0; i < tracks.Count; i++)
       {
         for (int j = i + 1; j < tracks.Count; j++)
         {
           double separation =
-            Math.Abs(tracks[i].FrequencyHz - tracks[j].FrequencyHz);
-          double uncertaintyOverlap = 2.0 *
-            Math.Sqrt(Math.Max(0, tracks[i].P00 + tracks[j].P00));
+            Math.Abs(tracks[i].FrequencyHz -
+                     tracks[j].FrequencyHz);
+          double sigmaOverlap = Math.Sqrt(Math.Max(
+            0, tracks[i].P00 + tracks[j].P00));
+          double threshold =
+            MergeResolutionHz +
+            Math.Min(MergeResolutionHz, sigmaOverlap);
+          if (separation <= threshold)
+          {
+            adjacency[i, j] = true;
+            adjacency[j, i] = true;
+          }
+        }
+      }
 
-          if (separation > MergeResolutionHz + uncertaintyOverlap)
+      var grouped = new bool[tracks.Count];
+      var inAnyGroup = new bool[tracks.Count];
+
+      for (int start = 0; start < tracks.Count; start++)
+      {
+        if (grouped[start]) continue;
+        var component = new List<int>();
+        var queue = new Queue<int>();
+        queue.Enqueue(start);
+        grouped[start] = true;
+
+        while (queue.Count > 0)
+        {
+          int i = queue.Dequeue();
+          component.Add(i);
+          for (int j = 0; j < tracks.Count; j++)
+          {
+            if (!adjacency[i, j] || grouped[j]) continue;
+            grouped[j] = true;
+            queue.Enqueue(j);
+          }
+        }
+
+        if (component.Count < 2) continue;
+
+        int groupId = component
+          .Select(i => tracks[i].MergeGroupId)
+          .Where(id => id != 0)
+          .DefaultIfEmpty(0)
+          .Min();
+        if (groupId == 0)
+          groupId = nextMergeGroupId++;
+
+        foreach (int index in component)
+        {
+          State track = tracks[index];
+          inAnyGroup[index] = true;
+          track.Ambiguous = true;
+
+          AssignToMergeGroup(
+            track, groupId, utc);
+        }
+      }
+
+      for (int i = 0; i < tracks.Count; i++)
+      {
+        if (inAnyGroup[i]) continue;
+        State track = tracks[i];
+        if (track.MergeGroupId == 0) continue;
+
+        // Prediction alone is not evidence that a merge has ended. Preserve
+        // the label group through the bounded lag; actual separated
+        // measurements release it in ReleaseResolvedMergeGroups().
+        if (track.MergeEntryUtc != default &&
+            utc - track.MergeEntryUtc > FixedLagIdentityTime)
+        {
+          track.MergeGroupId = 0;
+          track.IdentityAnchorUntilUtc =
+            utc + FixedLagIdentityTime;
+        }
+      }
+    }
+
+    private void RefineAssignmentsWithinIdentityGroups(
+      DateTime utc,
+      int[] assignments,
+      IReadOnlyList<CwSignalCandidate> peaks)
+    {
+      var identityGroups = tracks
+        .Select((track, index) => (Track: track, Index: index))
+        .Where(x =>
+          x.Track.IdentityGroupId != 0 &&
+          x.Track.MergeEntryUtc != default &&
+          utc <= x.Track.IdentityAnchorUntilUtc)
+        .GroupBy(x => x.Track.IdentityGroupId);
+
+      foreach (var group in identityGroups)
+      {
+        var members = group.ToArray();
+        if (members.Length < 2) continue;
+
+        int[] peakIndices = members
+          .Select(x => assignments[x.Index])
+          .Where(index => index >= 0)
+          .Distinct()
+          .ToArray();
+
+        // Reordering is valid only when GNN already accepted one distinct
+        // observation per identity. A single merged peak is handled by the
+        // shared-centroid logic; missing observations remain misses.
+        if (peakIndices.Length != members.Length)
+          continue;
+
+        // Identity ordering comes from the short observed ridge portion at
+        // merge entry, not the slower Kalman velocity posterior. This permits
+        // a genuine crossing to reverse frequency order without swapping IDs.
+        var orderedMembers = members
+          .Select(x => new
+          {
+            x.Index,
+            Prediction =
+              x.Track.MergeEntryFrequencyHz +
+              x.Track.MergeEntryDriftHzPerSecond *
+              (utc - x.Track.MergeEntryUtc).TotalSeconds
+          })
+          .OrderBy(x => x.Prediction)
+          .ToArray();
+
+        int[] orderedPeaks = peakIndices
+          .OrderBy(index => peaks[index].FrequencyHz)
+          .ToArray();
+
+        for (int k = 0; k < orderedMembers.Length; k++)
+          assignments[orderedMembers[k].Index] = orderedPeaks[k];
+      }
+    }
+
+    private void ReleaseResolvedMergeGroups(
+      DateTime utc,
+      IReadOnlyList<int> assignments,
+      IReadOnlyList<CwSignalCandidate> peaks)
+    {
+      foreach (var group in tracks
+        .Select((track, index) => (Track: track, Index: index))
+        .Where(x => x.Track.MergeGroupId != 0)
+        .GroupBy(x => x.Track.MergeGroupId)
+        .ToArray())
+      {
+        var members = group.ToArray();
+        int[] assignedPeaks = members
+          .Select(x => assignments[x.Index])
+          .Where(index => index >= 0)
+          .Distinct()
+          .ToArray();
+
+        if (assignedPeaks.Length != members.Length ||
+            assignedPeaks.Length < 2)
+          continue;
+
+        bool allResolved = true;
+        for (int i = 0; i < assignedPeaks.Length && allResolved; i++)
+        {
+          for (int j = i + 1; j < assignedPeaks.Length; j++)
+          {
+            CwSignalCandidate a = peaks[assignedPeaks[i]];
+            CwSignalCandidate b = peaks[assignedPeaks[j]];
+            double separation =
+              Math.Abs(a.FrequencyHz - b.FrequencyHz);
+            double measurementOverlap = 2.0 * Math.Sqrt(
+              MeasurementVariance(a) +
+              MeasurementVariance(b));
+            double threshold =
+              MergeResolutionHz +
+              Math.Min(MergeResolutionHz, measurementOverlap);
+
+            if (separation <= threshold)
+            {
+              allResolved = false;
+              break;
+            }
+          }
+        }
+
+        if (!allResolved) continue;
+
+        foreach (var member in members)
+        {
+          member.Track.MergeGroupId = 0;
+          member.Track.IdentityAnchorUntilUtc =
+            utc + FixedLagIdentityTime;
+        }
+      }
+    }
+
+    private void MarkMergedOrAmbiguousTracks()
+    {
+      for (int i = 0; i < tracks.Count; i++)
+      {
+        if (tracks[i].MergeGroupId != 0)
+          tracks[i].Ambiguous = true;
+
+        for (int j = i + 1; j < tracks.Count; j++)
+        {
+          double separation =
+            Math.Abs(tracks[i].FrequencyHz -
+                     tracks[j].FrequencyHz);
+          double uncertaintyOverlap = 2.0 *
+            Math.Sqrt(Math.Max(
+              0, tracks[i].P00 + tracks[j].P00));
+
+          if (separation >
+              MergeResolutionHz + uncertaintyOverlap)
             continue;
 
           tracks[i].Ambiguous = true;
@@ -393,5 +920,20 @@ namespace SkyRoof.CW
         }
       }
     }
+
+    private double IdentityConfidence(
+      State track,
+      DateTime utc)
+    {
+      if (track.MergeGroupId != 0)
+        return 0.45;
+      if (track.MergeEntryUtc != default &&
+          utc <= track.IdentityAnchorUntilUtc)
+        return 0.75;
+      if (!track.Active)
+        return 0.85;
+      return 1.0;
+    }
+
   }
 }

@@ -15,7 +15,11 @@ namespace SkyRoof.CW
     public double MinActiveFraction { get; init; } = 0.08;
     public double MaxActiveFraction { get; init; } = 0.94;
     public int MinimumActivityTransitions { get; init; } = 2;
-    public double MinimumSeparationHz { get; init; } = 25;
+    /// <summary>
+    /// Suppresses multiple local maxima that represent the same detector lobe.
+    /// This is intentionally independent from tracker birth gating.
+    /// </summary>
+    public double PeakDeduplicationHz { get; init; } = 8;
     public int MaxCandidates { get; init; } = 16;
   }
 
@@ -155,7 +159,15 @@ namespace SkyRoof.CW
         double frequency = (weight > 0
           ? weightedBin / weight
           : firstBin + b) * binHz;
-        peaks.Add(new CwSignalCandidate(frequency, snrDb[b]));
+        double measurementSigma = Math.Max(
+          binHz * 0.20,
+          binHz / Math.Sqrt(Math.Max(Math.Pow(10, snrDb[b] / 10.0), 1)));
+        peaks.Add(new CwSignalCandidate(
+          frequency,
+          snrDb[b],
+          MeasurementSigmaHz: measurementSigma,
+          ResolutionHz: binHz,
+          ActivityProbability: activeFractions[b]));
       }
 
       var selected = new List<CwSignalCandidate>();
@@ -165,7 +177,7 @@ namespace SkyRoof.CW
       {
         if (selected.Any(existing =>
           Math.Abs(existing.FrequencyHz - peak.FrequencyHz) <
-          options.MinimumSeparationHz))
+          options.PeakDeduplicationHz))
           continue;
 
         selected.Add(peak);
@@ -212,7 +224,9 @@ namespace SkyRoof.CW
           value.MaxActiveFraction <= value.MinActiveFraction ||
           value.MaxActiveFraction > 1)
         throw new ArgumentOutOfRangeException(nameof(value.MaxActiveFraction));
-      if (value.MinimumSeparationHz <= 0 || value.MaxCandidates < 1)
+      if (!double.IsFinite(value.PeakDeduplicationHz) ||
+          value.PeakDeduplicationHz <= 0 ||
+          value.MaxCandidates < 1)
         throw new ArgumentOutOfRangeException(nameof(value.MaxCandidates));
     }
   }

@@ -104,6 +104,117 @@ namespace SkyRoof.CW
       return new(data, [1, 1, FrameCount, metadata.FrequencyBins]);
     }
 
+
+    /// <summary>
+    /// Applies an activity-aware competing mask to a lane that has already
+    /// been DDC-isolated and remodulated to targetCenterHz. Every confirmed
+    /// track may contribute interference weight, even if that track is not
+    /// selected for ONNX inference.
+    /// </summary>
+    public DeepCwTensor BuildActivityAwareTensor(
+      CwSignalTrack target,
+      IReadOnlyList<CwSignalTrack> allTracks,
+      IReadOnlyDictionary<int, float[]> activityByTrack,
+      double targetCenterHz = 800,
+      double supportBandwidthHz = 240,
+      double maskFloor = 0.04,
+      double maskSigmaHz = 24)
+    {
+      ArgumentNullException.ThrowIfNull(allTracks);
+      ArgumentNullException.ThrowIfNull(activityByTrack);
+      if (!allTracks.Any(t => t.Id == target.Id))
+        throw new ArgumentException(
+          "Target track must be in the interference set.",
+          nameof(allTracks));
+      if (!activityByTrack.TryGetValue(target.Id, out float[]? targetActivity) ||
+          targetActivity.Length != FrameCount)
+        throw new ArgumentException(
+          "Target activity timeline does not match DeepCW frames.",
+          nameof(activityByTrack));
+      if (targetCenterHz < metadata.MinFrequencyHz ||
+          targetCenterHz > metadata.MaxFrequencyHz)
+        throw new ArgumentOutOfRangeException(nameof(targetCenterHz));
+      if (supportBandwidthHz < 40 ||
+          supportBandwidthHz > metadata.MaxFrequencyHz - metadata.MinFrequencyHz)
+        throw new ArgumentOutOfRangeException(nameof(supportBandwidthHz));
+      if (maskFloor <= 0 || maskFloor > 1)
+        throw new ArgumentOutOfRangeException(nameof(maskFloor));
+      if (maskSigmaHz < 4 || maskSigmaHz > supportBandwidthHz / 2.0)
+        throw new ArgumentOutOfRangeException(nameof(maskSigmaHz));
+
+      float[] data =
+        new float[checked(FrameCount * metadata.FrequencyBins)];
+      double halfSupport = supportBandwidthHz / 2.0;
+      double duration = DurationSeconds;
+      double targetSigma = Math.Clamp(
+        Math.Sqrt(maskSigmaHz * maskSigmaHz +
+                  4 * target.FrequencySigmaHz * target.FrequencySigmaHz),
+        6, halfSupport);
+
+      for (int frame = 0; frame < FrameCount; frame++)
+      {
+        double frameSeconds = frame * metadata.HopLength /
+          (double)metadata.SampleRate;
+        double relativeToEnd = frameSeconds - duration;
+        double pTarget = Math.Clamp(targetActivity[frame], 0, 1);
+        int row = frame * fullBins;
+        int dst = frame * metadata.FrequencyBins;
+
+        for (int b = 0; b < metadata.FrequencyBins; b++)
+        {
+          double outputHz = metadata.MinFrequencyHz + b * binHz;
+          double targetOffset = outputHz - targetCenterHz;
+          if (Math.Abs(targetOffset) > halfSupport)
+          {
+            data[dst + b] = 0;
+            continue;
+          }
+
+          double numerator = pTarget *
+            GaussianWeight(targetOffset, targetSigma);
+          double denominator = maskFloor;
+
+          foreach (CwSignalTrack competitor in allTracks)
+          {
+            if (!competitor.Confirmed) continue;
+            if (!activityByTrack.TryGetValue(
+                  competitor.Id, out float[]? competitorActivity) ||
+                competitorActivity.Length != FrameCount)
+              continue;
+
+            double relativeHz =
+              (competitor.FrequencyHz - target.FrequencyHz) +
+              (competitor.DriftHzPerSecond -
+               target.DriftHzPerSecond) * relativeToEnd;
+            double competitorCenter = targetCenterHz + relativeHz;
+            double competitorSigma = Math.Clamp(
+              Math.Sqrt(maskSigmaHz * maskSigmaHz +
+                        4 * competitor.FrequencySigmaHz *
+                        competitor.FrequencySigmaHz),
+              6, halfSupport);
+            double pOn = Math.Clamp(
+              competitorActivity[frame], 0, 1);
+            denominator += pOn * GaussianWeight(
+              outputHz - competitorCenter,
+              competitorSigma);
+          }
+
+          double mask = numerator /
+            Math.Max(denominator, 1e-12);
+          double taper = 0.5 *
+            (1 + Math.Cos(
+              Math.PI * Math.Abs(targetOffset) / halfSupport));
+          float magnitude = magnitudes[row + firstModelBin + b];
+          magnitude *= (float)(mask * taper);
+          data[dst + b] = MathF.Log(1 + magnitude);
+        }
+      }
+
+      return new(
+        data,
+        [1, 1, FrameCount, metadata.FrequencyBins]);
+    }
+
     /// <summary>
     /// Isolate one carrier in the already-computed magnitude spectrogram and
     /// translate that narrow slice to targetCenterHz inside the model passband.

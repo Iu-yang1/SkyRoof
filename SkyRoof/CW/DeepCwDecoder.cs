@@ -168,26 +168,32 @@ namespace SkyRoof.CW
     DateTime WindowEndUtc);
 
   /// <summary>
-  /// Runs one shared FFT/resampling pass and then an independent DeepCW tensor
-  /// + CTC inference for every selected Pileup lane.
+  /// Runs one calibrated wideband STFT, models activity/interference for every
+  /// confirmed track, and invokes DeepCW only for the resource-selected lanes.
+  /// Detection bandwidth is therefore independent from the model's 3.2 kHz
+  /// sample rate.
   /// </summary>
   public sealed class DeepCwMultiLaneDecoder
   {
     private readonly DeepCwModelMetadata metadata;
     private readonly IDeepCwTensorDecoder decoder;
+    private readonly CwCarrierActivityEstimator activityEstimator;
 
     public int MaxLanes { get; set; } = 5;
-    public double LaneBandwidthHz { get; set; } = 180;
+    public double LaneBandwidthHz { get; set; } = 240;
     public double TargetCenterHz { get; set; } = 800;
 
     public DeepCwMultiLaneDecoder(
       DeepCwModelMetadata metadata,
-      IDeepCwTensorDecoder decoder)
+      IDeepCwTensorDecoder decoder,
+      CwCarrierActivityEstimator? activityEstimator = null)
     {
       this.metadata = metadata ??
         throw new ArgumentNullException(nameof(metadata));
       this.decoder = decoder ??
         throw new ArgumentNullException(nameof(decoder));
+      this.activityEstimator =
+        activityEstimator ?? new CwCarrierActivityEstimator();
       metadata.Validate();
     }
 
@@ -204,27 +210,44 @@ namespace SkyRoof.CW
       if (MaxLanes is < 1 or > 8)
         throw new InvalidOperationException("CW lane count must be 1..8.");
 
-      var selected = tracks
+      CwSignalTrack[] allDetectedTracks = tracks
         .Where(t => t.Confirmed)
+        .Where(t => double.IsFinite(t.FrequencyHz))
+        .Where(t => t.FrequencyHz > 0 &&
+                    t.FrequencyHz < sourceSampleRate / 2.0)
+        .OrderBy(t => t.FrequencyHz)
+        .ToArray();
+
+      CwSignalTrack[] decodeSelectedTracks = allDetectedTracks
         .OrderByDescending(t => t.Active)
         .ThenByDescending(t => t.SnrDb)
         .ThenBy(t => t.FrequencyHz)
         .Take(MaxLanes)
         .ToArray();
-      if (selected.Length == 0)
+      if (decodeSelectedTracks.Length == 0)
         return Array.Empty<DeepCwLaneResult>();
 
-      DeepCwFeatureWindow features =
-        DeepCwFeatureWindow.Create(audio, sourceSampleRate, metadata);
-      var results = new List<DeepCwLaneResult>(selected.Length);
-      foreach (CwSignalTrack track in selected)
-      {
-        if (track.FrequencyHz <= 0 ||
-            track.FrequencyHz >= metadata.SampleRate / 2.0)
-          continue;
+      DeepCwWidebandFeatureWindow features =
+        DeepCwWidebandFeatureWindow.Create(
+          audio, sourceSampleRate, metadata);
 
-        DeepCwTensor tensor = features.BuildSeparatedLaneTensor(
-          track, selected, LaneBandwidthHz, TargetCenterHz);
+      IReadOnlyDictionary<int, float[]> activityByTrack =
+        features.EstimateActivities(
+          allDetectedTracks, activityEstimator);
+
+      // allDetectedTracks is intentionally not truncated to MaxLanes. An
+      // unselected strong station must still take part in interference masks.
+      var results =
+        new List<DeepCwLaneResult>(decodeSelectedTracks.Length);
+      foreach (CwSignalTrack track in decodeSelectedTracks)
+      {
+        DeepCwTensor tensor = features.BuildLaneTensor(
+          track,
+          allDetectedTracks,
+          activityByTrack,
+          TargetCenterHz,
+          LaneBandwidthHz);
+
         DeepCwDecodedText text = decoder.Decode(tensor);
         results.Add(new(
           track.Id,
