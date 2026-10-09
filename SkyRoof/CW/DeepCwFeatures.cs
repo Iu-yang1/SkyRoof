@@ -115,22 +115,64 @@ namespace SkyRoof.CW
       double bandwidthHz = 180,
       double targetCenterHz = 800)
     {
-      if (!double.IsFinite(laneFrequencyHz) ||
-          laneFrequencyHz <= 0 ||
-          laneFrequencyHz >= metadata.SampleRate / 2.0)
-        throw new ArgumentOutOfRangeException(nameof(laneFrequencyHz));
-      if (!double.IsFinite(bandwidthHz) || bandwidthHz < 25 || bandwidthHz > 600)
+      var synthetic = new CwSignalTrack(
+        1, laneFrequencyHz, 0, 0,
+        DateTime.UnixEpoch, DateTime.UnixEpoch,
+        Confirmed: true, Active: true);
+      return BuildSeparatedLaneTensor(
+        synthetic, [synthetic], bandwidthHz, targetCenterHz);
+    }
+
+    /// <summary>
+    /// Ridge-aware soft time-frequency separation for one Pileup lane.
+    ///
+    /// Each track contributes a Gaussian likelihood around its predicted
+    /// frequency at every frame. The target lane receives a Wiener-like
+    /// normalized mask w_i/(floor + sum_j w_j), followed by translation to the
+    /// DeepCW model center. This lets near-by lanes compete for shared TF
+    /// energy rather than duplicating the same hard rectangular slice.
+    /// </summary>
+    public DeepCwTensor BuildSeparatedLaneTensor(
+      CwSignalTrack target,
+      IReadOnlyList<CwSignalTrack> allTracks,
+      double bandwidthHz = 180,
+      double targetCenterHz = 800,
+      double maskFloor = 0.08)
+    {
+      ArgumentNullException.ThrowIfNull(allTracks);
+      if (!allTracks.Any(t => t.Id == target.Id))
+        throw new ArgumentException(
+          "Target track must be included in the separation set.",
+          nameof(allTracks));
+      if (!double.IsFinite(target.FrequencyHz) ||
+          target.FrequencyHz <= 0 ||
+          target.FrequencyHz >= metadata.SampleRate / 2.0)
+        throw new ArgumentOutOfRangeException(nameof(target));
+      if (!double.IsFinite(bandwidthHz) ||
+          bandwidthHz < 25 || bandwidthHz > 600)
         throw new ArgumentOutOfRangeException(nameof(bandwidthHz));
       if (targetCenterHz < metadata.MinFrequencyHz ||
           targetCenterHz > metadata.MaxFrequencyHz)
         throw new ArgumentOutOfRangeException(nameof(targetCenterHz));
+      if (!double.IsFinite(maskFloor) || maskFloor <= 0 || maskFloor > 1)
+        throw new ArgumentOutOfRangeException(nameof(maskFloor));
 
-      float[] data = new float[checked(FrameCount * metadata.FrequencyBins)];
+      float[] data =
+        new float[checked(FrameCount * metadata.FrequencyBins)];
+      double sigma = Math.Max(6, bandwidthHz / 2.355);
       double half = bandwidthHz / 2.0;
+      double duration = DurationSeconds;
+
       for (int frame = 0; frame < FrameCount; frame++)
       {
         int dst = frame * metadata.FrequencyBins;
         int row = frame * fullBins;
+        double frameSeconds = frame * metadata.HopLength /
+          (double)metadata.SampleRate;
+        double relativeToEnd = frameSeconds - duration;
+        double targetRidgeHz = target.FrequencyHz +
+          target.DriftHzPerSecond * relativeToEnd;
+
         for (int b = 0; b < metadata.FrequencyBins; b++)
         {
           double outputHz = metadata.MinFrequencyHz + b * binHz;
@@ -141,7 +183,7 @@ namespace SkyRoof.CW
             continue;
           }
 
-          double sourceHz = laneFrequencyHz + delta;
+          double sourceHz = targetRidgeHz + delta;
           double sourceBin = sourceHz / binHz;
           if (sourceBin < 0 || sourceBin > fullBins - 1)
           {
@@ -149,16 +191,45 @@ namespace SkyRoof.CW
             continue;
           }
 
+          double targetWeight = GaussianWeight(
+            sourceHz - targetRidgeHz, sigma);
+          double denominator = maskFloor;
+          foreach (CwSignalTrack competitor in allTracks)
+          {
+            if (!competitor.Confirmed) continue;
+            double competitorRidge = competitor.FrequencyHz +
+              competitor.DriftHzPerSecond * relativeToEnd;
+            denominator += GaussianWeight(
+              sourceHz - competitorRidge, sigma);
+          }
+
+          double mask = targetWeight / Math.Max(denominator, 1e-12);
+
           int lower = (int)Math.Floor(sourceBin);
           int upper = Math.Min(fullBins - 1, lower + 1);
           double fraction = sourceBin - lower;
           float lo = magnitudes[row + lower];
           float hi = magnitudes[row + upper];
-          float value = (float)(lo * (1 - fraction) + hi * fraction);
+          float value =
+            (float)(lo * (1 - fraction) + hi * fraction);
+
+          // Smooth the finite extraction support instead of a rectangular BPF.
+          double taper = 0.5 *
+            (1 + Math.Cos(Math.PI * Math.Abs(delta) / half));
+          value *= (float)(mask * taper);
           data[dst + b] = MathF.Log(1 + value);
         }
       }
-      return new(data, [1, 1, FrameCount, metadata.FrequencyBins]);
+
+      return new(data,
+        [1, 1, FrameCount, metadata.FrequencyBins]);
+    }
+
+    private static double GaussianWeight(double offsetHz, double sigmaHz)
+    {
+      double x = offsetHz / sigmaHz;
+      if (Math.Abs(x) > 6) return 0;
+      return Math.Exp(-0.5 * x * x);
     }
 
     private static int ReflectIndex(int index, int length)
