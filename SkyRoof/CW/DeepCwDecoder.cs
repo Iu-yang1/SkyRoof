@@ -235,7 +235,7 @@ namespace SkyRoof.CW
     /// A non-null backend enables the experimental per-lane time-domain path:
     /// DDC/isolation -> optional denoise -> model-faithful DeepCW frontend.
     /// </summary>
-    public ICwLaneDenoiser? LaneDenoiser { get; set; }
+    public ICwAudioDenoiser? LaneDenoiser { get; set; }
 
     public double DenoiseWet { get; set; } = 1.0;
 
