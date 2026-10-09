@@ -67,6 +67,9 @@ namespace SkyRoof.CW
       public double MergeEntryDriftHzPerSecond;
       public DateTime MergeEntryUtc;
       public DateTime IdentityAnchorUntilUtc;
+      public double LastMeasurementFrequencyHz;
+      public DateTime LastMeasurementUtc;
+      public double ObservedDriftHzPerSecond;
     }
 
     private readonly List<State> tracks = new();
@@ -279,7 +282,7 @@ namespace SkyRoof.CW
 
         State track = tracks[i];
         CwSignalCandidate peak = clean[peakIndex];
-        UpdateMeasurement(track, peak);
+        UpdateMeasurement(track, peak, utc);
         track.LastSeenUtc = utc;
         track.Active = true;
         track.SeenCount++;
@@ -317,7 +320,10 @@ namespace SkyRoof.CW
           LastSeenUtc = utc,
           StateUtc = utc,
           SeenCount = 1,
-          Active = true
+          Active = true,
+          LastMeasurementFrequencyHz = peak.FrequencyHz,
+          LastMeasurementUtc = utc,
+          ObservedDriftHzPerSecond = 0
         });
       }
 
@@ -495,8 +501,40 @@ namespace SkyRoof.CW
       return result;
     }
 
-    private void UpdateMeasurement(State track, CwSignalCandidate candidate)
+    private void UpdateMeasurement(
+      State track,
+      CwSignalCandidate candidate,
+      DateTime utc)
     {
+      if (track.LastMeasurementUtc != default &&
+          utc > track.LastMeasurementUtc)
+      {
+        double dtObserved =
+          (utc - track.LastMeasurementUtc).TotalSeconds;
+        if (dtObserved >= 0.005)
+        {
+          double instantaneous =
+            (candidate.FrequencyHz -
+             track.LastMeasurementFrequencyHz) /
+            dtObserved;
+
+          // Identity history is allowed a wider slope range than the Kalman
+          // state clamp. It is used only for short fixed-lag label recovery,
+          // not as the physical tracker state.
+          instantaneous = Math.Clamp(
+            instantaneous, -400, 400);
+          track.ObservedDriftHzPerSecond =
+            track.ObservedDriftHzPerSecond == 0
+              ? instantaneous
+              : 0.35 * track.ObservedDriftHzPerSecond +
+                0.65 * instantaneous;
+        }
+      }
+
+      track.LastMeasurementFrequencyHz =
+        candidate.FrequencyHz;
+      track.LastMeasurementUtc = utc;
+
       double r = MeasurementVariance(candidate);
       double innovation = candidate.FrequencyHz - track.FrequencyHz;
       double s = track.P00 + r;
@@ -571,9 +609,9 @@ namespace SkyRoof.CW
           }
 
           AssignToMergeGroup(
-            tracks[i], groupId, utc);
+            tracks[i], groupId, utc, a);
           AssignToMergeGroup(
-            tracks[j], groupId, utc);
+            tracks[j], groupId, utc, b);
         }
       }
     }
@@ -581,15 +619,54 @@ namespace SkyRoof.CW
     private void AssignToMergeGroup(
       State track,
       int groupId,
-      DateTime utc)
+      DateTime utc,
+      CwSignalCandidate? entryMeasurement = null)
     {
       bool enteringMerge = track.MergeGroupId == 0;
-      if (enteringMerge)
+      bool sameFrameAnchorUpgrade =
+        track.MergeEntryUtc == utc &&
+        entryMeasurement.HasValue;
+
+      if (enteringMerge || sameFrameAnchorUpgrade)
       {
-        track.MergeEntryFrequencyHz =
-          track.FrequencyHz;
-        track.MergeEntryDriftHzPerSecond =
-          track.DriftHzPerSecond;
+        if (entryMeasurement is CwSignalCandidate measurement)
+        {
+          double observedSlope =
+            track.ObservedDriftHzPerSecond;
+
+          if (track.LastMeasurementUtc != default &&
+              utc > track.LastMeasurementUtc)
+          {
+            double dtObserved =
+              (utc - track.LastMeasurementUtc).TotalSeconds;
+            if (dtObserved >= 0.005)
+            {
+              observedSlope =
+                (measurement.FrequencyHz -
+                 track.LastMeasurementFrequencyHz) /
+                dtObserved;
+            }
+          }
+
+          track.MergeEntryFrequencyHz =
+            measurement.FrequencyHz;
+          track.MergeEntryDriftHzPerSecond =
+            Math.Clamp(
+              Math.Abs(observedSlope) >= 1
+                ? observedSlope
+                : track.DriftHzPerSecond,
+              -400, 400);
+        }
+        else
+        {
+          track.MergeEntryFrequencyHz =
+            track.FrequencyHz;
+          track.MergeEntryDriftHzPerSecond =
+            Math.Abs(track.ObservedDriftHzPerSecond) >= 1
+              ? track.ObservedDriftHzPerSecond
+              : track.DriftHzPerSecond;
+        }
+
         track.MergeEntryUtc = utc;
         track.IdentityAnchorUntilUtc =
           utc + FixedLagIdentityTime;
@@ -718,6 +795,9 @@ namespace SkyRoof.CW
         if (peakIndices.Length != members.Length)
           continue;
 
+        // Identity ordering comes from the short observed ridge portion at
+        // merge entry, not the slower Kalman velocity posterior. This permits
+        // a genuine crossing to reverse frequency order without swapping IDs.
         var orderedMembers = members
           .Select(x => new
           {
