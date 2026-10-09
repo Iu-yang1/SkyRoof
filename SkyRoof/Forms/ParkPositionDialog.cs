@@ -193,6 +193,11 @@ namespace SkyRoof
 
     private void SaveRoute()
     {
+      // Saving the dialog should also commit the currently edited row;
+      // the operator need not remember to press Update first.
+      if (RouteList.SelectedIndex >= 0)
+        UpdateSelected();
+
       if (waypoints.Count == 0)
       {
         MessageBox.Show(this,
