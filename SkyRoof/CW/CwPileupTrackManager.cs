@@ -444,8 +444,11 @@ namespace SkyRoof.CW
           Math.Sqrt(Math.Max(track.P00, 1)));
         double anchorResidual =
           candidate.FrequencyHz - anchorPrediction;
+        // History is a tie-breaker only. Kalman innovation must remain the
+        // dominant association evidence so a valid close peak is never
+        // rejected merely because the pre-merge anchor is imperfect.
         identityPenalty =
-          2.0 * anchorResidual * anchorResidual /
+          0.25 * anchorResidual * anchorResidual /
           (anchorSigma * anchorSigma);
       }
 
