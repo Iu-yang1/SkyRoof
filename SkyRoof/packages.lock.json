@@ -38,6 +38,15 @@
 "resolved": "5.0.0",
 "contentHash": "pg1W2VwaEQMAiTpGK840hZgzavnqjlCMTVSbtVCXVyT+7AX4mc1o89SPv4TBlAjhgCOo9c1Y+jZ5m3ti2YgGgA=="
 },
+"Microsoft.ML.OnnxRuntime": {
+"type": "Direct",
+"requested": "[1.30.0, )",
+"resolved": "1.30.0",
+"contentHash": "RaF3KjPXB/IbNvvrcQtrxS/NZjB9dEHnZQTsdJCLP5Fnn1Jj3LomeqR1mMAoRFKinJ0pIe85PLhLlfGBYqzgWA==",
+"dependencies": {
+"Microsoft.ML.OnnxRuntime.Managed": "1.30.0"
+}
+},
 "MultimediaTimer": {
 "type": "Direct",
 "requested": "[1.0.1, )",
@@ -114,6 +123,14 @@
 "resolved": "1.0.0.69",
 "contentHash": "E3r7k7Z8O15MfF8dPdUgphZ2Hx/g3SVCef0hdY1Ogu0Uhx4GMuQJhKN5tWLC2eZgnS4Kn95yqHbVe/7hAQCwHw=="
 },
+"Microsoft.ML.OnnxRuntime.Managed": {
+"type": "Transitive",
+"resolved": "1.30.0",
+"contentHash": "KHW+vp+i4Mdf6RhIsMvurTVepafXHjg8/VQ0o6sa2wEK0KzV/4iEoRTUvsymcRP+XPAM/r6kZCaTADdV6Xn4RA==",
+"dependencies": {
+"System.Numerics.Tensors": "9.0.0"
+}
+},
 "NAudio.Asio": {
 "type": "Transitive",
 "resolved": "2.3.0",
@@ -171,6 +188,11 @@
 "dependencies": {
 "SharpGL": "3.1.1"
 }
+},
+"System.Numerics.Tensors": {
+"type": "Transitive",
+"resolved": "9.0.0",
+"contentHash": "hyJB4UlpAi19Xr9AXzu2NuagKC4lPfHObNMEAA0HmqFz2rX7wKgzeYzO/jM/eBHDhnUGFFEjk5cOoJaxqg5J4A=="
 },
 "System.Data.DataSetExtensions": {
 "type": "Transitive",
