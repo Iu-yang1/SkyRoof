@@ -62,6 +62,7 @@ namespace SkyRoof.CW
       public bool Active;
       public bool Ambiguous;
       public int MergeGroupId;
+      public int IdentityGroupId;
       public double MergeEntryFrequencyHz;
       public double MergeEntryDriftHzPerSecond;
       public DateTime MergeEntryUtc;
@@ -196,10 +197,18 @@ namespace SkyRoof.CW
       int[] assignments = SolveGlobalAssignment(
         tracks, clean, utc);
 
+      // Global GNN decides which measurements are physically plausible.
+      // Fixed-lag history is then used only to permute already-accepted peaks
+      // inside a merge group, never to create misses or new detections.
+      RefineAssignmentsWithinIdentityGroups(
+        utc, assignments, clean);
+
       // Measurement geometry can reveal a finite-resolution encounter before
       // the filtered posterior means have converged. Capture the labelled
       // pre-merge state *before* applying those close measurements.
       RefreshMergeGroupsFromAssignments(
+        utc, assignments, clean);
+      ReleaseResolvedMergeGroups(
         utc, assignments, clean);
 
       var usedPeaks = new HashSet<int>();
@@ -427,32 +436,7 @@ namespace SkyRoof.CW
       double snrPenalty =
         Math.Min(Math.Abs(candidate.SnrDb - track.SnrDb), 30) / 30.0;
 
-      double identityPenalty = 0;
-      bool hasIdentityAnchor =
-        track.MergeEntryUtc != default &&
-        (track.MergeGroupId != 0 ||
-         utc <= track.IdentityAnchorUntilUtc);
-      if (hasIdentityAnchor)
-      {
-        double dt =
-          (utc - track.MergeEntryUtc).TotalSeconds;
-        double anchorPrediction =
-          track.MergeEntryFrequencyHz +
-          track.MergeEntryDriftHzPerSecond * dt;
-        double anchorSigma = Math.Max(
-          MergeResolutionHz,
-          Math.Sqrt(Math.Max(track.P00, 1)));
-        double anchorResidual =
-          candidate.FrequencyHz - anchorPrediction;
-        // History is a tie-breaker only. Kalman innovation must remain the
-        // dominant association evidence so a valid close peak is never
-        // rejected merely because the pre-merge anchor is imperfect.
-        identityPenalty =
-          0.25 * anchorResidual * anchorResidual /
-          (anchorSigma * anchorSigma);
-      }
-
-      return nis + 0.12 * snrPenalty + identityPenalty;
+      return nis + 0.12 * snrPenalty;
     }
 
     private int[] SolveGlobalAssignment(
@@ -609,6 +593,7 @@ namespace SkyRoof.CW
       }
 
       track.MergeGroupId = groupId;
+      track.IdentityGroupId = groupId;
       track.Ambiguous = true;
       track.IdentityAnchorUntilUtc =
         utc + FixedLagIdentityTime;
@@ -687,10 +672,124 @@ namespace SkyRoof.CW
       {
         if (inAnyGroup[i]) continue;
         State track = tracks[i];
-        if (track.MergeGroupId != 0)
+        if (track.MergeGroupId == 0) continue;
+
+        // Prediction alone is not evidence that a merge has ended. Preserve
+        // the label group through the bounded lag; actual separated
+        // measurements release it in ReleaseResolvedMergeGroups().
+        if (track.MergeEntryUtc != default &&
+            utc - track.MergeEntryUtc > FixedLagIdentityTime)
         {
           track.MergeGroupId = 0;
           track.IdentityAnchorUntilUtc =
+            utc + FixedLagIdentityTime;
+        }
+      }
+    }
+
+    private void RefineAssignmentsWithinIdentityGroups(
+      DateTime utc,
+      int[] assignments,
+      IReadOnlyList<CwSignalCandidate> peaks)
+    {
+      var identityGroups = tracks
+        .Select((track, index) => (Track: track, Index: index))
+        .Where(x =>
+          x.Track.IdentityGroupId != 0 &&
+          x.Track.MergeEntryUtc != default &&
+          utc <= x.Track.IdentityAnchorUntilUtc)
+        .GroupBy(x => x.Track.IdentityGroupId);
+
+      foreach (var group in identityGroups)
+      {
+        var members = group.ToArray();
+        if (members.Length < 2) continue;
+
+        int[] peakIndices = members
+          .Select(x => assignments[x.Index])
+          .Where(index => index >= 0)
+          .Distinct()
+          .ToArray();
+
+        // Reordering is valid only when GNN already accepted one distinct
+        // observation per identity. A single merged peak is handled by the
+        // shared-centroid logic; missing observations remain misses.
+        if (peakIndices.Length != members.Length)
+          continue;
+
+        var orderedMembers = members
+          .Select(x => new
+          {
+            x.Index,
+            Prediction =
+              x.Track.MergeEntryFrequencyHz +
+              x.Track.MergeEntryDriftHzPerSecond *
+              (utc - x.Track.MergeEntryUtc).TotalSeconds
+          })
+          .OrderBy(x => x.Prediction)
+          .ToArray();
+
+        int[] orderedPeaks = peakIndices
+          .OrderBy(index => peaks[index].FrequencyHz)
+          .ToArray();
+
+        for (int k = 0; k < orderedMembers.Length; k++)
+          assignments[orderedMembers[k].Index] = orderedPeaks[k];
+      }
+    }
+
+    private void ReleaseResolvedMergeGroups(
+      DateTime utc,
+      IReadOnlyList<int> assignments,
+      IReadOnlyList<CwSignalCandidate> peaks)
+    {
+      foreach (var group in tracks
+        .Select((track, index) => (Track: track, Index: index))
+        .Where(x => x.Track.MergeGroupId != 0)
+        .GroupBy(x => x.Track.MergeGroupId)
+        .ToArray())
+      {
+        var members = group.ToArray();
+        int[] assignedPeaks = members
+          .Select(x => assignments[x.Index])
+          .Where(index => index >= 0)
+          .Distinct()
+          .ToArray();
+
+        if (assignedPeaks.Length != members.Length ||
+            assignedPeaks.Length < 2)
+          continue;
+
+        bool allResolved = true;
+        for (int i = 0; i < assignedPeaks.Length && allResolved; i++)
+        {
+          for (int j = i + 1; j < assignedPeaks.Length; j++)
+          {
+            CwSignalCandidate a = peaks[assignedPeaks[i]];
+            CwSignalCandidate b = peaks[assignedPeaks[j]];
+            double separation =
+              Math.Abs(a.FrequencyHz - b.FrequencyHz);
+            double measurementOverlap = 2.0 * Math.Sqrt(
+              MeasurementVariance(a) +
+              MeasurementVariance(b));
+            double threshold =
+              MergeResolutionHz +
+              Math.Min(MergeResolutionHz, measurementOverlap);
+
+            if (separation <= threshold)
+            {
+              allResolved = false;
+              break;
+            }
+          }
+        }
+
+        if (!allResolved) continue;
+
+        foreach (var member in members)
+        {
+          member.Track.MergeGroupId = 0;
+          member.Track.IdentityAnchorUntilUtc =
             utc + FixedLagIdentityTime;
         }
       }
