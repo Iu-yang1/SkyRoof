@@ -94,9 +94,19 @@ namespace SkyRoof.CW
 
     public int MinimumPortionFrames { get; init; } = 3;
     public int MaximumPortionGapFrames { get; init; } = 1;
+    public double MinimumRidgeSeedSnrDb { get; init; } = 10.5;
     public double MinimumPortionMeanSnrDb { get; init; } = 7.0;
     public double MinimumPortionContinuity { get; init; } = 0.60;
     public double MinimumPortionActivityProbability { get; init; } = 0.58;
+
+    // Keyed CW creates a comb of weaker spectral maxima sharing almost the
+    // same on/off envelope. Correlate short-portion power histories instead
+    // of blindly widening the Hz de-duplication gate; independent close
+    // stations are then still allowed.
+    public double SidebandCorrelationMaxHz { get; init; } = 160;
+    public double SidebandCorrelationThreshold { get; init; } = 0.90;
+    public double SidebandDominanceDb { get; init; } = 2.5;
+
     public double MaxRidgeSlopeHzPerSecond { get; init; } = 120;
     public double PrecisionAssociationGateHz { get; init; } = 28;
   }
@@ -569,6 +579,14 @@ namespace SkyRoof.CW
         for (int i = 0; i < peaks.Count; i++)
         {
           if (usedPeaks.Contains(i)) continue;
+
+          // Hysteretic ridge birth: a low-threshold peak may continue an
+          // existing portion, but it may not start a new identity until it
+          // crosses the stronger statistical seed threshold.
+          if (peaks[i].SnrDb <
+              options.MinimumRidgeSeedSnrDb)
+            continue;
+
           var portion = new MutablePortion
           {
             Id = nextPortionId++,
@@ -658,12 +676,139 @@ namespace SkyRoof.CW
           ids[PeakKey(peak)] = mutable.Id;
       }
 
+      HashSet<int> sidebandIds =
+        FindCorrelatedSidebandPortions(
+          portions, all);
+
+      if (sidebandIds.Count > 0)
+      {
+        portions.RemoveAll(p =>
+          sidebandIds.Contains(p.Id));
+
+        foreach (var key in ids
+          .Where(x =>
+            sidebandIds.Contains(x.Value))
+          .Select(x => x.Key)
+          .ToArray())
+          ids.Remove(key);
+      }
+
       return (
         portions
           .OrderBy(x => x.FirstSampleIndex)
           .ThenBy(x => x.FirstFrequencyHz)
           .ToList(),
         ids);
+    }
+
+    private HashSet<int> FindCorrelatedSidebandPortions(
+      IReadOnlyList<CwRidgePortion> portions,
+      IReadOnlyList<MutablePortion> mutablePortions)
+    {
+      var suppressed = new HashSet<int>();
+      var mutableById =
+        mutablePortions.ToDictionary(x => x.Id);
+
+      foreach (CwRidgePortion weak in portions
+        .OrderBy(x => x.MeanSnrDb))
+      {
+        if (suppressed.Contains(weak.Id))
+          continue;
+
+        double weakCenter =
+          0.5 * (weak.FirstFrequencyHz +
+                 weak.LastFrequencyHz);
+
+        foreach (CwRidgePortion strong in portions
+          .Where(x =>
+            x.Id != weak.Id &&
+            x.MeanSnrDb >=
+              weak.MeanSnrDb +
+              options.SidebandDominanceDb)
+          .OrderByDescending(x => x.MeanSnrDb))
+        {
+          if (suppressed.Contains(strong.Id))
+            continue;
+
+          double strongCenter =
+            0.5 * (strong.FirstFrequencyHz +
+                   strong.LastFrequencyHz);
+          if (Math.Abs(
+                strongCenter - weakCenter) >
+              options.SidebandCorrelationMaxHz)
+            continue;
+
+          if (!mutableById.TryGetValue(
+                weak.Id, out MutablePortion? weakMutable) ||
+              !mutableById.TryGetValue(
+                strong.Id, out MutablePortion? strongMutable))
+            continue;
+
+          double correlation =
+            CommonFrameLogPowerCorrelation(
+              weakMutable, strongMutable);
+
+          if (correlation >=
+              options.SidebandCorrelationThreshold)
+          {
+            suppressed.Add(weak.Id);
+            break;
+          }
+        }
+      }
+
+      return suppressed;
+    }
+
+    private static double CommonFrameLogPowerCorrelation(
+      MutablePortion a,
+      MutablePortion b)
+    {
+      var bByFrame = b.Peaks.ToDictionary(
+        x => x.FrameIndex,
+        x => Math.Log(Math.Max(x.Power, 1e-30)));
+      var pairs =
+        new List<(double A, double B)>();
+
+      foreach (FramePeak peak in a.Peaks)
+      {
+        if (bByFrame.TryGetValue(
+              peak.FrameIndex,
+              out double other))
+        {
+          pairs.Add((
+            Math.Log(Math.Max(peak.Power, 1e-30)),
+            other));
+        }
+      }
+
+      if (pairs.Count < 5)
+        return 0;
+
+      double meanA = pairs.Average(x => x.A);
+      double meanB = pairs.Average(x => x.B);
+      double covariance = 0;
+      double varianceA = 0;
+      double varianceB = 0;
+
+      foreach ((double x, double y) in pairs)
+      {
+        double da = x - meanA;
+        double db = y - meanB;
+        covariance += da * db;
+        varianceA += da * da;
+        varianceB += db * db;
+      }
+
+      // Nearly constant ridges (including the 15 Hz continuous-doublet unit
+      // test) contain no keying-envelope evidence and must never be removed by
+      // this heuristic.
+      if (varianceA < 1e-4 ||
+          varianceB < 1e-4)
+        return 0;
+
+      return covariance /
+        Math.Sqrt(varianceA * varianceB);
     }
 
     private List<CwRidgeObservationBatch>
@@ -932,6 +1077,11 @@ namespace SkyRoof.CW
       if (value.MaximumPortionGapFrames is < 0 or > 8)
         throw new ArgumentOutOfRangeException(
           nameof(value.MaximumPortionGapFrames));
+      if (!double.IsFinite(value.MinimumRidgeSeedSnrDb) ||
+          value.MinimumRidgeSeedSnrDb <
+            value.FastMinimumSnrDb)
+        throw new ArgumentOutOfRangeException(
+          nameof(value.MinimumRidgeSeedSnrDb));
       if (!double.IsFinite(value.MinimumPortionMeanSnrDb) ||
           value.MinimumPortionMeanSnrDb < -10)
         throw new ArgumentOutOfRangeException(
@@ -947,6 +1097,19 @@ namespace SkyRoof.CW
           value.MinimumPortionActivityProbability > 1)
         throw new ArgumentOutOfRangeException(
           nameof(value.MinimumPortionActivityProbability));
+      if (!double.IsFinite(value.SidebandCorrelationMaxHz) ||
+          value.SidebandCorrelationMaxHz <= 0)
+        throw new ArgumentOutOfRangeException(
+          nameof(value.SidebandCorrelationMaxHz));
+      if (!double.IsFinite(value.SidebandCorrelationThreshold) ||
+          value.SidebandCorrelationThreshold <= 0 ||
+          value.SidebandCorrelationThreshold > 1)
+        throw new ArgumentOutOfRangeException(
+          nameof(value.SidebandCorrelationThreshold));
+      if (!double.IsFinite(value.SidebandDominanceDb) ||
+          value.SidebandDominanceDb < 0)
+        throw new ArgumentOutOfRangeException(
+          nameof(value.SidebandDominanceDb));
       if (!double.IsFinite(
             value.MaxRidgeSlopeHzPerSecond) ||
           value.MaxRidgeSlopeHzPerSecond <= 0)
