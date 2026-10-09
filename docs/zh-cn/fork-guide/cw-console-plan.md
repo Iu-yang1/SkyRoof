@@ -1,6 +1,6 @@
 # CW Console：多路 Pileup 解码与自动拍发实施规划
 
-**状态：接收核心正在量化验证。** 仓库现已具备多载波检测/跟踪、双分辨率 Frame-level Ridge Scanner、约 360 ms fixed-lag beam/MHT、多 Lane 独立 ONNX/CTC 推理、活动感知干扰 mask、MergeGroup fallback，以及按 CTC 时间位置进行的连续 Transcript 协调。实时 SDR / WASAPI Capture / RS-BA1 render-endpoint loopback PCM 接线与非阻塞 receive worker 已进入接收核心；尚未完成的是 CW Console 停靠 UI、HamNoise 集成，以及任何电台发射功能。
+**状态：接收链和第一版 RX Console 已进入可交互阶段。** 仓库现已具备多载波检测/跟踪、双分辨率 Frame-level Ridge Scanner、约 360 ms fixed-lag beam/MHT、多 Lane 独立 ONNX/CTC 推理、连续 Transcript、实时 SDR / WASAPI Capture / RS-BA1 loopback PCM、非阻塞 receive worker，以及 RX-only Dockable CW Console。RX Console 已提供源选择、Start/Stop、DeepCW 模型状态/安装、Pileup Lane 表、选中 Lane 的 committed/provisional 文本和 worker completed/skipped 指标。尚未完成的是 CW 音频瀑布、HamNoise，以及任何 TX/keyer 功能。
 
 参考：[deepcw-engine](https://github.com/e04/deepcw-engine) 是**正式 CW 解码模型**，包含 model.onnx、model.onnx.json 与推理示例；[web-deep-cw-decoder](https://github.com/e04/web-deep-cw-decoder) 提供多路检测与 Pileup 结构参考；[HamNoise](https://github.com/e04/HamNoise) 提供可选神经降噪 C 核心。英文方案见 [English plan](../../fork-guide/cw-console-plan.md)。
 
@@ -60,7 +60,7 @@ Frame-level Scanner 另外通过单元测试验证单调 sample-index 时间轴�
 | 06 | 多路推理 + 连续转录 | ONNX Runtime + 元数据 STFT/log1p/CTC；OutputFrame 时间对齐；Committed/Provisional；AssociationHintId 归属 | 重叠窗口不重复；误字可在提交前纠正；重复字符不误合并；每 Lane 独立 |
 | 07 | 性能调度 | tracker 独立 120 ms cadence；DeepCW 6 s snapshot / 1 s hop；latest-only 单实例推理；默认最多 5 路 | ONNX 忙时跳过旧 hop 不排队；tracker 不被推理阻塞；状态统计 completed/skipped windows |
 | 08 | 降噪 | HamNoise C DLL、Raw/BYPASS/Wet-Dry、监听链 | 前后 CER 可对比，一键旁路 |
-| 09 | WinForms UI | DockContent、工具栏、音频瀑布、Pileup 表、RX 转录、TX 宏及状态栏 | GitHub Light/Dark 与粉蓝白主题，停靠布局保存 |
+| 09 | WinForms UI | 第一阶段 RX-only DockContent：Start/Stop、三源选择、模型状态/安装、Pileup 表、selected committed/provisional transcript、worker 指标；后续补音频瀑布/HamNoise/TX 区 | RX UI 不拥有 DSP 资源；关闭窗口不停止后台接收；停靠布局可恢复；TX 控件在安全 TX 阶段前不存在 |
 | 10 | SkyCAT CW | 受控 CW_SEND/CW_ABORT/CW_SPEED；IC-9700 CI-V 17 和 17 FF | 30 字符分包、异常、ACK、超时模拟测试 |
 | 11 | TX 状态机 | Idle→Armed→Queued→Sending→Stopping/Failed，F1–F8 宏、WPM、Break-in | 默认 TX 关；STOP 优先清队列；ACK 不冒充拍发完成 |
 | 12 | 卫星联动 | SAT MAIN 接收 / SUB 发射、CW/CW-R、当前上下行及 Doppler、PTT 所有权 | 错 VFO/外部 PTT/切卫星阻止 TX |
@@ -72,7 +72,7 @@ Frame-level Scanner 另外通过单元测试验证单调 sample-index 时间轴�
 
 | 布局 | 内容 | 交互 |
 |---|---|---|
-| 顶栏（约 38px） | RX Start/Stop、源选择、Raw/HamNoise、Single/Pileup、模型状态 | RX 与 TX 完全分开 |
+| 顶栏（当前 RX-only） | RX Start/Stop、SDR/WASAPI/RS-BA1 源选择、Settings、DeepCW 模型安装/状态 | RX 与 TX 完全分开；当前版本没有任何 TX 控件 |
 | 音频频谱/瀑布（约 150px） | 100–2000 Hz、频点标签、选中路高亮 | 左键锁定/选择 lane；右键解锁/静音 |
 | Pileup 表（主要区域） | Lane、AF Hz、检测 SNR、漂移 Hz/s、状态、最近呼号/文本 | 3–8 路独立文字；按频率/SNR 排序不改变 ID |
 | RX Transcript（可拖动） | 所选通道确定/暂定文字、UTC、Copy、QSO Entry | 暂定文字不得用于自动拍发 |
@@ -103,7 +103,8 @@ SkyCAT 现有 4532 主 CAT 通道独占 RS-BA1 虚拟 COM 并串行仲裁，新�
 4. Incremental CTC / Transcript 时间对齐、重叠窗口投票与真实 ONNX streaming benchmark（**PR #45**）。
 5. 实时 SDR / WASAPI Capture / RS-BA1 render-endpoint loopback PCM 接线、设置热切换与 source timeline isolation（**PR #46**）。
 6. tracker / ONNX 解耦的 receive worker、latest-only inference、TimelineGeneration 过期结果抑制（**PR #47**）。
-7. CW Console + HamNoise（完整停靠 UI 和本地降噪）。
-8. SkyCAT CW CI-V 协议（白名单/错误处理/模拟器）。
-9. 安全 TX + SAT 与 CI-V 协同（受控实机验收后启用）。
-10. 端到端 WAV corpus 指标、中英文用户指南、许可证与正式发布。
+7. RX-only Dockable CW Console：源/模型/worker 状态、Pileup Lane grid、selected committed/provisional transcript、停靠恢复（**PR #48**）。
+8. CW 音频瀑布 + HamNoise + RX 监控/性能细化。
+9. SkyCAT CW CI-V 协议（白名单/错误处理/模拟器）。
+10. 安全 TX + SAT 与 CI-V 协同（受控实机验收后启用）。
+11. 端到端 WAV corpus 指标、中英文用户指南、许可证与正式发布。
