@@ -51,6 +51,7 @@ namespace SkyRoof
     public CatControl CatControl = new();
     internal PttHotkeyController? PttHotkey;
     public CwAudioSourceController? CwAudio;
+    public CwReceiveWorker? CwReceiveWorker;
 
     // soundcards
     public readonly OutputSoundcard<float> SpeakerSoundcard = new();

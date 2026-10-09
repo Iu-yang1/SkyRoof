@@ -22,8 +22,10 @@ namespace SkyRoof.CW
 
     public bool Enabled { get; private set; }
     public CwReceiveAudioSource Source { get; private set; }
+    public string? SourceIdentity { get; private set; }
     public long AcceptedSamples { get; private set; }
     public DateTime? LastAcceptedUtc { get; private set; }
+    public long TimelineGeneration { get; private set; }
 
     public CwPcmIngress(
       CwPileupFrontEnd? frontEnd = null)
@@ -35,14 +37,25 @@ namespace SkyRoof.CW
 
     public void Configure(
       bool enabled,
-      CwReceiveAudioSource source)
+      CwReceiveAudioSource source,
+      string? sourceIdentity = null)
     {
+      string? normalizedIdentity =
+        string.IsNullOrWhiteSpace(sourceIdentity)
+          ? null
+          : sourceIdentity;
+
       if (Enabled == enabled &&
-          Source == source)
+          Source == source &&
+          string.Equals(
+            SourceIdentity,
+            normalizedIdentity,
+            StringComparison.Ordinal))
         return;
 
       Enabled = enabled;
       Source = source;
+      SourceIdentity = normalizedIdentity;
       ResetTimeline();
     }
 
@@ -87,6 +100,7 @@ namespace SkyRoof.CW
       FrontEnd.Reset();
       AcceptedSamples = 0;
       LastAcceptedUtc = null;
+      TimelineGeneration++;
     }
   }
 
@@ -147,17 +161,33 @@ namespace SkyRoof.CW
       captureInput.Enabled = false;
       loopbackInput.Enabled = false;
 
-      Ingress.Configure(
-        settings.ReceiveEnabled,
-        settings.AudioSource);
-
-      captureInput.SetDeviceId(
-        settings.CaptureDeviceId);
-
       string? loopbackDevice =
         ResolveLoopbackDeviceId(
           settings,
           ctx.Settings.Audio);
+
+      string sourceIdentity =
+        settings.AudioSource switch
+        {
+          CwReceiveAudioSource.SDR =>
+            "SDR",
+          CwReceiveAudioSource.WasapiCapture =>
+            settings.CaptureDeviceId ??
+            "<none>",
+          CwReceiveAudioSource.RsBa1Loopback =>
+            loopbackDevice ??
+            "<none>",
+          _ => "<unknown>"
+        };
+
+      Ingress.Configure(
+        settings.ReceiveEnabled,
+        settings.AudioSource,
+        sourceIdentity);
+
+      captureInput.SetDeviceId(
+        settings.CaptureDeviceId);
+
       loopbackInput.SetDeviceId(
         loopbackDevice);
 
