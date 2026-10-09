@@ -85,6 +85,10 @@ jobs:
           --filter FullyQualifiedName~DeepCwRealModelBenchmarkTests
           --logger "console;verbosity=normal"
 
+      - name: Print benchmark metrics
+        shell: powershell
+        run: Get-Content $env:DEEPCW_BENCHMARK_OUTPUT
+
       - name: Upload benchmark metrics
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
