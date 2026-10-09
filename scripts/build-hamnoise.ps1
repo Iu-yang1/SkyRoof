@@ -79,7 +79,7 @@ function Q([string]$value) {
 }
 
 $commonCpp =
-  '/nologo /O2 /MD /EHsc /std:c++17 ' +
+  '/nologo /O2 /MD /EHsc /std:c++20 ' +
   '/D DENOISE_WEB_TARGET_CW=1 /D DENOISE_WEB_TARGET_VOICE=0 ' +
   '/I ' + (Q $coreInclude) + ' /I ' + (Q $coreGenerated) +
   ' /I ' + (Q $v2Dir) + ' /I ' + (Q $v2Generated)
