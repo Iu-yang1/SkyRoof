@@ -85,6 +85,10 @@ namespace SkyRoof
     [DefaultValue(0f)]
     public float ParkElevation { get; set; }
 
+    [Browsable(false)]
+    [Description("Ordered PARK waypoints. Empty means legacy single-point parking.")]
+    public List<RotatorParkWaypoint> ParkWaypoints { get; set; } = new();
+
     public override string ToString() { return string.Empty; }
   }
 }
