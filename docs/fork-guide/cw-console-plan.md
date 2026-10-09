@@ -1,6 +1,6 @@
 # CW Console: full multi-lane Pileup and CI-V keyer implementation plan
 
-**Status: receive core under quantitative validation.** The repository now contains multi-carrier detection/tracking, a dual-resolution frame-level ridge scanner on a monotonic PCM sample timeline, a bounded ~360 ms fixed-lag beam/MHT, independent multi-lane ONNX/CTC inference, activity-aware interference masks, MergeGroup fallback and a real-model benchmark. It still does **not** wire live SDR/WASAPI PCM into the CW Console UI, provide continuous transcript reconciliation, integrate HamNoise, or enable radio transmission.
+**Status: receive core under quantitative validation.** The repository now contains multi-carrier detection/tracking, a dual-resolution frame-level ridge scanner, a bounded ~360 ms fixed-lag beam/MHT, independent multi-lane ONNX/CTC inference, activity-aware interference masks, MergeGroup fallback, and time-aligned incremental transcript reconciliation. It still does **not** wire live SDR/WASAPI PCM into the CW Console UI, integrate HamNoise, or enable radio transmission.
 
 Chinese: [CW Console 完整规划](../../zh-cn/fork-guide/cw-console-plan.md).
 
@@ -29,9 +29,11 @@ Pileup is no longer designed as frame-local peak chasing followed by fixed recta
 9. **Dual-resolution frame scanner** — Fast STFT uses 80 ms / 15 ms and is activity/continuity evidence only; its observations are explicitly not eligible for Kalman updates. Precision STFT uses 240 ms / 120 ms, reports sample-index aligned frequency/SNR/resolution/measurement sigma/activity, and is the only frame stream sent to the tracker.
 10. **Correlation- and chirp-aware precision sigma** — Precision measurement sigma is inflated for overlapping-window correlation and residual chirp across the 240 ms window. An optional common Doppler rate may be de-chirped before the STFT; reported frequencies are mapped back to the original AF axis.
 11. **True fixed-lag multi-frame association** — before Kalman/GNN, Precision batches pass through a bounded beam/MHT that retains 3 future batches by default (~360 ms). Global hypotheses accumulate frequency-innovation, local-velocity, velocity-change, SNR, activity and ridge-portion continuity costs. Only after the lag expires does the oldest batch receive stable `AssociationHintId` labels. New paths need at least two observations of future support, so one-frame clutter cannot immediately create a track.
-11. **RRP-inspired short portions, not a literal MATLAB port** — fast local maxima are linked into short mutually-consistent ridge portions before long-term tracking. The Laurent/Meignen basin/spline optimizer is not copied, and SkyRoof does not impose its non-crossing spline constraint.
+12. **RRP-inspired short portions, not a literal MATLAB port** — fast local maxima are linked into short mutually-consistent ridge portions before long-term tracking. The Laurent/Meignen basin/spline optimizer is not copied, and SkyRoof does not impose its non-crossing spline constraint.
 
 The design is inspired by, but does not literally implement, these published methods: Wang/Jiang/Zhang, *Random finite set approach to analyzing, detecting, and tracking dynamic time-frequency spectra* (2019, DOI 10.7527/S1000-6893.2018.22600); Meignen/Pham/McLaughlin, *On Demodulation, Ridge Detection, and Synchrosqueezing for Multicomponent Signals* (IEEE TSP 2017, DOI 10.1109/TSP.2017.2656838); Laurent/Meignen, *A Novel Ridge Detector for Nonstationary Multicomponent Signals* (IEEE TSP 2021, DOI 10.1109/TSP.2021.3085113); Meignen/Laurent/Oberlin, *One or Two Ridges? An Exact Mode Separation Condition for the Gabor Transform* (IEEE SPL 2022, DOI 10.1109/LSP.2022.3226948); and García-Fernández et al., *Bayesian Multi-Target Tracking With Merged Measurements Using Labelled Random Finite Sets* (IEEE TSP 2015, DOI 10.1109/TSP.2015.2393843).
+
+13. **Incremental CTC transcript reconciliation** — DeepCW exposes each emitted character's CTC `OutputFrame`, output-frame count and a top-vs-runner-up confidence. Overlapping decode windows are sequence-aligned on approximate absolute symbol time and confidence-weighted before text is committed. Each lane has an immutable `CommittedText` prefix plus a correctable `ProvisionalText` suffix. `AssociationHintId` is the preferred transcript identity, so text remains attached to the same multi-frame path through TrackId rebuilds and crossings.
 
 SkyRoof now uses **Frame Ridge Scanner → bounded fixed-lag beam/MHT → labelled Kalman/GNN → MergeGroup fallback** rather than a full GM-PHD/GLMB filter. The default associator retains only about 360 ms of future Precision observations and a bounded hypothesis beam, which is appropriate for the 5–8 lane desktop problem while still resolving crossings with future evidence. Heavier MHT/GLMB remains an escalation path only if end-to-end ID-switch benchmarks justify it.
 
@@ -39,7 +41,7 @@ SkyRoof now uses **Frame Ridge Scanner → bounded fixed-lag beam/MHT → labell
 
 CW changes are gated by a dedicated real `deepcw-engine` ONNX benchmark in addition to unit tests. The benchmark uses deterministic synthetic Morse mixtures and oracle tracks first, so separator/model error is measured independently from detector/tracker identity error. It reports masked and unmasked CER/WER, callsign recognition and real-time factor across fixed 5/10/15/25/40 Hz separations, power imbalance, Doppler-rate cases and a >1.6 kHz wideband lane.
 
-The frame scanner is unit-tested separately for monotonic sample timing, Fast/Precision separation, close-carrier resolution, silent-frame coast progression and Doppler de-chirp behavior. The next end-to-end corpus benchmark will add carrier detection recall/false alarms, frequency RMSE, ID switches, final CER/WER, callsign accuracy and latency. A lower ID-switch count is not accepted as a decoding improvement if CER or latency regresses materially.
+The frame scanner is unit-tested separately for monotonic sample timing, Fast/Precision separation, close-carrier resolution, silent-frame coast progression and Doppler de-chirp behavior. Incremental transcript reconciliation is additionally exercised by a real-ONNX 40 Hz two-lane sliding-window benchmark (6 s windows / 1 s hop) that records naive concatenation CER versus stable streaming CER/WER. The next end-to-end corpus benchmark will add carrier detection recall/false alarms, frequency RMSE, ID switches, final CER/WER, callsign accuracy and latency. A lower ID-switch count is not accepted as a decoding improvement if CER or latency regresses materially.
 
 ## Workflow and gates
 
@@ -51,7 +53,7 @@ The frame scanner is unit-tested separately for monotonic sample timing, Fast/Pr
 | CW-03 | Frame ridge scanner | Fast 80/15 ms ridge portions + Precision 240/120 ms observations, sample-index timeline, Doppler de-chirp | Fast frames never over-update Kalman; close carriers and silent coast are regression-tested |
 | CW-04 | Multi-frame association + tracking | 3-batch / ~360 ms beam-MHT, AssociationHintId, Kalman/GNN, MergeGroup fallback, up to 8 tracks | Crossing, single-peak merge, one-frame clutter and ID-swap regressions |
 | CW-05 | Per-lane isolation | Bandpass + smooth frequency shift to model's AF passband | Independent audio outputs for 3–5 simultaneous CW carriers |
-| CW-06 | DeepCW decoding | ONNX Runtime + metadata-faithful STFT/log1p, CTC and incremental text | **Each lane** independently shows true confirmed/pending text |
+| CW-06 | DeepCW + continuous transcript | ONNX Runtime + metadata-faithful STFT/log1p/CTC; OutputFrame timing; committed/provisional text; AssociationHintId ownership | Overlap de-duplication, pre-commit correction, repeated-character and per-lane isolation tests |
 | CW-07 | Load governance | Default 5, configurable up to 8 lanes, bounded inference backlog, selected-lane priority | Measured latency/CPU/RAM and safe overload behavior |
 | CW-08 | HamNoise | Native CW DLL with bypass and Wet/Dry, optional monitor | Compare raw/denoised per-lane CER |
 | CW-09 | Dockable UI | Waterfall, Pileup grid, selected transcript, TX editor, theme/settings | GitHub Light/Dark, pink-blue-white and layout restore |
@@ -68,7 +70,7 @@ The frame scanner is unit-tested separately for monotonic sample timing, Fast/Pr
 2. Enter a bounded, timestamped audio hub. Optionally reduce CW noise with HamNoise; preserve a raw bypass path.
 3. Run the dual-resolution ridge scanner. Fast 15 ms-hop frames form activity/reliable-ridge evidence only; Precision 120 ms-hop observations remain on the monotonic PCM sample axis.
 4. Hold Precision batches in the bounded fixed-lag beam/MHT for about 360 ms, commit the oldest batch with future-validated AssociationHintId labels, then update the labelled Kalman/GNN/MergeGroup tracker. Empty batches follow the same delayed timeline and still advance coast/hold time. For each active lane, extract or spectrally translate the component to DeepCW's model coordinates; classic/monitor audio may use the independent complex DDC path.
-5. Run the publicly available DeepCW ONNX model with lane-specific state and CTC. Store confirmed and pending text independently; invalidate stale work when a track disappears or switches identity.
+5. Run the publicly available DeepCW ONNX model with lane-specific state and CTC. Map emitted OutputFrames to approximate absolute time, reconcile overlapping windows by sequence-constrained symbol voting, and expose immutable committed text plus a correctable provisional suffix.
 6. Render all 3–8 lane transcripts simultaneously, with AF frequency, estimated SNR, drift, state and latest call. Show a complete transcript for one selected lane. Mark unresolved co-channel collisions.
 7. Track RF downlink and actual TX uplink separately through SkyRoof's existing Doppler model; do not interpret a tracked AF frequency as an uplink VFO command.
 
@@ -100,8 +102,9 @@ Use synthetic and recorded simultaneous CW WAV at 10/20/30/40 WPM; 3/5/8 carrier
 1. Track manager + multi-lane DeepCW core + reliability fixes and real-model benchmark (**merged in PR #41/#42**).
 2. Dual-resolution Frame Ridge Scanner, sample-index timeline and precision-only Kalman updates (**PR #43**).
 3. Bounded fixed-lag beam/MHT, multi-frame crossing/merge association and AssociationHintId (**PR #44**).
-3. Incremental CTC/transcript reconciliation plus live SDR/WASAPI/RS-BA1 PCM wiring.
-4. Dockable CW Console UI, load governance, HamNoise and settings.
-5. SkyCAT constrained CW protocol and mock serial tests.
-6. Safe TX + satellite CAT integration and supervised bench verification.
-7. End-to-end WAV corpus metrics, bilingual user guide, license audit and release checks.
+4. Incremental CTC timing, overlapping-window voting and real-ONNX streaming benchmark (**PR #45**).
+5. Live SDR/WASAPI/RS-BA1 PCM wiring.
+6. Dockable CW Console UI, load governance, HamNoise and settings.
+7. SkyCAT constrained CW protocol and mock serial tests.
+8. Safe TX + satellite CAT integration and supervised bench verification.
+9. End-to-end WAV corpus metrics, bilingual user guide, license audit and release checks.
