@@ -10,5 +10,7 @@ items:
     href: spectrum.md
   - name: Rotator, themes and operations
     href: rotator-and-ui.md
+  - name: CW Console and Pileup implementation plan
+    href: cw-console-plan.md
   - name: Troubleshooting and change history
     href: troubleshooting-and-history.md
