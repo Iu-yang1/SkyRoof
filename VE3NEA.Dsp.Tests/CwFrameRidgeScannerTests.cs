@@ -172,6 +172,46 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void Scanner_EmitsEmptyPrecisionBatchesThroughSilence()
+    {
+      const double seconds = 1.8;
+      int count =
+        (int)Math.Round(seconds * SampleRate);
+      float[] audio = MakeNoise(count, 0.0015f);
+
+      // Keyed CW exists only in the first 600 ms; the remaining window is
+      // deliberate silence/noise. Precision time must continue advancing.
+      int keyedSamples =
+        (int)Math.Round(0.60 * SampleRate);
+      double phase = 0;
+      for (int n = 0; n < keyedSamples; n++)
+      {
+        phase += 2 * Math.PI * 830 / SampleRate;
+        double t = n / (double)SampleRate;
+        if ((t % 0.11) < 0.065)
+          audio[n] +=
+            0.30f * (float)Math.Sin(phase);
+      }
+
+      var snapshot = new CwAudioSnapshot(
+        SampleRate,
+        T0,
+        count,
+        audio);
+      CwFrameRidgeScanner scanner =
+        NewScanner(700, 1000);
+
+      CwFrameRidgeScanResult result =
+        scanner.Scan(snapshot);
+
+      result.PrecisionBatches.Should().NotBeEmpty();
+      result.PrecisionBatches.Should().Contain(x =>
+        x.CenterSampleIndex >
+          (long)(1.0 * SampleRate) &&
+        x.Observations.Count == 0);
+    }
+
+    [Fact]
     public void FrontEnd_DoesNotReplayPrecisionFramesFromOverlappingSnapshot()
     {
       CwDetectorOptions detectorOptions = new()
