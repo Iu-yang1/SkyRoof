@@ -319,11 +319,39 @@ namespace SkyRoof.CW
         if (tracks.Count >= MaxTracks) break;
 
         CwSignalCandidate peak = clean[j];
-        double birthGate = Math.Max(
+        double detectorBirthGate = Math.Max(
           TrackBirthGateHz,
-          peak.ResolutionHz > 0 ? peak.ResolutionHz * 0.5 : 0);
-        if (tracks.Any(t =>
-          Math.Abs(t.FrequencyHz - peak.FrequencyHz) < birthGate))
+          peak.ResolutionHz > 0
+            ? peak.ResolutionHz * 0.5
+            : 0);
+
+        // A mature track that narrowly missed association must not be
+        // duplicated by the birth stage. Use a 3-sigma innovation exclusion
+        // zone for tracks with real history, while newly-created tracks in
+        // this same scan still use only the detector/birth-resolution gate.
+        // This preserves legitimate close doublets (e.g. 15 Hz) arriving in
+        // one frame instead of letting the first newborn suppress the second.
+        bool explainedByExistingTrack = tracks.Any(t =>
+        {
+          double gate = detectorBirthGate;
+          if (t.SeenCount >= 2)
+          {
+            double innovationSigma = Math.Sqrt(
+              Math.Max(
+                1e-9,
+                t.P00 + MeasurementVariance(peak)));
+            gate = Math.Max(
+              gate,
+              Math.Min(
+                MatchToleranceHz,
+                3.0 * innovationSigma));
+          }
+
+          return Math.Abs(
+            t.FrequencyHz - peak.FrequencyHz) < gate;
+        });
+
+        if (explainedByExistingTrack)
           continue;
 
         tracks.Add(new State
