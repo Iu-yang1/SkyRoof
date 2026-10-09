@@ -259,6 +259,10 @@ namespace SkyRoof
       if (ChangedFields.Exists(s => s.StartsWith("SkyRoof.AudioSettings.")))
         ctx.MainForm.ApplyAudioSettings();
 
+      if (ChangedFields.Exists(s =>
+            s.StartsWith("SkyRoof.CwConsoleSettings.")))
+        ctx.CwAudio?.ApplySettings();
+
       if (ChangedFields.Exists(s => s.StartsWith("SkyRoof.Announcement.Minutes")) ||
           ChangedFields.Exists(s => s.StartsWith("SkyRoof.Announcement.Enabled")))
         ctx.Announcer.RebuildQueue();
