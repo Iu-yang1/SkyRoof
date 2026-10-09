@@ -1,0 +1,162 @@
+using FluentAssertions;
+using SkyRoof.CW;
+using Xunit;
+
+namespace VE3NEA.Dsp.Tests
+{
+  public sealed class CwConsolePresentationTests
+  {
+    private static readonly DateTime T0 =
+      new(
+        2026, 10, 9,
+        0, 0, 0,
+        DateTimeKind.Utc);
+
+    [Fact]
+    public void AssociationHint_IsPreferredOverTransientTrackId()
+    {
+      CwSignalTrack track =
+        Track(
+          id: 17,
+          hintId: 404);
+
+      CwConsoleLaneIdentity identity =
+        CwConsolePresentation.Identity(
+          track);
+
+      identity.UsesAssociationHint
+        .Should().BeTrue();
+      identity.Id.Should().Be(404);
+      identity.ToString().Should().Be("H404");
+    }
+
+    [Fact]
+    public void TrackId_IsFallbackWhenNoAssociationHintExists()
+    {
+      CwSignalTrack track =
+        Track(
+          id: 17,
+          hintId: 0);
+
+      CwConsoleLaneIdentity identity =
+        CwConsolePresentation.Identity(
+          track);
+
+      identity.UsesAssociationHint
+        .Should().BeFalse();
+      identity.Id.Should().Be(17);
+      identity.ToString().Should().Be("T17");
+    }
+
+    [Fact]
+    public void RebuiltTrackAndTranscriptShareStableHintIdentity()
+    {
+      CwSignalTrack rebuilt =
+        Track(
+          id: 99,
+          hintId: 808);
+
+      var transcript =
+        new CwTranscriptSnapshot(
+          trackId: 12,
+          associationHintId: 808,
+          committedText: "CQ DE ",
+          provisionalText: "K1ABC",
+          provisionalSymbols:
+            Array.Empty<CwTranscriptSymbol>(),
+          lastWindowEndUtc:
+            T0.AddSeconds(8));
+
+      CwConsolePresentation.Identity(
+          rebuilt)
+        .Should().Be(
+          CwConsolePresentation.Identity(
+            transcript));
+    }
+
+    [Theory]
+    [InlineData(
+      false, true, "Active")]
+    [InlineData(
+      false, false, "Hold")]
+    [InlineData(
+      true, true, "Ambiguous")]
+    [InlineData(
+      true, false, "Ambiguous")]
+    public void StateText_UsesAmbiguityBeforeActivity(
+      bool ambiguous,
+      bool active,
+      string expected)
+    {
+      CwSignalTrack track =
+        Track(
+          id: 1,
+          hintId: 1) with
+        {
+          Ambiguous = ambiguous,
+          Active = active
+        };
+
+      CwConsolePresentation.StateText(
+          track)
+        .Should().Be(expected);
+    }
+
+    [Fact]
+    public void GridTranscript_MarksOnlyProvisionalSuffix()
+    {
+      var transcript =
+        new CwTranscriptSnapshot(
+          trackId: 1,
+          associationHintId: 101,
+          committedText: "CQ DE ",
+          provisionalText: "K1ABC",
+          provisionalSymbols:
+            Array.Empty<CwTranscriptSymbol>(),
+          lastWindowEndUtc: T0);
+
+      CwConsolePresentation.GridTranscript(
+          transcript)
+        .Should().Be(
+          "CQ DE ⟦K1ABC⟧");
+    }
+
+    [Fact]
+    public void GridTranscript_DoesNotDecorateFullyCommittedText()
+    {
+      var transcript =
+        new CwTranscriptSnapshot(
+          trackId: 1,
+          associationHintId: 101,
+          committedText: "CQ DE K1ABC",
+          provisionalText: "",
+          provisionalSymbols:
+            Array.Empty<CwTranscriptSymbol>(),
+          lastWindowEndUtc: T0);
+
+      CwConsolePresentation.GridTranscript(
+          transcript)
+        .Should().Be(
+          "CQ DE K1ABC");
+    }
+
+    private static CwSignalTrack Track(
+      int id,
+      int hintId) =>
+      new(
+        Id: id,
+        FrequencyHz: 800,
+        SnrDb: 12,
+        DriftHzPerSecond: 1.2,
+        FirstSeenUtc: T0,
+        LastSeenUtc:
+          T0.AddSeconds(4),
+        Confirmed: true,
+        Active: true,
+        Ambiguous: false,
+        FrequencySigmaHz: 2,
+        MergeGroupId: 0,
+        IdentityConfidence: 0.95,
+        AssociationHintId: hintId);
+  }
+}
