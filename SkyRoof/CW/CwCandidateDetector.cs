@@ -244,6 +244,7 @@ namespace SkyRoof.CW
     public CwAudioHub Audio { get; }
     public CwCandidateDetector Detector { get; }
     public CwFrameRidgeScanner FrameScanner { get; }
+    public CwFixedLagAssociator Associations { get; }
     public CwPileupTrackManager Tracks { get; }
     public double AnalysisSeconds { get; }
 
@@ -252,7 +253,8 @@ namespace SkyRoof.CW
       double analysisSeconds = 2.4,
       CwDetectorOptions? detectorOptions = null,
       CwPileupTrackManager? trackManager = null,
-      CwFrameRidgeScanner? frameScanner = null)
+      CwFrameRidgeScanner? frameScanner = null,
+      CwFixedLagAssociator? associator = null)
     {
       if (!double.IsFinite(analysisSeconds) || analysisSeconds < 0.5 || analysisSeconds > 10)
         throw new ArgumentOutOfRangeException(nameof(analysisSeconds));
@@ -293,6 +295,17 @@ namespace SkyRoof.CW
           "Frame scanner and PCM sample rates must match.",
           nameof(frameScanner));
 
+      Associations = associator ??
+        new CwFixedLagAssociator(
+          new CwFixedLagAssociatorOptions
+          {
+            SampleRate = sampleRate
+          });
+      if (Associations.Options.SampleRate != sampleRate)
+        throw new ArgumentException(
+          "Fixed-lag associator and PCM sample rates must match.",
+          nameof(associator));
+
       Tracks = trackManager ??
         new CwPileupTrackManager();
     }
@@ -320,25 +333,29 @@ namespace SkyRoof.CW
             lastPrecisionSampleIndex)
           .OrderBy(x => x.CenterSampleIndex))
       {
-        long samplesBeforeEnd =
-          snapshot.EndSampleIndex -
-          batch.CenterSampleIndex;
-        DateTime observationUtc =
-          snapshot.EndUtc -
-          TimeSpan.FromSeconds(
-            samplesBeforeEnd /
-            (double)snapshot.SampleRate);
+        IReadOnlyList<CwAssociatedCandidateBatch> committed =
+          Associations.Push(batch);
 
-        CwSignalCandidate[] candidates =
-          batch.Observations
-            .Where(x => x.KalmanEligible)
-            .Select(x => x.ToCandidate())
-            .ToArray();
+        foreach (CwAssociatedCandidateBatch associated in committed)
+        {
+          long samplesBeforeEnd =
+            snapshot.EndSampleIndex -
+            associated.CenterSampleIndex;
+          DateTime observationUtc =
+            snapshot.EndUtc -
+            TimeSpan.FromSeconds(
+              samplesBeforeEnd /
+              (double)snapshot.SampleRate);
 
-        latestTracks =
-          Tracks.Update(
-            observationUtc,
-            candidates);
+          latestTracks =
+            Tracks.Update(
+              observationUtc,
+              associated.Candidates);
+        }
+
+        // Mark the raw precision batch consumed even while it remains inside
+        // the lag buffer. Overlapping PCM snapshots must never enqueue it
+        // twice.
         lastPrecisionSampleIndex =
           batch.CenterSampleIndex;
       }
@@ -349,6 +366,7 @@ namespace SkyRoof.CW
     public void Reset()
     {
       Audio.Reset();
+      Associations.Reset();
       Tracks.Reset();
       lastPrecisionSampleIndex = long.MinValue;
       latestTracks =
