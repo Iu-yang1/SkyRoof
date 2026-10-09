@@ -1,6 +1,6 @@
 # CW Console: full multi-lane Pileup and CI-V keyer implementation plan
 
-**Status: receive core under quantitative validation.** The repository now contains multi-carrier detection/tracking, a dual-resolution frame-level ridge scanner, a bounded ~360 ms fixed-lag beam/MHT, independent multi-lane ONNX/CTC inference, activity-aware interference masks, MergeGroup fallback, and time-aligned incremental transcript reconciliation. Live SDR / WASAPI capture / RS-BA1 render-endpoint loopback PCM and the non-blocking receive worker now enter the receive core. The remaining work is the dockable CW Console UI, HamNoise integration, and all transmit functionality.
+**Status: the receive chain and first interactive RX Console are implemented.** The repository now contains multi-carrier detection/tracking, a dual-resolution frame-level ridge scanner, a bounded ~360 ms fixed-lag beam/MHT, independent multi-lane ONNX/CTC inference, incremental transcripts, live SDR / WASAPI capture / RS-BA1 loopback PCM, the non-blocking receive worker, and a receive-only dockable CW Console. The RX Console exposes source Start/Stop, source selection, DeepCW model status/install, the Pileup lane grid, selected committed/provisional text and completed/skipped worker metrics. Remaining receive work is the CW audio waterfall and HamNoise; all TX/keyer behavior is still absent.
 
 Chinese: [CW Console 完整规划](../../zh-cn/fork-guide/cw-console-plan.md).
 
@@ -56,7 +56,7 @@ The frame scanner is unit-tested separately for monotonic sample timing, Fast/Pr
 | CW-06 | DeepCW + continuous transcript | ONNX Runtime + metadata-faithful STFT/log1p/CTC; OutputFrame timing; committed/provisional text; AssociationHintId ownership | Overlap de-duplication, pre-commit correction, repeated-character and per-lane isolation tests |
 | CW-07 | Load governance | Independent 120 ms tracker cadence; 6 s DeepCW snapshots / 1 s hop; latest-only single inference; default 5 lanes | Busy inference skips old hops instead of queueing; tracker remains independent; completed/skipped windows are observable |
 | CW-08 | HamNoise | Native CW DLL with bypass and Wet/Dry, optional monitor | Compare raw/denoised per-lane CER |
-| CW-09 | Dockable UI | Waterfall, Pileup grid, selected transcript, TX editor, theme/settings | GitHub Light/Dark, pink-blue-white and layout restore |
+| CW-09 | Dockable UI | First RX-only DockContent: Start/Stop, three-source selection, model status/install, Pileup grid, selected committed/provisional transcript and worker metrics; later add audio waterfall/HamNoise/TX regions | UI owns no DSP resources; closing it does not stop receive; docking restores; TX controls remain absent until the safe-TX stages |
 | CW-10 | SkyCAT CW protocol | Constrained main-CAT CW_SEND/CW_ABORT/WPM; CI-V 17 / 17 FF | Unit tests for ACK, timeout, invalid text and abort |
 | CW-11 | TX state machine | Idle→Armed→Queued→Sending→Stopping/Failed; macros and TX inhibit | TX disabled by default; stop clears queue; ACK not RF completion |
 | CW-12 | Satellite integration | Main RX/Sub TX, CW/CW-R, CAT ownership, Doppler and mode checks | Wrong TX VFO, existing PTT, sat change inhibit TX |
@@ -78,7 +78,7 @@ The frame scanner is unit-tested separately for monotonic sample timing, Fast/Pr
 
 | Region | Contents | Interaction |
 |---|---|---|
-| Top toolbar, ~38px | RX Start/Stop, SDR/WASAPI/RS-BA1 source, Raw/HamNoise, Single/Pileup, model status | RX must not implicitly Arm TX |
+| Top toolbar, current RX-only stage | RX Start/Stop, SDR/WASAPI/RS-BA1 source, Settings, DeepCW model install/status | RX is completely separate from TX; the current panel contains no transmit controls |
 | AF waterfall, ~150px | 100–2000Hz view, lane markers and highlights | Left click selects a lane; context menu for lock/mute |
 | Pileup grid, resizable | ID, AF Hz, SNR, Hz/s, active/hold, call and per-lane transcript | Sorting never changes track identity |
 | Selected RX transcript | Confirmed/pending text, UTC, copy, QSO Entry suggestion | No automatic transmit from recognition |
@@ -105,7 +105,8 @@ Use synthetic and recorded simultaneous CW WAV at 10/20/30/40 WPM; 3/5/8 carrier
 4. Incremental CTC timing, overlapping-window voting and real-ONNX streaming benchmark (**PR #45**).
 5. Live SDR / WASAPI capture / RS-BA1 render-endpoint loopback PCM wiring, hot settings rebinding and source timeline isolation (**PR #46**).
 6. Decoupled tracker/ONNX receive worker, latest-only inference and TimelineGeneration stale-result suppression (**PR #47**).
-7. Dockable CW Console UI, HamNoise and settings.
-8. SkyCAT constrained CW protocol and mock serial tests.
-9. Safe TX + satellite CAT integration and supervised bench verification.
-10. End-to-end WAV corpus metrics, bilingual user guide, license audit and release checks.
+7. RX-only dockable CW Console: source/model/worker status, Pileup lane grid, selected committed/provisional transcript and docking restore (**PR #48**).
+8. CW audio waterfall + HamNoise + receive monitoring/performance refinements.
+9. SkyCAT constrained CW protocol and mock serial tests.
+10. Safe TX + satellite CAT integration and supervised bench verification.
+11. End-to-end WAV corpus metrics, bilingual user guide, license audit and release checks.
