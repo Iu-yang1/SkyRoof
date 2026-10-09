@@ -928,6 +928,33 @@ namespace VE3NEA.Dsp.Tests
 
 
     [Fact]
+    public void PartialScopeReadbackTracksOnlyRealRadioFields()
+    {
+      var state = IcomScopeReadbackState.ParsePartial(
+        "SELECT=SUB;SUB.REF=-3.5;MAIN.MODE=SCROLL-C;TX=1");
+
+      state.IsPartial.Should().BeTrue();
+      state.SelectedScope.Should().Be(1);
+      state.SubReferenceDb.Should().Be(-3.5);
+      state.ScopeDuringTx.Should().BeTrue();
+      state.HasField("SUB.REF").Should().BeTrue();
+      state.HasField("SUB.VBW").Should().BeFalse();
+      state.HasField("MAIN.MODE").Should().BeTrue();
+      state.HasField("MAIN.REF").Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("SUB.REF=-3.5")]
+    [InlineData("SELECT=MAIN;SELECT=SUB")]
+    [InlineData("SELECT=MAIN;INVALID=1")]
+    [InlineData("SELECT=MAIN;MAIN.REF=xyz")]
+    public void PartialScopeReadbackRejectsUnsafeOrMalformedValues(string input)
+    {
+      Action parse = () => IcomScopeReadbackState.ParsePartial(input);
+      parse.Should().Throw<FormatException>();
+    }
+
+    [Fact]
     public void FixedEdgeReadbackParserParsesSelectedPreset()
     {
       IcomFixedEdgeReadbackState state =
