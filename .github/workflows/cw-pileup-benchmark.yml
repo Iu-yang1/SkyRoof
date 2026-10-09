@@ -5,6 +5,9 @@ on:
   pull_request:
     paths:
       - "SkyRoof/CW/**"
+      - "native/HamNoiseBridge/**"
+      - "scripts/build-hamnoise.ps1"
+      - "Vendor/HamNoise/**"
       - "VE3NEA.Dsp.Tests/DeepCwRealModelBenchmarkTests.cs"
       - ".github/workflows/cw-pileup-benchmark.yml"
 
@@ -24,6 +27,10 @@ jobs:
 
       - name: Setup NuGet
         uses: NuGet/setup-nuget@fd55a6f3b34392fa83fde1454582407d8c714123 # v4.0
+
+      - name: Build pinned HamNoise CW backend
+        shell: pwsh
+        run: ./scripts/build-hamnoise.ps1
 
       - name: Download WinDivert 2.2.2 x64
         shell: powershell
