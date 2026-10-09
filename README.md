@@ -22,8 +22,9 @@ ephemerides, persistent Base corrections and editable satellite transmitters,
 extended SkyCAT/RS-BA1 and IC-9700 spectrum integration, feedback-verified
 multi-waypoint rotator PARK, theme variants and Windows audio/RF-gain controls.
 
-See the bilingual [fork documentation](https://iu-yang1.github.io/SkyRoof/). The [DocFX publishing workflow](https://github.com/Iu-yang1/SkyRoof/actions/workflows/deploy-docfx.yml) provides a reliable deployment-history entry even if GitHub's optional Deployments dashboard is unavailable.\n
-the original upstream website does not necessarily document or ship these features.
+See the bilingual [fork documentation](https://iu-yang1.github.io/SkyRoof/). The [DocFX publishing workflow](https://github.com/Iu-yang1/SkyRoof/actions/workflows/deploy-docfx.yml) provides a reliable deployment-history entry even if GitHub's optional Deployments dashboard is unavailable.
+
+The original upstream website does not necessarily document or ship these features.
 The IC-9700 independent Direct LAN scope source remains experimental.
 
 ## Building The Solution
