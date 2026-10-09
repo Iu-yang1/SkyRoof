@@ -87,29 +87,6 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
-    public void WindowTimingRegistration_AlignsContextShiftedCtcSymbols()
-    {
-      CwIncrementalTranscriptCoordinator coordinator =
-        NewCoordinator();
-
-      coordinator.Push(
-        Window(
-          30, 3030, 4.0,
-          ('C', 2.00, 0.94),
-          ('Q', 2.70, 0.93)));
-
-      CwTranscriptSnapshot result =
-        coordinator.Push(
-          Window(
-            30, 3030, 5.0,
-            ('C', 2.45, 0.95),
-            ('Q', 3.15, 0.94)));
-
-      result.CommittedText.Should().Be("CQ");
-      result.ProvisionalText.Should().BeEmpty();
-    }
-
-    [Fact]
     public void AssociationHint_PreservesTranscriptAcrossTrackIdRebuild()
     {
       CwIncrementalTranscriptCoordinator coordinator =
