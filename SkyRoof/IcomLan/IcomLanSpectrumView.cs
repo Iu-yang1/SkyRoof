@@ -2407,9 +2407,9 @@ namespace SkyRoof
       // reported spectrum center, not a potentially stale SkyRoof CAT/RIT
       // frequency. In FIXED modes it marks the selected radio frequency.
       bool centerMode =
-        geometry.Mode is
-          IcomScopeMode.Center or
-          IcomScopeMode.ScrollCenter;
+        geometry.RawMode is
+          (byte)IcomScopeMode.Center or
+          (byte)IcomScopeMode.ScrollCenter;
 
       if (!centerMode && tunedFrequencyHz <= 0)
         return;
