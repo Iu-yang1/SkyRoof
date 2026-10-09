@@ -92,12 +92,13 @@ namespace SkyRoof.CW
     public double PeakDeduplicationHz { get; init; } = 3.0;
     public int MaxPeaksPerFrame { get; init; } = 16;
 
-    public int MinimumPortionFrames { get; init; } = 3;
+    public int MinimumPortionFrames { get; init; } = 4;
     public int MaximumPortionGapFrames { get; init; } = 1;
-    public double MinimumRidgeSeedSnrDb { get; init; } = 10.5;
+    public double MinimumRidgeSeedSnrDb { get; init; } = 12.0;
     public double MinimumPortionMeanSnrDb { get; init; } = 7.0;
     public double MinimumPortionContinuity { get; init; } = 0.60;
     public double MinimumPortionActivityProbability { get; init; } = 0.58;
+    public double MaximumPortionFitResidualBins { get; init; } = 0.45;
 
     // Keyed CW creates a comb of weaker spectral maxima sharing almost the
     // same on/off envelope. Correlate short-portion power histories instead
@@ -508,10 +509,16 @@ namespace SkyRoof.CW
           double slope = EstimateRecentSlope(portion);
           double predicted =
             last.FrequencyHz + slope * dt;
-          double gate = Math.Max(
-            1.5 * last.ResolutionHz,
-            options.MaxRidgeSlopeHzPerSecond * dt +
-            last.ResolutionHz);
+          // The previous 1.5-bin gate allowed a noise maximum
+          // to random-walk by almost 19 Hz every 15 ms. Gate on the actual
+          // measurement uncertainty plus physically allowed ridge motion.
+          double uncertaintyGate = Math.Clamp(
+            3.0 * last.MeasurementSigmaHz,
+            0.30 * last.ResolutionHz,
+            0.65 * last.ResolutionHz);
+          double gate =
+            uncertaintyGate +
+            options.MaxRidgeSlopeHzPerSecond * dt;
 
           int bestIndex = -1;
           double bestDistance = double.PositiveInfinity;
@@ -653,12 +660,19 @@ namespace SkyRoof.CW
         // a reliable short ridge portion. This is the RRP-inspired
         // false-alarm barrier: continuity, accumulated SNR and activity are
         // evaluated jointly instead of promoting every local maximum.
+        double fitResidualHz =
+          LinearFitResidualHz(mutable.Peaks);
+        double maxResidualHz =
+          options.MaximumPortionFitResidualBins *
+          first.ResolutionHz;
+
         if (meanSnr <
               options.MinimumPortionMeanSnrDb ||
             continuity <
               options.MinimumPortionContinuity ||
             activity <
-              options.MinimumPortionActivityProbability)
+              options.MinimumPortionActivityProbability ||
+            fitResidualHz > maxResidualHz)
           continue;
 
         portions.Add(new(
@@ -699,6 +713,59 @@ namespace SkyRoof.CW
           .ThenBy(x => x.FirstFrequencyHz)
           .ToList(),
         ids);
+    }
+
+    private double LinearFitResidualHz(
+      IReadOnlyList<FramePeak> peaks)
+    {
+      if (peaks.Count < 2)
+        return 0;
+
+      double origin =
+        peaks[0].CenterSampleIndex;
+      double meanT = peaks.Average(x =>
+        (x.CenterSampleIndex - origin) /
+        (double)options.SampleRate);
+      double meanF =
+        peaks.Average(x => x.FrequencyHz);
+
+      double covariance = 0;
+      double timeVariance = 0;
+      foreach (FramePeak peak in peaks)
+      {
+        double t =
+          (peak.CenterSampleIndex - origin) /
+          (double)options.SampleRate;
+        double dt = t - meanT;
+        covariance +=
+          dt * (peak.FrequencyHz - meanF);
+        timeVariance += dt * dt;
+      }
+
+      double slope = timeVariance <= 1e-15
+        ? 0
+        : covariance / timeVariance;
+      slope = Math.Clamp(
+        slope,
+        -options.MaxRidgeSlopeHzPerSecond,
+        options.MaxRidgeSlopeHzPerSecond);
+      double intercept =
+        meanF - slope * meanT;
+
+      double squared = 0;
+      foreach (FramePeak peak in peaks)
+      {
+        double t =
+          (peak.CenterSampleIndex - origin) /
+          (double)options.SampleRate;
+        double residual =
+          peak.FrequencyHz -
+          (intercept + slope * t);
+        squared += residual * residual;
+      }
+
+      return Math.Sqrt(
+        squared / peaks.Count);
     }
 
     private HashSet<int> FindCorrelatedSidebandPortions(
@@ -1097,6 +1164,12 @@ namespace SkyRoof.CW
           value.MinimumPortionActivityProbability > 1)
         throw new ArgumentOutOfRangeException(
           nameof(value.MinimumPortionActivityProbability));
+      if (!double.IsFinite(
+            value.MaximumPortionFitResidualBins) ||
+          value.MaximumPortionFitResidualBins <= 0 ||
+          value.MaximumPortionFitResidualBins > 2)
+        throw new ArgumentOutOfRangeException(
+          nameof(value.MaximumPortionFitResidualBins));
       if (!double.IsFinite(value.SidebandCorrelationMaxHz) ||
           value.SidebandCorrelationMaxHz <= 0)
         throw new ArgumentOutOfRangeException(
