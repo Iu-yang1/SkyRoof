@@ -399,8 +399,19 @@ namespace SkyRoof.CW
 
           double snrLinear = Math.Pow(
             10, snrDb / 10.0);
+          // A parabolic FFT peak on a continuously-keyed sinusoid can
+          // beat a fraction of a bin at high SNR, but keyed CW in a finite
+          // 240 ms window has envelope-edge bias and correlated leakage that
+          // the pure-tone CRLB does not represent. Keep a realistic
+          // half-bin-class floor before overlap inflation; otherwise repeated
+          // high-SNR precision frames make GNN/Kalman reject a legitimate
+          // several-Hz drift step and the tracker can spawn a duplicate ID.
+          double estimatorFloorBins =
+            scale == CwRidgeObservationScale.Precision
+              ? 0.45
+              : 0.20;
           double baseSigma = Math.Max(
-            0.15 * binHz,
+            estimatorFloorBins * binHz,
             binHz / Math.Sqrt(
               Math.Max(snrLinear, 1.0)));
           double sigma =
