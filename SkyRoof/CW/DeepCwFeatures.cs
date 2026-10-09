@@ -99,7 +99,7 @@ namespace SkyRoof.CW
         int src = frame * fullBins + firstModelBin;
         int dst = frame * metadata.FrequencyBins;
         for (int b = 0; b < metadata.FrequencyBins; b++)
-          data[dst + b] = MathF.Log1p(magnitudes[src + b]);
+          data[dst + b] = MathF.Log(1 + magnitudes[src + b]);
       }
       return new(data, [1, 1, FrameCount, metadata.FrequencyBins]);
     }
@@ -155,7 +155,7 @@ namespace SkyRoof.CW
           float lo = magnitudes[row + lower];
           float hi = magnitudes[row + upper];
           float value = (float)(lo * (1 - fraction) + hi * fraction);
-          data[dst + b] = MathF.Log1p(value);
+          data[dst + b] = MathF.Log(1 + value);
         }
       }
       return new(data, [1, 1, FrameCount, metadata.FrequencyBins]);
