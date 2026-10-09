@@ -242,10 +242,16 @@ namespace SkyRoof.CW
         CwRidgeObservationScale.Precision,
         knownDopplerRateHzPerSecond);
 
+      long snapshotStartSample =
+        snapshot.EndSampleIndex - snapshot.Samples.Length;
+      long firstPrecisionCenter =
+        snapshotStartSample + precisionWindow / 2;
+
       List<CwRidgeObservationBatch> precision =
         BuildPrecisionObservations(
           portions,
           precisionFrames,
+          firstPrecisionCenter,
           knownDopplerRateHzPerSecond);
 
       return new(
@@ -633,16 +639,24 @@ namespace SkyRoof.CW
       BuildPrecisionObservations(
         IReadOnlyList<CwRidgePortion> portions,
         IReadOnlyList<List<FramePeak>> precisionFrames,
+        long firstPrecisionCenterSample,
         double knownDopplerRateHzPerSecond)
     {
       var result = new List<CwRidgeObservationBatch>();
       long halfPrecisionWindow =
         precisionWindow / 2;
+      double precisionBinHz =
+        options.SampleRate / (double)precisionWindow;
 
-      foreach (List<FramePeak> peaks in precisionFrames)
+      for (int frameIndex = 0;
+           frameIndex < precisionFrames.Count;
+           frameIndex++)
       {
-        if (peaks.Count == 0) continue;
-        long center = peaks[0].CenterSampleIndex;
+        List<FramePeak> peaks =
+          precisionFrames[frameIndex];
+        long center =
+          firstPrecisionCenterSample +
+          (long)frameIndex * precisionHop;
 
         PortionReference[] references = portions
           .Where(p =>
@@ -656,8 +670,17 @@ namespace SkyRoof.CW
           .OrderByDescending(x => x.Portion.MeanSnrDb)
           .ToArray();
 
-        if (references.Length == 0)
+        if (references.Length == 0 ||
+            peaks.Count == 0)
+        {
+          // Empty precision frames are still meaningful tracker time. The
+          // frontend forwards this empty batch so coast/hold/Active state
+          // advances during simultaneous key-up or signal loss.
+          result.Add(new(
+            center,
+            Array.Empty<CwRidgeObservation>()));
           continue;
+        }
 
         // Multiple Morse elements on the same carrier can create several fast
         // RRP-like portions inside one precision window. Collapse those
@@ -671,7 +694,7 @@ namespace SkyRoof.CW
               reference.PredictedFrequencyHz) <
             Math.Max(
               options.PeakDeduplicationHz,
-              peaks[0].ResolutionHz)))
+              precisionBinHz)))
             continue;
           uniqueReferences.Add(reference);
         }
@@ -747,9 +770,6 @@ namespace SkyRoof.CW
             KalmanEligible: true));
           usedPeaks.Add(pair.PeakIndex);
         }
-
-        if (observations.Count == 0)
-          continue;
 
         result.Add(new(
           center,
