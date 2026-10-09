@@ -1,0 +1,22 @@
+HamNoise integration notice
+===========================
+
+SkyRoof's optional CW denoise backend is built from the HamNoise project:
+
+  Project: https://github.com/e04/HamNoise
+  Pinned revision: 1af3a77b2ff18dada2149f36686430cdae7cf13c
+  License: GNU Affero General Public License v3.0 (AGPL-3.0)
+
+SkyRoof does not vendor HamNoise's generated model-weight headers in this
+repository. The reproducible build script scripts/build-hamnoise.ps1 fetches
+that exact revision and compiles the classic CW and CW V2 engines together
+with SkyRoof's thin native bridge:
+
+  native/HamNoiseBridge/hamnoise_bridge.cpp
+
+Corresponding source for the shipped hamnoise_skyroof.dll is therefore the
+combination of the pinned HamNoise revision above and the SkyRoof source tree
+for the same release.
+
+HamNoise remains copyright its respective authors/contributors. This notice
+does not alter either project's license terms.

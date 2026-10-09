@@ -293,6 +293,46 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void LaneExtractor_LongWindow_DoesNotOverflowOutputLength()
+    {
+      float[] audio =
+        new float[8 * SourceRate];
+      var extractor =
+        new CwLaneExtractor();
+
+      CwLaneSignal lane =
+        extractor.Extract(
+          audio,
+          SourceRate,
+          Track(9, 800, 12),
+          outputSampleRate: 9600,
+          targetCenterHz: 800);
+
+      lane.Audio.Should()
+        .HaveCount(8 * 9600);
+      lane.Envelope.Should()
+        .HaveCount(8 * 9600);
+      lane.SampleRate.Should()
+        .Be(9600);
+    }
+
+    [Fact]
+    public void WindowedSincResampler_LongWindow_DoesNotOverflowOutputLength()
+    {
+      float[] input =
+        new float[8 * SourceRate];
+
+      float[] output =
+        CwWindowedSincResampler.Resample(
+          input,
+          SourceRate,
+          9600);
+
+      output.Should()
+        .HaveCount(8 * 9600);
+    }
+
+    [Fact]
     public void WindowedSincResampler_PreservesLowFrequencyTone()
     {
       float[] input = MakeKeyedAudio(
@@ -337,6 +377,107 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void MultiLaneDecoder_UsesSharedWindowDenoiserOnceBeforeSoftMask()
+    {
+      DeepCwModelMetadata metadata =
+        DeepCwModelMetadata.Parse(MetadataJson);
+      var tensors =
+        new QueueTensorDecoder("A", "B");
+      var denoiser =
+        new RecordingAudioDenoiser();
+      var decoder =
+        new DeepCwMultiLaneDecoder(
+          metadata,
+          tensors)
+        {
+          MaxLanes = 2,
+          WindowDenoiser = denoiser,
+          DenoiseWet = 0.5
+        };
+
+      float[] audio = MakeKeyedAudio(
+        1.5,
+        (650, 0.30f, 0.14, 0.50),
+        (850, 0.22f, 0.16, 0.50));
+
+      CwSignalTrack[] tracks =
+      [
+        Track(1, 650, 12),
+        Track(2, 850, 11)
+      ];
+
+      IReadOnlyList<DeepCwLaneResult> result =
+        decoder.Decode(
+          audio,
+          SourceRate,
+          T0,
+          tracks);
+
+      result.Should().HaveCount(2);
+      denoiser.Calls.Should().Be(1);
+      denoiser.SampleRates.Should()
+        .ContainSingle()
+        .Which.Should().Be(9600);
+      denoiser.WetValues.Should()
+        .ContainSingle()
+        .Which.Should().BeApproximately(
+          0.5,
+          1e-12);
+      tensors.Calls.Should().Be(2);
+    }
+
+    [Fact]
+    public void MultiLaneDecoder_UsesInjectedTimeDomainDenoiserPerSelectedLane()
+    {
+      DeepCwModelMetadata metadata =
+        DeepCwModelMetadata.Parse(MetadataJson);
+      var tensors = new QueueTensorDecoder("A", "B");
+      var denoiser = new RecordingAudioDenoiser();
+      var decoder =
+        new DeepCwMultiLaneDecoder(
+          metadata,
+          tensors)
+        {
+          MaxLanes = 2,
+          LaneDenoiser = denoiser,
+          DenoiseWet = 0.65
+        };
+
+      float[] audio = MakeKeyedAudio(
+        1.5,
+        (650, 0.30f, 0.14, 0.50),
+        (850, 0.22f, 0.16, 0.50),
+        (1050, 0.10f, 0.18, 0.50));
+
+      CwSignalTrack[] tracks =
+      [
+        Track(1, 650, 8),
+        Track(2, 850, 15),
+        Track(3, 1050, 3)
+      ];
+
+      IReadOnlyList<DeepCwLaneResult> result =
+        decoder.Decode(
+          audio,
+          SourceRate,
+          T0,
+          tracks);
+
+      result.Should().HaveCount(2);
+      result.Select(x => x.TrackId)
+        .Should().Equal(2, 1);
+      denoiser.Calls.Should().Be(2);
+      denoiser.SampleRates.Should()
+        .OnlyContain(x => x == 9600);
+      denoiser.WetValues.Should()
+        .OnlyContain(x =>
+          Math.Abs(x - 0.65) < 1e-9);
+      denoiser.InputRms.Should()
+        .OnlyContain(x => x > 0.01);
+      tensors.Calls.Should().Be(2);
+    }
+
+    [Fact]
     public void ModelManager_PinsImmutableDeepCwRevision()
     {
       DeepCwModelManager.Revision.Should()
@@ -370,6 +511,37 @@ namespace VE3NEA.Dsp.Tests
         return new(
           text,
           Array.Empty<DeepCwDecodedSymbol>());
+      }
+    }
+
+    private sealed class RecordingAudioDenoiser :
+      ICwAudioDenoiser
+    {
+      public int SampleRate => 9600;
+      public string Name => "Test denoiser";
+      public int Calls { get; private set; }
+      public List<int> SampleRates { get; } = [];
+      public List<double> WetValues { get; } = [];
+      public List<double> InputRms { get; } = [];
+
+      public float[] Process(
+        ReadOnlySpan<float> input,
+        int sampleRate,
+        double wet = 1)
+      {
+        Calls++;
+        SampleRates.Add(sampleRate);
+        WetValues.Add(wet);
+
+        double sum = 0;
+        foreach (float value in input)
+          sum += value * value;
+        InputRms.Add(
+          Math.Sqrt(
+            sum /
+            Math.Max(1, input.Length)));
+
+        return input.ToArray();
       }
     }
 

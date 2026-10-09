@@ -250,6 +250,307 @@ namespace VE3NEA.Dsp.Tests
       }
     }
 
+    [Fact]
+    public void RealDeepCw_HamNoiseClassicV2_AB()
+    {
+      if (!string.Equals(
+            Environment.GetEnvironmentVariable(
+              "SKYROOF_RUN_HAMNOISE_BENCHMARK"),
+            "1",
+            StringComparison.Ordinal))
+      {
+        output.WriteLine(
+          "HamNoise A/B benchmark disabled outside the dedicated workflow.");
+        return;
+      }
+
+      HamNoiseAudioDenoiser.IsAvailable()
+        .Should().BeTrue(
+          "the dedicated benchmark workflow builds the pinned HamNoise bridge");
+
+      string modelPath =
+        RequiredEnvironment(
+          "DEEPCW_MODEL_PATH");
+      string metadataPath =
+        RequiredEnvironment(
+          "DEEPCW_METADATA_PATH");
+      string baselineReport =
+        RequiredEnvironment(
+          "DEEPCW_BENCHMARK_OUTPUT");
+      string reportPath =
+        Path.Combine(
+          Path.GetDirectoryName(
+            baselineReport) ??
+            Environment.CurrentDirectory,
+          "cw-hamnoise-ab.json");
+
+      DeepCwModelMetadata metadata =
+        DeepCwModelMetadata.Load(
+          metadataPath);
+      using var onnx =
+        new DeepCwOnnxDecoder(
+          modelPath,
+          metadata);
+
+      BenchmarkScenario[] scenarios =
+      [
+        new("static_equal_sep40", 800, 40, 0, 0, -2),
+        new("static_equal_sep25", 800, 25, 0, 0, -2),
+        new("static_equal_sep15", 800, 15, 0, 0, -2),
+        new("static_equal_sep10", 800, 10, 0, 0, -2),
+        new("static_equal_sep5", 800, 5, 0, 0, -2),
+
+        new("static_8db_sep40", 800, 40, 8, 0, -2),
+        new("static_8db_sep25", 800, 25, 8, 0, -2),
+        new("static_8db_sep15", 800, 15, 8, 0, -2),
+        new("static_8db_sep10", 800, 10, 8, 0, -2),
+        new("static_8db_sep5", 800, 5, 8, 0, -2),
+
+        new("doppler5_sep25_8db", 800, 25, 8, 5, -2),
+        new("doppler10_sep25_8db", 800, 25, 8, 10, -2),
+        new("doppler20_sep25_8db", 800, 25, 8, 20, -2),
+
+        new("wideband2600_sep25_d10", 2600, 25, 6, 10, -2)
+      ];
+
+      (
+        string Name,
+        Func<ICwAudioDenoiser?> Create,
+        bool SharedWindow
+      )[] modes =
+      [
+        ("WidebandBaseline", () => null, false),
+        ("SharedHamNoiseClassic", () =>
+          new HamNoiseAudioDenoiser(
+            CwDenoiseMode.HamNoiseClassic), true),
+        ("SharedHamNoiseV2", () =>
+          new HamNoiseAudioDenoiser(
+            CwDenoiseMode.HamNoiseV2), true)
+      ];
+
+      const string truthA =
+        "CQ DE K1ABC";
+      const string truthB =
+        "CQ DE W9XYZ";
+
+      var results =
+        new List<DenoiseAbResult>();
+
+      foreach ((
+        string Name,
+        Func<ICwAudioDenoiser?> Create,
+        bool SharedWindow
+      ) mode in modes)
+      {
+        ICwAudioDenoiser? denoiser =
+          mode.Create();
+
+        var decoder =
+          new DeepCwMultiLaneDecoder(
+            metadata,
+            onnx)
+          {
+            MaxLanes = 2,
+            LaneBandwidthHz = 240,
+            TargetCenterHz = 800,
+            WindowDenoiser =
+              mode.SharedWindow
+                ? denoiser
+                : null,
+            LaneDenoiser =
+              !mode.SharedWindow &&
+              mode.Name !=
+                "WidebandBaseline"
+                ? denoiser
+                : null,
+            DenoiseWet = 1.0
+          };
+
+        foreach (BenchmarkScenario scenario
+          in scenarios)
+        {
+          GeneratedMix mix =
+            GenerateMix(
+              scenario,
+              truthA,
+              truthB,
+              wpmA: 24,
+              wpmB: 27);
+
+          CwSignalTrack[] tracks =
+          [
+            MakeTrack(
+              1,
+              mix.EndFrequencyA,
+              14,
+              scenario.DriftHzPerSecond),
+            MakeTrack(
+              2,
+              mix.EndFrequencyB,
+              14 +
+                scenario.PowerDeltaDb,
+              -scenario.DriftHzPerSecond)
+          ];
+
+          var sw =
+            Stopwatch.StartNew();
+
+          IReadOnlyList<DeepCwLaneResult>
+            decoded =
+              decoder.Decode(
+                mix.Audio,
+                SampleRate,
+                new DateTime(
+                  2026, 10, 9,
+                  0, 0, 0,
+                  DateTimeKind.Utc),
+                tracks);
+
+          sw.Stop();
+
+          string textA =
+            decoded
+              .FirstOrDefault(
+                x => x.TrackId == 1)
+              .Text ?? "";
+          string textB =
+            decoded
+              .FirstOrDefault(
+                x => x.TrackId == 2)
+              .Text ?? "";
+
+          var result =
+            new DenoiseAbResult(
+              Mode:
+                mode.Name,
+              Scenario:
+                scenario.Name,
+              SeparationHz:
+                scenario.SeparationHz,
+              PowerDeltaDb:
+                scenario.PowerDeltaDb,
+              DriftHzPerSecond:
+                scenario.DriftHzPerSecond,
+              CenterFrequencyHz:
+                scenario.CenterFrequencyHz,
+              TruthA:
+                truthA,
+              DecodedA:
+                textA,
+              CerA:
+                CharacterErrorRate(
+                  truthA,
+                  textA),
+              WerA:
+                WordErrorRate(
+                  truthA,
+                  textA),
+              CallsignA:
+                ContainsCallsign(
+                  textA,
+                  "K1ABC"),
+              TruthB:
+                truthB,
+              DecodedB:
+                textB,
+              CerB:
+                CharacterErrorRate(
+                  truthB,
+                  textB),
+              WerB:
+                WordErrorRate(
+                  truthB,
+                  textB),
+              CallsignB:
+                ContainsCallsign(
+                  textB,
+                  "W9XYZ"),
+              ProcessingSeconds:
+                sw.Elapsed.TotalSeconds,
+              RealTimeFactor:
+                sw.Elapsed.TotalSeconds /
+                DurationSeconds);
+
+          results.Add(result);
+          output.WriteLine(
+            "HAMNOISE_AB " +
+            JsonSerializer.Serialize(
+              result));
+        }
+      }
+
+      results.Should().HaveCount(
+        scenarios.Length *
+        modes.Length);
+      results.Should().OnlyContain(x =>
+        double.IsFinite(x.CerA) &&
+        double.IsFinite(x.CerB) &&
+        double.IsFinite(x.WerA) &&
+        double.IsFinite(x.WerB) &&
+        double.IsFinite(
+          x.RealTimeFactor));
+
+      var summary =
+        results
+          .GroupBy(x => x.Mode)
+          .Select(group => new
+          {
+            mode = group.Key,
+            meanCer =
+              group.Average(x =>
+                (x.CerA + x.CerB) /
+                2.0),
+            meanWer =
+              group.Average(x =>
+                (x.WerA + x.WerB) /
+                2.0),
+            callsigns =
+              group.Sum(x =>
+                (x.CallsignA ? 1 : 0) +
+                (x.CallsignB ? 1 : 0)),
+            totalCallsigns =
+              group.Count() * 2,
+            maxRealTimeFactor =
+              group.Max(x =>
+                x.RealTimeFactor),
+            meanRealTimeFactor =
+              group.Average(x =>
+                x.RealTimeFactor)
+          })
+          .ToArray();
+
+      Directory.CreateDirectory(
+        Path.GetDirectoryName(
+          reportPath)!);
+
+      File.WriteAllText(
+        reportPath,
+        JsonSerializer.Serialize(
+          new
+          {
+            generatedUtc =
+              DateTime.UtcNow,
+            hamNoiseRevision =
+              "1af3a77b2ff18dada2149f36686430cdae7cf13c",
+            deepCwRevision =
+              DeepCwModelManager.Revision,
+            denoiseWet = 1.0,
+            architecture =
+              "WidebandBaseline=raw activity-aware soft mask; SharedHamNoise=resample the decode snapshot once to 9.6kHz, denoise once after tracking, then retain the existing all-track activity-aware soft mask",
+            summary,
+            scenarios = results
+          },
+          new JsonSerializerOptions
+          {
+            WriteIndented = true
+          }));
+
+      output.WriteLine(
+        "HAMNOISE_SUMMARY " +
+        JsonSerializer.Serialize(
+          summary));
+    }
+
     private StreamingBenchmarkResult
       RunStreamingTranscriptBenchmark(
         DeepCwModelMetadata metadata,
@@ -920,6 +1221,26 @@ namespace VE3NEA.Dsp.Tests
       string StreamingB,
       double StreamingCerB,
       double StreamingWerB,
+      bool CallsignB,
+      double ProcessingSeconds,
+      double RealTimeFactor);
+
+    private readonly record struct DenoiseAbResult(
+      string Mode,
+      string Scenario,
+      double SeparationHz,
+      double PowerDeltaDb,
+      double DriftHzPerSecond,
+      double CenterFrequencyHz,
+      string TruthA,
+      string DecodedA,
+      double CerA,
+      double WerA,
+      bool CallsignA,
+      string TruthB,
+      string DecodedB,
+      double CerB,
+      double WerB,
       bool CallsignB,
       double ProcessingSeconds,
       double RealTimeFactor);

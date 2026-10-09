@@ -22,6 +22,14 @@
     <ProjectReference Include="..\SkyRoof\SkyRoof.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\Vendor\HamNoise\x64\hamnoise_skyroof.dll"
+          Link="hamnoise_skyroof.dll"
+          Condition="Exists('..\Vendor\HamNoise\x64\hamnoise_skyroof.dll')">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
   <!-- SkyRoof consumes VE3NEA.SkyTlm as a vendored assembly, and an assembly reference does not flow to a
        referencing project the way a project reference would, so tests that name SkyTlm types have to point
        at the same copy themselves. -->

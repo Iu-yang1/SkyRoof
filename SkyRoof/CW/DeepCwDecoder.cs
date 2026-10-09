@@ -224,15 +224,33 @@ namespace SkyRoof.CW
     private readonly DeepCwModelMetadata metadata;
     private readonly IDeepCwTensorDecoder decoder;
     private readonly CwCarrierActivityEstimator activityEstimator;
+    private readonly CwLaneExtractor laneExtractor;
 
     public int MaxLanes { get; set; } = 5;
     public double LaneBandwidthHz { get; set; } = 240;
     public double TargetCenterHz { get; set; } = 800;
 
+    /// <summary>
+    /// Optional decode-window denoiser. Tracking still runs on untouched raw
+    /// PCM; only the immutable inference snapshot is resampled to this
+    /// backend's rate, denoised once, and then passed through the existing
+    /// all-track activity-aware wideband separator.
+    /// </summary>
+    public ICwAudioDenoiser? WindowDenoiser { get; set; }
+
+    /// <summary>
+    /// Optional per-lane experiment: DDC/isolation -> denoise -> standard
+    /// DeepCW frontend. This is mutually exclusive with WindowDenoiser.
+    /// </summary>
+    public ICwAudioDenoiser? LaneDenoiser { get; set; }
+
+    public double DenoiseWet { get; set; } = 1.0;
+
     public DeepCwMultiLaneDecoder(
       DeepCwModelMetadata metadata,
       IDeepCwTensorDecoder decoder,
-      CwCarrierActivityEstimator? activityEstimator = null)
+      CwCarrierActivityEstimator? activityEstimator = null,
+      CwLaneExtractor? laneExtractor = null)
     {
       this.metadata = metadata ??
         throw new ArgumentNullException(nameof(metadata));
@@ -240,6 +258,8 @@ namespace SkyRoof.CW
         throw new ArgumentNullException(nameof(decoder));
       this.activityEstimator =
         activityEstimator ?? new CwCarrierActivityEstimator();
+      this.laneExtractor =
+        laneExtractor ?? new CwLaneExtractor();
       metadata.Validate();
     }
 
@@ -273,28 +293,121 @@ namespace SkyRoof.CW
       if (decodeSelectedTracks.Length == 0)
         return Array.Empty<DeepCwLaneResult>();
 
-      DeepCwWidebandFeatureWindow features =
-        DeepCwWidebandFeatureWindow.Create(
-          audio, sourceSampleRate, metadata);
+      if (!double.IsFinite(DenoiseWet) ||
+          DenoiseWet < 0 ||
+          DenoiseWet > 1)
+        throw new InvalidOperationException(
+          "CW denoise wet mix must be in the range 0..1.");
+      if (WindowDenoiser != null &&
+          LaneDenoiser != null)
+        throw new InvalidOperationException(
+          "CW window and per-lane denoisers are mutually exclusive.");
 
-      IReadOnlyDictionary<int, float[]> activityByTrack =
-        features.EstimateActivities(
-          allDetectedTracks, activityEstimator);
+      DeepCwWidebandFeatureWindow? widebandFeatures = null;
+      IReadOnlyDictionary<int, float[]>? activityByTrack = null;
 
-      // allDetectedTracks is intentionally not truncated to MaxLanes. An
-      // unselected strong station must still take part in interference masks.
-      var results =
-        new List<DeepCwLaneResult>(decodeSelectedTracks.Length);
-      foreach (CwSignalTrack track in decodeSelectedTracks)
+      if (LaneDenoiser == null)
       {
-        DeepCwTensor tensor = features.BuildLaneTensor(
-          track,
-          allDetectedTracks,
-          activityByTrack,
-          TargetCenterHz,
-          LaneBandwidthHz);
+        ReadOnlySpan<float> widebandAudio =
+          audio;
+        int widebandSampleRate =
+          sourceSampleRate;
+        float[]? windowProcessed = null;
 
-        DeepCwDecodedText text = decoder.Decode(tensor);
+        if (WindowDenoiser != null)
+        {
+          if (allDetectedTracks.Any(track =>
+                track.FrequencyHz >=
+                  WindowDenoiser.SampleRate / 2.0))
+            throw new InvalidOperationException(
+              "A tracked CW carrier exceeds the shared denoiser Nyquist rate.");
+
+          float[] resampled =
+            CwWindowedSincResampler.Resample(
+              audio,
+              sourceSampleRate,
+              WindowDenoiser.SampleRate);
+
+          windowProcessed =
+            WindowDenoiser.Process(
+              resampled,
+              WindowDenoiser.SampleRate,
+              DenoiseWet);
+
+          widebandAudio =
+            windowProcessed;
+          widebandSampleRate =
+            WindowDenoiser.SampleRate;
+        }
+
+        widebandFeatures =
+          DeepCwWidebandFeatureWindow.Create(
+            widebandAudio,
+            widebandSampleRate,
+            metadata);
+
+        activityByTrack =
+          widebandFeatures.EstimateActivities(
+            allDetectedTracks,
+            activityEstimator);
+      }
+
+      // allDetectedTracks is intentionally not truncated to MaxLanes. On the
+      // default wideband path, every confirmed station still participates in
+      // the competing soft mask even if it is not selected for ONNX.
+      var results =
+        new List<DeepCwLaneResult>(
+          decodeSelectedTracks.Length);
+
+      foreach (CwSignalTrack track
+        in decodeSelectedTracks)
+      {
+        DeepCwTensor tensor;
+        double durationSeconds;
+
+        if (LaneDenoiser == null)
+        {
+          tensor =
+            widebandFeatures!.BuildLaneTensor(
+              track,
+              allDetectedTracks,
+              activityByTrack!,
+              TargetCenterHz,
+              LaneBandwidthHz);
+          durationSeconds =
+            widebandFeatures.DurationSeconds;
+        }
+        else
+        {
+          CwLaneSignal lane =
+            laneExtractor.Extract(
+              audio,
+              sourceSampleRate,
+              track,
+              LaneDenoiser.SampleRate,
+              TargetCenterHz);
+
+          float[] processed =
+            LaneDenoiser.Process(
+              lane.Audio,
+              lane.SampleRate,
+              DenoiseWet);
+
+          DeepCwFeatureWindow laneFeatures =
+            DeepCwFeatureWindow.Create(
+              processed,
+              LaneDenoiser.SampleRate,
+              metadata);
+
+          tensor =
+            laneFeatures.BuildStandardTensor();
+          durationSeconds =
+            laneFeatures.DurationSeconds;
+        }
+
+        DeepCwDecodedText text =
+          decoder.Decode(tensor);
+
         results.Add(new(
           track.Id,
           track.FrequencyHz,
@@ -305,7 +418,7 @@ namespace SkyRoof.CW
           track.AssociationHintId,
           text.Symbols,
           text.OutputFrameCount,
-          features.DurationSeconds));
+          durationSeconds));
       }
 
       return results;

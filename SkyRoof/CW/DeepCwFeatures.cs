@@ -382,8 +382,13 @@ namespace SkyRoof.CW
       if (input.Length == 0) return [];
       if (sourceRate == targetRate) return input.ToArray();
 
+      // Promote before multiplication. Multi-second 48 kHz windows can
+      // exceed Int32 when multiplied by a 9.6 kHz target rate.
       int outputLength = Math.Max(1,
-        (int)Math.Round(input.Length * targetRate / (double)sourceRate));
+        checked((int)Math.Round(
+          (double)input.Length *
+          targetRate /
+          sourceRate)));
       float[] output = new float[outputLength];
       double ratio = sourceRate / (double)targetRate;
       double cutoff = 0.45 * Math.Min(1.0, targetRate / (double)sourceRate);

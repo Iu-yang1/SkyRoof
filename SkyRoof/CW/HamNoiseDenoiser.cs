@@ -1,0 +1,218 @@
+using System.Runtime.InteropServices;
+
+namespace SkyRoof.CW
+{
+  public enum CwDenoiseMode
+  {
+    Bypass,
+    HamNoiseClassic,
+    HamNoiseV2
+  }
+
+  public interface ICwAudioDenoiser
+  {
+    int SampleRate { get; }
+    string Name { get; }
+
+    float[] Process(
+      ReadOnlySpan<float> input,
+      int sampleRate,
+      double wet = 1.0);
+  }
+
+  internal static class HamNoiseNative
+  {
+    internal const string LibraryName =
+      "hamnoise_skyroof.dll";
+    internal const int ExpectedAbiVersion = 1;
+
+    [DllImport(
+      LibraryName,
+      CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int
+      hamnoise_skyroof_abi_version();
+
+    [DllImport(
+      LibraryName,
+      CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int
+      hamnoise_skyroof_sample_rate();
+
+    [DllImport(
+      LibraryName,
+      CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int
+      hamnoise_skyroof_process_classic(
+        float[] input,
+        int sampleCount,
+        float[] output);
+
+    [DllImport(
+      LibraryName,
+      CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int
+      hamnoise_skyroof_process_v2(
+        float[] input,
+        int sampleCount,
+        float[] output);
+
+    internal static bool IsAvailable()
+    {
+      if (!NativeLibrary.TryLoad(
+            LibraryName,
+            out nint handle))
+        return false;
+
+      NativeLibrary.Free(handle);
+
+      try
+      {
+        return hamnoise_skyroof_abi_version() ==
+                 ExpectedAbiVersion &&
+               hamnoise_skyroof_sample_rate() ==
+                 9600;
+      }
+      catch (
+        Exception ex) when (
+          ex is DllNotFoundException or
+          EntryPointNotFoundException or
+          BadImageFormatException)
+      {
+        return false;
+      }
+    }
+  }
+
+  /// <summary>
+  /// Optional HamNoise audio backend. SkyRoof always performs carrier
+  /// detection/tracking on the untouched raw receive stream. The backend is
+  /// used only by explicit decode experiments, either once on a 9.6 kHz
+  /// inference snapshot or after one tracked lane has been DDC-isolated.
+  /// </summary>
+  public sealed class HamNoiseAudioDenoiser :
+    ICwAudioDenoiser
+  {
+    public CwDenoiseMode Mode { get; }
+    public int SampleRate { get; }
+    public string Name =>
+      Mode == CwDenoiseMode.HamNoiseV2
+        ? "HamNoise CW V2"
+        : "HamNoise CW Classic";
+
+    public HamNoiseAudioDenoiser(
+      CwDenoiseMode mode)
+    {
+      if (mode is not (
+            CwDenoiseMode.HamNoiseClassic or
+            CwDenoiseMode.HamNoiseV2))
+        throw new ArgumentOutOfRangeException(
+          nameof(mode));
+
+      Mode = mode;
+
+      if (!HamNoiseNative.IsAvailable())
+        throw new InvalidOperationException(
+          "HamNoise native backend is not available. " +
+          "Build or install hamnoise_skyroof.dll.");
+
+      int abi =
+        HamNoiseNative
+          .hamnoise_skyroof_abi_version();
+      if (abi !=
+          HamNoiseNative.ExpectedAbiVersion)
+        throw new InvalidOperationException(
+          $"HamNoise ABI mismatch: expected " +
+          $"{HamNoiseNative.ExpectedAbiVersion}, " +
+          $"got {abi}.");
+
+      SampleRate =
+        HamNoiseNative
+          .hamnoise_skyroof_sample_rate();
+      if (SampleRate != 9600)
+        throw new InvalidOperationException(
+          $"Unsupported HamNoise sample rate " +
+          $"{SampleRate} Hz.");
+    }
+
+    public static bool IsAvailable() =>
+      HamNoiseNative.IsAvailable();
+
+    public float[] Process(
+      ReadOnlySpan<float> input,
+      int sampleRate,
+      double wet = 1.0)
+    {
+      if (sampleRate != SampleRate)
+        throw new ArgumentException(
+          $"HamNoise requires {SampleRate} Hz PCM.",
+          nameof(sampleRate));
+      if (!double.IsFinite(wet) ||
+          wet < 0 ||
+          wet > 1)
+        throw new ArgumentOutOfRangeException(
+          nameof(wet));
+      if (input.Length == 0)
+        return [];
+
+      float[] dry =
+        input.ToArray();
+      if (wet == 0)
+        return dry;
+
+      int expectedLength =
+        dry.Length;
+      float[] enhanced =
+        new float[expectedLength];
+
+      int status =
+        Mode ==
+          CwDenoiseMode.HamNoiseV2
+          ? HamNoiseNative
+              .hamnoise_skyroof_process_v2(
+                dry,
+                dry.Length,
+                enhanced)
+          : HamNoiseNative
+              .hamnoise_skyroof_process_classic(
+                dry,
+                dry.Length,
+                enhanced);
+
+      if (status != 0)
+        throw new InvalidOperationException(
+          $"{Name} failed with status {status}.");
+
+      if (enhanced.Length != expectedLength)
+        throw new InvalidOperationException(
+          $"{Name} changed the managed output length from " +
+          $"{expectedLength} to {enhanced.Length}.");
+
+      for (int i = 0;
+           i < enhanced.Length;
+           i++)
+      {
+        if (!float.IsFinite(
+              enhanced[i]))
+          throw new InvalidOperationException(
+            $"{Name} produced a non-finite sample at index {i}.");
+      }
+
+      if (wet >= 1)
+        return enhanced;
+
+      float blend =
+        (float)wet;
+      for (int i = 0;
+           i < enhanced.Length;
+           i++)
+      {
+        enhanced[i] =
+          dry[i] +
+          (enhanced[i] - dry[i]) *
+          blend;
+      }
+
+      return enhanced;
+    }
+  }
+}

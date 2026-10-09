@@ -56,9 +56,15 @@ namespace SkyRoof.CW
           targetCenterHz >= outputSampleRate / 2.0 - PassbandHz)
         throw new ArgumentOutOfRangeException(nameof(targetCenterHz));
 
+      // Promote before multiplication. A normal 8 s / 48 kHz decode
+      // window contains 384,000 samples; 384,000 * 9,600 exceeds Int32 and
+      // previously wrapped negative before the division, collapsing the
+      // extracted lane to one sample.
       int outputLength = Math.Max(1,
-        (int)Math.Round(input.Length *
-          outputSampleRate / (double)sourceSampleRate));
+        checked((int)Math.Round(
+          (double)input.Length *
+          outputSampleRate /
+          sourceSampleRate)));
       float[] audio = new float[outputLength];
       float[] envelope = new float[outputLength];
       double ratio = sourceSampleRate / (double)outputSampleRate;

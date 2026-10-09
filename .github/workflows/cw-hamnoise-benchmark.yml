@@ -1,12 +1,18 @@
-name: CW Pileup Real Model Benchmark
+name: CW HamNoise A/B Benchmark
 
 on:
   workflow_dispatch:
   pull_request:
     paths:
-      - "SkyRoof/CW/**"
+      - "SkyRoof/CW/HamNoiseDenoiser.cs"
+      - "SkyRoof/CW/DeepCwDecoder.cs"
+      - "SkyRoof/CW/CwLaneExtractor.cs"
+      - "SkyRoof/CW/DeepCwFeatures.cs"
+      - "native/HamNoiseBridge/**"
+      - "scripts/build-hamnoise.ps1"
+      - "VE3NEA.Dsp.Tests/HamNoiseDenoiserTests.cs"
       - "VE3NEA.Dsp.Tests/DeepCwRealModelBenchmarkTests.cs"
-      - ".github/workflows/cw-pileup-benchmark.yml"
+      - ".github/workflows/cw-hamnoise-benchmark.yml"
 
 permissions:
   contents: read
@@ -24,6 +30,10 @@ jobs:
 
       - name: Setup NuGet
         uses: NuGet/setup-nuget@fd55a6f3b34392fa83fde1454582407d8c714123 # v4.0
+
+      - name: Build pinned HamNoise CW backend
+        shell: pwsh
+        run: ./scripts/build-hamnoise.ps1
 
       - name: Download WinDivert 2.2.2 x64
         shell: powershell
@@ -75,23 +85,23 @@ jobs:
           "DEEPCW_METADATA_PATH=$metadata" | Out-File -FilePath $env:GITHUB_ENV -Append
           "DEEPCW_BENCHMARK_OUTPUT=$env:GITHUB_WORKSPACE\artifacts\cw-pileup-benchmark.json" |
             Out-File -FilePath $env:GITHUB_ENV -Append
-          "SKYROOF_RUN_DEEPCW_BENCHMARK=1" |
+          "SKYROOF_RUN_HAMNOISE_BENCHMARK=1" |
             Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Run real ONNX Pileup benchmark
+      - name: Run HamNoise native smoke tests and real ONNX A/B
         run: >
           dotnet test VE3NEA.Dsp.Tests/VE3NEA.Dsp.Tests.csproj
           -c Release -p:Platform=x64 --no-restore
-          --filter FullyQualifiedName~RealDeepCw_PileupSeparatorBaseline
+          --filter "FullyQualifiedName~RealDeepCw_HamNoiseClassicV2_AB|FullyQualifiedName~HamNoiseDenoiserTests"
           --logger "console;verbosity=normal"
 
-      - name: Print benchmark metrics
+      - name: Print HamNoise metrics
         shell: powershell
-        run: Get-Content $env:DEEPCW_BENCHMARK_OUTPUT
+        run: Get-Content artifacts\cw-hamnoise-ab.json
 
-      - name: Upload benchmark metrics
+      - name: Upload HamNoise metrics
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: cw-pileup-real-model-benchmark
-          path: artifacts/cw-pileup-benchmark.json
+          name: cw-hamnoise-ab-benchmark
+          path: artifacts/cw-hamnoise-ab.json
           if-no-files-found: error
