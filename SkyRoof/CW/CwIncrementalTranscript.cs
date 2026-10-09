@@ -11,6 +11,15 @@ namespace SkyRoof.CW
     public double MinimumConsensus { get; init; } = 0.60;
     public double MinimumAverageConfidence { get; init; } = 0.52;
     public double CommittedMatchRetentionSeconds { get; init; } = 8.0;
+
+    /// <summary>
+    /// DeepCW output-frame timing can move near a decode-window edge because
+    /// the neural receptive field sees different left/right context. Before
+    /// symbol clustering, search this bounded range for a whole-window timing
+    /// correction supported by multiple same-character anchors.
+    /// </summary>
+    public double MaxWindowTimingCorrectionSeconds { get; init; } = 0.75;
+    public int MinimumTimingAnchorMatches { get; init; } = 2;
   }
 
   public readonly record struct CwTranscriptSymbol(
@@ -96,7 +105,17 @@ namespace SkyRoof.CW
     private readonly record struct IncomingSymbol(
       char Character,
       DateTime TimestampUtc,
-      double Confidence);
+      double Confidence)
+    {
+      public IncomingSymbol ShiftSeconds(
+        double seconds) =>
+        this with
+        {
+          TimestampUtc =
+            TimestampUtc +
+            TimeSpan.FromSeconds(seconds)
+        };
+    }
 
     private enum AlignmentAction : byte
     {
@@ -285,13 +304,16 @@ namespace SkyRoof.CW
     {
       double tolerance =
         options.SymbolMatchToleranceSeconds;
+      double searchMargin =
+        tolerance +
+        options.MaxWindowTimingCorrectionSeconds;
 
       DateTime firstIncoming =
         incoming[0].TimestampUtc -
-        TimeSpan.FromSeconds(tolerance);
+        TimeSpan.FromSeconds(searchMargin);
       DateTime lastIncoming =
         incoming[^1].TimestampUtc +
-        TimeSpan.FromSeconds(tolerance);
+        TimeSpan.FromSeconds(searchMargin);
 
       SymbolCluster[] existing =
         state.RecentCommitted
@@ -303,13 +325,18 @@ namespace SkyRoof.CW
           .ThenBy(x => x.Id)
           .ToArray();
 
+      IncomingSymbol[] registered =
+        RegisterWindowTiming(
+          existing,
+          incoming);
+
       AlignmentAction[,] actions =
-        Align(existing, incoming);
+        Align(existing, registered);
 
       var matches =
         BacktrackAlignment(
           existing,
-          incoming,
+          registered,
           actions);
 
       foreach (var match in matches)
@@ -320,7 +347,7 @@ namespace SkyRoof.CW
           SymbolCluster cluster =
             existing[match.ExistingIndex];
           IncomingSymbol symbol =
-            incoming[match.IncomingIndex];
+            registered[match.IncomingIndex];
 
           if (cluster.Committed)
           {
@@ -340,7 +367,7 @@ namespace SkyRoof.CW
         else if (match.IncomingIndex >= 0)
         {
           IncomingSymbol symbol =
-            incoming[match.IncomingIndex];
+            registered[match.IncomingIndex];
           var cluster = new SymbolCluster
           {
             Id = nextClusterId++,
@@ -371,6 +398,132 @@ namespace SkyRoof.CW
           ? cmp
           : a.Id.CompareTo(b.Id);
       });
+    }
+
+    private IncomingSymbol[] RegisterWindowTiming(
+      IReadOnlyList<SymbolCluster> existing,
+      IReadOnlyList<IncomingSymbol> incoming)
+    {
+      if (existing.Count < options.MinimumTimingAnchorMatches ||
+          incoming.Count < options.MinimumTimingAnchorMatches ||
+          options.MaxWindowTimingCorrectionSeconds <= 0)
+        return incoming.ToArray();
+
+      var candidateOffsets = new List<double> { 0 };
+      double maxOffset =
+        options.MaxWindowTimingCorrectionSeconds;
+
+      foreach (SymbolCluster cluster in existing)
+      {
+        char existingChar =
+          WinningCharacter(cluster).Character;
+        foreach (IncomingSymbol symbol in incoming)
+        {
+          if (existingChar != symbol.Character)
+            continue;
+
+          double offset =
+            (cluster.TimestampUtc -
+             symbol.TimestampUtc)
+            .TotalSeconds;
+          if (Math.Abs(offset) <= maxOffset)
+            candidateOffsets.Add(offset);
+        }
+      }
+
+      (
+        double Offset,
+        int SameCharacterMatches,
+        double ResidualSeconds,
+        double OffsetMagnitude)
+        best =
+          (0, 0, double.PositiveInfinity, 0);
+
+      foreach (double candidate in candidateOffsets
+        .Distinct()
+        .OrderBy(x => Math.Abs(x)))
+      {
+        IncomingSymbol[] shifted =
+          incoming
+            .Select(x =>
+              x.ShiftSeconds(candidate))
+            .ToArray();
+
+        AlignmentAction[,] actions =
+          Align(existing, shifted);
+        IReadOnlyList<AlignmentPair> pairs =
+          BacktrackAlignment(
+            existing,
+            shifted,
+            actions);
+
+        int matches = 0;
+        double residual = 0;
+        foreach (AlignmentPair pair in pairs)
+        {
+          if (pair.ExistingIndex < 0 ||
+              pair.IncomingIndex < 0)
+            continue;
+
+          SymbolCluster cluster =
+            existing[pair.ExistingIndex];
+          IncomingSymbol symbol =
+            shifted[pair.IncomingIndex];
+          if (WinningCharacter(cluster).Character !=
+              symbol.Character)
+            continue;
+
+          double dt = Math.Abs(
+            (cluster.TimestampUtc -
+             symbol.TimestampUtc)
+            .TotalSeconds);
+          if (dt >
+              options.SymbolMatchToleranceSeconds)
+            continue;
+
+          matches++;
+          residual += dt;
+        }
+
+        double meanResidual =
+          matches > 0
+            ? residual / matches
+            : double.PositiveInfinity;
+
+        bool better =
+          matches >
+            best.SameCharacterMatches ||
+          (matches ==
+             best.SameCharacterMatches &&
+           meanResidual <
+             best.ResidualSeconds - 1e-9) ||
+          (matches ==
+             best.SameCharacterMatches &&
+           Math.Abs(
+             meanResidual -
+             best.ResidualSeconds) <= 1e-9 &&
+           Math.Abs(candidate) <
+             best.OffsetMagnitude);
+
+        if (better)
+        {
+          best =
+            (
+              candidate,
+              matches,
+              meanResidual,
+              Math.Abs(candidate));
+        }
+      }
+
+      if (best.SameCharacterMatches <
+          options.MinimumTimingAnchorMatches)
+        return incoming.ToArray();
+
+      return incoming
+        .Select(x =>
+          x.ShiftSeconds(best.Offset))
+        .ToArray();
     }
 
     private AlignmentAction[,] Align(
@@ -812,6 +965,15 @@ namespace SkyRoof.CW
             value.SymbolMatchToleranceSeconds)
         throw new ArgumentOutOfRangeException(
           nameof(value.CommittedMatchRetentionSeconds));
+      if (!double.IsFinite(
+            value.MaxWindowTimingCorrectionSeconds) ||
+          value.MaxWindowTimingCorrectionSeconds < 0 ||
+          value.MaxWindowTimingCorrectionSeconds > 2)
+        throw new ArgumentOutOfRangeException(
+          nameof(value.MaxWindowTimingCorrectionSeconds));
+      if (value.MinimumTimingAnchorMatches is < 1 or > 8)
+        throw new ArgumentOutOfRangeException(
+          nameof(value.MinimumTimingAnchorMatches));
     }
   }
 }
