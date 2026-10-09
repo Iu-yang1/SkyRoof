@@ -264,7 +264,7 @@ namespace VE3NEA.Dsp.Tests
         return;
       }
 
-      HamNoiseLaneDenoiser.IsAvailable()
+      HamNoiseAudioDenoiser.IsAvailable()
         .Should().BeTrue(
           "the dedicated benchmark workflow builds the pinned HamNoise bridge");
 
@@ -322,16 +322,16 @@ namespace VE3NEA.Dsp.Tests
         ("WidebandBaseline", () => null, false),
         ("LaneDry", () => new IdentityLaneDenoiser(), false),
         ("LaneHamNoiseClassic", () =>
-          new HamNoiseLaneDenoiser(
+          new HamNoiseAudioDenoiser(
             CwDenoiseMode.HamNoiseClassic), false),
         ("LaneHamNoiseV2", () =>
-          new HamNoiseLaneDenoiser(
+          new HamNoiseAudioDenoiser(
             CwDenoiseMode.HamNoiseV2), false),
         ("SharedHamNoiseClassic", () =>
-          new HamNoiseLaneDenoiser(
+          new HamNoiseAudioDenoiser(
             CwDenoiseMode.HamNoiseClassic), true),
         ("SharedHamNoiseV2", () =>
-          new HamNoiseLaneDenoiser(
+          new HamNoiseAudioDenoiser(
             CwDenoiseMode.HamNoiseV2), true)
       ];
 
