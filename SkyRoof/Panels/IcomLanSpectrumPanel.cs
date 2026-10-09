@@ -1613,39 +1613,40 @@ namespace SkyRoof
         activeScope =
           state.SelectedScope;
 
-      if (!applyPendingSettings &&
-          activeScope == 1)
-      {
-        settings.ScopeEdgeNumber =
-          state.SubEdge;
-        settings.ScopeReferenceLevelDb =
-          state.SubReferenceDb;
-        settings.ScopeSweepSpeed =
-          state.SubSpeed;
-        settings.ScopeVbw =
-          state.SubVbw;
-      }
-      else if (!applyPendingSettings)
-      {
-        settings.ScopeEdgeNumber =
-          state.MainEdge;
-        settings.ScopeReferenceLevelDb =
-          state.MainReferenceDb;
-        settings.ScopeSweepSpeed =
-          state.MainSpeed;
-        settings.ScopeVbw =
-          state.MainVbw;
-      }
-
       if (!applyPendingSettings)
       {
-        settings.ScopeDuringTx =
-          state.ScopeDuringTx;
-        settings.ScopeCenterType =
-          state.CenterType;
-        settings.ScopeMarkerPosition =
-          state.MarkerPosition;
+        if (activeScope == 1)
+        {
+          if (state.HasField("SUB.EDGE"))
+            settings.ScopeEdgeNumber = state.SubEdge;
+          if (state.HasField("SUB.REF"))
+            settings.ScopeReferenceLevelDb = state.SubReferenceDb;
+          if (state.HasField("SUB.SPEED"))
+            settings.ScopeSweepSpeed = state.SubSpeed;
+          if (state.HasField("SUB.VBW"))
+            settings.ScopeVbw = state.SubVbw;
+        }
+        else
+        {
+          if (state.HasField("MAIN.EDGE"))
+            settings.ScopeEdgeNumber = state.MainEdge;
+          if (state.HasField("MAIN.REF"))
+            settings.ScopeReferenceLevelDb = state.MainReferenceDb;
+          if (state.HasField("MAIN.SPEED"))
+            settings.ScopeSweepSpeed = state.MainSpeed;
+          if (state.HasField("MAIN.VBW"))
+            settings.ScopeVbw = state.MainVbw;
+        }
 
+        if (state.HasField("TX"))
+          settings.ScopeDuringTx = state.ScopeDuringTx;
+        if (state.HasField("CENTER"))
+          settings.ScopeCenterType = state.CenterType;
+        if (state.HasField("MARKER"))
+          settings.ScopeMarkerPosition = state.MarkerPosition;
+
+        // Preserve existing settings when an individual CI-V query is
+        // rejected by older IC-9700 firmware; never apply filler defaults.
         ctx.Settings.SaveToFile();
       }
 
@@ -1694,7 +1695,9 @@ namespace SkyRoof
       else
       {
         StatusLabel.Text =
-          $"IC-9700 scope readback synchronized ({(activeScope == 1 ? "SUB" : "MAIN")}).";
+          state.IsPartial
+            ? $"IC-9700 partial scope readback ({(activeScope == 1 ? "SUB" : "MAIN")}); unavailable fields kept unchanged."
+            : $"IC-9700 scope readback synchronized ({(activeScope == 1 ? "SUB" : "MAIN")}).";
       }
     }
 
