@@ -131,7 +131,7 @@ namespace SkyRoof
 
       UiToolTip.SetToolTip(
         ParkButton,
-        "Left-click: move to PARK\nRight-click: save PARK azimuth/elevation");
+        "Left-click: follow ordered PARK route\nRight-click: edit PARK waypoints");
 
       var divider = new Label
       {
@@ -266,6 +266,7 @@ namespace SkyRoof
       // edit the saved preset. ManualPark itself still rejects movement while
       // the live-pass lock is active.
       ParkButton.Enabled = enabled;
+      ParkButton.Text = rotator.ParkProgressText;
 
       // TRACK remains available while manual controls are locked so the
       // operator can intentionally leave live-pass tracking. As soon as Track
@@ -280,7 +281,9 @@ namespace SkyRoof
           : "TRACK";
 
       ManualHintLabel.Text =
-        manualLocked
+        rotator.IsParking
+          ? "PARK ACTIVE\n\nSTOP cancels\nthe route."
+          : manualLocked
           ? "LIVE TRACK\n\nManual locked.\nClear TRACK first."
           : rotator.IsTracking
             ? "PRE-POSITION\n\nManual input will\nclear TRACK first."
