@@ -2392,6 +2392,18 @@ namespace SkyRoof
           plot.Bottom));
     }
 
+    // RS-BA1-style marker behavior: CENTER/SCROLL-C use the scope
+    // frequency axis, FIXED/SCROLL-F follow the tuned RX/TX frequency.
+    // A stale CAT value must not move the center line in CENTER mode.
+    internal static long ResolveMarkerRawFrequency(
+      IcomScopeGeometry geometry,
+      long tunedFrequencyHz,
+      long displayOffsetHz) =>
+      geometry.RawMode is (byte)IcomScopeMode.Center or
+        (byte)IcomScopeMode.ScrollCenter
+          ? geometry.CenterFrequencyHz
+          : checked(tunedFrequencyHz - displayOffsetHz);
+
     private void DrawFrequencyMarker(
       Graphics graphics,
       Rectangle plot,
@@ -2415,9 +2427,7 @@ namespace SkyRoof
         return;
 
       long rawFrequency =
-        centerMode
-          ? geometry.CenterFrequencyHz
-          : checked(tunedFrequencyHz - displayOffsetHz);
+        ResolveMarkerRawFrequency(geometry, tunedFrequencyHz, displayOffsetHz);
 
       if (!geometry.ContainsFrequency(
             rawFrequency))
