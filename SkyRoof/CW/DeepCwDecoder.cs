@@ -264,7 +264,7 @@ namespace SkyRoof.CW
     internal int StftCacheEntries => frameCache.Count;
     internal void ResetFeatureCache() => frameCache.Clear();
 
-    public int MaxLanes { get; set; } = 5;
+    public int MaxLanes { get; set; } = 8;
     public double LaneBandwidthHz { get; set; } = 240;
     public double TargetCenterHz { get; set; } = 800;
 
