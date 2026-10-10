@@ -11,6 +11,17 @@ namespace SkyRoof
     internal long WidthHz => UpperHz - LowerHz;
   }
 
+  internal readonly record struct IcomScopeRxPassbandPreferences(
+    int SsbHz, int DataHz, int CwHz, int FmHz)
+  {
+    internal static IcomScopeRxPassbandPreferences FromSettings(
+      IcomLanSpectrumSettings settings) => new(
+        settings.RxSsbEstimatedBandwidthHz,
+        settings.RxDataEstimatedBandwidthHz,
+        settings.RxCwEstimatedBandwidthHz,
+        settings.RxFmEstimatedBandwidthHz);
+  }
+
   internal static class IcomScopeRxPassbandEstimator
   {
     // Nominal IF bandwidths follow the IC-9700 FIL2 examples. The
@@ -21,6 +32,14 @@ namespace SkyRoof
       Slicer.Mode? mode,
       long dialFrequencyHz,
       IcomLanSpectrumSettings settings,
+      out IcomScopeRxPassband passband) =>
+      TryEstimate(mode, dialFrequencyHz,
+        IcomScopeRxPassbandPreferences.FromSettings(settings), out passband);
+
+    internal static bool TryEstimate(
+      Slicer.Mode? mode,
+      long dialFrequencyHz,
+      IcomScopeRxPassbandPreferences preferences,
       out IcomScopeRxPassband passband)
     {
       passband = default;
@@ -32,28 +51,28 @@ namespace SkyRoof
       switch (mode.Value)
       {
         case Slicer.Mode.USB:
-          width = settings.RxSsbEstimatedBandwidthHz;
+          width = preferences.SsbHz;
           offset = +1_500;
           break;
         case Slicer.Mode.LSB:
-          width = settings.RxSsbEstimatedBandwidthHz;
+          width = preferences.SsbHz;
           offset = -1_500;
           break;
         case Slicer.Mode.USB_D:
-          width = settings.RxDataEstimatedBandwidthHz;
+          width = preferences.DataHz;
           offset = +1_500;
           break;
         case Slicer.Mode.LSB_D:
-          width = settings.RxDataEstimatedBandwidthHz;
+          width = preferences.DataHz;
           offset = -1_500;
           break;
         case Slicer.Mode.CW:
-          width = settings.RxCwEstimatedBandwidthHz;
+          width = preferences.CwHz;
           offset = 0;
           break;
         case Slicer.Mode.FM:
         case Slicer.Mode.FM_D:
-          width = settings.RxFmEstimatedBandwidthHz;
+          width = preferences.FmHz;
           offset = 0;
           break;
         default:
