@@ -18,12 +18,17 @@ namespace SkyRoof.CW
   {
     private CwConsoleSettings settings;
     private readonly ICwKeyerSessionFactory sessionFactory;
+    private readonly ICwTransmitInterlock transmitInterlock;
     private readonly SemaphoreSlim operationLock =
       new(1, 1);
 
     private ICwKeyerSession? activeSession;
     private CancellationTokenSource? watchdogStop;
     private Task? watchdogTask;
+    private Task? interlockMonitorTask;
+
+    private CwTransmitInterlockSnapshot? armedInterlock;
+    private CwTransmitInterlockSnapshot? activeInterlock;
 
     private bool armed;
     private string activeText =
@@ -39,13 +44,25 @@ namespace SkyRoof.CW
       CwConsoleSettings settings)
       : this(
           settings,
-          new CwKeyerTcpSessionFactory())
+          new CwKeyerTcpSessionFactory(),
+          NullCwTransmitInterlock.Instance)
     {
     }
 
     public CwTransmitController(
       CwConsoleSettings settings,
-      ICwKeyerSessionFactory sessionFactory)
+      ICwTransmitInterlock transmitInterlock)
+      : this(
+          settings,
+          new CwKeyerTcpSessionFactory(),
+          transmitInterlock)
+    {
+    }
+
+    public CwTransmitController(
+      CwConsoleSettings settings,
+      ICwKeyerSessionFactory sessionFactory,
+      ICwTransmitInterlock? transmitInterlock = null)
     {
       this.settings =
         settings ??
@@ -56,7 +73,14 @@ namespace SkyRoof.CW
         sessionFactory ??
         throw new ArgumentNullException(
           nameof(sessionFactory));
+
+      this.transmitInterlock =
+        transmitInterlock ??
+        NullCwTransmitInterlock.Instance;
     }
+
+    public bool TxCatWritesFrozen =>
+      transmitInterlock.TxWritesFrozen;
 
     public CwTransmitState State
     {
@@ -102,7 +126,10 @@ namespace SkyRoof.CW
            activeSession != null);
 
         if (safetyBoundaryChanged)
+        {
           armed = false;
+          armedInterlock = null;
+        }
       }
 
       OnStateChanged();
@@ -125,9 +152,13 @@ namespace SkyRoof.CW
         throw new InvalidOperationException(
           "CW transmit is disabled in Settings.");
 
+      CwTransmitInterlockSnapshot snapshot =
+        transmitInterlock.CaptureForArm();
+
       lock (this)
       {
         armed = true;
+        armedInterlock = snapshot;
         lastError = null;
       }
 
@@ -150,7 +181,10 @@ namespace SkyRoof.CW
       }
 
       lock (this)
+      {
         armed = false;
+        armedInterlock = null;
+      }
 
       OnStateChanged();
 
@@ -177,6 +211,22 @@ namespace SkyRoof.CW
         CwKeyerStatus status =
           await session.GetStatusAsync(
             cancellationToken);
+
+        CwTransmitInterlockSnapshot? armedSnapshot;
+        lock (this)
+          armedSnapshot = armed
+            ? armedInterlock
+            : null;
+
+        if (armedSnapshot.HasValue)
+        {
+          CwTransmitInterlockSnapshot current =
+            transmitInterlock.PrepareForSend(
+              armedSnapshot.Value);
+          transmitInterlock.ValidateHardware(
+            current,
+            status);
+        }
 
         lock (this)
         {
@@ -212,6 +262,8 @@ namespace SkyRoof.CW
 
       try
       {
+        CwTransmitInterlockSnapshot armSnapshot;
+
         lock (this)
         {
           if (!settings.TransmitEnabled)
@@ -222,10 +274,24 @@ namespace SkyRoof.CW
             throw new InvalidOperationException(
               "CW transmit is not armed.");
 
+          if (!armedInterlock.HasValue)
+            throw new InvalidOperationException(
+              "CW transmit interlock was not captured while arming.");
+
           if (activeSession != null)
             throw new InvalidOperationException(
               "A CW message is already active.");
+
+          armSnapshot =
+            armedInterlock.Value;
         }
+
+        CwTransmitInterlockSnapshot sendSnapshot =
+          transmitInterlock.PrepareForSend(
+            armSnapshot);
+
+        transmitInterlock.SetTxWritesFrozen(
+          true);
 
         session =
           await sessionFactory.ConnectAsync(
@@ -237,13 +303,28 @@ namespace SkyRoof.CW
             cancellationToken);
 
         EnsureReady(status);
+        transmitInterlock.ValidateHardware(
+          sendSnapshot,
+          status);
 
-        // SkyCAT repeats the same preflight under the shared hardware command
-        // lock immediately before Command 17, so this local check is only an
-        // early operator-facing diagnostic, not the final safety authority.
-        await session.SendAsync(
-          text,
-          cancellationToken);
+        // Satellite sends use SkyCAT's SENDHZ command so the actual TX VFO is
+        // re-read and compared inside the same serial/lease critical section
+        // immediately before Command 17. Terrestrial operation preserves the
+        // legacy SEND command.
+        if (sendSnapshot.RequiresHardwareFrequencyGuard)
+        {
+          await session.SendGuardedAsync(
+            sendSnapshot.ExpectedCatTxHz,
+            sendSnapshot.FrequencyToleranceHz,
+            text,
+            cancellationToken);
+        }
+        else
+        {
+          await session.SendAsync(
+            text,
+            cancellationToken);
+        }
 
         TimeSpan watchdog =
           CwMessageTiming.ComputeWatchdog(
@@ -260,6 +341,7 @@ namespace SkyRoof.CW
         {
           activeSession = session;
           session = null;
+          activeInterlock = sendSnapshot;
           activeText = text;
           radioStatus = status;
           watchdogDueUtc = due;
@@ -272,12 +354,21 @@ namespace SkyRoof.CW
             watchdog,
             watchdogCts.Token);
 
+        interlockMonitorTask =
+          RunInterlockMonitorAsync(
+            sendSnapshot,
+            watchdogCts.Token);
+
         OnStateChanged();
       }
       catch (Exception ex)
       {
         if (session != null)
           await session.DisposeAsync();
+
+        if (activeSession == null)
+          transmitInterlock.SetTxWritesFrozen(
+            false);
 
         SetError(ex);
         throw;
@@ -318,6 +409,7 @@ namespace SkyRoof.CW
       {
         session = activeSession;
         activeSession = null;
+        activeInterlock = null;
 
         watchdogStop?.Cancel();
         watchdogStop?.Dispose();
@@ -328,6 +420,8 @@ namespace SkyRoof.CW
 
       if (session == null)
       {
+        transmitInterlock.SetTxWritesFrozen(
+          false);
         OnStateChanged();
         return;
       }
@@ -349,6 +443,8 @@ namespace SkyRoof.CW
       finally
       {
         await session.DisposeAsync();
+        transmitInterlock.SetTxWritesFrozen(
+          false);
       }
 
       if (error == null)
@@ -391,6 +487,63 @@ namespace SkyRoof.CW
           new InvalidOperationException(
             "CW watchdog STOP failed. SkyCAT connection teardown was used as the secondary fail-safe.",
             ex));
+      }
+    }
+
+    private async Task RunInterlockMonitorAsync(
+      CwTransmitInterlockSnapshot active,
+      CancellationToken cancellationToken)
+    {
+      try
+      {
+        while (true)
+        {
+          await Task.Delay(
+            TimeSpan.FromMilliseconds(100),
+            cancellationToken);
+
+          transmitInterlock.ValidateDuringSend(
+            active);
+        }
+      }
+      catch (OperationCanceledException)
+      {
+      }
+      catch (ObjectDisposedException)
+      {
+      }
+      catch (Exception safetyError)
+      {
+        lock (this)
+        {
+          armed = false;
+          armedInterlock = null;
+        }
+
+        Exception? stopError = null;
+        try
+        {
+          await StopAsync(
+            CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+          stopError = ex;
+        }
+
+        InvalidOperationException error =
+          stopError == null
+            ? new InvalidOperationException(
+                "CW satellite TX interlock changed during transmission. The message was stopped and TX was disarmed.",
+                safetyError)
+            : new InvalidOperationException(
+                "CW satellite TX interlock changed and the explicit STOP also failed. SkyCAT connection teardown remains the secondary fail-safe.",
+                new AggregateException(
+                  safetyError,
+                  stopError));
+
+        SetError(error);
+        OnStateChanged();
       }
     }
 
@@ -455,11 +608,15 @@ namespace SkyRoof.CW
       lock (this)
       {
         armed = false;
+        armedInterlock = null;
+        activeInterlock = null;
         disposed = true;
       }
 
       watchdogStop?.Cancel();
       watchdogStop?.Dispose();
+      transmitInterlock.SetTxWritesFrozen(
+        false);
       operationLock.Dispose();
 
       OnStateChanged();
