@@ -80,6 +80,10 @@ namespace SkyRoof.CW
     private readonly DeepCwOnnxDecoder onnx;
     private readonly CwContinuousDeepCwDecoder continuous;
 
+    internal long StftHits => continuous.Decoder.StftCacheHits;
+    internal long StftMisses => continuous.Decoder.StftCacheMisses;
+    internal double MeanOnnxInferenceMs => onnx.MeanInferenceMilliseconds;
+
     internal DeepCwInferenceSession(
       CwReceiveWorkerOptions options)
     {
