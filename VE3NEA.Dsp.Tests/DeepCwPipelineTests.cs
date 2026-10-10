@@ -345,6 +345,39 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void MultiLaneDecoder_DoesNotInvokeOnnxForNoiseOnlyFalseTrack()
+    {
+      DeepCwModelMetadata metadata =
+        DeepCwModelMetadata.Parse(
+          MetadataJson);
+      var fake =
+        new QueueTensorDecoder("FALSE");
+      var decoder =
+        new DeepCwMultiLaneDecoder(
+          metadata,
+          fake)
+        {
+          MaxLanes = 1
+        };
+
+      // MakeKeyedAudio with no tones is deterministic broadband noise.
+      float[] noise =
+        MakeKeyedAudio(4.0);
+      CwSignalTrack falseTrack =
+        Track(1, 800, 14);
+
+      IReadOnlyList<DeepCwLaneResult> result =
+        decoder.Decode(
+          noise,
+          SourceRate,
+          T0,
+          new[] { falseTrack });
+
+      result.Should().BeEmpty();
+      fake.Calls.Should().Be(0);
+    }
+
+    [Fact]
     public void MultiLaneDecoder_InvokesIndependentInferenceForSelectedTracks()
     {
       DeepCwModelMetadata metadata =
