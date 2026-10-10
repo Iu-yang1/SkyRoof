@@ -1,4 +1,5 @@
 using Serilog;
+using System.Diagnostics;
 using VE3NEA;
 
 namespace SkyRoof.CW
@@ -26,6 +27,17 @@ namespace SkyRoof.CW
     public long AcceptedSamples { get; private set; }
     public DateTime? LastAcceptedUtc { get; private set; }
     public long TimelineGeneration { get; private set; }
+
+    private long lastAppendTimestamp;
+    private long lastAppendIntervalTicks;
+    private int lastBlockSamples;
+    private long acceptedBlocks;
+
+    public long AcceptedBlocks => Interlocked.Read(ref acceptedBlocks);
+    public int LastBlockSamples => Volatile.Read(ref lastBlockSamples);
+    public double LastPcmDeliveryIntervalMs =>
+      1000.0 * Interlocked.Read(ref lastAppendIntervalTicks) /
+        Stopwatch.Frequency;
 
     public CwPcmIngress(
       CwPileupFrontEnd? frontEnd = null)
@@ -90,6 +102,17 @@ namespace SkyRoof.CW
         data,
         count,
         utc);
+
+      // Track actual new-audio delivery separately from FFT/GDI times.
+      // On a WASAPI path with a 100-ms update cadence, no timer can paint
+      // 30 unique frames/second from fresh PCM. These counters make that
+      // cause visible in the CW Spectrum tooltip.
+      long now = Stopwatch.GetTimestamp();
+      long previousTime = Interlocked.Exchange(ref lastAppendTimestamp, now);
+      if (previousTime > 0 && now > previousTime)
+        Interlocked.Exchange(ref lastAppendIntervalTicks, now - previousTime);
+      Volatile.Write(ref lastBlockSamples, count);
+      Interlocked.Increment(ref acceptedBlocks);
       AcceptedSamples += count;
       LastAcceptedUtc = utc;
       return true;
@@ -98,6 +121,10 @@ namespace SkyRoof.CW
     public void ResetTimeline()
     {
       FrontEnd.Reset();
+      Interlocked.Exchange(ref lastAppendTimestamp, 0);
+      Interlocked.Exchange(ref lastAppendIntervalTicks, 0);
+      Interlocked.Exchange(ref acceptedBlocks, 0);
+      Volatile.Write(ref lastBlockSamples, 0);
       AcceptedSamples = 0;
       LastAcceptedUtc = null;
       TimelineGeneration++;
@@ -112,7 +139,14 @@ namespace SkyRoof.CW
   public sealed class CwAudioSourceController : IDisposable
   {
     private readonly Context ctx;
-    private readonly InputSoundcard<float> captureInput = new();
+    // CW waterfall targets a ~33-ms display hop. The legacy soundcard
+    // 200-ms WASAPI polling buffer yielded ~100-ms PCM delivery intervals,
+    // limiting both Raw and HamNoise to around 10 genuinely new frames/s.
+    // Opt in only this CW capture path; ordinary Soundcard users keep
+    // their established defaults.
+    private readonly InputSoundcard<float> captureInput = new(
+      captureBufferMilliseconds: 40,
+      readerBlockSizeSamples: 1600);
     private readonly LoopbackInputSoundcard loopbackInput = new();
     private bool disposed;
 

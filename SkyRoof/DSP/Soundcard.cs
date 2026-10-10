@@ -423,9 +423,27 @@ namespace VE3NEA
 
     public event EventHandler<DataEventArgs<float>>? SamplesAvailable;
 
-    public InputSoundcard(string? audioDeviceId = null, int? samplingRate = null)
+    // CW-only low latency may opt into smaller WASAPI polling buffers,
+    // without altering the established 200-ms behavior for other users.
+    private readonly int captureBufferMilliseconds;
+    private readonly int readerBlockSizeSamples;
+
+    public int CaptureBufferMilliseconds => captureBufferMilliseconds;
+    public int ReaderBlockSizeSamples => readerBlockSizeSamples;
+
+    public InputSoundcard(
+      string? audioDeviceId = null,
+      int? samplingRate = null,
+      int captureBufferMilliseconds = 200,
+      int readerBlockSizeSamples = 4800)
       : base(audioDeviceId, samplingRate)
     {
+      if (captureBufferMilliseconds is < 20 or > 1000)
+        throw new ArgumentOutOfRangeException(nameof(captureBufferMilliseconds));
+      if (readerBlockSizeSamples is < 128 or > 48000)
+        throw new ArgumentOutOfRangeException(nameof(readerBlockSizeSamples));
+      this.captureBufferMilliseconds = captureBufferMilliseconds;
+      this.readerBlockSizeSamples = readerBlockSizeSamples;
     }
 
     protected override bool IsCurrentSoundcard(object? sender)
@@ -438,7 +456,8 @@ namespace VE3NEA
       int channelCount = typeof(T) == typeof(Complex32) ? 2 : 1;
       WaveFormat format = WaveFormat.CreateIeeeFloatWaveFormat(SamplingRate, channelCount);
 
-      soundIn = new WasapiCapture(mmDevice!, false, 200)
+      soundIn = new WasapiCapture(
+        mmDevice!, false, captureBufferMilliseconds)
       {
         ShareMode = AudioClientShareMode.Shared,
         WaveFormat = format
@@ -506,19 +525,19 @@ namespace VE3NEA
       ReaderThread = null;
     }
 
-    private const int blockSize = 4800;
     private readonly DataEventArgs<float> Args = new();
 
     private void ReaderLoop()
     {
-      Args.Data = new float[blockSize];
+      Args.Data = new float[readerBlockSizeSamples];
 
       while (!stopping)
         try
         {
           if (SampleSource == null) break;
 
-          Args.Count = SampleSource.Read(Args.Data, 0, blockSize);
+          Args.Count = SampleSource.Read(
+            Args.Data, 0, readerBlockSizeSamples);
 
           if (Args.Count > 0)
           {

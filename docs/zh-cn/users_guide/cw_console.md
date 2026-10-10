@@ -434,3 +434,31 @@ CW 后台完成 FFT 后还会主动发出帧就绪通知：距离上一帧已经
 真实 Painted FPS、帧间隔 p95/最大值、GDI 绘制时间平均/p95
 和后台 FFT/HamNoise 处理时间。如果 FFT 和 GDI 都只用几毫秒，
 但 FPS 仍低，就应继续查 UI 消息排队和音频回调周期。
+
+
+### IC-9700 USB AF 麦克风采集造成的 CW 瀑布刷新限制
+
+实机截图显示 CW Raw 约 **9.4 FPS**，HamNoise Classic 约
+**9.6 FPS**，但 GDI 绘制只有约 2–4 ms、后台 FFT/降噪
+平均只需约 7–10 ms。这种现象不能用 FFT 运算慢解释。
+审查发现原有通用 `InputSoundcard<T>` 设定 **200 ms 的
+WASAPI 采集缓冲**，并以 **4800 个采样点**（48 kHz 下
+100 ms）作为读取块上限；即使瀑布每 33 ms 请求刷新，
+也不能产生比实际输入 PCM 更新更快的真实新帧。
+
+本次**仅为 CW 麦克风采集实例**请求更短的 40 ms
+WASAPI 缓冲，读取块上限改为 **1600 点（约 33.3 ms）**。
+其他 SkyRoof 音频设备保持 200 ms / 4800 点默认值，
+不会改变其他声音输出、接收解码或发射逻辑。
+不同 Windows 音频设备可能强制较长共享模式周期，因此
+**不能保证所有电脑必定达到 30 FPS**。
+
+鼠标悬停 CW Console 顶部 `Spectrum: Raw` / HamNoise
+状态文字，可同时读取实际 **Painted FPS、p95 帧间隔**、
+**PCM input samples/block、last delivery interval (ms)**。
+如果后者仍约 100–200 ms，优先检查 USB Audio CODEC
+驱动或 Windows 的音频缓冲配置，而非继续调整 FFT。
+
+同时移除了 LAN Spectrum 红色 RX 通带上的超长英文
+说明悬停提示，避免遮挡频率和谱线。估算 IF 滤波器带宽
+仍可在 Spectrum Settings 中调整，文档保留相关说明。

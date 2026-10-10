@@ -876,7 +876,10 @@ namespace SkyRoof
         $"{DisplayFrames.LastProcessingMilliseconds:F1} ms last, " +
         $"{DisplayFrames.MeanProcessingMilliseconds:F1} ms mean\n" +
         $"Busy display ticks (no queue buildup): " +
-        $"{DisplayFrames.BusyTicks}; stale results: {staleDisplayFrames}");
+        $"{DisplayFrames.BusyTicks}; stale results: {staleDisplayFrames}\n" +
+        $"PCM input: {ctx.CwAudio?.Ingress.LastBlockSamples ?? 0} samples/" +
+        $"block, last delivery interval " +
+        $"{ctx.CwAudio?.Ingress.LastPcmDeliveryIntervalMs ?? 0:F1} ms");
 
       InstallModelBtn.Visible =
         status.ModelState ==
