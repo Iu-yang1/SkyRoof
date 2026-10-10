@@ -863,8 +863,9 @@ namespace SkyRoof
       lock (stateSync)
         selected = CwConsolePresentation
           .CollapseDuplicateLaneIdentities(latestTracks)
-          .FirstOrDefault(t =>
-            CwConsolePresentation.Identity(t) == identity);
+          .Where(t => CwConsolePresentation.Identity(t) == identity)
+          .Select(t => (CwSignalTrack?)t)
+          .FirstOrDefault();
 
       if (selected is CwSignalTrack track &&
           WaterfallView.ViewportZoom > 1.0 &&
