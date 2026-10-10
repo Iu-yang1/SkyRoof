@@ -64,6 +64,7 @@ namespace SkyRoof
       ctx.UdpStreamSender.ctx = ctx;
 
       var settingsLoadResult = ctx.Settings.LoadFromFile();
+      UpdateCwConsoleMenuText();
 
       AddRotatorControlCard();
 
@@ -1084,7 +1085,7 @@ namespace SkyRoof
     private void ConfigureCwConsoleMenuItem()
     {
       CwConsoleMNU.Name = "CwConsoleMNU";
-      CwConsoleMNU.Text = "&CW Console (RX)";
+      UpdateCwConsoleMenuText();
       CwConsoleMNU.Click += CwConsoleMNU_Click;
 
       int ft4Index =
@@ -1095,6 +1096,20 @@ namespace SkyRoof
           ? ft4Index + 1
           : GroupViewPanelMNU.DropDownItems.Count,
         CwConsoleMNU);
+    }
+
+    internal void UpdateCwConsoleMenuText()
+    {
+      bool txEnabled =
+        ctx.Settings.CwConsole.TransmitEnabled;
+      CwConsoleMNU.Text =
+        txEnabled
+          ? "&CW Console (TX enabled)"
+          : "&CW Console (TX disabled)";
+      CwConsoleMNU.ToolTipText =
+        txEnabled
+          ? "CW receive and IC-9700 Command-17 transmit are enabled in Settings."
+          : "CW receive is available; transmit is disabled in Settings.";
     }
 
     private void CwConsoleMNU_Click(
