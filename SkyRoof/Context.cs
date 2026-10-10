@@ -53,6 +53,7 @@ namespace SkyRoof
     internal PttHotkeyController? PttHotkey;
     public CwAudioSourceController? CwAudio;
     public CwReceiveWorker? CwReceiveWorker;
+    public CwTransmitController? CwTransmit;
 
     // soundcards
     public readonly OutputSoundcard<float> SpeakerSoundcard = new();
