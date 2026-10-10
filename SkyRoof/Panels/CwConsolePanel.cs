@@ -1365,7 +1365,10 @@ namespace SkyRoof
         string timing =
           state.RadioStatus is
             CwKeyerStatus status
-            ? $" · {status.Wpm:F1} WPM"
+            ? $" · {status.Wpm:F1} WPM" +
+              FormatTxFrequencyGuard(
+                tx,
+                status)
             : string.Empty;
 
         string watchdog =
@@ -1386,7 +1389,10 @@ namespace SkyRoof
       string radio =
         state.RadioStatus is
           CwKeyerStatus ready
-          ? $" · {ready.Mode} · BK-IN {ready.BreakIn} · {ready.Wpm:F1} WPM"
+          ? $" · {ready.Mode} · BK-IN {ready.BreakIn} · {ready.Wpm:F1} WPM" +
+            FormatTxFrequencyGuard(
+              tx,
+              ready)
           : string.Empty;
 
       TxStatusLabel.Text =
@@ -1404,6 +1410,29 @@ namespace SkyRoof
         state.Armed
           ? Theme.SpectrumPeak
           : SystemColors.ControlText;
+    }
+
+    private static string FormatTxFrequencyGuard(
+      CwTransmitController tx,
+      CwKeyerStatus status)
+    {
+      CwTransmitInterlockSnapshot? guard =
+        tx.CurrentInterlock;
+
+      if (guard is not
+            CwTransmitInterlockSnapshot value ||
+          !value.IsSatellite)
+        return string.Empty;
+
+      string actual =
+        status.ActualTxFrequencyHz.HasValue
+          ? status.ActualTxFrequencyHz.Value
+              .ToString("N0")
+          : "?";
+
+      return
+        $" · TX VFO {actual} → " +
+        $"{value.ExpectedCatTxHz:N0} Hz";
     }
 
     private async void ArmTxBtn_Click(
