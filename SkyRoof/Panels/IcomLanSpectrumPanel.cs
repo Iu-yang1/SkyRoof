@@ -2810,6 +2810,7 @@ namespace SkyRoof
         CatControl_IcomFixedEdgeReadbackReceived;
       UiTimer.Stop();
       StopCapture();
+      RxPassbandHelp.Dispose();
 
       ctx.IcomLanSpectrumPanel = null;
       ctx.MainForm.IcomLanSpectrumMNU.Checked = false;
