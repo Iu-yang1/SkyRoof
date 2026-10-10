@@ -30,15 +30,17 @@ namespace SkyRoof
     private const double DisplayRangeDb = 30.0;
 
     private static readonly Color SkimmerBackground =
-      Color.FromArgb(3, 10, 6);
+      Color.FromArgb(0, 15, 46);
     private static readonly Color SkimmerScaleBackground =
-      Color.FromArgb(14, 22, 18);
+      Color.FromArgb(9, 31, 55);
     private static readonly Color SkimmerGrid =
-      Color.FromArgb(36, 72, 48);
+      Color.FromArgb(35, 79, 101);
     private static readonly Color SkimmerTrace =
-      Color.FromArgb(92, 255, 126);
+      Color.FromArgb(224, 236, 241);
+    private static readonly Color SkimmerLane =
+      Color.FromArgb(65, 220, 238);
     private static readonly Color SkimmerPeak =
-      Color.FromArgb(255, 231, 92);
+      Color.FromArgb(65, 255, 112);
 
     private readonly Bitmap waterfall;
     private int writeRow;
@@ -89,6 +91,24 @@ namespace SkyRoof
       Invalidate();
     }
 
+    public void SetSpectrum(
+      CwAudioSpectrumFrame frame)
+    {
+      if (frame.PowerDb.Length !=
+          waterfall.Width)
+        throw new ArgumentException(
+          "Spectrum width changed.",
+          nameof(frame));
+
+      minFrequencyHz =
+        frame.MinFrequencyHz;
+      maxFrequencyHz =
+        frame.MaxFrequencyHz;
+      latestPowerDb =
+        (float[])frame.PowerDb.Clone();
+      Invalidate();
+    }
+
     public void Append(
       CwAudioSpectrumFrame frame)
     {
@@ -102,9 +122,6 @@ namespace SkyRoof
         frame.MinFrequencyHz;
       maxFrequencyHz =
         frame.MaxFrequencyHz;
-      latestPowerDb =
-        (float[])frame.PowerDb.Clone();
-
       float targetFloor =
         Percentile(
           frame.PowerDb,
@@ -415,8 +432,8 @@ namespace SkyRoof
       using var normalPen =
         new Pen(
           Color.FromArgb(
-            170,
-            SkimmerTrace),
+            185,
+            SkimmerLane),
           1.25f);
       using var selectedPen =
         new Pen(
@@ -714,36 +731,52 @@ namespace SkyRoof
           0,
           1);
 
-      Color darkGreen =
-        Color.FromArgb(0, 34, 10);
+      Color blue =
+        Color.FromArgb(0, 35, 112);
+      Color cyan =
+        Color.FromArgb(0, 176, 226);
       Color green =
-        Color.FromArgb(0, 190, 38);
-      Color yellowGreen =
-        Color.FromArgb(178, 224, 28);
+        Color.FromArgb(0, 225, 70);
+      Color yellow =
+        Color.FromArgb(255, 225, 35);
+      Color red =
+        Color.FromArgb(255, 75, 32);
 
-      if (level < 0.14)
+      if (level < 0.16)
         return Mix(
           SkimmerBackground,
-          darkGreen,
-          level / 0.14);
-      if (level < 0.58)
+          blue,
+          level / 0.16);
+      if (level < 0.42)
         return Mix(
-          darkGreen,
-          green,
-          (level - 0.14) /
-          0.44);
-      if (level < 0.84)
-        return Mix(
-          green,
-          yellowGreen,
-          (level - 0.58) /
+          blue,
+          cyan,
+          (level - 0.16) /
           0.26);
+      if (level < 0.68)
+        return Mix(
+          cyan,
+          green,
+          (level - 0.42) /
+          0.26);
+      if (level < 0.86)
+        return Mix(
+          green,
+          yellow,
+          (level - 0.68) /
+          0.18);
+      if (level < 0.96)
+        return Mix(
+          yellow,
+          red,
+          (level - 0.86) /
+          0.10);
 
       return Mix(
-        SkimmerPeak,
+        red,
         Color.White,
-        (level - 0.84) /
-        0.16);
+        (level - 0.96) /
+        0.04);
     }
 
     private static Color Mix(
