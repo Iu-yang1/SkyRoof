@@ -31,6 +31,10 @@ namespace SkyRoof
       new(spectrumBins: 512);
     private long waterfallGeneration = -1;
     private long lastWaterfallSampleIndex = -1;
+    private long lastQueuedWaterfallSampleIndex = -1;
+    private long lastQueuedGeneration = -1;
+    private CwDenoiseMode lastQueuedMode = CwDenoiseMode.Bypass;
+    private long staleDisplayFrames;
     private readonly CwDisplayFrameProcessor DisplayFrames;
 
     private readonly CwPileupLaneList PileupList = new();
@@ -61,8 +65,10 @@ namespace SkyRoof
 
     private readonly System.Windows.Forms.Timer UiTimer =
       new() { Interval = 250 };
+    // 33-ms target (~30.3 Hz): presentation is measured in OnPaint
+    // because the WinForms message loop may coalesce timer/paint events.
     private readonly System.Windows.Forms.Timer WaterfallTimer =
-      new() { Interval = 50 };
+      new() { Interval = 33 };
 
     private IReadOnlyList<CwSignalTrack> latestTracks =
       Array.Empty<CwSignalTrack>();
@@ -825,6 +831,19 @@ namespace SkyRoof
         $"DeepCW STFT cache: {status.DeepCwStftCacheHits} reused / " +
         $"{status.DeepCwStftCacheMisses} computed\n" +
         $"Mean ONNX Run: {status.MeanOnnxInferenceMs:F1} ms");
+
+      CwDisplayCadenceSnapshot paint = WaterfallView.PaintMetrics;
+      MacroToolTip.SetToolTip(
+        SpectrumStatusLabel,
+        $"CW waterfall (new frames actually painted): " +
+        $"{paint.ActualFps:F1} FPS\n" +
+        $"Painted interval p95: {paint.P95IntervalMs:F1} ms; " +
+        $"max: {paint.MaximumIntervalMs:F1} ms\n" +
+        $"Background display processing: " +
+        $"{DisplayFrames.LastProcessingMilliseconds:F1} ms last, " +
+        $"{DisplayFrames.MeanProcessingMilliseconds:F1} ms mean\n" +
+        $"Busy display ticks (no queue buildup): " +
+        $"{DisplayFrames.BusyTicks}; stale results: {staleDisplayFrames}");
 
       InstallModelBtn.Visible =
         status.ModelState ==
