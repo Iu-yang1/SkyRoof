@@ -377,7 +377,7 @@ namespace SkyRoof
       root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
       root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
       root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-      root.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
+      root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
       return root;
     }
 
@@ -514,6 +514,9 @@ namespace SkyRoof
       var group = new GroupBox
       {
         Dock = DockStyle.Fill,
+        AutoSize = true,
+        AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        MinimumSize = new Size(0, 145),
         Text = "CW TX — IC-9700 / SkyCAT",
         Margin = new Padding(0, 2, 0, 0),
         Padding = new Padding(5)
@@ -521,6 +524,8 @@ namespace SkyRoof
       var layout = new TableLayoutPanel
       {
         Dock = DockStyle.Fill,
+        AutoSize = true,
+        AutoSizeMode = AutoSizeMode.GrowAndShrink,
         ColumnCount = 1,
         RowCount = 4,
         Margin = new Padding(0)
