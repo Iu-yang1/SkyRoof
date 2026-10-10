@@ -20,20 +20,25 @@ namespace SkyRoof
     public bool ReceiveEnabled { get; set; } = false;
 
     [DisplayName("Audio Source")]
-    [DefaultValue(CwReceiveAudioSource.SDR)]
-    public CwReceiveAudioSource AudioSource { get; set; } =
-      CwReceiveAudioSource.SDR;
-
-    [DisplayName("WASAPI Capture Device")]
     [Description(
-      "Windows capture endpoint used when Audio Source is WasapiCapture.")]
+      "Radio USB / WASAPI Capture reads a Windows capture endpoint such as Microphone (USB Audio CODEC). RS-BA1 Loopback captures the Windows playback/render endpoint that RS-BA1 is playing into.")]
+    [DefaultValue(CwReceiveAudioSource.WasapiCapture)]
+    public CwReceiveAudioSource AudioSource { get; set; } =
+      CwReceiveAudioSource.WasapiCapture;
+
+    [DisplayName("Radio / USB Capture Device (RX)")]
+    [Description(
+      "Windows capture/input endpoint used for direct radio RX audio. For an IC-9700 USB connection this is normally Microphone (USB Audio CODEC), not the Speakers/USB Audio CODEC render endpoint.")]
     [TypeConverter(typeof(InputSoundcardNameConverter))]
     public string? CaptureDeviceId { get; set; } =
-      Soundcard.GetDefaultSoundcardId(DataFlow.Capture);
+      Soundcard.GetPreferredSoundcardId(
+        DataFlow.Capture,
+        "USB Audio CODEC",
+        "ICOM");
 
-    [DisplayName("RS-BA1 Loopback Device")]
+    [DisplayName("RS-BA1 Playback Endpoint (loopback)")]
     [Description(
-      "Windows render endpoint captured in loopback mode when Audio Source is RsBa1Loopback. Leave unselected to reuse the output endpoint selected for the RS-BA1 Remote Utility AF Gain session. Loopback captures the entire endpoint mix, so a dedicated endpoint is recommended.")]
+      "Windows playback/render endpoint captured in loopback mode. Select the speaker/virtual device that RS-BA1 Remote Utility is actually playing into (for example a remote-audio virtual endpoint). Do not select the radio's Microphone (USB Audio CODEC) capture endpoint here.")]
     [TypeConverter(typeof(OutputSoundcardNameConverter))]
     public string? RsBa1LoopbackDeviceId { get; set; }
 
