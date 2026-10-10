@@ -237,6 +237,87 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public async Task DisablingTransmitSetting_IsAuthoritativeEvenIfStopFails()
+    {
+      var factory =
+        new FakeFactory();
+
+      await using var controller =
+        new CwTransmitController(
+          EnabledSettings(),
+          factory);
+
+      controller.Arm();
+      await controller.SendAsync("CQ");
+
+      factory.Session.StopError =
+        new IOException(
+          "simulated STOP failure");
+
+      var disabled =
+        new CwConsoleSettings
+        {
+          TransmitEnabled = false,
+          CwKeyerPort = 4538
+        };
+
+      Func<Task> apply =
+        () =>
+          controller.ApplySettingsAsync(
+            disabled);
+
+      await apply.Should()
+        .ThrowAsync<IOException>();
+
+      controller.State.Armed
+        .Should().BeFalse();
+      controller.State.Sending
+        .Should().BeFalse();
+
+      Action rearm =
+        controller.Arm;
+      rearm.Should()
+        .Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task ChangingKeyerPort_StopsOldLeaseAndRequiresRearm()
+    {
+      var factory =
+        new FakeFactory();
+
+      await using var controller =
+        new CwTransmitController(
+          EnabledSettings(),
+          factory);
+
+      controller.Arm();
+      await controller.SendAsync("CQ");
+
+      await controller.ApplySettingsAsync(
+        new CwConsoleSettings
+        {
+          TransmitEnabled = true,
+          CwKeyerPort = 4608
+        });
+
+      controller.State.Armed
+        .Should().BeFalse();
+      controller.State.Sending
+        .Should().BeFalse();
+      factory.Session.StopCalls
+        .Should().Be(1);
+
+      controller.Arm();
+      await controller.SendAsync("TEST");
+
+      factory.Ports.Should()
+        .Equal(4538, 4608);
+
+      await controller.StopAsync();
+    }
+
+    [Fact]
     public async Task Dispose_StopsActiveMessageAndDisarms()
     {
       var factory =
@@ -284,13 +365,15 @@ namespace VE3NEA.Dsp.Tests
         private set;
       }
 
+      public List<int> Ports { get; } = [];
+
       public Task<ICwKeyerSession>
         ConnectAsync(
           int port,
           CancellationToken cancellationToken = default)
       {
         ConnectCalls++;
-        port.Should().Be(4538);
+        Ports.Add(port);
         return Task.FromResult<
           ICwKeyerSession>(Session);
       }
