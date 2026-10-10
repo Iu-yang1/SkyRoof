@@ -118,6 +118,88 @@ namespace VE3NEA.Dsp.Tests
         .Throw<InvalidOperationException>();
     }
 
+    [Fact]
+    public void SingleFrequencyUplink_UsesCorrectedBasePlusMinusFiveKhz()
+    {
+      var link = new RadioLink
+      {
+        TxCust =
+          new TransmitterCustomization
+          {
+            UplinkBaseOffset = 1200
+          }
+      };
+      var tx =
+        new SatnogsDbTransmitter
+        {
+          uplink_low = 435000000,
+          uplink_high = null
+        };
+
+      Action inside =
+        () =>
+          CwSatelliteTransmitInterlock
+            .ValidatePublishedUplinkPassband(
+              link,
+              tx,
+              435006199);
+
+      Action outside =
+        () =>
+          CwSatelliteTransmitInterlock
+            .ValidatePublishedUplinkPassband(
+              link,
+              tx,
+              435006201);
+
+      inside.Should().NotThrow();
+      outside.Should()
+        .Throw<InvalidOperationException>()
+        .WithMessage(
+          "*single-frequency uplink*");
+    }
+
+    [Fact]
+    public void LinearUplink_UsesBaseCorrectedPublishedPassband()
+    {
+      var link = new RadioLink
+      {
+        TxCust =
+          new TransmitterCustomization
+          {
+            UplinkBaseOffset = -500
+          }
+      };
+      var tx =
+        new SatnogsDbTransmitter
+        {
+          uplink_low = 145900000,
+          uplink_high = 146000000
+        };
+
+      Action inside =
+        () =>
+          CwSatelliteTransmitInterlock
+            .ValidatePublishedUplinkPassband(
+              link,
+              tx,
+              145899400);
+
+      Action outside =
+        () =>
+          CwSatelliteTransmitInterlock
+            .ValidatePublishedUplinkPassband(
+              link,
+              tx,
+              145899399);
+
+      inside.Should().NotThrow();
+      outside.Should()
+        .Throw<InvalidOperationException>()
+        .WithMessage(
+          "*outside the selected transmitter passband*");
+    }
+
     private static CwTransmitInterlockSnapshot
       Snapshot(
         string satelliteId = "SAT-1",
