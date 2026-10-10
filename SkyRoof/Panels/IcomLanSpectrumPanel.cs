@@ -237,7 +237,8 @@ namespace SkyRoof
 
           ConfigureSpanEdgeControl(
             mode is IcomScopeMode.Center or
-              IcomScopeMode.ScrollCenter);
+              IcomScopeMode.ScrollCenter,
+            operatorInitiated: true);
           UpdateScopeControlAvailability();
 
           if (!TryGetControlScope(
@@ -1323,8 +1324,10 @@ namespace SkyRoof
         UpdatingScopeControlUi = true;
         try
         {
-          ScopeModeBox.SelectedIndex = -1;
-          SpanEdgeBox.SelectedIndex = -1;
+          if (!ScopeModeBox.ContainsFocus)
+            ScopeModeBox.SelectedIndex = -1;
+          if (!SpanEdgeBox.ContainsFocus)
+            SpanEdgeBox.SelectedIndex = -1;
         }
         finally
         {
@@ -1349,9 +1352,10 @@ namespace SkyRoof
               out IcomScopeControlRequest pendingMode))
           displayedMode = (byte)pendingMode.Mode;
 
-        ScopeModeBox.SelectedIndex =
+        SetRadioSelectedIndex(
+          ScopeModeBox,
           displayedMode <= (byte)IcomScopeMode.ScrollFixed
-            ? displayedMode : -1;
+            ? displayedMode : -1);
 
         bool spanMode =
           displayedMode is
@@ -1372,7 +1376,7 @@ namespace SkyRoof
           int spanIndex = Array.IndexOf(
             ScopeSpanValues, actualOrRequestedSpan);
           if (spanIndex >= 0)
-            SpanEdgeBox.SelectedIndex = spanIndex;
+            SetRadioSelectedIndex(SpanEdgeBox, spanIndex);
         }
         else
         {
@@ -1383,28 +1387,29 @@ namespace SkyRoof
                 out IcomScopeControlRequest pendingEdge))
             actualOrRequestedEdge = pendingEdge.EdgeNumber;
 
-          SpanEdgeBox.SelectedIndex =
-            Math.Clamp(actualOrRequestedEdge, 1, 4) - 1;
+          SetRadioSelectedIndex(
+            SpanEdgeBox,
+            Math.Clamp(actualOrRequestedEdge, 1, 4) - 1);
         }
 
-        ReferenceBox.Value =
-          (decimal)NormalizeReferenceLevel(
-            ctx.Settings.IcomLanSpectrum
-              .ScopeReferenceLevelDb);
+        if (!ReferenceBox.ContainsFocus)
+        {
+          decimal desiredReference =
+            (decimal)NormalizeReferenceLevel(
+              ctx.Settings.IcomLanSpectrum.ScopeReferenceLevelDb);
+          if (ReferenceBox.Value != desiredReference)
+            ReferenceBox.Value = desiredReference;
+        }
 
-        SweepSpeedBox.SelectedIndex =
-          Math.Clamp(
-            (int)ctx.Settings.IcomLanSpectrum
-              .ScopeSweepSpeed,
-            0,
-            2);
+        SetRadioSelectedIndex(
+          SweepSpeedBox,
+          Math.Clamp((int)ctx.Settings.IcomLanSpectrum
+            .ScopeSweepSpeed, 0, 2));
 
-        VbwBox.SelectedIndex =
-          Math.Clamp(
-            (int)ctx.Settings.IcomLanSpectrum
-              .ScopeVbw,
-            0,
-            1);
+        SetRadioSelectedIndex(
+          VbwBox,
+          Math.Clamp((int)ctx.Settings.IcomLanSpectrum
+            .ScopeVbw, 0, 1));
 
       }
       finally
@@ -1443,9 +1448,28 @@ namespace SkyRoof
       UpdateScopeControlAvailability();
     }
 
-    private void ConfigureSpanEdgeControl(
-      bool showSpan)
+    private static void SetRadioSelectedIndex(
+      ComboBox box, int selectedIndex)
     {
+      // Native Win32 ComboBox selection can change as the user navigates
+      // the expanded list. Never overwrite it from an asynchronous
+      // 27 00 frame or stale register readback during active editing.
+      if (box.DroppedDown || box.ContainsFocus)
+        return;
+      if (box.SelectedIndex != selectedIndex)
+        box.SelectedIndex = selectedIndex;
+    }
+
+    private void ConfigureSpanEdgeControl(
+      bool showSpan,
+      bool operatorInitiated = false)
+    {
+      // A mode/edge readback must never clear the actual dropdown Items
+      // while the user is hovering/selecting one of its entries.
+      if (!operatorInitiated &&
+          (SpanEdgeBox.DroppedDown || ScopeModeBox.DroppedDown))
+        return;
+
       if (SpanEdgeBox.Items.Count > 0 &&
           SpanEdgeShowsSpan == showSpan)
         return;
