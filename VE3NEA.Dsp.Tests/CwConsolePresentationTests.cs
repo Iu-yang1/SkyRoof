@@ -254,6 +254,10 @@ namespace VE3NEA.Dsp.Tests
       CwPileupLaneList.CalculateRowHeight(viewportHeight)
         .Should().Be(expected);
       CwPileupLaneList.LaneCount.Should().Be(8);
+      if (viewportHeight >= CwPileupLaneList.LaneCount *
+          CwPileupLaneList.MinimumRowHeight)
+        (expected * CwPileupLaneList.LaneCount)
+          .Should().BeLessThanOrEqualTo(viewportHeight);
     }
 
     [Fact]
