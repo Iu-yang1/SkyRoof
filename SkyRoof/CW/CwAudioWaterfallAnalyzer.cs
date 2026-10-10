@@ -175,10 +175,6 @@ namespace SkyRoof.CW
         result);
     }
 
-    private static double Power(
-      Complex value) =>
-      value.Real * value.Real +
-      value.Imaginary *
-      value.Imaginary;
+    public void Dispose() => fft.Dispose();
   }
 }
