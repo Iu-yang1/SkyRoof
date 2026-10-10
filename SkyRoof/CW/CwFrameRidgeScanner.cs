@@ -136,6 +136,8 @@ namespace SkyRoof.CW
     private readonly int fastHop;
     private readonly int precisionWindow;
     private readonly int precisionHop;
+    private readonly double[] fastHann;
+    private readonly double[] precisionHann;
 
     private sealed class MutablePortion
     {
@@ -183,7 +185,18 @@ namespace SkyRoof.CW
         throw new ArgumentOutOfRangeException(
           nameof(options),
           "CW ridge STFT hop must not exceed its window.");
+
+      // Windows do not depend on PCM or Doppler; allocate them once rather
+      // than rebuilding cosine tables every 120-ms tracking cycle.
+      fastHann = CreateHann(fastWindow);
+      precisionHann = CreateHann(precisionWindow);
     }
+
+    private static double[] CreateHann(int count) =>
+      Enumerable.Range(0, count)
+        .Select(i => 0.5 - 0.5 *
+          Math.Cos(2 * Math.PI * i / count))
+        .ToArray();
 
     public CwFrameRidgeScannerOptions Options => options;
     public int FastWindowSamples => fastWindow;
@@ -293,10 +306,8 @@ namespace SkyRoof.CW
       int frameCount = 1 +
         (snapshot.Samples.Length - windowSamples) / hopSamples;
       var frames = new List<List<FramePeak>>(frameCount);
-      double[] window = Enumerable.Range(0, windowSamples)
-        .Select(i => 0.5 - 0.5 *
-          Math.Cos(2 * Math.PI * i / windowSamples))
-        .ToArray();
+      double[] window = windowSamples == fastWindow
+        ? fastHann : precisionHann;
       var fft = new Complex[windowSamples];
 
       double binHz =
@@ -336,22 +347,31 @@ namespace SkyRoof.CW
           (centerSample - snapshot.EndSampleIndex) /
           (double)options.SampleRate;
 
-        for (int i = 0; i < windowSamples; i++)
+        if (knownDopplerRateHzPerSecond == 0)
         {
-          long globalSample =
-            snapshotStartSample + offset + i;
-          double t =
-            (globalSample - snapshot.EndSampleIndex) /
-            (double)options.SampleRate;
-          double dechirpPhase =
-            Math.PI *
-            knownDopplerRateHzPerSecond *
-            t * t;
-          double value =
-            snapshot.Samples[offset + i] * window[i];
-          fft[i] = new Complex(
-            value * Math.Cos(-dechirpPhase),
-            value * Math.Sin(-dechirpPhase));
+          // Most terrestrial CW sessions have no de-chirp. Avoid two
+          // transcendental calls per FFT input sample in this hot path.
+          for (int i = 0; i < windowSamples; i++)
+            fft[i] = new Complex(
+              snapshot.Samples[offset + i] * window[i], 0);
+        }
+        else
+        {
+          for (int i = 0; i < windowSamples; i++)
+          {
+            long globalSample =
+              snapshotStartSample + offset + i;
+            double t =
+              (globalSample - snapshot.EndSampleIndex) /
+              (double)options.SampleRate;
+            double phase =
+              -Math.PI * knownDopplerRateHzPerSecond * t * t;
+            double value =
+              snapshot.Samples[offset + i] * window[i];
+            fft[i] = new Complex(
+              value * Math.Cos(phase),
+              value * Math.Sin(phase));
+          }
         }
 
         Fourier.Forward(fft, FourierOptions.Matlab);
