@@ -288,7 +288,7 @@ namespace SkyRoof.CW
       return catTxHz > 0;
     }
 
-    private static void
+    internal static void
       ValidatePublishedUplinkPassband(
         RadioLink link,
         SatnogsDbTransmitter tx,
