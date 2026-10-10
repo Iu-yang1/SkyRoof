@@ -274,6 +274,30 @@ namespace SkyRoof.CW
         Ingress.LastAcceptedUtc);
     }
 
+    internal static string SourceDisplayName(
+      CwReceiveAudioSource source) =>
+      source switch
+      {
+        CwReceiveAudioSource.SDR =>
+          "SDR audio",
+        CwReceiveAudioSource.WasapiCapture =>
+          "Radio USB / WASAPI capture",
+        CwReceiveAudioSource.RsBa1Loopback =>
+          "RS-BA1 speaker loopback",
+        _ => source.ToString()
+      };
+
+    internal static string SourceRoleHint(
+      CwReceiveAudioSource source) =>
+      source switch
+      {
+        CwReceiveAudioSource.WasapiCapture =>
+          "capture/input endpoint",
+        CwReceiveAudioSource.RsBa1Loopback =>
+          "playback/render endpoint",
+        _ => string.Empty
+      };
+
     internal static string? ResolveLoopbackDeviceId(
       CwConsoleSettings cw,
       AudioSettings audio)
