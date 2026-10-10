@@ -138,6 +138,32 @@ namespace SkyRoof.CW
     private readonly int precisionHop;
     private readonly double[] fastHann;
     private readonly double[] precisionHann;
+    // Cache only exact absolute sample windows at zero known Doppler rate.
+    // The frame grid is intentionally unchanged; no sample resynchronization.
+    private readonly Dictionary<long, FramePeak[]> fastCache = new();
+    private readonly Dictionary<long, FramePeak[]> precisionCache = new();
+    private readonly Queue<long> fastCacheOrder = new();
+    private readonly Queue<long> precisionCacheOrder = new();
+    private const int FastCacheCapacity = 640;
+    private const int PrecisionCacheCapacity = 128;
+    private long lastScanEndIndex = -1;
+    private long cacheHits;
+    private long cacheMisses;
+
+    internal long StftCacheHits => cacheHits;
+    internal long StftCacheMisses => cacheMisses;
+    internal int StftCacheEntries => fastCache.Count + precisionCache.Count;
+
+    public void ResetCache()
+    {
+      fastCache.Clear();
+      precisionCache.Clear();
+      fastCacheOrder.Clear();
+      precisionCacheOrder.Clear();
+      lastScanEndIndex = -1;
+      cacheHits = 0;
+      cacheMisses = 0;
+    }
 
     private sealed class MutablePortion
     {
@@ -220,6 +246,14 @@ namespace SkyRoof.CW
           Math.Abs(knownDopplerRateHzPerSecond) > 500)
         throw new ArgumentOutOfRangeException(
           nameof(knownDopplerRateHzPerSecond));
+
+      // A backwards audio position indicates a new timeline when used
+      // directly. The owning CwPileupFrontEnd additionally clears this
+      // cache on its explicit PCM reset, before counters can be reused.
+      if (lastScanEndIndex >= 0 &&
+          snapshot.EndSampleIndex < lastScanEndIndex)
+        ResetCache();
+      lastScanEndIndex = snapshot.EndSampleIndex;
 
       if (snapshot.Samples.Length < precisionWindow)
       {
@@ -337,6 +371,15 @@ namespace SkyRoof.CW
 
       long snapshotStartSample =
         snapshot.EndSampleIndex - snapshot.Samples.Length;
+      bool cacheEnabled = knownDopplerRateHzPerSecond == 0;
+      Dictionary<long, FramePeak[]> cache =
+        scale == CwRidgeObservationScale.Fast
+          ? fastCache : precisionCache;
+      Queue<long> cacheOrder =
+        scale == CwRidgeObservationScale.Fast
+          ? fastCacheOrder : precisionCacheOrder;
+      int capacity = scale == CwRidgeObservationScale.Fast
+        ? FastCacheCapacity : PrecisionCacheCapacity;
       var powers = new double[binCount];
       var noiseScratch = new double[binCount];
 
@@ -345,10 +388,20 @@ namespace SkyRoof.CW
            frameIndex++)
       {
         int offset = frameIndex * hopSamples;
+        long absoluteStart = snapshotStartSample + offset;
         long centerSample =
-          snapshotStartSample +
-          offset +
-          windowSamples / 2;
+          absoluteStart + windowSamples / 2;
+        if (cacheEnabled)
+        {
+          if (cache.TryGetValue(absoluteStart, out FramePeak[]? cached))
+          {
+            cacheHits++;
+            frames.Add(cached.Select(peak =>
+              peak with { FrameIndex = frameIndex }).ToList());
+            continue;
+          }
+          cacheMisses++;
+        }
         double centerTimeFromEnd =
           (centerSample - snapshot.EndSampleIndex) /
           (double)options.SampleRate;
@@ -510,10 +563,17 @@ namespace SkyRoof.CW
             break;
         }
 
-        frames.Add(
-          selected
-            .OrderBy(x => x.FrequencyHz)
-            .ToList());
+        List<FramePeak> ordered = selected
+          .OrderBy(x => x.FrequencyHz)
+          .ToList();
+        frames.Add(ordered);
+        if (cacheEnabled)
+        {
+          cache.Add(absoluteStart, ordered.ToArray());
+          cacheOrder.Enqueue(absoluteStart);
+          while (cacheOrder.Count > capacity)
+            cache.Remove(cacheOrder.Dequeue());
+        }
       }
 
       return frames;
