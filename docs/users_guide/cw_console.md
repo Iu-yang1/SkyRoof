@@ -2,8 +2,8 @@
 
 The CW Console is SkyRoof's receive-and-keyer panel for simultaneous CW signals.
 It combines multi-carrier tracking, DeepCW text decoding, a live AF waterfall,
-continuous per-lane transcripts, and an explicitly armed IC-9700 Command-17
-text keyer.
+continuous per-lane transcripts, and an operator-initiated IC-9700 Command-17
+text keyer with per-send preflight.
 
 The receive and transmit sides are intentionally separated. Decoded text never
 automatically selects a transmit frequency and is never transmitted
@@ -60,12 +60,14 @@ no longer part of the main window.
   spectrum frame adds a time column at the **right**; history scrolls **right
   to left** as in CW Skimmer. H/T lane markers are horizontal frequency lines.
   Drag the splitter to change the spectrum/message ratio.
-- **Right:** eight stable, scrollable Pileup cards. Each shows Lane ID,
-  AF Hz, SNR, state, committed text (C), and provisional text (P), along with
-  a Copy button. A card stays in its numbered slot through short QSB/Hold
+- **Right:** eight stable, vertically scrollable Pileup cards. Each shows
+  Lane ID, AF Hz, SNR and state above a **word-wrapped, selectable and
+  independently scrollable transcript**; provisional text is colored
+  separately. Long CW messages can be read without clipping, and each
+  card retains a Copy button. A card stays in its numbered slot through short QSB/Hold
   and frequency crossings. Click a card or waterfall marker to select the
   same lane in both places.
-- **Bottom:** permanent Arm TX, Send, prominent STOP, one-line keyer composer,
+- **Bottom:** Send (automatic preflight), prominent STOP, one-line keyer composer,
   verified WPM set/readback, and F1-F8 macro keys. Action/macro lines remain
   individually horizontally scrollable in narrower windows.
 
@@ -151,13 +153,11 @@ causes an automatic reply.
 
 ## Enable CW transmit
 
-CW transmit has two independent gates:
-
-1. **Settings > CW Console > Enable CW Transmit** must be enabled.
-2. The operator must press **Arm TX** in the CW Console.
-
-**Arm state is never persisted.** Every new application/panel session starts
-disarmed.
+CW transmit is permitted by **Settings > CW Console > Enable CW
+Transmit**. There is no longer an Arm TX button: clicking **Send** or
+**Shift+F1..F8** is the explicit operator action. The Console captures the
+current satellite/transmitter context and prepares the internal interlock
+immediately before that message. This state is never persisted.
 
 SkyRoof does not automatically:
 
@@ -166,9 +166,11 @@ SkyRoof does not automatically:
 - assert PTT for this keyer path;
 - choose a transmit frequency from a decoded receive lane.
 
-CW transmit capability is enabled by default, but this **does not key the radio automatically**. Every actual transmission still requires an explicit **Arm TX** action and must pass the CW/CW-R, Semi/Full BK-IN, SkyCAT lease and frequency-interlock checks.
+CW transmit capability is enabled by default, but this **does not key the
+radio automatically**. RX text never triggers TX. Every explicit Send must
+pass the CW/CW-R, Semi/Full BK-IN, SkyCAT lease and frequency-interlock checks.
 
-Before arming, configure the radio yourself for CW/CW-R and Semi/Full BK-IN.
+Before sending, configure the radio yourself for CW/CW-R and Semi/Full BK-IN.
 
 ## SkyCAT keyer connection
 
@@ -184,8 +186,8 @@ issues Command 17 `FF` STOP when the keyer client disappears.
 The transmit area provides a **6-48 WPM** control. **Set WPM** sends SkyCAT
 `SETWPM`, which writes IC-9700 CI-V `14 0C` and only succeeds after an
 immediate matching hardware readback. While TX is armed but idle, the Console
-refreshes `STATUS` at about 1 Hz, so front-panel KEY SPEED changes appear
-without re-arming.
+refreshes `STATUS` at about 1 Hz while internally prepared and idle;
+front-panel KEY SPEED changes appear in the Console after a send.
 
 The CW Console displays the verified actual key-speed-derived WPM and the
 watchdog countdown while a message is active.
@@ -194,7 +196,7 @@ watchdog countdown while a message is active.
 
 Satellite CW sends add another safety layer.
 
-When TX is armed, SkyRoof captures the selected satellite/transmitter,
+At the explicit send action, SkyRoof captures the selected satellite/transmitter,
 no-Doppler uplink position, uplink mode, and transverter mapping. Immediately
 before a satellite message:
 
@@ -220,8 +222,8 @@ regulations and privileges.
 
 The composer accepts at most 30 Command-17 characters.
 
-Press **Send** only after TX is armed. SkyRoof performs the same radio
-preflight immediately before every message. The message lease remains open
+Press **Send** to prepare the interlock and run the complete radio
+preflight immediately before each message. The message lease remains open
 until STOP or watchdog completion.
 
 The watchdog estimates Morse duration from the IC-9700 KEYRAW key-speed value,
@@ -233,11 +235,9 @@ used whenever the transmit state is uncertain.
 
 ## F1-F8 message macros
 
-Configure presets under:
-
-**Settings > CW Console > CW Message Macros**
-
-The defaults are empty.
+**Right-click any F1-F8 button** to edit its preset in place and save it
+immediately to Settings.json. You can also edit presets under
+**Settings > CW Console > CW Message Macros**. The defaults are empty.
 
 - **F1 ... F8** or clicking a macro button: load the preset into the composer
   only.
@@ -248,7 +248,7 @@ The defaults are empty.
 Keyboard auto-repeat cannot queue multiple macro sends while the first
 asynchronous TX preflight is still running.
 
-Macros do not bypass Enable TX, Arm, CW/BK-IN checks, the satellite TXHZ/SENDHZ
+Macros do not bypass Enable TX, CW/BK-IN checks, the satellite TXHZ/SENDHZ
 guard, the lease, watchdog, STOP, or disconnect fail-safe.
 
 There is no macro queue and no auto-reply.
@@ -285,8 +285,7 @@ Recommended sequence:
 3. enable Semi/Full BK-IN yourself;
 4. verify the expected satellite/transverter TX VFO shown in the Console;
 5. enable **CW Transmit** in Settings;
-6. Arm TX;
-7. send a very short test message;
+6. press Send for a very short test message (automatic preflight);
 8. press STOP and verify immediate keying termination;
 9. verify Doppler catch-up after the lease releases;
 10. only then proceed to an on-air test that is permitted by your licence and
@@ -320,7 +319,7 @@ Look at the H/T identity, Ambiguous state and ±2 sigma band. Strong overlap,
 merged peaks or very small carrier spacing can temporarily increase identity
 uncertainty.
 
-### Arm fails
+### Send preflight fails
 
 Verify all of the following:
 
@@ -336,3 +335,9 @@ Verify all of the following:
 Do not increase the tolerance merely to silence the error. Verify the selected
 satellite/transmitter, base correction, transverter LO mapping, operator
 no-Doppler tuning position, and the actual radio TX VFO first.
+
+## CW receive CPU performance notes
+
+This version caches ridge-scanner Hann windows and skips per-sample trigonometric de-chirping when the known Doppler rate is zero. The display waterfall remains approximately 20 Hz, while its 8192-point spectrum trace refreshes every fourth display frame. The single DeepCW ONNX Runtime session uses bounded CPU intra-op parallelism to reduce contention with the 120-ms tracker loop. Decode windows, hops, physical-evidence gates, tracker covariance and satellite TX interlocks remain unchanged.
+
+For a meaningful before/after comparison, use the same PCM recording, lane count and display-cleanup mode, then compare total process CPU, completed/skipped inference windows and transcript accuracy. The Windows CPU percentages of an i5-10400 and an i7-14650HX are not directly comparable as per-inference cost metrics; real hardware benchmarks are still required.
