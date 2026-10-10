@@ -19,14 +19,15 @@ namespace SkyRoof
   }
 
   /// <summary>
-  /// Small receive-only AF waterfall. Spectrum rows are supplied by the
-  /// display analyzer; lane overlays come from immutable tracker snapshots.
+  /// CW Skimmer-style horizontal-time waterfall. Time advances leftward as
+  /// new frames enter on the right, while frequency is vertical on the left.
+  /// The display-only viewport never changes decoder/receive input.
   /// </summary>
   public sealed class CwAudioWaterfallView : Control
   {
-    private const int ScaleHeight = 26;
-    private const int SpectrumHeight = 44;
-    private const int HistoryRows = 180;
+    private const int FrequencyScaleWidth = 57;
+    private const int SpectrumTraceWidth = 51;
+    private const int HistoryColumns = 512;
     private const double DisplayRangeDb = 30.0;
 
     private static readonly Color SkimmerBackground =
@@ -43,7 +44,7 @@ namespace SkyRoof
       Color.FromArgb(65, 255, 112);
 
     private readonly Bitmap waterfall;
-    private int writeRow;
+    private int nextWriteColumn;
     private bool hasRows;
     private float displayFloorDb = float.NaN;
     private float spectrumFloorDb = float.NaN;
@@ -53,7 +54,7 @@ namespace SkyRoof
     private double viewportStartFraction;
     private double viewportZoom = 1.0;
 
-    // Horizontal pan/zoom changes the display only; the detector and the
+    // Vertical AF pan/zoom changes the display only; the detector and the
     // complete wideband inference still receive the full original AF span.
     public double ViewportStartFraction => viewportStartFraction;
     public double ViewportZoom => viewportZoom;
@@ -127,10 +128,12 @@ namespace SkyRoof
       DoubleBuffered = true;
       TabStop = true;
       MinimumSize = new Size(250, 130);
+      // X is history/time, Y is frequency. The low AF bins occupy the
+      // bottom of the bitmap; the most recent column is drawn on the right.
       waterfall =
         new Bitmap(
+          HistoryColumns,
           spectrumBins,
-          HistoryRows,
           PixelFormat.Format32bppArgb);
 
       Clear();
@@ -145,7 +148,7 @@ namespace SkyRoof
           waterfall);
       g.Clear(
         SkimmerBackground);
-      writeRow = 0;
+      nextWriteColumn = 0;
       hasRows = false;
       displayFloorDb = float.NaN;
       spectrumFloorDb = float.NaN;
@@ -157,7 +160,7 @@ namespace SkyRoof
       CwAudioSpectrumFrame frame)
     {
       if (frame.PowerDb.Length !=
-          waterfall.Width)
+          waterfall.Height)
         throw new ArgumentException(
           "Spectrum width changed.",
           nameof(frame));
@@ -184,7 +187,7 @@ namespace SkyRoof
       CwAudioSpectrumFrame frame)
     {
       if (frame.PowerDb.Length !=
-          waterfall.Width)
+          waterfall.Height)
         throw new ArgumentException(
           "Waterfall spectrum width changed.",
           nameof(frame));
@@ -209,32 +212,21 @@ namespace SkyRoof
       double floor =
         displayFloorDb + 1.0;
 
-      writeRow =
-        (writeRow - 1 +
-         HistoryRows) %
-        HistoryRows;
-
-      for (int x = 0;
-           x < waterfall.Width;
-           x++)
+      for (int bin = 0; bin < waterfall.Height; bin++)
       {
-        double level =
-          (frame.PowerDb[x] -
-           floor) /
-          DisplayRangeDb;
-        level =
-          Math.Pow(
-            Math.Clamp(
-              level,
-              0,
-              1),
-            0.78);
-
+        double level = Math.Pow(
+          Math.Clamp(
+            (frame.PowerDb[bin] - floor) / DisplayRangeDb,
+            0, 1),
+          0.78);
         waterfall.SetPixel(
-          x,
-          writeRow,
+          nextWriteColumn,
+          waterfall.Height - 1 - bin,
           HeatColor(level));
       }
+
+      nextWriteColumn =
+        (nextWriteColumn + 1) % HistoryColumns;
 
       hasRows = true;
       Invalidate();
@@ -258,518 +250,291 @@ namespace SkyRoof
       Invalidate();
     }
 
-    protected override void OnPaint(
-      PaintEventArgs e)
+    // Frequency increases upward; chronological history scrolls toward
+    // the left. These helpers are shared by drawing and hit-testing.
+    internal static float FrequencyToVerticalPixel(
+      double hz, double lowHz, double highHz, int height)
+    {
+      double proportion =
+        (hz - lowHz) / Math.Max(highHz - lowHz, 1e-9);
+      return (float)((1 - Math.Clamp(proportion, 0, 1)) *
+        Math.Max(1, height - 1));
+    }
+
+    internal static double VerticalPixelToFrequency(
+      int y, double lowHz, double highHz, int height)
+    {
+      double proportion = 1 - Math.Clamp(
+        y / (double)Math.Max(1, height - 1), 0, 1);
+      return lowHz + proportion * (highHz - lowHz);
+    }
+
+    private Rectangle WaterfallBounds =>
+      new(
+        FrequencyScaleWidth + SpectrumTraceWidth,
+        0,
+        Math.Max(1, ClientSize.Width -
+          FrequencyScaleWidth - SpectrumTraceWidth),
+        Math.Max(1, ClientSize.Height));
+
+    private float FrequencyToY(double frequencyHz) =>
+      FrequencyToVerticalPixel(
+        frequencyHz, VisibleMinimumHz, VisibleMaximumHz,
+        ClientSize.Height);
+
+    private double YToFrequency(int y) =>
+      VerticalPixelToFrequency(
+        y, VisibleMinimumHz, VisibleMaximumHz,
+        ClientSize.Height);
+
+    protected override void OnPaint(PaintEventArgs e)
     {
       base.OnPaint(e);
+      PaintContents(e.Graphics);
+    }
 
-      Rectangle scale =
-        new(
-          0,
-          0,
-          ClientSize.Width,
-          ScaleHeight);
-      Rectangle spectrum =
-        new(
-          0,
-          ScaleHeight,
-          ClientSize.Width,
-          Math.Min(
-            SpectrumHeight,
-            Math.Max(
-              1,
-              ClientSize.Height -
-              ScaleHeight)));
-      Rectangle waterfallBody =
-        new(
-          0,
-          spectrum.Bottom,
-          ClientSize.Width,
-          Math.Max(
-            1,
-            ClientSize.Height -
-            spectrum.Bottom));
-      Rectangle plot =
-        new(
-          0,
-          ScaleHeight,
-          ClientSize.Width,
-          Math.Max(
-            1,
-            ClientSize.Height -
-            ScaleHeight));
+    // Shared by the real Control paint path and raster tests, without
+    // relying on Control.DrawToBitmap/WM_PRINTCLIENT semantics.
+    internal void PaintContents(Graphics graphics)
+    {
+      Rectangle scale = new(
+        0, 0, FrequencyScaleWidth,
+        Math.Max(1, ClientSize.Height));
+      Rectangle spectrum = new(
+        scale.Right, 0, SpectrumTraceWidth,
+        Math.Max(1, ClientSize.Height));
+      Rectangle body = WaterfallBounds;
 
       using (var scaleBrush =
-        new SolidBrush(
-          SkimmerScaleBackground))
-        e.Graphics.FillRectangle(
-          scaleBrush,
-          scale);
+        new SolidBrush(SkimmerScaleBackground))
+        graphics.FillRectangle(scaleBrush, scale);
       using (var background =
-        new SolidBrush(
-          SkimmerBackground))
-      {
-        e.Graphics.FillRectangle(
-          background,
-          plot);
-      }
-
-      DrawScale(
-        e.Graphics,
-        scale,
-        plot);
-      DrawSpectrumTrace(
-        e.Graphics,
-        spectrum);
+        new SolidBrush(SkimmerBackground))
+        graphics.FillRectangle(background, spectrum);
+      using (var background =
+        new SolidBrush(SkimmerBackground))
+        graphics.FillRectangle(background, body);
 
       if (hasRows)
-        DrawWaterfall(
-          e.Graphics,
-          waterfallBody);
-
-      DrawTrackMarkers(
-        e.Graphics,
-        plot);
+        DrawWaterfall(graphics, body);
+      DrawFrequencyScale(graphics, scale, spectrum, body);
+      DrawSpectrumTrace(graphics, spectrum);
+      DrawTrackMarkers(graphics, body);
     }
 
     private void DrawSpectrumTrace(
-      Graphics g,
-      Rectangle body)
+      Graphics g, Rectangle spectrum)
     {
       if (latestPowerDb.Length < 2 ||
           !float.IsFinite(spectrumFloorDb))
         return;
 
-      using var pen = new Pen(SkimmerTrace, 1.25f);
+      using var pen = new Pen(SkimmerTrace, 1.2f);
+      var points = new PointF[latestPowerDb.Length];
       double floor = spectrumFloorDb + 1.0;
-      int first = Math.Clamp(
-        (int)Math.Floor(
-          (VisibleMinimumHz - minFrequencyHz) /
-          Math.Max(1e-9, maxFrequencyHz - minFrequencyHz) *
-          (latestPowerDb.Length - 1)),
-        0, latestPowerDb.Length - 2);
-      int last = Math.Clamp(
-        (int)Math.Ceiling(
-          (VisibleMaximumHz - minFrequencyHz) /
-          Math.Max(1e-9, maxFrequencyHz - minFrequencyHz) *
-          (latestPowerDb.Length - 1)),
-        first + 1, latestPowerDb.Length - 1);
-      var points = new PointF[last - first + 1];
-
-      for (int i = first; i <= last; i++)
+      for (int bin = 0; bin < latestPowerDb.Length; bin++)
       {
-        double level = Math.Clamp(
-          (latestPowerDb[i] - floor) / DisplayRangeDb,
-          0, 1);
-        double frequency = minFrequencyHz +
-          i * (maxFrequencyHz - minFrequencyHz) /
+        double hz = minFrequencyHz +
+          bin * (maxFrequencyHz - minFrequencyHz) /
           (latestPowerDb.Length - 1);
-        float x = FrequencyToX(frequency);
-        float y = body.Bottom - 2 -
-          (float)(level * Math.Max(1, body.Height - 5));
-        points[i - first] = new PointF(x, y);
+        double relative = Math.Clamp(
+          (latestPowerDb[bin] - floor) / DisplayRangeDb,
+          0, 1);
+        float x = spectrum.Right - 2 -
+          (float)(relative * Math.Max(1, spectrum.Width - 5));
+        points[bin] = new PointF(x, FrequencyToY(hz));
       }
-      g.SetClip(body);
+
+      GraphicsState saved = g.Save();
+      g.SetClip(spectrum);
       g.DrawLines(pen, points);
-      g.ResetClip();
+      g.Restore(saved);
     }
 
-    private void DrawWaterfall(
-      Graphics g,
-      Rectangle body)
+    private void DrawWaterfall(Graphics g, Rectangle body)
     {
-      g.InterpolationMode =
-        InterpolationMode.NearestNeighbor;
-      g.PixelOffsetMode =
-        PixelOffsetMode.Half;
+      // The ring is stored as columns: each new 512-bin FFT is one time
+      // column. Split at nextWriteColumn (oldest) to place the newest
+      // sample at the right edge with no image rotation or transposition
+      // during paint. A blank ring shows dark space to the left of new data.
+      int firstCount = HistoryColumns - nextWriteColumn;
+      int secondCount = nextWriteColumn;
 
-      // New rows are written backwards. writeRow therefore always points
-      // at the newest row and the chronological ring starts there.
-      int sourceLeft = Math.Clamp(
+      double fullSpan = Math.Max(1e-9,
+        maxFrequencyHz - minFrequencyHz);
+      int top = Math.Clamp(
         (int)Math.Floor(
-          (VisibleMinimumHz - minFrequencyHz) /
-          Math.Max(1e-9, maxFrequencyHz - minFrequencyHz) *
-          waterfall.Width),
-        0, waterfall.Width - 1);
-      int sourceRight = Math.Clamp(
+          (maxFrequencyHz - VisibleMaximumHz) / fullSpan *
+          waterfall.Height), 0, waterfall.Height - 1);
+      int bottom = Math.Clamp(
         (int)Math.Ceiling(
-          (VisibleMaximumHz - minFrequencyHz) /
-          Math.Max(1e-9, maxFrequencyHz - minFrequencyHz) *
-          waterfall.Width),
-        sourceLeft + 1, waterfall.Width);
-      int sourceWidth = sourceRight - sourceLeft;
+          (maxFrequencyHz - VisibleMinimumHz) / fullSpan *
+          waterfall.Height), top + 1, waterfall.Height);
+      int sourceHeight = bottom - top;
 
-      int firstCount =
-        HistoryRows - writeRow;
-      int secondCount =
-        writeRow;
-
+      GraphicsState saved = g.Save();
+      g.SetClip(body);
+      g.InterpolationMode = InterpolationMode.NearestNeighbor;
+      g.PixelOffsetMode = PixelOffsetMode.Half;
+      int leftWidth = (int)Math.Round(
+        firstCount * body.Width / (double)HistoryColumns);
       if (firstCount > 0)
       {
-        Rectangle source =
-          new(
-            sourceLeft,
-            writeRow,
-            sourceWidth,
-            firstCount);
-        Rectangle dest =
-          new(
-            body.Left,
-            body.Top,
-            body.Width,
-            (int)Math.Ceiling(
-              firstCount *
-              body.Height /
-              (double)HistoryRows));
         g.DrawImage(
           waterfall,
-          dest,
-          source,
+          new Rectangle(body.Left, body.Top,
+            Math.Max(1, leftWidth), body.Height),
+          new Rectangle(nextWriteColumn, top,
+            firstCount, sourceHeight),
           GraphicsUnit.Pixel);
       }
-
       if (secondCount > 0)
       {
-        Rectangle source =
-          new(
-            sourceLeft,
-            0,
-            sourceWidth,
-            secondCount);
-        int top =
-          body.Top +
-          (int)Math.Round(
-            firstCount *
-            body.Height /
-            (double)HistoryRows);
-        Rectangle dest =
-          new(
-            body.Left,
-            top,
-            body.Width,
-            body.Bottom - top);
         g.DrawImage(
           waterfall,
-          dest,
-          source,
+          new Rectangle(body.Left + leftWidth, body.Top,
+            Math.Max(1, body.Width - leftWidth), body.Height),
+          new Rectangle(0, top, secondCount, sourceHeight),
           GraphicsUnit.Pixel);
       }
+      g.Restore(saved);
     }
 
-    private void DrawScale(
-      Graphics g,
-      Rectangle scale,
-      Rectangle plot)
+    private void DrawFrequencyScale(
+      Graphics g, Rectangle scale, Rectangle spectrum,
+      Rectangle body)
     {
-      int stepHz = viewportZoom >= 4.0 ? 50
-        : viewportZoom >= 2.0 ? 100 : 250;
-      int first =
-        (int)Math.Ceiling(
-          VisibleMinimumHz /
-          stepHz) *
-        stepHz;
-
-      using var gridPen =
-        new Pen(
-          SkimmerGrid);
-      using var textBrush =
-        new SolidBrush(
-          Color.Gainsboro);
-
-      for (int hz = first;
-           hz <= VisibleMaximumHz;
-           hz += stepHz)
+      int stepHz = viewportZoom >= 4 ? 50 :
+        viewportZoom >= 2 ? 100 : 250;
+      int first = (int)Math.Ceiling(
+        VisibleMinimumHz / stepHz) * stepHz;
+      using var pen = new Pen(SkimmerGrid);
+      using var brush = new SolidBrush(Color.Gainsboro);
+      for (int hz = first; hz <= VisibleMaximumHz; hz += stepHz)
       {
-        float x =
-          FrequencyToX(hz);
-        g.DrawLine(
-          gridPen,
-          x,
-          scale.Bottom - 8,
-          x,
-          plot.Bottom);
-
-        string label =
-          hz.ToString();
-        SizeF size =
-          g.MeasureString(
-            label,
-            Font);
-        g.DrawString(
-          label,
-          Font,
-          textBrush,
-          x - size.Width / 2,
-          2);
+        float y = FrequencyToY(hz);
+        g.DrawLine(pen, scale.Right - 5, y, body.Right, y);
+        string caption = hz.ToString();
+        SizeF size = g.MeasureString(caption, Font);
+        float labelY = Math.Clamp(
+          y - size.Height / 2, scale.Top,
+          Math.Max(scale.Top, scale.Bottom - size.Height));
+        g.DrawString(caption, Font, brush,
+          scale.Right - size.Width - 6, labelY);
       }
+      using var border = new Pen(Color.FromArgb(90, 145, 167));
+      g.DrawLine(border, scale.Right, 0,
+        scale.Right, ClientSize.Height);
+      g.DrawLine(border, spectrum.Right, 0,
+        spectrum.Right, ClientSize.Height);
     }
 
     private void DrawTrackMarkers(
-      Graphics g,
-      Rectangle body)
+      Graphics g, Rectangle body)
     {
-      using var normalPen =
-        new Pen(
-          Color.FromArgb(
-            185,
-            SkimmerLane),
-          1.25f);
-      using var selectedPen =
-        new Pen(
-          SkimmerPeak,
-          2.4f);
-      using var ambiguousPen =
-        new Pen(
-          Color.Orange,
-          1.35f)
-        {
-          DashStyle =
-            DashStyle.Dash
-        };
-      using var holdPen =
-        new Pen(
-          Color.FromArgb(
-            145,
-            Color.LightGray),
-          1.0f)
-        {
-          DashStyle =
-            DashStyle.Dot
-        };
-
-      float[] labelRight =
-        { float.NegativeInfinity,
-          float.NegativeInfinity,
+      using var normalPen = new Pen(
+        Color.FromArgb(185, SkimmerLane), 1.25f);
+      using var selectedPen = new Pen(SkimmerPeak, 2.4f);
+      using var ambiguousPen = new Pen(Color.Orange, 1.35f)
+      { DashStyle = DashStyle.Dash };
+      using var holdPen = new Pen(
+        Color.FromArgb(145, Color.LightGray), 1.0f)
+      { DashStyle = DashStyle.Dot };
+      var labelEnds = new float[]
+        { float.NegativeInfinity, float.NegativeInfinity,
           float.NegativeInfinity };
 
-      foreach (CwSignalTrack track
-        in tracks)
+      GraphicsState saved = g.Save();
+      g.SetClip(body);
+      foreach (CwSignalTrack track in tracks)
       {
-        if (track.FrequencyHz <
-              VisibleMinimumHz ||
-            track.FrequencyHz >
-              VisibleMaximumHz)
+        if (track.FrequencyHz < VisibleMinimumHz ||
+            track.FrequencyHz > VisibleMaximumHz)
           continue;
 
-        CwConsoleLaneIdentity identity =
-          CwConsolePresentation.Identity(
-            track);
-        bool selected =
-          selectedIdentity.HasValue &&
-          identity ==
-            selectedIdentity.Value;
+        CwConsoleLaneIdentity id =
+          CwConsolePresentation.Identity(track);
+        bool selected = selectedIdentity.HasValue &&
+          id == selectedIdentity.Value;
+        Pen pen = selected ? selectedPen :
+          track.Ambiguous ? ambiguousPen :
+          !track.Active ? holdPen : normalPen;
 
-        Pen pen =
-          selected
-            ? selectedPen
-            : track.Ambiguous
-              ? ambiguousPen
-              : !track.Active
-                ? holdPen
-                : normalPen;
-
-        float x =
-          FrequencyToX(
-            track.FrequencyHz);
-
-        // Keep the full-height uncertainty band only for the selected lane.
-        // Drawing every ±2σ band was obscuring the actual CW spectrum.
-        if (selected &&
-            track.FrequencySigmaHz > 0 &&
-            double.IsFinite(
-              track.FrequencySigmaHz))
+        float y = FrequencyToY(track.FrequencyHz);
+        if (selected && track.FrequencySigmaHz > 0 &&
+            double.IsFinite(track.FrequencySigmaHz))
         {
-          float lowX =
-            FrequencyToX(
-              track.FrequencyHz -
-              2 * track.FrequencySigmaHz);
-          float highX =
-            FrequencyToX(
-              track.FrequencyHz +
-              2 * track.FrequencySigmaHz);
-          float left =
-            Math.Min(lowX, highX);
-          float width =
-            Math.Max(
-              1,
-              Math.Abs(
-                highX - lowX));
-          using var sigmaBrush =
-            new SolidBrush(
-              Color.FromArgb(
-                34,
-                SkimmerPeak));
-          g.FillRectangle(
-            sigmaBrush,
-            left,
-            body.Top,
-            width,
-            body.Height);
+          float first = FrequencyToY(
+            track.FrequencyHz + 2 * track.FrequencySigmaHz);
+          float last = FrequencyToY(
+            track.FrequencyHz - 2 * track.FrequencySigmaHz);
+          using var fill = new SolidBrush(
+            Color.FromArgb(34, SkimmerPeak));
+          g.FillRectangle(fill, body.Left, Math.Min(first, last),
+            body.Width, Math.Max(1, Math.Abs(last - first)));
         }
 
-        g.DrawLine(
-          pen,
-          x,
-          body.Top,
-          x,
-          body.Bottom);
-
-        string lane =
-          CwConsolePresentation.LaneLabel(
-            track);
-        SizeF size =
-          g.MeasureString(
-            lane,
-            Font);
-
-        int labelRow = 0;
-        for (int row = 0;
-             row < labelRight.Length;
-             row++)
+        g.DrawLine(pen, body.Left, y, body.Right, y);
+        string label = CwConsolePresentation.LaneLabel(track);
+        SizeF textSize = g.MeasureString(label, Font);
+        int col = 0;
+        for (int i = 0; i < labelEnds.Length; i++)
         {
-          if (x > labelRight[row] + 5)
+          if (y > labelEnds[i] + 3)
           {
-            labelRow = row;
+            col = i;
             break;
           }
-          labelRow = row;
+          col = i;
         }
 
-        float labelX =
-          Math.Clamp(
-            x + 3,
-            body.Left + 1,
-            Math.Max(
-              body.Left + 1,
-              body.Right -
-              size.Width - 7));
-        float labelY =
-          body.Top + 2 +
-          labelRow *
-          (size.Height + 2);
-        RectangleF labelRect =
-          new(
-            labelX,
-            labelY,
-            size.Width + 5,
-            size.Height + 2);
-        labelRight[labelRow] =
-          labelRect.Right;
-
-        using var backBrush =
-          new SolidBrush(
-            Color.FromArgb(
-              220,
-              SkimmerBackground));
-        using var textBrush =
-          new SolidBrush(
-            pen.Color);
-        g.FillRectangle(
-          backBrush,
-          labelRect);
-        g.DrawString(
-          lane,
-          Font,
-          textBrush,
-          labelRect.Left + 2,
-          labelRect.Top + 1);
+        float labelX = body.Left + 5 +
+          col * (textSize.Width + 9);
+        float labelY = Math.Clamp(y - textSize.Height - 2,
+          body.Top, Math.Max(body.Top,
+          body.Bottom - textSize.Height - 4));
+        labelEnds[col] = labelY + textSize.Height;
+        using var background = new SolidBrush(
+          Color.FromArgb(220, SkimmerBackground));
+        using var foreground = new SolidBrush(pen.Color);
+        g.FillRectangle(background, labelX, labelY,
+          textSize.Width + 5, textSize.Height + 2);
+        g.DrawString(label, Font, foreground,
+          labelX + 2, labelY + 1);
       }
+      g.Restore(saved);
     }
 
     private void CwAudioWaterfallView_MouseClick(
-      object? sender,
-      MouseEventArgs e)
+      object? sender, MouseEventArgs e)
     {
-      if (e.Button !=
-          MouseButtons.Left ||
-          e.Y < ScaleHeight ||
-          tracks.Count == 0)
+      if (e.Button != MouseButtons.Left ||
+          e.X < WaterfallBounds.Left || tracks.Count == 0)
         return;
 
-      double frequency =
-        XToFrequency(e.X);
-
-      CwSignalTrack[] visible =
-        tracks
-          .Where(x =>
-            x.FrequencyHz >=
-              VisibleMinimumHz &&
-            x.FrequencyHz <=
-              VisibleMaximumHz)
-          .OrderBy(x =>
-            Math.Abs(
-              x.FrequencyHz -
-              frequency))
-          .ToArray();
-
-      if (visible.Length == 0)
+      double frequency = YToFrequency(e.Y);
+      CwSignalTrack? nearest = tracks
+        .Where(track =>
+          track.FrequencyHz >= VisibleMinimumHz &&
+          track.FrequencyHz <= VisibleMaximumHz)
+        .OrderBy(track =>
+          Math.Abs(track.FrequencyHz - frequency))
+        .Select(track => (CwSignalTrack?)track)
+        .FirstOrDefault();
+      if (nearest is not CwSignalTrack matched)
         return;
-
-      CwSignalTrack nearest =
-        visible[0];
 
       double hzPerPixel =
-        (VisibleMaximumHz -
-         VisibleMinimumHz) /
-        Math.Max(
-          1,
-          ClientSize.Width);
-      double pickGateHz =
-        Math.Max(
-          35,
-          hzPerPixel * 18);
-
-      if (Math.Abs(
-            nearest.FrequencyHz -
-            frequency) >
-          pickGateHz)
+        (VisibleMaximumHz - VisibleMinimumHz) /
+        Math.Max(1, ClientSize.Height);
+      double gate = Math.Max(35, hzPerPixel * 18);
+      if (Math.Abs(matched.FrequencyHz - frequency) > gate)
         return;
 
-      LaneClicked?.Invoke(
-        this,
+      LaneClicked?.Invoke(this,
         new CwWaterfallLaneClickedEventArgs(
-          CwConsolePresentation.Identity(
-            nearest),
-          nearest.FrequencyHz));
-    }
-
-    private float FrequencyToX(
-      double frequencyHz)
-    {
-      double fraction =
-        (frequencyHz -
-         VisibleMinimumHz) /
-        Math.Max(
-          VisibleMaximumHz -
-          VisibleMinimumHz,
-          1e-9);
-
-      return (float)(
-        Math.Clamp(
-          fraction,
-          0,
-          1) *
-        Math.Max(
-          1,
-          ClientSize.Width - 1));
-    }
-
-    private double XToFrequency(
-      int x)
-    {
-      double fraction =
-        Math.Clamp(
-          x /
-          (double)Math.Max(
-            1,
-            ClientSize.Width - 1),
-          0,
-          1);
-
-      return VisibleMinimumHz +
-        fraction *
-        (VisibleMaximumHz -
-         VisibleMinimumHz);
+          CwConsolePresentation.Identity(matched),
+          matched.FrequencyHz));
     }
 
     private static float Percentile(

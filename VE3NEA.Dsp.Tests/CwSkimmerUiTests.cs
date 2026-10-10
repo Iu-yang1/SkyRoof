@@ -42,6 +42,83 @@ namespace VE3NEA.Dsp.Tests
       view.VisibleMaximumHz.Should().Be(2000);
     }
 
+    [Theory]
+    [InlineData(100.0, 400.0)]
+    [InlineData(1050.0, 200.0)]
+    [InlineData(2000.0, 0.0)]
+    public void VerticalFrequencyRuler_HighAFAboveLowAF(
+      double hz, double expectedPixel)
+    {
+      float y = CwAudioWaterfallView.FrequencyToVerticalPixel(
+        hz, 100, 2000, 401);
+      y.Should().BeApproximately((float)expectedPixel, 0.001f);
+      CwAudioWaterfallView.VerticalPixelToFrequency(
+        (int)y, 100, 2000, 401)
+        .Should().BeApproximately(hz, 0.001);
+    }
+
+    [Fact]
+    public void HorizontalWaterfall_NewFramesArriveOnRight()
+    {
+      using var view = new CwAudioWaterfallView(512)
+      {
+        Size = new System.Drawing.Size(740, 250)
+      };
+      var power = Enumerable.Repeat(-100f, 512).ToArray();
+      // A 2048-point Hann FFT has a multi-bin main lobe when interpolated
+      // onto the 512-bin display grid. A one-bin impulse can disappear when
+      // a 512-pixel texture is minified to a 250-pixel WinForms view.
+      for (int bin = 185; bin <= 191; bin++)
+        power[bin] = -10f; // ~799 Hz, away from the 750-Hz grid
+      var frame = new CwAudioSpectrumFrame(
+        DateTime.UtcNow, 0, 100, 2000, power);
+      view.SetSpectrum(frame);
+
+      // Less than the 512-column history: old time must remain dark on
+      // the left while these 40 keyed frames accumulate on the right.
+      for (int i = 0; i < 40; i++)
+        view.Append(frame);
+
+      using var rendered = new System.Drawing.Bitmap(
+        view.Width, view.Height);
+      using (var g = System.Drawing.Graphics.FromImage(rendered))
+        view.PaintContents(g);
+
+      int signalY = (int)CwAudioWaterfallView.FrequencyToVerticalPixel(
+        100 + 188 * 1900.0 / 511.0, 100, 2000, view.Height);
+      // Check an area rather than one pixel: GDI nearest-neighbor pixel
+      // centers and font/DPI scaling can shift the drawn bin by a few px.
+      int PeakBrightness(int left, int right)
+      {
+        int peak = 0;
+        for (int x = left; x < right; x++)
+          for (int y = signalY - 4; y <= signalY + 4; y++)
+          {
+            var color = rendered.GetPixel(x, y);
+            peak = Math.Max(peak, color.R + color.G + color.B);
+          }
+        return peak;
+      }
+
+      int brightRight = PeakBrightness(view.Width - 52, view.Width - 5);
+      int darkLeft = PeakBrightness(180, 230);
+      brightRight.Should().BeGreaterThan(darkLeft + 60,
+        "the newest 40 time columns must appear at the right side");
+    }
+
+    [Fact]
+    public void PileupCopyButton_AutoSizesForWindowsDpi()
+    {
+      using var card = new CwPileupLaneCard(0);
+      var layout = card.Controls.OfType<TableLayoutPanel>().Single();
+      layout.ColumnStyles[1].SizeType.Should().Be(
+        SizeType.AutoSize);
+      var button = layout.Controls.OfType<Button>().Single();
+      button.Text.Should().Be("Copy");
+      button.AutoSize.Should().BeTrue();
+      button.MinimumSize.Width.Should().BeGreaterThan(65);
+    }
+
     [Fact]
     public void StableMessageCards_KeepTheirSlotDuringFrequencyCrossing()
     {

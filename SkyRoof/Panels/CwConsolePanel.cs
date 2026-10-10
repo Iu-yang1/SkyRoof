@@ -34,7 +34,7 @@ namespace SkyRoof
 
     private readonly CwPileupLaneList PileupList = new();
     private readonly SplitContainer WorkSplit = new();
-    private readonly HScrollBar AfPanBar = new();
+    private readonly VScrollBar AfPanBar = new();
     private readonly NumericUpDown AfZoomBox = new();
     private readonly Label AfWindowLabel = new();
 
@@ -396,11 +396,13 @@ namespace SkyRoof
       {
         Dock = DockStyle.Fill,
         RowCount = 2,
-        ColumnCount = 1,
+        ColumnCount = 2,
         Padding = new Padding(0)
       };
       left.ColumnStyles.Add(
         new ColumnStyle(SizeType.Percent, 100));
+      left.ColumnStyles.Add(
+        new ColumnStyle(SizeType.Absolute, 19));
       left.RowStyles.Add(
         new RowStyle(SizeType.Percent, 100));
       left.RowStyles.Add(
@@ -414,47 +416,34 @@ namespace SkyRoof
         WaterfallView_ViewportChanged;
       left.Controls.Add(WaterfallView, 0, 0);
 
-      var pan = new TableLayoutPanel
-      {
-        Dock = DockStyle.Fill,
-        ColumnCount = 3,
-        RowCount = 1,
-        Margin = new Padding(0)
-      };
-      pan.ColumnStyles.Add(
-        new ColumnStyle(SizeType.AutoSize));
-      pan.ColumnStyles.Add(
-        new ColumnStyle(SizeType.Percent, 100));
-      pan.ColumnStyles.Add(
-        new ColumnStyle(SizeType.AutoSize));
-      pan.Controls.Add(
-        new Label
-        {
-          Text = "AF",
-          AutoSize = true,
-          Margin = new Padding(3, 7, 8, 0)
-        }, 0, 0);
-
+      // AF is vertical now: scroll frequency up/down independently of
+      // the horizontal time history (newest frames arrive on the right).
       AfPanBar.Dock = DockStyle.Fill;
       AfPanBar.Minimum = 0;
       AfPanBar.LargeChange = 100;
       AfPanBar.SmallChange = 10;
       AfPanBar.Maximum = 1099;
+      AfPanBar.Value = 1000;
       AfPanBar.Enabled = false;
       AfPanBar.ValueChanged += (_, _) =>
         WaterfallView.SetViewport(
-          AfPanBar.Value / 1000.0,
+          (1000 - AfPanBar.Value) / 1000.0,
           (double)AfZoomBox.Value);
-      pan.Controls.Add(AfPanBar, 1, 0);
+      left.Controls.Add(AfPanBar, 1, 0);
 
-      var zoom = new FlowLayoutPanel
+      var controls = new FlowLayoutPanel
       {
-        AutoSize = true,
+        Dock = DockStyle.Fill,
         FlowDirection = FlowDirection.LeftToRight,
         WrapContents = false,
-        Margin = new Padding(3, 0, 0, 0)
+        AutoScroll = true,
+        Margin = new Padding(0)
       };
-      zoom.Controls.Add(
+      AfWindowLabel.Text = "AF ↑  ·  Time ←";
+      AfWindowLabel.AutoSize = true;
+      AfWindowLabel.Margin = new Padding(4, 7, 14, 0);
+      controls.Controls.Add(AfWindowLabel);
+      controls.Controls.Add(
         new Label
         {
           Text = "Zoom",
@@ -468,11 +457,10 @@ namespace SkyRoof
       AfZoomBox.Width = 45;
       AfZoomBox.ValueChanged += (_, _) =>
         WaterfallView.SetViewport(
-          AfPanBar.Value / 1000.0,
+          (1000 - AfPanBar.Value) / 1000.0,
           (double)AfZoomBox.Value);
-      zoom.Controls.Add(AfZoomBox);
-      pan.Controls.Add(zoom, 2, 0);
-      left.Controls.Add(pan, 0, 1);
+      controls.Controls.Add(AfZoomBox);
+      left.Controls.Add(controls, 0, 1);
 
       WorkSplit.Panel1.Controls.Add(left);
       PileupList.LaneSelected +=
@@ -494,7 +482,7 @@ namespace SkyRoof
     {
       int value = Math.Clamp(
         (int)Math.Round(
-          WaterfallView.ViewportStartFraction * 1000),
+          1000 - WaterfallView.ViewportStartFraction * 1000),
         0, 1000);
       if (AfPanBar.Value != value)
         AfPanBar.Value = value;
