@@ -248,7 +248,10 @@ namespace VE3NEA.Dsp.Tests
               keyedSignalPowerIncludesDutyCycle = true,
               oracleTracks = true,
               scenarios = results,
-              streamingTranscript = streaming
+              streamingTranscript = streaming,
+              stftCacheHits = decoder.StftCacheHits,
+              stftCacheMisses = decoder.StftCacheMisses,
+              meanOnnxRunMilliseconds = onnx.MeanInferenceMilliseconds
             },
             new JsonSerializerOptions
             {
