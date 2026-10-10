@@ -1,6 +1,6 @@
 # CW Console: full multi-lane Pileup and CI-V keyer implementation plan
 
-**Status: the receive chain and interactive RX Console are implemented.** The repository now contains multi-carrier detection/tracking, a dual-resolution frame-level ridge scanner, a bounded ~360 ms fixed-lag beam/MHT, independent multi-lane ONNX/CTC inference, incremental transcripts, live SDR / WASAPI capture / RS-BA1 loopback PCM, the non-blocking receive worker, and a receive-only dockable CW Console. The RX Console exposes source Start/Stop, source selection, DeepCW model status/install, the Pileup lane grid, selected committed/provisional text, worker metrics, and an independent display-only AF waterfall tied to the current scanner AF range with ~10 FPS refresh, stable AssociationHint lane labels, Active/Hold/Ambiguous styling, lane selection and ±2σ frequency-uncertainty bands. HamNoise Classic/CW V2 now exists as a **benchmark-only experimental backend** with reproducible native builds and real DeepCW A/B; it is not inserted before the raw 48 kHz tracker, is not exposed in the CW Console, and is not shipped in production installers. All TX/keyer behavior remains absent.
+**Status: the receive chain and first safe-TX Console stage are implemented.** The repository now contains multi-carrier detection/tracking, dual-resolution ridge scanning, bounded fixed-lag association, multi-lane DeepCW/CTC, incremental transcripts, live SDR/WASAPI/RS-BA1-loopback PCM, the non-blocking worker, AF waterfall, and an explicitly armed IC-9700 Command-17 text keyer. SkyCAT owns a dedicated loopback-only `127.0.0.1:4538` CW endpoint with a whitelist protocol, a transmitter lease shared with CAT/WSJT-X PTT, and `17 FF` fail-safe STOP on timeout/disconnect/reconnect/shutdown. SkyRoof's persistent **Enable CW Transmit** defaults off and the Console Arm state is never persisted; IC-9700 `14 0C` KEYRAW readback drives a 6–48 WPM message-duration watchdog. This stage does **not** switch the radio into CW, enable BK-IN, auto-reply to decoded callsigns, or perform satellite TX-VFO/licensed-band validation. HamNoise remains benchmark-only.
 
 Chinese: [CW Console 完整规划](../../zh-cn/fork-guide/cw-console-plan.md).
 
@@ -58,9 +58,9 @@ The frame scanner is unit-tested separately for monotonic sample timing, Fast/Pr
 | CW-06 | DeepCW + continuous transcript | ONNX Runtime + metadata-faithful STFT/log1p/CTC; OutputFrame timing; committed/provisional text; AssociationHintId ownership | Overlap de-duplication, pre-commit correction, repeated-character and per-lane isolation tests |
 | CW-07 | Load governance | Independent 120 ms tracker cadence; 6 s DeepCW snapshots / 1 s hop; latest-only single inference; default 5 lanes | Busy inference skips old hops instead of queueing; tracker remains independent; completed/skipped windows are observable |
 | CW-08 | HamNoise research | Pinned-revision Classic/CW V2 native bridge, per-lane DDC and shared decode-window placements, LaneDry/raw controls | Dedicated HamNoise workflow compares CER/WER/callsign/RTF; current Shared V2 only matches CER while regressing WER/callsigns, so no UI/release exposure |
-| CW-09 | Dockable UI | RX-only DockContent: Start/Stop, three-source selection, model status/install, Pileup grid, selected committed/provisional transcript, worker metrics, independent AF waterfall, lane overlays and ±2σ uncertainty bands | UI owns no tracker/ONNX resources; waterfall FFT consumes PCM snapshots only; closing it does not stop receive; TX controls remain absent until the safe-TX stages |
-| CW-10 | SkyCAT CW protocol | Constrained main-CAT CW_SEND/CW_ABORT/WPM; CI-V 17 / 17 FF | Unit tests for ACK, timeout, invalid text and abort |
-| CW-11 | TX state machine | Idle→Armed→Queued→Sending→Stopping/Failed; macros and TX inhibit | TX disabled by default; stop clears queue; ACK not RF completion |
+| CW-09 | Dockable UI | RX controls + Pileup/transcript/waterfall plus an isolated TX composer | UI owns no tracker/ONNX resources; closing it leaves RX alive but disarms/stops CW TX started by the Console |
+| CW-10 | SkyCAT CW protocol | Dedicated loopback `4538` PING/CAPS/STATUS/SEND/STOP; CI-V 17 / 17 FF; 16 47 BK-IN; 14 0C KEYRAW | 30-char/alphabet, mode/BK-IN/TX preflight, shared PTT lease, timeout/disconnect fail-safe tests (SkyCAT PR #27) |
+| CW-11 | TX state machine | Persistent enable (default off) + non-persistent Arm; Send/STOP; KEYRAW→WPM duration watchdog; connection teardown secondary fail-safe | unenabled/unarmed sends rejected; Console/app close STOPs; ACK is never treated as RF completion (SkyRoof PR #51) |
 | CW-12 | Satellite integration | Main RX/Sub TX, CW/CW-R, CAT ownership, Doppler and mode checks | Wrong TX VFO, existing PTT, sat change inhibit TX |
 | CW-13 | Release testing | Multi-carrier WAV corpus, CER/cross-talk, long soak and radio simulation | CI clean; separate real IC-9700 keyer sign-off |
 
@@ -80,20 +80,20 @@ The frame scanner is unit-tested separately for monotonic sample timing, Fast/Pr
 
 | Region | Contents | Interaction |
 |---|---|---|
-| Top toolbar, current RX-only stage | RX Start/Stop, SDR/WASAPI/RS-BA1 source, Settings, DeepCW model install/status | RX is completely separate from TX; the current panel contains no transmit controls |
+| Top toolbar | RX Start/Stop, SDR/WASAPI/RS-BA1 source, Settings, DeepCW model install/status | RX remains resource/state-isolated from TX |
 | AF waterfall, ~180px | Current Frame Scanner AF range, 250 Hz scale, stable H/T lane labels, Active/Hold/Ambiguous markers and ±2σ frequency covariance bands | Left click selects an existing lane only; it does not tune the radio or alter AF/RF |
 | Pileup grid, resizable | ID, AF Hz, SNR, Hz/s, active/hold, call and per-lane transcript | Sorting never changes track identity |
 | Selected RX transcript | Confirmed/pending text, UTC, copy, QSO Entry suggestion | No automatic transmit from recognition |
-| TX composer, 140–200px | Message, F1–F8 macros, WPM, break-in, Arm/Send and always-visible Abort | Explicit preflight + operator action |
+| TX composer, ~158px | Max-30-char message, non-persistent Arm/Disarm, Send, always-visible red STOP, mode/BK-IN/WPM/watchdog status | Settings enable + explicit Arm required; no automatic reply or macro queue yet |
 | Status strip, ~22px | Audio/model latency, active lanes, CPU, CAT ownership/errors | Accessible diagnostics and fallback |
 
 Implement as SkyRoof/Panels/CwConsolePanel.cs using existing DockContent, Context, View menu, layout persistence and Theme palette. Do not lift React JSX. Persist RX choices, macros, tracking parameters and splitter layout but **never** persist TX armed state.
 
 ## Safe text CW keyer workflow
 
-SkyCAT remains sole owner of the RS-BA1 virtual CI-V serial port, using its existing main port 4532 and shared command lock. Add an explicit CW command whitelist, not a general raw CI-V tunnel. Keep auxiliary port 4537 restricted to non-transmit settings. IC-9700 CI-V 17 sends at most 30 ASCII characters per frame and 17 FF aborts queued keying; a successful command ACK is **not** proof that the complete text finished transmitting.
+SkyCAT keeps the existing 4532 CAT and 4537 Remote Control Switch responsibilities and exposes CW on a separate **loopback-only 4538 whitelist endpoint**, never a raw CI-V tunnel. Before `SEND`, SkyCAT checks under the shared CI-V command lock that TX mode is already CW/CW-R, 16 47 BK-IN is already Semi/Full, the hardware is not currently transmitting, and the shared CAT/WSJT-X/CW transmitter lease is available. SkyCAT never changes mode, enables BK-IN, or asserts PTT for this path. IC-9700 Command 17 sends at most 30 supported characters and binary 17 FF stops it; ACK is **not** proof that the complete text finished transmitting. SkyRoof reads 14 0C KEYRAW, maps it to the documented 6–48 WPM range and starts a duration watchdog. If explicit STOP fails, closing the lease connection triggers SkyCAT's disconnect STOP; an unconfirmed STOP leaves the server fail-closed.
 
-Require supported radio, correct SAT TX receiver, CW/CW-R mode, licensed frequency and unoccupied PTT ownership before explicit Arm+Send. Stop has priority over unsent queue entries. On link loss clear queued messages, do not resume automatically, and display **TX status unknown** if physical abort cannot be confirmed. Never automatically reply to a decoded callsign.
+The implemented first TX stage requires a supported IC-9700, CW/CW-R, pre-enabled Semi/Full BK-IN, idle hardware TX and an unoccupied transmitter lease before explicit Arm+Send. It does **not yet** validate the selected satellite TX VFO, Doppler uplink, or licensed-band policy; those remain CW-12. STOP has priority, link loss is never auto-resumed, and decoded callsigns are never transmitted automatically.
 
 ## Verification
 
@@ -110,6 +110,7 @@ Use synthetic and recorded simultaneous CW WAV at 10/20/30/40 WPM; 3/5/8 carrier
 7. RX-only dockable CW Console: source/model/worker status, Pileup lane grid, selected committed/provisional transcript and docking restore (**PR #48**).
 8. CW AF waterfall, stable lane overlays, ±2σ uncertainty bands and an independent ~10 FPS display cadence (**PR #49**).
 9. HamNoise benchmark-only experiment: pinned native bridge, per-lane/shared Classic and CW V2 placements, LaneDry control, and a dedicated real-model A/B workflow; results remain out of UI/releases. Also fixes the Int32 multiplication overflow in **both CwLaneExtractor and CwWindowedSincResampler** that could collapse an 8 s 48 kHz→9.6 kHz window to one sample (**PR #50**).
-10. SkyCAT constrained CW protocol and mock serial tests.
-11. Safe TX + satellite CAT integration and supervised bench verification.
+10. Dedicated SkyCAT 4538 CW whitelist protocol, shared PTT lease and disconnect/reconnect/shutdown fail-safe (**SkyCAT PR #27**).
+11. SkyRoof two-gate TX arming, RS-BA1-style text composer, KEYRAW watchdog and close/shutdown STOP (**SkyRoof PR #51**).
+12. Satellite TX-VFO / Doppler / licensed-band integration and supervised IC-9700 RF sign-off.
 12. End-to-end WAV corpus metrics, bilingual user guide, license audit and release checks.
