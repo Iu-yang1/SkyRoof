@@ -32,6 +32,21 @@ namespace SkyRoof.CW
             false,
             transcript.TrackId);
 
+    internal static CwSignalTrack[] CollapseDuplicateLaneIdentities(
+      IEnumerable<CwSignalTrack> tracks) =>
+      tracks
+        .GroupBy(Identity)
+        .Select(group =>
+          group
+            .OrderBy(track => track.Ambiguous)
+            .ThenByDescending(track => track.Active)
+            .ThenByDescending(track => track.IdentityConfidence)
+            .ThenByDescending(track => track.SnrDb)
+            .ThenByDescending(track => track.LastSeenUtc)
+            .First())
+        .OrderBy(track => track.FrequencyHz)
+        .ToArray();
+
     internal static string LaneLabel(
       CwSignalTrack track) =>
       Identity(track).ToString();

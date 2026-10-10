@@ -78,8 +78,8 @@ if (-not $deepNotice.Contains($expectedRevision) -or
 }
 
 $settings = Get-Content (Require-File "SkyRoof\Settings\CwConsoleSettings.cs") -Raw
-if ($settings -notmatch '(?s)\[DefaultValue\(false\)\].{0,300}public\s+bool\s+TransmitEnabled\s*\{[^}]*\}\s*=\s*false\s*;') {
-  throw "CW TransmitEnabled must remain explicitly default-false."
+if ($settings -notmatch '(?s)\[DefaultValue\(true\)\].{0,300}public\s+bool\s+TransmitEnabled\s*\{[^}]*\}\s*=\s*true\s*;') {
+  throw "CW TransmitEnabled must remain explicitly default-true; actual RF still requires explicit Arm TX and SkyCAT preflight."
 }
 
 $iss = Get-Content (Require-File "install\SkyRoof.iss") -Raw
@@ -88,6 +88,14 @@ if ($iss -match 'hamnoise_skyroof\.dll') {
 }
 if ($iss -notmatch 'Source:\s*\.\.\\licenses\\\*') {
   throw "Production installer no longer packages the licenses directory."
+}
+foreach ($runtimeFile in @(
+    "Microsoft.ML.OnnxRuntime.dll",
+    "System.Numerics.Tensors.dll",
+    "runtimes\win-x64\native\onnxruntime")) {
+  if (-not $iss.Contains($runtimeFile)) {
+    throw "Production installer is missing required DeepCW runtime payload: $runtimeFile"
+  }
 }
 
 $licenseReadme = Get-Content (Require-File "licenses\README.txt") -Raw
@@ -98,6 +106,6 @@ if (-not $licenseReadme.Contains("DeepCW model") -or
 
 Write-Host "CW production release validation passed."
 Write-Host "DeepCW revision: $expectedRevision"
-Write-Host "CW TX default: disabled"
+Write-Host "CW TX capability default: enabled (explicit Arm TX still required)"
 Write-Host "HamNoise production packaging: absent"
 Write-Host "Recorded corpus schema: v1"

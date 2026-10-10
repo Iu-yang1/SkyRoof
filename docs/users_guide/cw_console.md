@@ -119,6 +119,8 @@ SkyRoof does not automatically:
 - assert PTT for this keyer path;
 - choose a transmit frequency from a decoded receive lane.
 
+CW transmit capability is enabled by default, but this **does not key the radio automatically**. Every actual transmission still requires an explicit **Arm TX** action and must pass the CW/CW-R, Semi/Full BK-IN, SkyCAT lease and frequency-interlock checks.
+
 Before arming, configure the radio yourself for CW/CW-R and Semi/Full BK-IN.
 
 ## SkyCAT keyer connection

@@ -75,6 +75,40 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void DuplicateAssociationHint_CollapsesToOneSemanticUiLane()
+    {
+      CwSignalTrack weaker =
+        Track(
+          id: 17,
+          hintId: 404) with
+        {
+          Ambiguous = true,
+          SnrDb = 8,
+          IdentityConfidence = 0.70
+        };
+      CwSignalTrack stronger =
+        Track(
+          id: 18,
+          hintId: 404) with
+        {
+          Ambiguous = true,
+          SnrDb = 14,
+          IdentityConfidence = 0.85
+        };
+
+      CwSignalTrack[] visible =
+        CwConsolePresentation
+          .CollapseDuplicateLaneIdentities(
+            new[] { weaker, stronger });
+
+      visible.Should().ContainSingle();
+      visible[0].Id.Should().Be(18);
+      CwConsolePresentation.Identity(
+          visible[0])
+        .ToString().Should().Be("H404");
+    }
+
+    [Fact]
     public void LaneLabels_PreferStableAssociationHintButKeepTrackDiagnostic()
     {
       CwSignalTrack hinted =
