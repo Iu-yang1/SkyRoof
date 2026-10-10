@@ -150,6 +150,33 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void StatusPollFallbackCannotDiscardPendingCompletedSweep()
+    {
+      var mailbox = new IcomScopeUiFrameMailbox();
+      mailbox.Offer(Frame(10)).Should().BeTrue();
+      var currentPartial = new IcomScopeFrame
+      {
+        Scope = 0,
+        TimestampUtc = Frame(11).TimestampUtc,
+        SweepComplete = false,
+        DivisionCurrent = 2,
+        DivisionMaximum = 11
+      };
+      mailbox.Offer(currentPartial).Should().BeFalse();
+
+      // Status refresh observes the same latest partial while the
+      // original event callback is still queued. The fallback must not
+      // call RenderScopeFrame directly (which would advance its timestamp
+      // beyond the completed sweep); it offers it to this same mailbox.
+      mailbox.Offer(currentPartial).Should().BeFalse();
+
+      var delivered = mailbox.TakeAll();
+      delivered.Should().HaveCount(2);
+      delivered[0].SweepComplete.Should().BeTrue();
+      delivered[1].SweepComplete.Should().BeFalse();
+    }
+
+    [Fact]
     public void ReplacementOfCompleteSweepsIsMeasuredSeparately()
     {
       var mailbox = new IcomScopeUiFrameMailbox();
