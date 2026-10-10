@@ -72,3 +72,27 @@ Icom LAN Spectrum 的波形取自电台接收的 CI-V `27 00` 帧。
 显式设置为 **SkyCAT**，并确保 SkyCAT 控制后端在线。
 如仍然无法修改，应进一步检查 SkyCAT 发送日志以及电台实际回读。
 Direct LAN 控制仍为实验性路径，不能将写入排队等同于执行成功。
+
+
+### LAN 频谱下拉框稳定性和 UI 帧合并
+
+原有 Icom LAN Spectrum 频谱在接收每一帧 `27 00` 波形时，
+都会同时刷新 WinForms MODE、SPAN/EDGE、SPEED、VBW 等电台设置
+控件；频谱接近 30 FPS 时，这会不断抢占展开的下拉菜单，
+使鼠标悬停在 **100 kHz** 时又跳回 **25 kHz**。
+
+现已改为**最多只保留一个待处理的 UI 频谱回调**，UI 忙时使用
+最新波形，跳过旧帧而不积压。只有电台频谱模式、中心频率或跨度的
+几何信息确实变化，才立即更新相应控件；500 ms 状态轮询保留。
+鼠标展开菜单、键盘焦点停留在选项框时，不允许设备旧状态改写
+用户正在选择的 MODE、SPAN/EDGE、FAST/MID/SLOW、VBW。
+仅在 `SelectionChangeCommitted`（用户正式选择）时发出
+CI-V 写入命令，而不是响应后台 SelectedIndex 改动。REF
+数值框在编辑期间也不会被旧回读抢占。
+
+先前的“命令已排队 ≠ 电台已确认”机制仍然生效。如果选择后
+经过 20 秒仍恢复旧带宽，应进一步查询 SkyCAT 控制命令及
+电台实际 CI-V 回读，而不是认定 UI 选择成功。Spectrum
+Diagnostics 会显示被合并的旧波形帧计数及待确认控制数量。
+这种调整只针对 UI 调度和状态同步，不改变 Icom LAN 原有
+475 点频谱数据和 RS-BA1 / SkyCAT / Direct LAN 传输能力。
