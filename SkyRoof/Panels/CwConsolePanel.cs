@@ -40,6 +40,15 @@ namespace SkyRoof
     private readonly Button SendTxBtn = new();
     private readonly Button StopTxBtn = new();
     private readonly Label TxStatusLabel = new();
+    private readonly Button[] MacroButtons =
+      Enumerable.Range(
+        0,
+        CwMacroBank.Count)
+      .Select(_ => new Button())
+      .ToArray();
+    private readonly ToolTip MacroToolTip =
+      new();
+    private bool sendRequestInProgress;
 
     private readonly System.Windows.Forms.Timer UiTimer =
       new() { Interval = 250 };
@@ -86,6 +95,7 @@ namespace SkyRoof
       Name = "CwConsolePanel";
       ClientSize = new Size(980, 850);
       MinimumSize = new Size(680, 650);
+      KeyPreview = true;
 
       BuildUi();
 
@@ -178,7 +188,7 @@ namespace SkyRoof
       root.RowStyles.Add(
         new RowStyle(
           SizeType.Absolute,
-          158));
+          208));
 
       var toolbar =
         new FlowLayoutPanel
@@ -554,7 +564,7 @@ namespace SkyRoof
         {
           Dock = DockStyle.Fill,
           ColumnCount = 1,
-          RowCount = 3
+          RowCount = 4
         };
 
       layout.RowStyles.Add(
@@ -564,6 +574,9 @@ namespace SkyRoof
         new RowStyle(
           SizeType.Percent,
           100));
+      layout.RowStyles.Add(
+        new RowStyle(
+          SizeType.AutoSize));
       layout.RowStyles.Add(
         new RowStyle(
           SizeType.AutoSize));
@@ -597,6 +610,51 @@ namespace SkyRoof
         TxTextBox,
         0,
         1);
+
+      var macros =
+        new FlowLayoutPanel
+        {
+          AutoSize = true,
+          Dock = DockStyle.Fill,
+          FlowDirection =
+            FlowDirection.LeftToRight,
+          WrapContents = true,
+          Margin = new Padding(
+            0, 5, 0, 0)
+        };
+
+      for (int i = 0;
+           i < MacroButtons.Length;
+           i++)
+      {
+        Button button =
+          MacroButtons[i];
+        int index = i;
+
+        button.AutoSize = true;
+        button.Tag = index;
+        button.Click +=
+          (_, _) =>
+            LoadMacroIntoComposer(
+              index);
+        macros.Controls.Add(
+          button);
+      }
+
+      macros.Controls.Add(
+        new Label
+        {
+          AutoSize = true,
+          Text =
+            "F1–F8 load · Shift+F1–F8 send",
+          Margin = new Padding(
+            8, 7, 0, 0)
+        });
+
+      layout.Controls.Add(
+        macros,
+        0,
+        2);
 
       var buttons =
         new FlowLayoutPanel
@@ -653,7 +711,7 @@ namespace SkyRoof
       layout.Controls.Add(
         buttons,
         0,
-        2);
+        3);
 
       group.Controls.Add(
         layout);
@@ -1351,6 +1409,11 @@ namespace SkyRoof
       TxTextBox.ReadOnly =
         state.Sending;
 
+      foreach (Button macroButton
+        in MacroButtons)
+        macroButton.Enabled =
+          !state.Sending;
+
       if (!settings.TransmitEnabled)
       {
         TxStatusLabel.Text =
@@ -1502,16 +1565,23 @@ namespace SkyRoof
 
     private async void SendTxBtn_Click(
       object? sender,
-      EventArgs e)
+      EventArgs e) =>
+      await SendTextAsync(
+        TxTextBox.Text);
+
+    private async Task SendTextAsync(
+      string text)
     {
       CwTransmitController? tx =
         ctx.CwTransmit;
-      if (tx == null)
+      if (tx == null ||
+          sendRequestInProgress)
         return;
 
-      string text =
-        TxTextBox.Text;
-
+      // WinForms may deliver repeated Shift+Fn key messages while the first
+      // asynchronous preflight is still awaiting SkyCAT. Keep only one UI
+      // send request in flight. STOP remains independent and always available.
+      sendRequestInProgress = true;
       SendTxBtn.Enabled = false;
 
       try
@@ -1529,6 +1599,7 @@ namespace SkyRoof
       }
       finally
       {
+        sendRequestInProgress = false;
         if (!IsDisposed)
           RefreshTransmitUi();
       }
@@ -1579,7 +1650,128 @@ namespace SkyRoof
         updatingSourceUi = false;
       }
 
+      RefreshMacroButtons();
       RefreshUi();
+    }
+
+    private void RefreshMacroButtons()
+    {
+      CwMacroSettings macros =
+        ctx.Settings.CwConsole.Macros;
+
+      for (int i = 0;
+           i < MacroButtons.Length;
+           i++)
+      {
+        Button button =
+          MacroButtons[i];
+        button.Text =
+          CwMacroBank.Preview(
+            macros,
+            i);
+
+        string raw =
+          CwMacroBank.Get(
+            macros,
+            i);
+        MacroToolTip.SetToolTip(
+          button,
+          string.IsNullOrWhiteSpace(raw)
+            ? $"F{i + 1} is empty. Edit it in Settings > CW Console > CW Message Macros."
+            : $"F{i + 1}: load macro\r\nShift+F{i + 1}: send after explicit Arm\r\n\r\n{raw}");
+      }
+    }
+
+    private void LoadMacroIntoComposer(
+      int index)
+    {
+      try
+      {
+        string text =
+          CwMacroBank.Prepare(
+            ctx.Settings.CwConsole.Macros,
+            index);
+
+        TxTextBox.Text = text;
+        TxTextBox.SelectionStart =
+          TxTextBox.TextLength;
+        TxTextBox.Focus();
+      }
+      catch (Exception ex)
+      {
+        MessageBox.Show(
+          this,
+          ex.Message,
+          $"CW macro F{index + 1}",
+          MessageBoxButtons.OK,
+          MessageBoxIcon.Warning);
+      }
+    }
+
+    private async Task SendMacroAsync(
+      int index)
+    {
+      try
+      {
+        string text =
+          CwMacroBank.Prepare(
+            ctx.Settings.CwConsole.Macros,
+            index);
+
+        TxTextBox.Text = text;
+        await SendTextAsync(text);
+      }
+      catch (Exception ex)
+      {
+        MessageBox.Show(
+          this,
+          ex.Message,
+          $"CW macro F{index + 1}",
+          MessageBoxButtons.OK,
+          MessageBoxIcon.Warning);
+      }
+    }
+
+    protected override bool ProcessCmdKey(
+      ref Message msg,
+      Keys keyData)
+    {
+      Keys key =
+        keyData & Keys.KeyCode;
+
+      if (key >= Keys.F1 &&
+          key <= Keys.F8)
+      {
+        Keys modifiers =
+          keyData & Keys.Modifiers;
+
+        // Only the two documented forms are owned by the CW Console:
+        //   F1..F8       -> load only
+        //   Shift+F1..F8 -> explicit send
+        // Ctrl/Alt combinations are deliberately left to WinForms/the host
+        // so an unrelated shortcut can never be reinterpreted as transmit.
+        if (modifiers is not (
+              Keys.None or
+              Keys.Shift))
+          return base.ProcessCmdKey(
+            ref msg,
+            keyData);
+
+        int index =
+          (int)key -
+          (int)Keys.F1;
+
+        if (modifiers == Keys.Shift)
+          _ = SendMacroAsync(index);
+        else
+          LoadMacroIntoComposer(index);
+
+        return true;
+      }
+
+      return base.ProcessCmdKey(
+        ref msg,
+        keyData);
     }
 
     private void CwConsolePanel_FormClosing(

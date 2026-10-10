@@ -1,6 +1,6 @@
 # CW Console：多路 Pileup 解码与自动拍发实施规划
 
-**状态：接收链和第一阶段安全 TX Console 已进入可交互阶段。** 仓库现已具备多载波检测/跟踪、双分辨率 Frame-level Ridge Scanner、约 360 ms fixed-lag beam/MHT、多 Lane 独立 ONNX/CTC 推理、连续 Transcript、实时 SDR / WASAPI Capture / RS-BA1 loopback PCM、非阻塞 receive worker、AF waterfall，以及显式 Arm 的 IC-9700 Command 17 文本拍发。SkyCAT 使用独立的本机回环 `127.0.0.1:4538` CW keyer：只接受 STATUS/SEND/STOP 等白名单命令，与 CAT/WSJT-X PTT 共用互斥 TX lease，并在超时、断线、重连和退出时执行 `17 FF` fail-safe STOP。SkyRoof 的持久 `Enable CW Transmit` 默认关闭，Console 的 Arm 状态永不持久化；Send 使用电台 `14 0C` KEYRAW 读回估算 6–48 WPM 拍发时长并启动 STOP watchdog。当前阶段**不会**自动切 CW/CW-R、不会自动打开 BK-IN、不会自动回复解码呼号，也尚未实现卫星 TX VFO/许可频段自动校验。HamNoise 仍仅为 benchmark-only 实验后端。
+**状态：接收链、安全 Command-17 TX、卫星 TX interlock 与 F1–F8 消息预设均已进入可交互阶段。** 仓库现已具备多载波检测/跟踪、双分辨率 Frame-level Ridge Scanner、约 360 ms fixed-lag beam/MHT、多 Lane 独立 ONNX/CTC、连续 Transcript、实时 SDR / WASAPI Capture / RS-BA1 loopback PCM、非阻塞 receive worker、AF waterfall、显式 Arm 的 IC-9700 Command 17 文本拍发，以及持久化 F1–F8 宏。F1–F8/按钮只把预设装入 composer；只有 **Shift+F1…Shift+F8** 才会在用户已 Enable + Arm 的前提下显式发送，并继续经过 TXHZ/SENDHZ、卫星 interlock、watchdog、STOP/disconnect 等全部安全链。SkyRoof 仍不会自动切 CW/CW-R、自动打开 BK-IN、根据解码呼号自动回复、从 RX Lane 自动选择发射频率，也不提供宏队列。HamNoise 仍仅为 benchmark-only 实验后端。
 
 参考：[deepcw-engine](https://github.com/e04/deepcw-engine) 是**正式 CW 解码模型**，包含 model.onnx、model.onnx.json 与推理示例；[web-deep-cw-decoder](https://github.com/e04/web-deep-cw-decoder) 提供多路检测与 Pileup 结构参考；[HamNoise](https://github.com/e04/HamNoise) 提供可选神经降噪 C 核心。英文方案见 [English plan](../../fork-guide/cw-console-plan.md)。
 
@@ -78,7 +78,7 @@ Frame-level Scanner 另外通过单元测试验证单调 sample-index 时间轴�
 | 音频频谱/瀑布（约 180px） | 跟随当前 Frame Scanner AF 范围、250 Hz 标尺、稳定 H/T lane 标签、Active/Hold/Ambiguous 轨迹、±2σ 频率协方差带 | 左键选择现有 lane；只改变 UI 选中项，不调电台、不改 AF/RF |
 | Pileup 表（主要区域） | Lane、AF Hz、检测 SNR、漂移 Hz/s、状态、最近呼号/文本 | 3–8 路独立文字；按频率/SNR 排序不改变 ID |
 | RX Transcript（可拖动） | 所选通道确定/暂定文字、UTC、Copy、QSO Entry | 暂定文字不得用于自动拍发 |
-| TX Composer（底部） | 最多 30 字符文本、非持久 Arm/Disarm、Send、醒目的 STOP、当前 mode/BK-IN/WPM/watchdog | 未在 Settings Enable 或未 Arm 禁止发送；STOP 始终优先；当前不提供自动回复/宏队列 |
+| TX Composer（底部） | 最多 30 字符文本、非持久 Arm/Disarm、Send、醒目 STOP、mode/BK-IN/WPM/watchdog、F1–F8 宏按钮 | F1–F8 只装载；Shift+F1–F8 才显式发送；Settings Enable + Arm 仍必需；无自动回复/宏队列 |
 | 状态栏 | 有效采样率、模型状态、延迟、活动 Lane 数、CAT/TX 状态 | 错误与降级清晰可见 |
 
 基于现有 SkyRoof Context/MainForm/Ft4ConsolePanel 模式注册一个 DockContent；使用现有主题调色板，不复制网页 JSX。持久化音频源、宏、路数、门限和布局，但**不持久化 TX Armed 状态**。
@@ -107,9 +107,10 @@ SkyCAT 保留 4532 主 CAT 与 4537 Remote Control Switch 的原有职责，CW �
 6. tracker / ONNX 解耦的 receive worker、latest-only inference、TimelineGeneration 过期结果抑制（**PR #47**）。
 7. RX-only Dockable CW Console：源/模型/worker 状态、Pileup Lane grid、selected committed/provisional transcript、停靠恢复（**PR #48**）。
 8. CW AF waterfall、稳定 lane overlay、±2σ uncertainty band、约 10 FPS 独立 UI 刷新（**PR #49**）。
-9. HamNoise benchmark-only 实验后端：固定 revision native bridge、per-lane/shared Classic 与 CW V2、LaneDry 对照、独立 real-model A/B workflow；量化结论暂不进入 UI/Release。同时修复 8 s 长窗口在 **CwLaneExtractor** 和 **CwWindowedSincResampler** 两处 48 kHz→9.6 kHz 输出长度计算的 Int32 乘法溢出（**PR #50**）。
+9. HamNoise benchmark-only 实验后端：固定 revision native bridge、per-lane/shared Classic 与 CW V2、LaneDry 对照、独立 real-model A/B workflow；量化结论暂不进入 UI/Release。同时修复 CwLaneExtractor/CwWindowedSincResampler 长窗口 Int32 溢出（**PR #50**）。
 10. SkyCAT 独立 4538 CW CI-V 白名单协议、共享 PTT lease、断线/重连/退出 fail-safe（**SkyCAT PR #27**）。
 11. SkyRoof 两级 TX gate、RS-BA1 风格文本 composer、KEYRAW 时长 watchdog、关闭/退出 STOP（**SkyRoof PR #51**）。
 12. 卫星 TX interlock：TXHZ/SENDHZ、卫星/转发器/no-Doppler uplink/mode/transverter 上下文锁定、TX CAT freeze、发送中变化 STOP+Disarm，以及 SkyCAT CW lease 的 TX-side CAT write gate（**SkyCAT PR #28/#29；SkyRoof PR #52**）。
-13. 受控 IC-9700 实机 RF 验收：dummy load/低功率优先，核对 CW/CW-R、BK-IN、实际 uplink、Doppler catch-up 和 STOP 行为；软件检查不替代当地法规/执照要求。
-12. 端到端 WAV corpus 指标、中英文用户指南、许可证与正式发布。
+13. 持久化 F1–F8 CW 消息预设：普通 F 键/按钮只装载，Shift+F1–F8 显式发送并复用完整 TX 安全状态机；不提供自动回复或宏队列（**SkyRoof PR #53**）。
+14. 受控 IC-9700 实机 RF 验收：dummy load/低功率优先，核对 CW/CW-R、BK-IN、实际 uplink、Doppler catch-up、宏 Shift-send 和 STOP；软件检查不替代当地法规/执照要求。
+15. 端到端 WAV corpus 指标、中英文用户指南、许可证审计与正式发布检查。
