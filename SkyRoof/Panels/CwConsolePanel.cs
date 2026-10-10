@@ -1355,8 +1355,13 @@ namespace SkyRoof
       {
         // Capture the satellite/TX interlock at the operator's explicit
         // send action, not when the Console was opened minutes earlier.
-        if (!tx.State.Armed)
-          tx.Arm();
+        if (tx.State.Sending)
+          throw new InvalidOperationException(
+            "A CW message is already in progress. Press STOP first.");
+        // A previous Send may have completed via watchdog. Always capture
+        // a fresh interlock for this explicit action, never reuse an old
+        // satellite/no-Doppler context across sends.
+        tx.Arm();
         await tx.SendAsync(text, requestStop.Token);
       }
       catch (OperationCanceledException) when (requestStop.IsCancellationRequested)
