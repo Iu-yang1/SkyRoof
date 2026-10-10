@@ -48,11 +48,11 @@ namespace VE3NEA.Dsp.Tests
         mailbox.Offer(Frame(i)).Should().BeFalse();
 
       mailbox.ReplacedFrames.Should().Be(98);
-      mailbox.Take()!.TimestampUtc.Should().Be(Frame(99).TimestampUtc);
-      mailbox.Take().Should().BeNull();
+      mailbox.TakeAll().Should().ContainSingle().Which.TimestampUtc.Should().Be(Frame(99).TimestampUtc);
+      mailbox.TakeAll().Should().BeEmpty();
 
       mailbox.Offer(Frame(100)).Should().BeTrue();
-      mailbox.Take()!.TimestampUtc.Should().Be(Frame(100).TimestampUtc);
+      mailbox.TakeAll().Should().ContainSingle().Which.TimestampUtc.Should().Be(Frame(100).TimestampUtc);
     }
 
     [Fact]
@@ -61,8 +61,28 @@ namespace VE3NEA.Dsp.Tests
       var mailbox = new IcomScopeUiFrameMailbox();
       mailbox.Offer(Frame(40)).Should().BeTrue();
       mailbox.Offer(Frame(12)).Should().BeFalse();
-      mailbox.Take()!.TimestampUtc.Should().Be(Frame(40).TimestampUtc);
+      mailbox.TakeAll().Should().ContainSingle().Which.TimestampUtc.Should().Be(Frame(40).TimestampUtc);
       mailbox.ReplacedFrames.Should().Be(0);
+    }
+
+    [Fact]
+    public void InterleavedMainAndSubKeepNewestFromBothReceivers()
+    {
+      var mailbox = new IcomScopeUiFrameMailbox();
+      mailbox.Offer(Frame(5)).Should().BeTrue();
+      IcomScopeFrame sub = new()
+      {
+        Scope = 1,
+        Mode = (byte)IcomScopeMode.Center,
+        FrequencyAHz = 145_990_000,
+        FrequencyBHz = 50_000,
+        TimestampUtc = Epoch.AddMilliseconds(60)
+      };
+      mailbox.Offer(sub).Should().BeFalse();
+      IcomScopeFrame[] two = mailbox.TakeAll();
+      two.Should().HaveCount(2);
+      two[0].Scope.Should().Be(0);
+      two[1].Scope.Should().Be(1);
     }
 
     [Fact]
@@ -71,7 +91,7 @@ namespace VE3NEA.Dsp.Tests
       var mailbox = new IcomScopeUiFrameMailbox();
       mailbox.Offer(Frame(5)).Should().BeTrue();
       mailbox.Clear();
-      mailbox.Take().Should().BeNull();
+      mailbox.TakeAll().Should().BeEmpty();
       mailbox.Offer(Frame(1)).Should().BeTrue();
     }
   }
