@@ -48,10 +48,10 @@ The status line shows the concrete Windows endpoint that is currently open.
 
 ## CW Skimmer V1 horizontal workspace
 
-The CW Console is now organized around a **wide left AF spectrum and waterfall,
-right-side Pileup messages, and a permanent bottom transmit strip**. The old
-seven-column Lane DataGridView and separate Selected RX Transcript panel are
-no longer part of the main window.
+The CW Console is organized around a **wide left AF spectrum and waterfall,
+right-side Pileup messages, a compact selected-lane RX readout, and a permanent
+bottom transmit strip**. The old seven-column Lane DataGridView is no longer
+part of the main window.
 
 - **Top:** Start/Stop RX, audio source, display-only Raw/HamNoise selector,
   settings and decode/worker status.
@@ -67,9 +67,21 @@ no longer part of the main window.
   card retains a Copy button. A card stays in its numbered slot through short QSB/Hold
   and frequency crossings. Click a card or waterfall marker to select the
   same lane in both places.
+- **Immediately above CW TX:** a compact **CW RX — Selected Lane** GroupBox
+  using the same styling as the transmit area. Clicking a Pileup card or a
+  waterfall lane marker updates its slot number, stable H/T identity, AF Hz,
+  SNR and Active/Hold/Ambiguous/Grace state. The full selected receive text
+  wraps and scrolls in a read-only field; uncommitted characters are colored
+  separately. **Copy RX** copies the raw transcript without formatting.
+  If the lane disappears or the audio timeline resets, stale text is cleared.
 - **Bottom:** Send (automatic preflight), prominent STOP, one-line keyer composer,
   verified WPM set/readback, and F1-F8 macro keys. Action/macro lines remain
   individually horizontally scrollable in narrower windows.
+
+The RX detail is **receive-only**: selecting a lane or copying decoded text
+cannot send CW, adjust a TX VFO or override the satellite interlock. It
+updates from the existing 250-ms UI snapshot rather than starting a new
+decoder or FFT worker.
 
 **AF navigation:** use the **vertical scrollbar on the right of the waterfall**
 to pan the visible frequency range up/down and Zoom for 1-8x magnification.
