@@ -3,6 +3,12 @@ using System.Numerics;
 
 namespace SkyRoof.CW
 {
+  public readonly record struct CwPhysicalLaneEvidence(
+    double LocalSnrDb,
+    double KeyingDepthDb,
+    double DutyCycle,
+    int KeyingTransitions);
+
   /// <summary>
   /// Wideband STFT whose physical time/frequency grid is calibrated to the
   /// DeepCW model frontend. For 48 kHz PCM and a 3.2 kHz DeepCW model:
@@ -167,6 +173,142 @@ namespace SkyRoof.CW
           0.25 * upper * upper);
       }
       return result;
+    }
+
+    public CwPhysicalLaneEvidence EvaluatePhysicalEvidence(
+      CwSignalTrack track,
+      ReadOnlySpan<float> activity)
+    {
+      if (activity.Length != FrameCount)
+        throw new ArgumentException(
+          "CW activity timeline must match the wideband frame count.",
+          nameof(activity));
+
+      float[] ridge =
+        GetRidgeMagnitudeSeries(track);
+      var localSnr =
+        new double[FrameCount];
+      var centerMagnitude =
+        new double[FrameCount];
+      double[] offsets =
+        [-120, -90, -60, 60, 90, 120];
+
+      for (int frame = 0;
+           frame < FrameCount;
+           frame++)
+      {
+        double relativeToEnd =
+          FrameRelativeToEndSeconds(frame);
+        double ridgeHz =
+          track.FrequencyHz +
+          track.DriftHzPerSecond *
+          relativeToEnd;
+        double center =
+          Math.Max(
+            ridge[frame],
+            1e-12f);
+        centerMagnitude[frame] = center;
+
+        var side = new List<double>(offsets.Length);
+        foreach (double offset in offsets)
+        {
+          double hz = ridgeHz + offset;
+          if (hz <= BinHz ||
+              hz >= SourceSampleRate / 2.0 - BinHz)
+            continue;
+          side.Add(
+            Math.Max(
+              SampleCalibratedMagnitude(
+                frame,
+                hz),
+              1e-12f));
+        }
+
+        if (side.Count == 0)
+        {
+          localSnr[frame] = 0;
+          continue;
+        }
+
+        side.Sort();
+        double noise =
+          side.Count % 2 == 0
+            ? 0.5 *
+              (side[side.Count / 2 - 1] +
+               side[side.Count / 2])
+            : side[side.Count / 2];
+        localSnr[frame] =
+          20.0 * Math.Log10(
+            center /
+            Math.Max(noise, 1e-12));
+      }
+
+      Array.Sort(localSnr);
+      Array.Sort(centerMagnitude);
+      double snr75 =
+        QuantileSorted(
+          localSnr,
+          0.75);
+      double low =
+        Math.Max(
+          QuantileSorted(
+            centerMagnitude,
+            0.15),
+          1e-12);
+      double high =
+        Math.Max(
+          QuantileSorted(
+            centerMagnitude,
+            0.85),
+          low);
+      double keyingDepthDb =
+        Math.Clamp(
+          20.0 * Math.Log10(
+            high / low),
+          0,
+          60);
+
+      int onFrames = 0;
+      int transitions = 0;
+      bool? state = null;
+      for (int i = 0;
+           i < activity.Length;
+           i++)
+      {
+        float p =
+          Math.Clamp(
+            activity[i],
+            0,
+            1);
+        if (p >= 0.5f)
+          onFrames++;
+
+        bool? next =
+          p >= 0.65f
+            ? true
+            : p <= 0.35f
+              ? false
+              : state;
+        if (next.HasValue)
+        {
+          if (state.HasValue &&
+              next.Value != state.Value)
+            transitions++;
+          state = next;
+        }
+      }
+
+      double duty =
+        activity.Length == 0
+          ? 0
+          : onFrames /
+            (double)activity.Length;
+
+      return new(
+        snr75,
+        keyingDepthDb,
+        duty,
+        transitions);
     }
 
     public IReadOnlyDictionary<int, float[]> EstimateActivities(
@@ -335,6 +477,31 @@ namespace SkyRoof.CW
       return new(
         data,
         [1, 1, FrameCount, metadata.FrequencyBins]);
+    }
+
+    private static double QuantileSorted(
+      IReadOnlyList<double> values,
+      double quantile)
+    {
+      if (values.Count == 0)
+        return 0;
+      double position =
+        Math.Clamp(
+          quantile,
+          0,
+          1) *
+        (values.Count - 1);
+      int lower =
+        (int)Math.Floor(position);
+      int upper =
+        Math.Min(
+          values.Count - 1,
+          lower + 1);
+      double fraction =
+        position - lower;
+      return
+        values[lower] * (1 - fraction) +
+        values[upper] * fraction;
     }
 
     private double FrameRelativeToEndSeconds(int frame) =>
