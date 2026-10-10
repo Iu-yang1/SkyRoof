@@ -120,10 +120,10 @@ Track markers are deliberately lighter than before. Only the **selected** lane
 shows a full-height ±2 sigma uncertainty band, so diagnostic overlays no longer
 hide the real spectrum.
 
-The lane table uses eight stable numbered UI slots. A lane keeps its row while
-its AssociationHint/Track identity survives; a short Hold/dropout enters a
-grace state instead of causing every lower row to move. A slot is released
-only after the lane has really disappeared for several seconds.
+The right-hand Pileup panel uses eight stable numbered lane cards. A lane
+keeps its card while the AssociationHint/Track identity survives; a short
+Hold/dropout enters a grace state instead of shifting the other cards. A slot
+is released only after the lane has really disappeared for several seconds.
 
 Clicking a lane overlay selects that existing lane. It does not tune the radio
 and does not change AF or RF frequency.
