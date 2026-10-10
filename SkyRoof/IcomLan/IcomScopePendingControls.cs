@@ -102,6 +102,16 @@ namespace SkyRoof
           x => x.MarkerPosition == state.MarkerPosition);
     }
 
+    internal void ObserveFixedEdgeReadback(
+      IcomFixedEdgeReadbackState state)
+    {
+      ConfirmIf(0, IcomScopeControlKind.FixedEdge,
+        request => request.FrequencyRange == state.FrequencyRange &&
+          request.EdgeNumber == state.EdgeNumber &&
+          request.LowerFrequencyHz == state.LowerHz &&
+          request.UpperFrequencyHz == state.UpperHz);
+    }
+
     private void ConfirmIf(
       byte scope, IcomScopeControlKind kind,
       Func<IcomScopeControlRequest, bool> matches)
