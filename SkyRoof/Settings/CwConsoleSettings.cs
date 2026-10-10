@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using NAudio.CoreAudioApi;
 using VE3NEA;
+using SkyRoof.CW;
 
 namespace SkyRoof
 {
@@ -41,6 +42,13 @@ namespace SkyRoof
       "Windows playback/render endpoint captured in loopback mode. Select the speaker/virtual device that RS-BA1 Remote Utility is actually playing into (for example a remote-audio virtual endpoint). Do not select the radio's Microphone (USB Audio CODEC) capture endpoint here.")]
     [TypeConverter(typeof(OutputSoundcardNameConverter))]
     public string? RsBa1LoopbackDeviceId { get; set; }
+
+    [DisplayName("Spectrum Cleanup")]
+    [Description(
+      "Display only. Bypass shows raw PCM. HamNoise Classic/V2 denoise only the CW Skimmer-style spectrum/waterfall copy; detector, tracker, DeepCW and transcript decoding always use untouched raw PCM.")]
+    [DefaultValue(CwDenoiseMode.Bypass)]
+    public CwDenoiseMode SpectrumDenoiseMode { get; set; } =
+      CwDenoiseMode.Bypass;
 
     [DisplayName("Enable CW Transmit")]
     [Description(
