@@ -102,3 +102,45 @@ Coalesced UI scope frames and pending/unconfirmed CI-V commands are shown in
 Spectrum Diagnostics. The latest frame is preferred over replaying old
 waveform frames, preserving the existing Direct LAN, SkyCAT and passive
 RS-BA1 capture behavior while reducing contention with CW Console painting.
+
+
+### Red RX passband overlay: bandwidth accuracy, radio modes and zoom
+
+The red shaded area is an **estimated IC-9700 receive IF passband**, not
+a visualization of the independent SkyRoof SDR `Slicer` filter.
+Previously the scope used `Slicer.GetBandwidth` / `GetModeOffset`
+directly: 2.8 kHz SSB, 5 kHz SSB-D, 500 Hz CW and 16/48 kHz FM.
+In particular, 48 kHz FM-D was not representative of IC-9700 FM-D
+IF selectivity.
+
+The estimator now uses the nominal IC-9700 widths and offsets for
+the modes currently exposed by SkyRoof's RadioLink:
+
+| Mode | Nominal estimated width | Nominal RF region relative to dial |
+| --- | ---: | --- |
+| USB | 2.4 kHz | +300 to +2700 Hz |
+| LSB | 2.4 kHz | -2700 to -300 Hz |
+| USB-D | 1.2 kHz | +900 to +2100 Hz |
+| LSB-D | 1.2 kHz | -2100 to -900 Hz |
+| CW | 500 Hz | centered on dial |
+| FM / FM-D | 15 kHz | centered on dial |
+
+These are **illustrative FIL defaults**, not measurements of your radio.
+FIL1/FIL2/FIL3, custom IF BW, IF shift / Twin PBT, CW pitch, and mode
+changes made independently in RS-BA1 are not currently read back as a
+complete IF passband from scope CI-V `27 00`. Do not treat this shading
+as a calibrated measurement of receive selectivity. AM, RTTY, DV and DD
+are not represented by the current `Slicer.Mode` overlay interface;
+SkyRoof will not invent a passband for an unknown mode.
+
+In Spectrum **Settings**, four *Estimated RX ... filter width (Hz)*
+fields let you match the red overlay to the width shown on the radio
+for SSB, SSB-D, CW or FM/FM-D. These settings affect the overlay only:
+**they do not send CI-V commands to change the IC-9700 filters**.
+
+The span/zoom/center/fixed frequency-to-pixel mapping uses precisely the
+same scope geometry and optional CAT/transverter display-frequency offset
+as the waterfall, trace and tuning marker. An estimated passband outside
+the visible view is clipped completely, rather than leaving a spurious
+one-pixel red stripe. USB/LSB polarity, 25/50/100 kHz span and zoom ratios
+are covered by regression tests.

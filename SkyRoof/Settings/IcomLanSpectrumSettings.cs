@@ -66,6 +66,26 @@ namespace SkyRoof
     public IcomScopeControlPath ControlPath { get; set; } =
       IcomScopeControlPath.Auto;
 
+    [DisplayName("Estimated RX SSB filter width (Hz)")]
+    [Description("Local red receive passband overlay only. IC-9700 nominal SSB FIL2 is 2400 Hz. Set to the radio's current BW if different. Does not change radio IF filters or Twin PBT.")]
+    [DefaultValue(2400)]
+    public int RxSsbEstimatedBandwidthHz { get; set; } = 2400;
+
+    [DisplayName("Estimated RX SSB-D filter width (Hz)")]
+    [Description("Local receive overlay only; nominal IC-9700 SSB-D FIL2 is 1200 Hz. Not an IF filter readback or write.")]
+    [DefaultValue(1200)]
+    public int RxDataEstimatedBandwidthHz { get; set; } = 1200;
+
+    [DisplayName("Estimated RX CW filter width (Hz)")]
+    [Description("Local receive overlay only; nominal IC-9700 CW FIL2 is 500 Hz. Assumes a filter centered at the displayed carrier; CW pitch/IF shift/PBT is not read back.")]
+    [DefaultValue(500)]
+    public int RxCwEstimatedBandwidthHz { get; set; } = 500;
+
+    [DisplayName("Estimated RX FM/FM-D filter width (Hz)")]
+    [Description("Local receive overlay only; nominal IC-9700 FM FIL1 is 15000 Hz. Select the width matching your radio's FM filter selection, such as 10000 or 7000.")]
+    [DefaultValue(15000)]
+    public int RxFmEstimatedBandwidthHz { get; set; } = 15000;
+
     [DisplayName("Scope edge number")]
     [Description("Selected IC-9700 fixed/scroll-fixed scope edge, 1 through 4.")]
     [DefaultValue(1)]
