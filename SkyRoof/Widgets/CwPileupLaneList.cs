@@ -25,7 +25,9 @@ namespace SkyRoof
       Dock = DockStyle.Top,
       AutoSize = false,
       Margin = new Padding(0),
-      Padding = new Padding(2)
+      // Row height is computed from the viewport / 8. Any extra outer
+      // padding would introduce an unnecessary scrollbar and hide row 8.
+      Padding = new Padding(0)
     };
     private readonly Label header = new()
     {
