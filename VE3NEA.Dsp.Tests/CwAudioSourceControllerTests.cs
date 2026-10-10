@@ -65,6 +65,39 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void Ingress_SignalsOnlyAfterFreshAcceptedPcm()
+    {
+      var ingress = new CwPcmIngress();
+      int signals = 0;
+      ingress.SamplesAccepted += () =>
+      {
+        ingress.FrontEnd.Audio.TotalSamplesWritten.Should()
+          .BeGreaterThan(0);
+        signals++;
+      };
+      float[] samples = new float[1600];
+
+      ingress.Configure(true, CwReceiveAudioSource.WasapiCapture, "mic");
+      ingress.Append(CwReceiveAudioSource.SDR,
+        samples, 1600, T0).Should().BeFalse();
+      signals.Should().Be(0);
+      ingress.Append(CwReceiveAudioSource.WasapiCapture,
+        samples, 0, T0).Should().BeFalse();
+      signals.Should().Be(0);
+
+      ingress.Append(CwReceiveAudioSource.WasapiCapture,
+        samples, 1600, T0).Should().BeTrue();
+      ingress.Append(CwReceiveAudioSource.WasapiCapture,
+        samples, 1600, T0.AddMilliseconds(30)).Should().BeTrue();
+      signals.Should().Be(2);
+
+      ingress.Configure(false, CwReceiveAudioSource.WasapiCapture, "mic");
+      ingress.Append(CwReceiveAudioSource.WasapiCapture,
+        samples, 1600, T0.AddMilliseconds(60)).Should().BeFalse();
+      signals.Should().Be(2);
+    }
+
+    [Fact]
     public void Ingress_AcceptsOnlyConfiguredSource()
     {
       var ingress = new CwPcmIngress();
