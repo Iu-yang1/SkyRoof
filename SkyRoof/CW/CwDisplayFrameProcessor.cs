@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace SkyRoof.CW
 {
   /// <summary>
@@ -8,7 +10,8 @@ namespace SkyRoof.CW
     long TimelineGeneration,
     CwDenoiseMode DenoiseMode,
     CwAudioSpectrumFrame Waterfall,
-    CwAudioSpectrumFrame Spectrum);
+    CwAudioSpectrumFrame Spectrum,
+    double ProcessingMilliseconds = 0);
 
   /// <summary>
   /// One in-flight display computation at most. Slow HamNoise inference
@@ -25,6 +28,23 @@ namespace SkyRoof.CW
     private CwDenoiseMode denoiserMode = CwDenoiseMode.Bypass;
     private Task<CwDisplayFrameResult>? running;
     private bool disposed;
+    private long busyTicks;
+    private long finishedFrames;
+    private long processingTicks;
+    private long lastProcessingTicks;
+
+    internal long BusyTicks => Interlocked.Read(ref busyTicks);
+    internal long FinishedFrames => Interlocked.Read(ref finishedFrames);
+    internal double MeanProcessingMilliseconds =>
+      FinishedFrames == 0 ? 0 :
+      1000.0 * Interlocked.Read(ref processingTicks) /
+        Stopwatch.Frequency / FinishedFrames;
+    internal double LastProcessingMilliseconds =>
+      1000.0 * Interlocked.Read(ref lastProcessingTicks) /
+        Stopwatch.Frequency;
+
+    internal void RecordBusyTick() =>
+      Interlocked.Increment(ref busyTicks);
 
     internal CwDisplayFrameProcessor(
       CwAudioWaterfallAnalyzer waterfall,
@@ -44,7 +64,7 @@ namespace SkyRoof.CW
     /// <summary>
     /// Queue only if the previous job has already been consumed. Caller
     /// supplies a fresh immutable snapshot, avoiding an unbounded queue
-    /// when HamNoise takes longer than the 50 ms display timer period.
+    /// when HamNoise takes longer than the display polling interval.
     /// </summary>
     internal bool TryQueue(
       CwAudioSnapshot snapshot,
@@ -56,6 +76,7 @@ namespace SkyRoof.CW
 
       running = Task.Run(() =>
       {
+        long start = Stopwatch.GetTimestamp();
         CwAudioSnapshot display =
           transformOverride != null
             ? transformOverride(snapshot, mode)
@@ -63,10 +84,17 @@ namespace SkyRoof.CW
 
         // Both FFTW plans are owned solely by this serialized producer.
         // Compute both traces for each delivered frame: no old 5 Hz cap.
+        CwAudioSpectrumFrame waterfallFrame =
+          waterfall.Analyze(display);
+        CwAudioSpectrumFrame spectrumFrame =
+          spectrum.Analyze(display);
+        long ticks = Stopwatch.GetTimestamp() - start;
+        Interlocked.Increment(ref finishedFrames);
+        Interlocked.Add(ref processingTicks, ticks);
+        Interlocked.Exchange(ref lastProcessingTicks, ticks);
         return new CwDisplayFrameResult(
-          generation, mode,
-          waterfall.Analyze(display),
-          spectrum.Analyze(display));
+          generation, mode, waterfallFrame, spectrumFrame,
+          1000.0 * ticks / Stopwatch.Frequency);
       });
       return true;
     }
