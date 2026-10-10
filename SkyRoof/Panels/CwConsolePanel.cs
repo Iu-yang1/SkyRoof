@@ -123,8 +123,8 @@ namespace SkyRoof
       Name = "CwConsolePanel";
       // Keep the Console usable as a compact floating tool window. The old
       // 1040x900 / 720x720 geometry was unnecessarily tall on 1080p displays.
-      ClientSize = new Size(860, 620);
-      MinimumSize = new Size(700, 560);
+      ClientSize = new Size(900, 680);
+      MinimumSize = new Size(720, 620);
       KeyPreview = true;
 
       BuildUi();
@@ -190,7 +190,7 @@ namespace SkyRoof
           Dock = DockStyle.Fill,
           ColumnCount = 1,
           RowCount = 6,
-          Padding = new Padding(8)
+          Padding = new Padding(6)
         };
 
       root.ColumnStyles.Add(
@@ -211,21 +211,22 @@ namespace SkyRoof
         new RowStyle(
           SizeType.Percent,
           100));
+      // Transcript and TX rows size from their actual controls. This avoids
+      // clipping at non-100% DPI/font scaling while the lane grid consumes
+      // the remaining height.
       root.RowStyles.Add(
         new RowStyle(
-          SizeType.Absolute,
-          145));
+          SizeType.AutoSize));
       root.RowStyles.Add(
         new RowStyle(
-          SizeType.Absolute,
-          155));
+          SizeType.AutoSize));
 
       var toolbar =
         new FlowLayoutPanel
         {
           Dock = DockStyle.Fill,
           AutoSize = true,
-          WrapContents = true,
+          WrapContents = false,
           FlowDirection =
             FlowDirection.LeftToRight,
           Margin = new Padding(
@@ -418,6 +419,8 @@ namespace SkyRoof
     private void ConfigureLaneGrid()
     {
       LaneGrid.Dock = DockStyle.Fill;
+      LaneGrid.MinimumSize =
+        new Size(0, 185);
       LaneGrid.ReadOnly = true;
       LaneGrid.AllowUserToAddRows = false;
       LaneGrid.AllowUserToDeleteRows = false;
@@ -512,15 +515,19 @@ namespace SkyRoof
         new GroupBox
         {
           Dock = DockStyle.Fill,
+          AutoSize = true,
+          AutoSizeMode = AutoSizeMode.GrowAndShrink,
           Text = "Selected RX Transcript",
           Padding = new Padding(8),
-          MinimumSize = new Size(0, 115)
+          MinimumSize = new Size(0, 122)
         };
 
       var layout =
         new TableLayoutPanel
         {
           Dock = DockStyle.Fill,
+          AutoSize = true,
+          AutoSizeMode = AutoSizeMode.GrowAndShrink,
           ColumnCount = 2,
           RowCount = 5
         };
@@ -541,15 +548,15 @@ namespace SkyRoof
           SizeType.AutoSize));
       layout.RowStyles.Add(
         new RowStyle(
-          SizeType.Percent,
-          50));
+          SizeType.Absolute,
+          34));
       layout.RowStyles.Add(
         new RowStyle(
           SizeType.AutoSize));
       layout.RowStyles.Add(
         new RowStyle(
-          SizeType.Percent,
-          50));
+          SizeType.Absolute,
+          34));
 
       SelectedLaneLabel.Text =
         "No lane selected";
@@ -641,6 +648,8 @@ namespace SkyRoof
         new GroupBox
         {
           Dock = DockStyle.Fill,
+          AutoSize = true,
+          AutoSizeMode = AutoSizeMode.GrowAndShrink,
           Text =
             "CW Transmit — IC-9700 / SkyCAT Command 17",
           Padding = new Padding(8),
@@ -652,6 +661,8 @@ namespace SkyRoof
         new TableLayoutPanel
         {
           Dock = DockStyle.Fill,
+          AutoSize = true,
+          AutoSizeMode = AutoSizeMode.GrowAndShrink,
           ColumnCount = 1,
           RowCount = 4
         };
@@ -661,8 +672,8 @@ namespace SkyRoof
           SizeType.AutoSize));
       layout.RowStyles.Add(
         new RowStyle(
-          SizeType.Percent,
-          100));
+          SizeType.Absolute,
+          32));
       layout.RowStyles.Add(
         new RowStyle(
           SizeType.AutoSize));
@@ -683,7 +694,7 @@ namespace SkyRoof
 
       TxTextBox.Dock =
         DockStyle.Fill;
-      TxTextBox.Multiline = true;
+      TxTextBox.Multiline = false;
       TxTextBox.MaxLength =
         CwMessageTiming.MaxCharacters;
       TxTextBox.Font =
@@ -691,9 +702,9 @@ namespace SkyRoof
           FontFamily.GenericMonospace,
           11f);
       TxTextBox.ScrollBars =
-        ScrollBars.Vertical;
+        ScrollBars.None;
       TxTextBox.MinimumSize =
-        new Size(0, 42);
+        new Size(0, 24);
       TxTextBox.TextChanged +=
         (_, _) =>
           RefreshTransmitUi();
@@ -722,7 +733,9 @@ namespace SkyRoof
           MacroButtons[i];
         int index = i;
 
-        button.AutoSize = true;
+        button.AutoSize = false;
+        button.Size =
+          new Size(58, 26);
         button.Tag = index;
         button.Click +=
           (_, _) =>
@@ -737,7 +750,7 @@ namespace SkyRoof
         {
           AutoSize = true,
           Text =
-            "F1–F8 load · Shift+F1–F8 send",
+            "F1–F8 load · Shift+Fn send",
           Margin = new Padding(
             8, 7, 0, 0)
         });
@@ -821,7 +834,7 @@ namespace SkyRoof
         {
           AutoSize = true,
           Text =
-            "Max 30 chars · radio must already be CW/CW-R with Semi/Full BK-IN",
+            "≤30 chars · CW/CW-R · Semi/Full BK-IN",
           Margin = new Padding(
             12, 7, 0, 0)
         });
@@ -841,6 +854,8 @@ namespace SkyRoof
     {
       box.Dock = DockStyle.Fill;
       box.Multiline = true;
+      box.MinimumSize =
+        new Size(0, 28);
       box.ReadOnly = true;
       box.ScrollBars =
         ScrollBars.Vertical;
