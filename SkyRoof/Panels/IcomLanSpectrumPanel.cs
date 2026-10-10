@@ -1986,17 +1986,9 @@ namespace SkyRoof
           DialogResult.OK)
         return;
 
-      settings.FixedEdgePresets[key] =
-        new IcomScopeFixedEdgePreset
-        {
-          LowerHz =
-            dialog.LowerHz,
-          UpperHz =
-            dialog.UpperHz
-        };
-
-      ctx.Settings.SaveToFile();
-
+      // Do not save unconfirmed requested radio-register values as though
+      // they were installed presets. The matching post-write EDGE readback
+      // persists the actual device state on successful confirmation.
       bool routed =
         SendScopeControl(
           IcomScopeControlRequest.ForFixedEdge(
