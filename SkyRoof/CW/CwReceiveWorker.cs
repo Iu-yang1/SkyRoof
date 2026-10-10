@@ -30,7 +30,12 @@ namespace SkyRoof.CW
     long CompletedInferenceWindows,
     long SkippedInferenceWindows,
     int TrackCount,
-    string? LastError);
+    string? LastError,
+    long RidgeStftCacheHits = 0,
+    long RidgeStftCacheMisses = 0,
+    long DeepCwStftCacheHits = 0,
+    long DeepCwStftCacheMisses = 0,
+    double MeanOnnxInferenceMs = 0);
 
   public sealed class CwTracksUpdatedEventArgs : EventArgs
   {
