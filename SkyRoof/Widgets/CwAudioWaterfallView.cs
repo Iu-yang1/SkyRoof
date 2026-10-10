@@ -1,6 +1,7 @@
 using SkyRoof.CW;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
 
 namespace SkyRoof
 {
@@ -212,17 +213,32 @@ namespace SkyRoof
       double floor =
         displayFloorDb + 1.0;
 
-      for (int bin = 0; bin < waterfall.Height; bin++)
+      // Update one 32-bit column under a single bitmap lock instead of
+      // making 512 GDI+ SetPixel calls on every 50-ms UI paint tick.
+      BitmapData pixels = waterfall.LockBits(
+        new Rectangle(0, 0, waterfall.Width, waterfall.Height),
+        ImageLockMode.WriteOnly,
+        PixelFormat.Format32bppArgb);
+      try
       {
-        double level = Math.Pow(
-          Math.Clamp(
-            (frame.PowerDb[bin] - floor) / DisplayRangeDb,
-            0, 1),
-          0.78);
-        waterfall.SetPixel(
-          nextWriteColumn,
-          waterfall.Height - 1 - bin,
-          HeatColor(level));
+        for (int bin = 0; bin < waterfall.Height; bin++)
+        {
+          double level = Math.Pow(
+            Math.Clamp(
+              (frame.PowerDb[bin] - floor) / DisplayRangeDb,
+              0, 1),
+            0.78);
+          int argb = HeatColor(level).ToArgb();
+          Marshal.WriteInt32(
+            pixels.Scan0,
+            (waterfall.Height - 1 - bin) * pixels.Stride +
+              nextWriteColumn * 4,
+            argb);
+        }
+      }
+      finally
+      {
+        waterfall.UnlockBits(pixels);
       }
 
       nextWriteColumn =
