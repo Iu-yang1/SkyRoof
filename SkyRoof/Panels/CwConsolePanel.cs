@@ -1742,14 +1742,26 @@ namespace SkyRoof
       if (key >= Keys.F1 &&
           key <= Keys.F8)
       {
+        Keys modifiers =
+          keyData & Keys.Modifiers;
+
+        // Only the two documented forms are owned by the CW Console:
+        //   F1..F8       -> load only
+        //   Shift+F1..F8 -> explicit send
+        // Ctrl/Alt combinations are deliberately left to WinForms/the host
+        // so an unrelated shortcut can never be reinterpreted as transmit.
+        if (modifiers is not (
+              Keys.None or
+              Keys.Shift))
+          return base.ProcessCmdKey(
+            ref msg,
+            keyData);
+
         int index =
           (int)key -
           (int)Keys.F1;
-        bool send =
-          (keyData & Keys.Shift) ==
-          Keys.Shift;
 
-        if (send)
+        if (modifiers == Keys.Shift)
           _ = SendMacroAsync(index);
         else
           LoadMacroIntoComposer(index);
