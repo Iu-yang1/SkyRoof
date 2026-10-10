@@ -10,6 +10,8 @@ items:
     href: spectrum.md
   - name: 转台、主题与操作
     href: rotator-and-ui.md
+  - name: CW Console 用户指南
+    href: ../users_guide/cw_console.md
   - name: CW Console 与多路 Pileup 规划
     href: cw-console-plan.md
   - name: 故障排查与更新记录
