@@ -49,10 +49,58 @@ namespace SkyRoof
     [DefaultValue(4538)]
     public int CwKeyerPort { get; set; } = 4538;
 
+    [DisplayName("CW Message Macros")]
+    [Description(
+      "Persistent F1-F8 text presets. F1-F8 load a preset into the composer; Shift+F1-F8 explicitly sends it only when TX is already enabled and armed.")]
+    [TypeConverter(typeof(ExpandableObjectConverter))]
+    public CwMacroSettings Macros { get; set; } = new();
+
     [Browsable(false)]
     [DefaultValue(2.4)]
     public double TrackingAnalysisSeconds { get; set; } = 2.4;
 
     public override string ToString() => string.Empty;
+  }
+}
+
+
+namespace SkyRoof
+{
+  public sealed class CwMacroSettings
+  {
+    [DisplayName("F1")]
+    [DefaultValue("")]
+    public string F1 { get; set; } = string.Empty;
+
+    [DisplayName("F2")]
+    [DefaultValue("")]
+    public string F2 { get; set; } = string.Empty;
+
+    [DisplayName("F3")]
+    [DefaultValue("")]
+    public string F3 { get; set; } = string.Empty;
+
+    [DisplayName("F4")]
+    [DefaultValue("")]
+    public string F4 { get; set; } = string.Empty;
+
+    [DisplayName("F5")]
+    [DefaultValue("")]
+    public string F5 { get; set; } = string.Empty;
+
+    [DisplayName("F6")]
+    [DefaultValue("")]
+    public string F6 { get; set; } = string.Empty;
+
+    [DisplayName("F7")]
+    [DefaultValue("")]
+    public string F7 { get; set; } = string.Empty;
+
+    [DisplayName("F8")]
+    [DefaultValue("")]
+    public string F8 { get; set; } = string.Empty;
+
+    public override string ToString() =>
+      string.Empty;
   }
 }
