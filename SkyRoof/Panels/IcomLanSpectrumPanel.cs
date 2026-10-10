@@ -1263,7 +1263,23 @@ namespace SkyRoof
         frame);
       SpectrumView.PushFrame(frame);
       LastRenderedScopeFrameTicks = ticks;
-      RefreshScopeGeometryUi();
+
+      // Do not write all ComboBox selections / NumericUpDown values on
+      // every 27 00 frame. That repeatedly mutates native Win32 controls
+      // even if only the 475 waveform amplitude values changed, and can
+      // steal selection in an open dropdown. Geometry still refreshes
+      // immediately on a real MODE/SPAN/frequency transition.
+      if (LastGeometryUiScope != frame.Scope ||
+          LastGeometryUiMode != frame.Mode ||
+          LastGeometryUiA != frame.FrequencyAHz ||
+          LastGeometryUiB != frame.FrequencyBHz)
+      {
+        LastGeometryUiScope = frame.Scope;
+        LastGeometryUiMode = frame.Mode;
+        LastGeometryUiA = frame.FrequencyAHz;
+        LastGeometryUiB = frame.FrequencyBHz;
+        RefreshScopeGeometryUi();
+      }
     }
 
     private void SynchronizePendingEdgeIfNeeded(
