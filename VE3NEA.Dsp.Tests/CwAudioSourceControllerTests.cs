@@ -13,6 +13,58 @@ namespace VE3NEA.Dsp.Tests
       new(2026, 10, 9, 0, 0, 0, DateTimeKind.Utc);
 
     [Fact]
+    public void CwWasapiCapture_CanUseSmallAudioPacketsWithoutChangingLegacyDefault()
+    {
+      using var cwCapture = new InputSoundcard<float>(
+        captureBufferMilliseconds: 40,
+        readerBlockSizeSamples: 1600);
+      using var otherCapture = new InputSoundcard<float>();
+      cwCapture.CaptureBufferMilliseconds.Should().Be(40);
+      cwCapture.ReaderBlockSizeSamples.Should().Be(1600);
+      otherCapture.CaptureBufferMilliseconds.Should().Be(200);
+      otherCapture.ReaderBlockSizeSamples.Should().Be(4800);
+    }
+
+    [Theory]
+    [InlineData(0, 1600)]
+    [InlineData(19, 1600)]
+    [InlineData(1001, 1600)]
+    [InlineData(40, 0)]
+    [InlineData(40, 127)]
+    public void WasapiCapture_InvalidLatencyOrBlockSizeIsRejected(
+      int latency, int blockSamples)
+    {
+      Action create = () =>
+      {
+        using var device = new InputSoundcard<float>(
+          captureBufferMilliseconds: latency,
+          readerBlockSizeSamples: blockSamples);
+      };
+      create.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public void Ingress_PcmDeliveryTelemetryResetsOnSourceChange()
+    {
+      var ingress = new CwPcmIngress();
+      ingress.Configure(true, CwReceiveAudioSource.WasapiCapture, "mic");
+      float[] block = new float[1600];
+      ingress.Append(
+        CwReceiveAudioSource.WasapiCapture, block, block.Length, T0)
+        .Should().BeTrue();
+      ingress.Append(
+        CwReceiveAudioSource.WasapiCapture, block, block.Length,
+        T0.AddMilliseconds(33)).Should().BeTrue();
+      ingress.AcceptedBlocks.Should().Be(2);
+      ingress.LastBlockSamples.Should().Be(1600);
+      ingress.LastPcmDeliveryIntervalMs.Should().BeGreaterOrEqualTo(0);
+      ingress.Configure(false, CwReceiveAudioSource.WasapiCapture, "mic");
+      ingress.AcceptedBlocks.Should().Be(0);
+      ingress.LastBlockSamples.Should().Be(0);
+      ingress.LastPcmDeliveryIntervalMs.Should().Be(0);
+    }
+
+    [Fact]
     public void Ingress_AcceptsOnlyConfiguredSource()
     {
       var ingress = new CwPcmIngress();
