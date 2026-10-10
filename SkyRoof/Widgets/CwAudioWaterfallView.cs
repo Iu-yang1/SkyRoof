@@ -290,6 +290,13 @@ namespace SkyRoof
     protected override void OnPaint(PaintEventArgs e)
     {
       base.OnPaint(e);
+      PaintContents(e.Graphics);
+    }
+
+    // Shared by the real Control paint path and raster tests, without
+    // relying on Control.DrawToBitmap/WM_PRINTCLIENT semantics.
+    internal void PaintContents(Graphics graphics)
+    {
       Rectangle scale = new(
         0, 0, FrequencyScaleWidth,
         Math.Max(1, ClientSize.Height));
@@ -300,19 +307,19 @@ namespace SkyRoof
 
       using (var scaleBrush =
         new SolidBrush(SkimmerScaleBackground))
-        e.Graphics.FillRectangle(scaleBrush, scale);
+        graphics.FillRectangle(scaleBrush, scale);
       using (var background =
         new SolidBrush(SkimmerBackground))
-        e.Graphics.FillRectangle(background, spectrum);
+        graphics.FillRectangle(background, spectrum);
       using (var background =
         new SolidBrush(SkimmerBackground))
-        e.Graphics.FillRectangle(background, body);
+        graphics.FillRectangle(background, body);
 
       if (hasRows)
-        DrawWaterfall(e.Graphics, body);
-      DrawFrequencyScale(e.Graphics, scale, spectrum, body);
-      DrawSpectrumTrace(e.Graphics, spectrum);
-      DrawTrackMarkers(e.Graphics, body);
+        DrawWaterfall(graphics, body);
+      DrawFrequencyScale(graphics, scale, spectrum, body);
+      DrawSpectrumTrace(graphics, spectrum);
+      DrawTrackMarkers(graphics, body);
     }
 
     private void DrawSpectrumTrace(
