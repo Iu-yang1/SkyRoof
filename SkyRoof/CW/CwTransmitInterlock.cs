@@ -91,6 +91,7 @@ namespace SkyRoof.CW
     private const int HardwareFrequencyToleranceHz = 100;
     private const double ContextFrequencyToleranceHz = 0.5;
     private const double PassbandToleranceHz = 100;
+    private const double SingleFrequencyToleranceHz = 5000;
 
     private readonly Context ctx;
     private int txWritesFrozen;
@@ -293,9 +294,28 @@ namespace SkyRoof.CW
         SatnogsDbTransmitter tx,
         double noDopplerHz)
     {
-      if (!tx.uplink_low.HasValue ||
-          !tx.uplink_high.HasValue)
+      if (!tx.uplink_low.HasValue)
         return;
+
+      if (!tx.uplink_high.HasValue ||
+          tx.uplink_high.Value ==
+            tx.uplink_low.Value)
+      {
+        double center =
+          tx.uplink_low.Value +
+          link.UplinkBaseOffset;
+
+        if (Math.Abs(
+              noDopplerHz -
+              center) >
+            SingleFrequencyToleranceHz)
+          throw new InvalidOperationException(
+            $"The logical uplink {noDopplerHz:n0} Hz is more than " +
+            $"±{SingleFrequencyToleranceHz:n0} Hz from the selected single-frequency uplink " +
+            $"{center:n0} Hz.");
+
+        return;
+      }
 
       double a =
         tx.uplink_low.Value +
