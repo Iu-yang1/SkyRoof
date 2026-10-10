@@ -50,6 +50,65 @@ namespace SkyRoof
     private float[] latestPowerDb = Array.Empty<float>();
     private double minFrequencyHz = 100;
     private double maxFrequencyHz = 2000;
+    private double viewportStartFraction;
+    private double viewportZoom = 1.0;
+
+    // Horizontal pan/zoom changes the display only; the detector and the
+    // complete wideband inference still receive the full original AF span.
+    public double ViewportStartFraction => viewportStartFraction;
+    public double ViewportZoom => viewportZoom;
+    public double VisibleMinimumHz =>
+      minFrequencyHz + viewportStartFraction *
+      (maxFrequencyHz - minFrequencyHz) *
+      (1.0 - 1.0 / viewportZoom);
+    public double VisibleMaximumHz =>
+      VisibleMinimumHz +
+      (maxFrequencyHz - minFrequencyHz) / viewportZoom;
+    public event EventHandler? ViewportChanged;
+
+    public void SetViewport(double startFraction, double zoom)
+    {
+      if (!double.IsFinite(startFraction) || !double.IsFinite(zoom))
+        throw new ArgumentOutOfRangeException(nameof(zoom));
+
+      double nextZoom = Math.Clamp(zoom, 1.0, 8.0);
+      double nextStart = nextZoom == 1.0
+        ? 0.0 : Math.Clamp(startFraction, 0.0, 1.0);
+      if (Math.Abs(nextZoom - viewportZoom) < 1e-9 &&
+          Math.Abs(nextStart - viewportStartFraction) < 1e-9)
+        return;
+
+      viewportZoom = nextZoom;
+      viewportStartFraction = nextStart;
+      Invalidate();
+      ViewportChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+      // Focus on explicit interaction, never on hover: RX spectrum hover
+      // must not steal keyboard focus from a live CW TX composer.
+      Focus();
+      base.OnMouseDown(e);
+    }
+
+    protected override void OnMouseWheel(MouseEventArgs e)
+    {
+      base.OnMouseWheel(e);
+      if (ModifierKeys.HasFlag(Keys.Control))
+      {
+        // Keep wheel zoom aligned with the integer 1–8x toolbar control.
+        SetViewport(viewportStartFraction,
+          Math.Clamp(
+            Math.Round(viewportZoom) + Math.Sign(e.Delta),
+            1, 8));
+      }
+      else
+      {
+        SetViewport(viewportStartFraction -
+          Math.Sign(e.Delta) * 0.08, viewportZoom);
+      }
+    }
 
     private IReadOnlyList<CwSignalTrack> tracks =
       Array.Empty<CwSignalTrack>();
@@ -66,7 +125,8 @@ namespace SkyRoof
           nameof(spectrumBins));
 
       DoubleBuffered = true;
-      MinimumSize = new Size(320, 120);
+      TabStop = true;
+      MinimumSize = new Size(250, 130);
       waterfall =
         new Bitmap(
           spectrumBins,
@@ -280,45 +340,38 @@ namespace SkyRoof
           !float.IsFinite(spectrumFloorDb))
         return;
 
-      using var pen =
-        new Pen(
-          SkimmerTrace,
-          1.25f);
-      var points =
-        new PointF[latestPowerDb.Length];
-      double floor =
-        spectrumFloorDb + 1.0;
+      using var pen = new Pen(SkimmerTrace, 1.25f);
+      double floor = spectrumFloorDb + 1.0;
+      int first = Math.Clamp(
+        (int)Math.Floor(
+          (VisibleMinimumHz - minFrequencyHz) /
+          Math.Max(1e-9, maxFrequencyHz - minFrequencyHz) *
+          (latestPowerDb.Length - 1)),
+        0, latestPowerDb.Length - 2);
+      int last = Math.Clamp(
+        (int)Math.Ceiling(
+          (VisibleMaximumHz - minFrequencyHz) /
+          Math.Max(1e-9, maxFrequencyHz - minFrequencyHz) *
+          (latestPowerDb.Length - 1)),
+        first + 1, latestPowerDb.Length - 1);
+      var points = new PointF[last - first + 1];
 
-      for (int i = 0;
-           i < latestPowerDb.Length;
-           i++)
+      for (int i = first; i <= last; i++)
       {
-        double level =
-          Math.Clamp(
-            (latestPowerDb[i] - floor) /
-            DisplayRangeDb,
-            0,
-            1);
-        float x =
-          body.Left +
-          i *
-          (body.Width - 1f) /
-          Math.Max(
-            1,
-            latestPowerDb.Length - 1);
-        float y =
-          body.Bottom - 2 -
-          (float)(level *
-            Math.Max(
-              1,
-              body.Height - 5));
-        points[i] =
-          new PointF(x, y);
+        double level = Math.Clamp(
+          (latestPowerDb[i] - floor) / DisplayRangeDb,
+          0, 1);
+        double frequency = minFrequencyHz +
+          i * (maxFrequencyHz - minFrequencyHz) /
+          (latestPowerDb.Length - 1);
+        float x = FrequencyToX(frequency);
+        float y = body.Bottom - 2 -
+          (float)(level * Math.Max(1, body.Height - 5));
+        points[i - first] = new PointF(x, y);
       }
-
-      g.DrawLines(
-        pen,
-        points);
+      g.SetClip(body);
+      g.DrawLines(pen, points);
+      g.ResetClip();
     }
 
     private void DrawWaterfall(
@@ -332,6 +385,20 @@ namespace SkyRoof
 
       // New rows are written backwards. writeRow therefore always points
       // at the newest row and the chronological ring starts there.
+      int sourceLeft = Math.Clamp(
+        (int)Math.Floor(
+          (VisibleMinimumHz - minFrequencyHz) /
+          Math.Max(1e-9, maxFrequencyHz - minFrequencyHz) *
+          waterfall.Width),
+        0, waterfall.Width - 1);
+      int sourceRight = Math.Clamp(
+        (int)Math.Ceiling(
+          (VisibleMaximumHz - minFrequencyHz) /
+          Math.Max(1e-9, maxFrequencyHz - minFrequencyHz) *
+          waterfall.Width),
+        sourceLeft + 1, waterfall.Width);
+      int sourceWidth = sourceRight - sourceLeft;
+
       int firstCount =
         HistoryRows - writeRow;
       int secondCount =
@@ -341,9 +408,9 @@ namespace SkyRoof
       {
         Rectangle source =
           new(
-            0,
+            sourceLeft,
             writeRow,
-            waterfall.Width,
+            sourceWidth,
             firstCount);
         Rectangle dest =
           new(
@@ -365,9 +432,9 @@ namespace SkyRoof
       {
         Rectangle source =
           new(
+            sourceLeft,
             0,
-            0,
-            waterfall.Width,
+            sourceWidth,
             secondCount);
         int top =
           body.Top +
@@ -394,10 +461,11 @@ namespace SkyRoof
       Rectangle scale,
       Rectangle plot)
     {
-      const int stepHz = 250;
+      int stepHz = viewportZoom >= 4.0 ? 50
+        : viewportZoom >= 2.0 ? 100 : 250;
       int first =
         (int)Math.Ceiling(
-          minFrequencyHz /
+          VisibleMinimumHz /
           stepHz) *
         stepHz;
 
@@ -409,7 +477,7 @@ namespace SkyRoof
           Color.Gainsboro);
 
       for (int hz = first;
-           hz <= maxFrequencyHz;
+           hz <= VisibleMaximumHz;
            hz += stepHz)
       {
         float x =
@@ -478,9 +546,9 @@ namespace SkyRoof
         in tracks)
       {
         if (track.FrequencyHz <
-              minFrequencyHz ||
+              VisibleMinimumHz ||
             track.FrequencyHz >
-              maxFrequencyHz)
+              VisibleMaximumHz)
           continue;
 
         CwConsoleLaneIdentity identity =
@@ -625,9 +693,9 @@ namespace SkyRoof
         tracks
           .Where(x =>
             x.FrequencyHz >=
-              minFrequencyHz &&
+              VisibleMinimumHz &&
             x.FrequencyHz <=
-              maxFrequencyHz)
+              VisibleMaximumHz)
           .OrderBy(x =>
             Math.Abs(
               x.FrequencyHz -
@@ -641,8 +709,8 @@ namespace SkyRoof
         visible[0];
 
       double hzPerPixel =
-        (maxFrequencyHz -
-         minFrequencyHz) /
+        (VisibleMaximumHz -
+         VisibleMinimumHz) /
         Math.Max(
           1,
           ClientSize.Width);
@@ -670,10 +738,10 @@ namespace SkyRoof
     {
       double fraction =
         (frequencyHz -
-         minFrequencyHz) /
+         VisibleMinimumHz) /
         Math.Max(
-          maxFrequencyHz -
-          minFrequencyHz,
+          VisibleMaximumHz -
+          VisibleMinimumHz,
           1e-9);
 
       return (float)(
@@ -698,10 +766,10 @@ namespace SkyRoof
           0,
           1);
 
-      return minFrequencyHz +
+      return VisibleMinimumHz +
         fraction *
-        (maxFrequencyHz -
-         minFrequencyHz);
+        (VisibleMaximumHz -
+         VisibleMinimumHz);
     }
 
     private static float Percentile(

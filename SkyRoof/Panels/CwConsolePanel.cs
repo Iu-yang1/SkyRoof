@@ -32,11 +32,11 @@ namespace SkyRoof
     private long waterfallGeneration = -1;
     private long lastWaterfallSampleIndex = -1;
 
-    private readonly DataGridView LaneGrid = new();
-    private readonly Label SelectedLaneLabel = new();
-    private readonly TextBox CommittedTextBox = new();
-    private readonly TextBox ProvisionalTextBox = new();
-    private readonly Button CopyBtn = new();
+    private readonly CwPileupLaneList PileupList = new();
+    private readonly SplitContainer WorkSplit = new();
+    private readonly HScrollBar AfPanBar = new();
+    private readonly NumericUpDown AfZoomBox = new();
+    private readonly Label AfWindowLabel = new();
 
     private readonly TextBox TxTextBox = new();
     private readonly Button ArmTxBtn = new();
@@ -123,8 +123,8 @@ namespace SkyRoof
       Name = "CwConsolePanel";
       // Keep the Console usable as a compact floating tool window. The old
       // 1040x900 / 720x720 geometry was unnecessarily tall on 1080p displays.
-      ClientSize = new Size(900, 680);
-      MinimumSize = new Size(720, 620);
+      ClientSize = new Size(1010, 640);
+      MinimumSize = new Size(720, 510);
       KeyPreview = true;
 
       BuildUi();
@@ -185,53 +185,20 @@ namespace SkyRoof
     private void BuildUi()
     {
       var root =
-        new TableLayoutPanel
-        {
-          Dock = DockStyle.Fill,
-          AutoScroll = true,
-          ColumnCount = 1,
-          RowCount = 6,
-          Padding = new Padding(6)
-        };
-
-      root.ColumnStyles.Add(
-        new ColumnStyle(
-          SizeType.Percent,
-          100));
-      root.RowStyles.Add(
-        new RowStyle(
-          SizeType.AutoSize));
-      root.RowStyles.Add(
-        new RowStyle(
-          SizeType.AutoSize));
-      root.RowStyles.Add(
-        new RowStyle(
-          SizeType.Absolute,
-          120));
-      root.RowStyles.Add(
-        new RowStyle(
-          SizeType.Percent,
-          100));
-      // Transcript and TX rows size from their actual controls. This avoids
-      // clipping at non-100% DPI/font scaling while the lane grid consumes
-      // the remaining height.
-      root.RowStyles.Add(
-        new RowStyle(
-          SizeType.AutoSize));
-      root.RowStyles.Add(
-        new RowStyle(
-          SizeType.AutoSize));
+        CreateSkimmerRootLayout();
 
       var toolbar =
         new FlowLayoutPanel
         {
           Dock = DockStyle.Fill,
-          AutoSize = true,
-          WrapContents = true,
+          AutoSize = false,
+          AutoScroll = true,
+          Height = 36,
+          WrapContents = false,
           FlowDirection =
             FlowDirection.LeftToRight,
           Margin = new Padding(
-            0, 0, 0, 5)
+            0, 0, 0, 2)
         };
 
       RxToggleBtn.AutoSize = true;
@@ -347,12 +314,14 @@ namespace SkyRoof
         new FlowLayoutPanel
         {
           Dock = DockStyle.Fill,
-          AutoSize = true,
-          WrapContents = true,
+          AutoSize = false,
+          AutoScroll = true,
+          Height = 27,
+          WrapContents = false,
           FlowDirection =
             FlowDirection.LeftToRight,
           Margin = new Padding(
-            0, 0, 0, 5)
+            0, 0, 0, 2)
         };
 
       InputStatusLabel.AutoSize = true;
@@ -386,432 +355,238 @@ namespace SkyRoof
         0,
         1);
 
-      WaterfallView.Dock =
-        DockStyle.Fill;
-      WaterfallView.Margin =
-        new Padding(
-          0, 0, 0, 6);
-      WaterfallView.LaneClicked +=
-        WaterfallView_LaneClicked;
-      root.Controls.Add(
-        WaterfallView,
-        0,
-        2);
-
-      ConfigureLaneGrid();
-      root.Controls.Add(
-        LaneGrid,
-        0,
-        3);
-
-      root.Controls.Add(
-        BuildTranscriptPanel(),
-        0,
-        4);
-
-      root.Controls.Add(
-        BuildTransmitPanel(),
-        0,
-        5);
+      ConfigureSkimmerWorkspace();
+      root.Controls.Add(WorkSplit, 0, 2);
+      root.Controls.Add(BuildTransmitPanel(), 0, 3);
 
       Controls.Add(root);
     }
 
-    private void ConfigureLaneGrid()
+    internal static TableLayoutPanel CreateSkimmerRootLayout()
     {
-      LaneGrid.Dock = DockStyle.Fill;
-      LaneGrid.MinimumSize =
-        new Size(0, 185);
-      LaneGrid.ReadOnly = true;
-      LaneGrid.AllowUserToAddRows = false;
-      LaneGrid.AllowUserToDeleteRows = false;
-      LaneGrid.AllowUserToResizeRows = false;
-      LaneGrid.AllowUserToOrderColumns = false;
-      LaneGrid.MultiSelect = false;
-      LaneGrid.SelectionMode =
-        DataGridViewSelectionMode.FullRowSelect;
-      LaneGrid.AutoGenerateColumns = false;
-      LaneGrid.AutoSizeColumnsMode =
-        DataGridViewAutoSizeColumnsMode.Fill;
-      LaneGrid.RowHeadersVisible = false;
-      LaneGrid.BackgroundColor =
-        SystemColors.Window;
-      LaneGrid.BorderStyle =
-        BorderStyle.FixedSingle;
-
-      LaneGrid.Columns.Add(
-        MakeTextColumn(
-          "Lane",
-          "Slot / Lane",
-          76,
-          0.45f));
-      LaneGrid.Columns.Add(
-        MakeTextColumn(
-          "Frequency",
-          "AF Hz",
-          82,
-          0.72f));
-      LaneGrid.Columns.Add(
-        MakeTextColumn(
-          "Snr",
-          "SNR dB",
-          74,
-          0.62f));
-      LaneGrid.Columns.Add(
-        MakeTextColumn(
-          "Drift",
-          "Hz/s",
-          72,
-          0.62f));
-      LaneGrid.Columns.Add(
-        MakeTextColumn(
-          "State",
-          "State",
-          92,
-          0.82f));
-      LaneGrid.Columns.Add(
-        MakeTextColumn(
-          "Identity",
-          "ID conf",
-          76,
-          0.64f));
-
-      var textColumn =
-        MakeTextColumn(
-          "Transcript",
-          "Transcript",
-          260,
-          3.4f);
-      textColumn.DefaultCellStyle.Font =
-        new Font(
-          FontFamily.GenericMonospace,
-          9.5f);
-      LaneGrid.Columns.Add(
-        textColumn);
-
-      LaneGrid.SelectionChanged +=
-        LaneGrid_SelectionChanged;
+      var root = new TableLayoutPanel
+      {
+        ColumnCount = 1,
+        RowCount = 4,
+        Dock = DockStyle.Fill,
+        AutoScroll = false,
+        Padding = new Padding(6)
+      };
+      root.ColumnStyles.Add(
+        new ColumnStyle(SizeType.Percent, 100));
+      root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+      root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+      root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+      root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+      return root;
     }
 
-    private static DataGridViewTextBoxColumn
-      MakeTextColumn(
-        string name,
-        string header,
-        int minimumWidth,
-        float fillWeight) =>
-      new()
-      {
-        Name = name,
-        HeaderText = header,
-        MinimumWidth = minimumWidth,
-        FillWeight = fillWeight,
-        SortMode =
-          DataGridViewColumnSortMode
-            .NotSortable
-      };
-
-    private Control BuildTranscriptPanel()
+    private void ConfigureSkimmerWorkspace()
     {
-      var group =
-        new GroupBox
-        {
-          Dock = DockStyle.Fill,
-          AutoSize = true,
-          AutoSizeMode = AutoSizeMode.GrowAndShrink,
-          Text = "Selected RX Transcript",
-          Padding = new Padding(8),
-          MinimumSize = new Size(0, 112)
-        };
+      WorkSplit.Dock = DockStyle.Fill;
+      WorkSplit.Orientation = Orientation.Vertical;
+      WorkSplit.SplitterWidth = 7;
+      WorkSplit.BorderStyle = BorderStyle.FixedSingle;
+      // Docked/narrow consoles may be smaller than the combined preferred
+      // pane widths, so don't set hard minimums that make WinForms throw.
+      WorkSplit.Panel1MinSize = 0;
+      WorkSplit.Panel2MinSize = 0;
 
-      var layout =
-        new TableLayoutPanel
-        {
-          Dock = DockStyle.Fill,
-          AutoSize = true,
-          AutoSizeMode = AutoSizeMode.GrowAndShrink,
-          ColumnCount = 2,
-          RowCount = 5
-        };
+      var left = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        RowCount = 2,
+        ColumnCount = 1,
+        Padding = new Padding(0)
+      };
+      left.ColumnStyles.Add(
+        new ColumnStyle(SizeType.Percent, 100));
+      left.RowStyles.Add(
+        new RowStyle(SizeType.Percent, 100));
+      left.RowStyles.Add(
+        new RowStyle(SizeType.Absolute, 30));
 
-      layout.ColumnStyles.Add(
-        new ColumnStyle(
-          SizeType.Percent,
-          100));
-      layout.ColumnStyles.Add(
-        new ColumnStyle(
-          SizeType.AutoSize));
+      WaterfallView.Dock = DockStyle.Fill;
+      WaterfallView.Margin = new Padding(0);
+      WaterfallView.LaneClicked +=
+        WaterfallView_LaneClicked;
+      WaterfallView.ViewportChanged +=
+        WaterfallView_ViewportChanged;
+      left.Controls.Add(WaterfallView, 0, 0);
 
-      layout.RowStyles.Add(
-        new RowStyle(
-          SizeType.AutoSize));
-      layout.RowStyles.Add(
-        new RowStyle(
-          SizeType.AutoSize));
-      layout.RowStyles.Add(
-        new RowStyle(
-          SizeType.Absolute,
-          28));
-      layout.RowStyles.Add(
-        new RowStyle(
-          SizeType.AutoSize));
-      layout.RowStyles.Add(
-        new RowStyle(
-          SizeType.Absolute,
-          28));
-
-      SelectedLaneLabel.Text =
-        "No lane selected";
-      SelectedLaneLabel.AutoSize = true;
-      SelectedLaneLabel.Font =
-        new Font(
-          Font,
-          FontStyle.Bold);
-      layout.Controls.Add(
-        SelectedLaneLabel,
-        0,
-        0);
-
-      CopyBtn.Text = "Copy";
-      CopyBtn.AutoSize = true;
-      CopyBtn.Click +=
-        CopyBtn_Click;
-      layout.Controls.Add(
-        CopyBtn,
-        1,
-        0);
-
-      var committedLabel =
+      var pan = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        ColumnCount = 3,
+        RowCount = 1,
+        Margin = new Padding(0)
+      };
+      pan.ColumnStyles.Add(
+        new ColumnStyle(SizeType.AutoSize));
+      pan.ColumnStyles.Add(
+        new ColumnStyle(SizeType.Percent, 100));
+      pan.ColumnStyles.Add(
+        new ColumnStyle(SizeType.AutoSize));
+      pan.Controls.Add(
         new Label
         {
-          Text = "Committed",
+          Text = "AF",
           AutoSize = true,
-          Margin = new Padding(
-            0, 5, 0, 2)
-        };
-      layout.SetColumnSpan(
-        committedLabel,
-        2);
-      layout.Controls.Add(
-        committedLabel,
-        0,
-        1);
+          Margin = new Padding(3, 7, 8, 0)
+        }, 0, 0);
 
-      ConfigureTranscriptBox(
-        CommittedTextBox);
-      layout.SetColumnSpan(
-        CommittedTextBox,
-        2);
-      layout.Controls.Add(
-        CommittedTextBox,
-        0,
-        2);
+      AfPanBar.Dock = DockStyle.Fill;
+      AfPanBar.Minimum = 0;
+      AfPanBar.LargeChange = 100;
+      AfPanBar.SmallChange = 10;
+      AfPanBar.Maximum = 1099;
+      AfPanBar.Enabled = false;
+      AfPanBar.ValueChanged += (_, _) =>
+        WaterfallView.SetViewport(
+          AfPanBar.Value / 1000.0,
+          (double)AfZoomBox.Value);
+      pan.Controls.Add(AfPanBar, 1, 0);
 
-      var provisionalLabel =
+      var zoom = new FlowLayoutPanel
+      {
+        AutoSize = true,
+        FlowDirection = FlowDirection.LeftToRight,
+        WrapContents = false,
+        Margin = new Padding(3, 0, 0, 0)
+      };
+      zoom.Controls.Add(
         new Label
         {
-          Text = "Provisional / may change",
+          Text = "Zoom",
           AutoSize = true,
-          ForeColor = Theme.ScaleAccent,
-          Font = new Font(
-            Font,
-            FontStyle.Bold),
-          Margin = new Padding(
-            0, 5, 0, 2)
-        };
-      layout.SetColumnSpan(
-        provisionalLabel,
-        2);
-      layout.Controls.Add(
-        provisionalLabel,
-        0,
-        3);
+          Margin = new Padding(0, 7, 3, 0)
+        });
+      AfZoomBox.Minimum = 1;
+      AfZoomBox.Maximum = 8;
+      AfZoomBox.Increment = 1;
+      AfZoomBox.Value = 1;
+      AfZoomBox.Width = 45;
+      AfZoomBox.ValueChanged += (_, _) =>
+        WaterfallView.SetViewport(
+          AfPanBar.Value / 1000.0,
+          (double)AfZoomBox.Value);
+      zoom.Controls.Add(AfZoomBox);
+      pan.Controls.Add(zoom, 2, 0);
+      left.Controls.Add(pan, 0, 1);
 
-      ConfigureTranscriptBox(
-        ProvisionalTextBox);
-      ProvisionalTextBox.ForeColor =
-        Theme.ScaleAccent;
-      layout.SetColumnSpan(
-        ProvisionalTextBox,
-        2);
-      layout.Controls.Add(
-        ProvisionalTextBox,
-        0,
-        4);
+      WorkSplit.Panel1.Controls.Add(left);
+      PileupList.LaneSelected +=
+        PileupList_LaneSelected;
+      WorkSplit.Panel2.Controls.Add(PileupList);
 
-      group.Controls.Add(
-        layout);
-      return group;
+      Shown += (_, _) =>
+      {
+        if (WorkSplit.ClientSize.Width > 0)
+          WorkSplit.SplitterDistance = Math.Clamp(
+            (int)(WorkSplit.ClientSize.Width * 0.68),
+            1,
+            Math.Max(1, WorkSplit.ClientSize.Width - 8));
+      };
+    }
+
+    private void WaterfallView_ViewportChanged(
+      object? sender, EventArgs e)
+    {
+      int value = Math.Clamp(
+        (int)Math.Round(
+          WaterfallView.ViewportStartFraction * 1000),
+        0, 1000);
+      if (AfPanBar.Value != value)
+        AfPanBar.Value = value;
+
+      AfPanBar.Enabled =
+        WaterfallView.ViewportZoom > 1.0;
+      decimal zoom = Math.Clamp(
+        (decimal)WaterfallView.ViewportZoom,
+        AfZoomBox.Minimum,
+        AfZoomBox.Maximum);
+      if (AfZoomBox.Value != zoom)
+        AfZoomBox.Value = zoom;
     }
 
     private Control BuildTransmitPanel()
     {
-      var group =
-        new GroupBox
-        {
-          Dock = DockStyle.Fill,
-          AutoSize = true,
-          AutoSizeMode = AutoSizeMode.GrowAndShrink,
-          Text =
-            "CW Transmit — IC-9700 / SkyCAT Command 17",
-          Padding = new Padding(8),
-          Margin = new Padding(
-            0, 6, 0, 0)
-        };
-
-      var layout =
-        new TableLayoutPanel
-        {
-          Dock = DockStyle.Fill,
-          AutoSize = true,
-          AutoSizeMode = AutoSizeMode.GrowAndShrink,
-          ColumnCount = 1,
-          RowCount = 4
-        };
-
-      layout.RowStyles.Add(
-        new RowStyle(
-          SizeType.AutoSize));
-      layout.RowStyles.Add(
-        new RowStyle(
-          SizeType.Absolute,
-          32));
-      layout.RowStyles.Add(
-        new RowStyle(
-          SizeType.AutoSize));
-      layout.RowStyles.Add(
-        new RowStyle(
-          SizeType.AutoSize));
-
-      TxStatusLabel.AutoSize = true;
-      TxStatusLabel.Text =
-        "TX: disabled";
-      TxStatusLabel.Margin =
-        new Padding(
-          0, 0, 0, 5);
-      layout.Controls.Add(
-        TxStatusLabel,
-        0,
-        0);
-
-      TxTextBox.Dock =
-        DockStyle.Fill;
-      TxTextBox.Multiline = false;
-      TxTextBox.MaxLength =
-        CwMessageTiming.MaxCharacters;
-      TxTextBox.Font =
-        new Font(
-          FontFamily.GenericMonospace,
-          11f);
-      TxTextBox.ScrollBars =
-        ScrollBars.None;
-      TxTextBox.MinimumSize =
-        new Size(0, 24);
-      TxTextBox.TextChanged +=
-        (_, _) =>
-          RefreshTransmitUi();
-      layout.Controls.Add(
-        TxTextBox,
-        0,
-        1);
-
-      var macros =
-        new FlowLayoutPanel
-        {
-          AutoSize = true,
-          Dock = DockStyle.Fill,
-          FlowDirection =
-            FlowDirection.LeftToRight,
-          WrapContents = false,
-          Margin = new Padding(
-            0, 5, 0, 0)
-        };
-
-      for (int i = 0;
-           i < MacroButtons.Length;
-           i++)
+      var group = new GroupBox
       {
-        Button button =
-          MacroButtons[i];
-        int index = i;
+        Dock = DockStyle.Fill,
+        AutoSize = true,
+        AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        MinimumSize = new Size(0, 145),
+        Text = "CW TX — IC-9700 / SkyCAT",
+        Margin = new Padding(0, 2, 0, 0),
+        Padding = new Padding(5)
+      };
+      var layout = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        AutoSize = true,
+        AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        ColumnCount = 1,
+        RowCount = 4,
+        Margin = new Padding(0)
+      };
+      layout.ColumnStyles.Add(
+        new ColumnStyle(SizeType.Percent, 100));
+      layout.RowStyles.Add(
+        new RowStyle(SizeType.Absolute, 22));
+      layout.RowStyles.Add(
+        new RowStyle(SizeType.Absolute, 28));
+      layout.RowStyles.Add(
+        new RowStyle(SizeType.Absolute, 35));
+      layout.RowStyles.Add(
+        new RowStyle(SizeType.Absolute, 32));
 
-        button.AutoSize = false;
-        button.Size =
-          new Size(58, 26);
-        button.Tag = index;
-        button.Click +=
-          (_, _) =>
-            LoadMacroIntoComposer(
-              index);
-        macros.Controls.Add(
-          button);
-      }
+      TxStatusLabel.Text = "TX: disarmed";
+      TxStatusLabel.Dock = DockStyle.Fill;
+      TxStatusLabel.AutoEllipsis = true;
+      layout.Controls.Add(TxStatusLabel, 0, 0);
 
-      macros.Controls.Add(
-        new Label
-        {
-          AutoSize = true,
-          Text =
-            "F1–F8 load · Shift+Fn send",
-          Margin = new Padding(
-            8, 7, 0, 0)
-        });
+      TxTextBox.Dock = DockStyle.Fill;
+      TxTextBox.Multiline = false;
+      TxTextBox.MaxLength = CwMessageTiming.MaxCharacters;
+      TxTextBox.Font = new Font(
+        FontFamily.GenericMonospace, 10.5f);
+      TxTextBox.TextChanged +=
+        (_, _) => RefreshTransmitUi();
+      layout.Controls.Add(TxTextBox, 0, 1);
 
-      layout.Controls.Add(
-        macros,
-        0,
-        2);
+      var actions = new FlowLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        AutoScroll = true,
+        WrapContents = false,
+        Margin = new Padding(0, 2, 0, 0)
+      };
 
-      var buttons =
-        new FlowLayoutPanel
-        {
-          AutoSize = true,
-          Dock = DockStyle.Fill,
-          FlowDirection =
-            FlowDirection.LeftToRight,
-          WrapContents = true,
-          Margin = new Padding(
-            0, 5, 0, 0)
-        };
-
-      ArmTxBtn.Text =
-        "Arm TX";
+      ArmTxBtn.Text = "Arm TX";
       ArmTxBtn.AutoSize = true;
-      ArmTxBtn.Click +=
-        ArmTxBtn_Click;
-      buttons.Controls.Add(
-        ArmTxBtn);
+      ArmTxBtn.Click += ArmTxBtn_Click;
+      actions.Controls.Add(ArmTxBtn);
 
-      SendTxBtn.Text =
-        "Send";
+      SendTxBtn.Text = "Send";
       SendTxBtn.AutoSize = true;
-      SendTxBtn.Click +=
-        SendTxBtn_Click;
-      buttons.Controls.Add(
-        SendTxBtn);
+      SendTxBtn.Click += SendTxBtn_Click;
+      actions.Controls.Add(SendTxBtn);
 
-      StopTxBtn.Text =
-        "STOP";
+      StopTxBtn.Text = "STOP";
       StopTxBtn.AutoSize = true;
-      StopTxBtn.BackColor =
-        Color.Firebrick;
-      StopTxBtn.ForeColor =
-        Color.White;
-      StopTxBtn.UseVisualStyleBackColor =
-        false;
-      StopTxBtn.Click +=
-        StopTxBtn_Click;
-      buttons.Controls.Add(
-        StopTxBtn);
+      StopTxBtn.BackColor = Color.Firebrick;
+      StopTxBtn.ForeColor = Color.White;
+      StopTxBtn.UseVisualStyleBackColor = false;
+      StopTxBtn.Click += StopTxBtn_Click;
+      actions.Controls.Add(StopTxBtn);
 
-      buttons.Controls.Add(
-        new Label
-        {
-          AutoSize = true,
-          Text = "Speed",
-          Margin = new Padding(
-            12, 7, 2, 0)
-        });
-
+      actions.Controls.Add(new Label
+      {
+        Text = "WPM",
+        AutoSize = true,
+        Margin = new Padding(10, 8, 2, 0)
+      });
       KeySpeedBox.Minimum =
         (decimal)CwMessageTiming.MinimumWpm;
       KeySpeedBox.Maximum =
@@ -820,54 +595,34 @@ namespace SkyRoof
       KeySpeedBox.Increment = 0.5m;
       KeySpeedBox.Value = 20m;
       KeySpeedBox.Width = 64;
-      buttons.Controls.Add(
-        KeySpeedBox);
-
+      actions.Controls.Add(KeySpeedBox);
       SetKeySpeedBtn.Text = "Set WPM";
       SetKeySpeedBtn.AutoSize = true;
-      SetKeySpeedBtn.Click +=
-        SetKeySpeedBtn_Click;
-      buttons.Controls.Add(
-        SetKeySpeedBtn);
+      SetKeySpeedBtn.Click += SetKeySpeedBtn_Click;
+      actions.Controls.Add(SetKeySpeedBtn);
+      layout.Controls.Add(actions, 0, 2);
 
-      buttons.Controls.Add(
-        new Label
-        {
-          AutoSize = true,
-          Text =
-            "≤30 chars · CW/CW-R · Semi/Full BK-IN",
-          Margin = new Padding(
-            12, 7, 0, 0)
-        });
-
-      layout.Controls.Add(
-        buttons,
-        0,
-        3);
-
-      group.Controls.Add(
-        layout);
+      var macros = new FlowLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        AutoScroll = true,
+        WrapContents = false,
+        Margin = new Padding(0)
+      };
+      for (int i = 0; i < MacroButtons.Length; i++)
+      {
+        Button button = MacroButtons[i];
+        int index = i;
+        button.AutoSize = false;
+        button.Size = new Size(62, 25);
+        button.Tag = index;
+        button.Click += (_, _) =>
+          LoadMacroIntoComposer(index);
+        macros.Controls.Add(button);
+      }
+      layout.Controls.Add(macros, 0, 3);
+      group.Controls.Add(layout);
       return group;
-    }
-
-    private static void ConfigureTranscriptBox(
-      TextBox box)
-    {
-      box.Dock = DockStyle.Fill;
-      box.Multiline = false;
-      box.MinimumSize =
-        new Size(0, 23);
-      box.ReadOnly = true;
-      box.ScrollBars =
-        ScrollBars.None;
-      box.Font =
-        new Font(
-          FontFamily.GenericMonospace,
-          11f);
-      box.BackColor =
-        SystemColors.Window;
-      box.BorderStyle =
-        BorderStyle.FixedSingle;
     }
 
     private void Worker_TracksUpdated(
@@ -943,8 +698,7 @@ namespace SkyRoof
     {
       RefreshSourceStatus();
       RefreshWorkerStatus();
-      RefreshGrid();
-      RefreshSelectedTranscript();
+      RefreshPileupCards();
       RefreshTransmitUi();
     }
 
@@ -1006,11 +760,10 @@ namespace SkyRoof
         CwAudioSourceController.SourceRoleHint(
           status.Value.Source);
       InputStatusLabel.Text =
-        $"Input: {CwAudioSourceController.SourceDisplayName(status.Value.Source)} · {state} · " +
-        $"{status.Value.DeviceName}" +
-        (string.IsNullOrEmpty(role)
-          ? string.Empty
-          : $" · {role}");
+        $"RX: {state} · {status.Value.DeviceName}";
+      SourceBox.AccessibleDescription =
+        CwAudioSourceController.SourceDisplayName(status.Value.Source) +
+        (string.IsNullOrEmpty(role) ? "" : $" · {role}");
     }
 
     private void RefreshWorkerStatus()
@@ -1079,13 +832,10 @@ namespace SkyRoof
            CwReceiveModelState.Unknown);
     }
 
-    private void RefreshGrid()
+    private void RefreshPileupCards()
     {
       CwSignalTrack[] tracks;
-      Dictionary<
-        CwConsoleLaneIdentity,
-        CwTranscriptSnapshot> textByLane;
-
+      Dictionary<CwConsoleLaneIdentity, CwTranscriptSnapshot> textByLane;
       lock (stateSync)
       {
         tracks = latestTracks.ToArray();
@@ -1093,171 +843,73 @@ namespace SkyRoof
       }
 
       IReadOnlyList<CwConsoleLaneSlot> slots =
-        laneSlots.Update(
-          tracks,
-          DateTime.UtcNow);
+        laneSlots.Update(tracks, DateTime.UtcNow);
 
-      CwConsoleLaneIdentity? preserve =
-        SelectedRowIdentity() ??
-        selectedIdentity;
-
-      LaneGrid.SuspendLayout();
-      try
+      if (!slots.Any(slot =>
+        slot.Identity.HasValue &&
+        slot.Identity == selectedIdentity))
       {
-        while (LaneGrid.Rows.Count < laneSlots.MaxSlots)
-          LaneGrid.Rows.Add();
-        while (LaneGrid.Rows.Count > laneSlots.MaxSlots)
-          LaneGrid.Rows.RemoveAt(
-            LaneGrid.Rows.Count - 1);
-
-        foreach (CwConsoleLaneSlot slot in slots)
-        {
-          DataGridViewRow row =
-            LaneGrid.Rows[slot.Index];
-
-          if (slot.Identity is not CwConsoleLaneIdentity identity ||
-              slot.Track is not CwSignalTrack track)
-          {
-            ClearLaneRow(row, slot.Index);
-            continue;
-          }
-
-          row.Tag = identity;
-          textByLane.TryGetValue(
-            identity,
-            out CwTranscriptSnapshot transcript);
-
-          UpdateLaneRow(
-            row,
-            slot.Index,
-            track,
-            transcript,
-            slot.Present);
-        }
-
-        DataGridViewRow? select = null;
-        if (preserve.HasValue)
-          select =
-            LaneGrid.Rows
-              .Cast<DataGridViewRow>()
-              .FirstOrDefault(row =>
-                row.Tag is CwConsoleLaneIdentity identity &&
-                identity == preserve.Value);
-
-        select ??=
-          slots
-            .Where(slot => slot.Present && slot.Identity.HasValue)
-            .Select(slot => LaneGrid.Rows[slot.Index])
-            .FirstOrDefault();
-
-        if (select != null &&
-            select.Tag is CwConsoleLaneIdentity selectIdentity)
-        {
-          if (SelectedRowIdentity() != selectIdentity)
-          {
-            LaneGrid.ClearSelection();
-            select.Selected = true;
-            LaneGrid.CurrentCell = select.Cells[0];
-          }
-          selectedIdentity = selectIdentity;
-        }
-        else
-        {
-          LaneGrid.ClearSelection();
-          selectedIdentity = null;
-        }
+        selectedIdentity = slots
+          .FirstOrDefault(slot => slot.Present &&
+            slot.Identity.HasValue).Identity;
       }
-      finally
+
+      PileupList.UpdateLanes(
+        slots, textByLane, selectedIdentity);
+    }
+
+    private void PileupList_LaneSelected(
+      CwConsoleLaneIdentity identity)
+    {
+      selectedIdentity = identity;
+      // Card-to-spectrum selection follows the existing RX carrier only.
+      // This never tunes an RF VFO or changes the decoder's full AF span.
+      CwSignalTrack? selected = null;
+      lock (stateSync)
+        selected = CwConsolePresentation
+          .CollapseDuplicateLaneIdentities(latestTracks)
+          .Where(t => CwConsolePresentation.Identity(t) == identity)
+          .Select(t => (CwSignalTrack?)t)
+          .FirstOrDefault();
+
+      if (selected is CwSignalTrack track &&
+          WaterfallView.ViewportZoom > 1.0 &&
+          (track.FrequencyHz < WaterfallView.VisibleMinimumHz ||
+           track.FrequencyHz > WaterfallView.VisibleMaximumHz))
       {
-        LaneGrid.ResumeLayout();
+        double fullMin = SpectrumAnalyzer.MinFrequencyHz;
+        double fullMax = SpectrumAnalyzer.MaxFrequencyHz;
+        double span = fullMax - fullMin;
+        double visible = span / WaterfallView.ViewportZoom;
+        double room = span - visible;
+        if (room > 0)
+          WaterfallView.SetViewport(
+            Math.Clamp(
+              (track.FrequencyHz - visible / 2 - fullMin) / room,
+              0, 1),
+            WaterfallView.ViewportZoom);
       }
+
+      RefreshPileupCards();
+      RefreshWaterfallSelection();
     }
 
-    private static void ClearLaneRow(
-      DataGridViewRow row,
-      int slotIndex)
+    private void RefreshWaterfallSelection()
     {
-      row.Tag = null;
-      row.Cells[0].Value =
-        $"{slotIndex + 1} · —";
-      for (int i = 1; i < row.Cells.Count; i++)
-        row.Cells[i].Value = string.Empty;
-      row.DefaultCellStyle.ForeColor =
-        SystemColors.GrayText;
-    }
-
-    private static void UpdateLaneRow(
-      DataGridViewRow row,
-      int slotIndex,
-      CwSignalTrack track,
-      CwTranscriptSnapshot? transcript,
-      bool present)
-    {
-      row.Cells[0].Value =
-        $"{slotIndex + 1} · " +
-        CwConsolePresentation.LaneLabel(track);
-      row.Cells[1].Value =
-        track.FrequencyHz.ToString("F1");
-      row.Cells[2].Value =
-        track.SnrDb.ToString("F1");
-      row.Cells[3].Value =
-        track.DriftHzPerSecond.ToString(
-          "+0.0;-0.0;0.0");
-      row.Cells[4].Value =
-        present
-          ? CwConsolePresentation.StateText(track)
-          : "Grace";
-      row.Cells[5].Value =
-        track.IdentityConfidence.ToString("P0");
-      row.Cells[6].Value =
-        CwConsolePresentation.GridTranscript(transcript);
-
-      row.DefaultCellStyle.ForeColor =
-        !present
-          ? SystemColors.GrayText
-          : track.Ambiguous
-            ? Theme.SpectrumPeak
-            : !track.Active
-              ? SystemColors.GrayText
-              : SystemColors.ControlText;
-    }
-
-    private void LaneGrid_SelectionChanged(
-      object? sender,
-      EventArgs e)
-    {
-      CwConsoleLaneIdentity? identity =
-        SelectedRowIdentity();
-      if (identity.HasValue)
-        selectedIdentity =
-          identity.Value;
+      CwSignalTrack[] tracks;
+      lock (stateSync)
+        tracks = CwConsolePresentation
+          .CollapseDuplicateLaneIdentities(latestTracks);
+      WaterfallView.SetTracks(tracks, selectedIdentity);
     }
 
     private void WaterfallView_LaneClicked(
       object? sender,
       CwWaterfallLaneClickedEventArgs e)
     {
-      selectedIdentity =
-        e.Identity;
-
-      DataGridViewRow? row =
-        LaneGrid.Rows
-          .Cast<DataGridViewRow>()
-          .FirstOrDefault(
-            value =>
-              value.Tag is
-                CwConsoleLaneIdentity identity &&
-              identity == e.Identity);
-
-      if (row != null)
-      {
-        LaneGrid.ClearSelection();
-        row.Selected = true;
-        LaneGrid.CurrentCell =
-          row.Cells[0];
-      }
-
-      RefreshSelectedTranscript();
+      selectedIdentity = e.Identity;
+      RefreshPileupCards();
+      RefreshWaterfallSelection();
     }
 
     private void RefreshWaterfall()
@@ -1380,87 +1032,6 @@ namespace SkyRoof
         raw.EndUtc,
         raw.EndSampleIndex,
         restored);
-    }
-
-    private CwConsoleLaneIdentity?
-      SelectedRowIdentity()
-    {
-      if (LaneGrid.SelectedRows.Count == 0)
-        return null;
-
-      return LaneGrid.SelectedRows[0].Tag is
-          CwConsoleLaneIdentity identity
-        ? identity
-        : null;
-    }
-
-    private void RefreshSelectedTranscript()
-    {
-      CwConsoleLaneIdentity? identity =
-        selectedIdentity;
-      if (!identity.HasValue)
-      {
-        SelectedLaneLabel.Text =
-          "No lane selected";
-        CommittedTextBox.Text =
-          string.Empty;
-        ProvisionalTextBox.Text =
-          string.Empty;
-        CopyBtn.Enabled = false;
-        return;
-      }
-
-      CwSignalTrack? track = null;
-      CwTranscriptSnapshot? transcript = null;
-
-      lock (stateSync)
-      {
-        foreach (CwSignalTrack candidate
-          in CwConsolePresentation
-            .CollapseDuplicateLaneIdentities(
-              latestTracks))
-        {
-          if (CwConsolePresentation.Identity(
-                candidate) ==
-              identity.Value)
-          {
-            track = candidate;
-            break;
-          }
-        }
-
-        if (transcripts.TryGetValue(
-              identity.Value,
-              out CwTranscriptSnapshot value))
-          transcript = value;
-      }
-
-      if (track.HasValue)
-      {
-        CwSignalTrack value =
-          track.Value;
-        SelectedLaneLabel.Text =
-          $"Lane {CwConsolePresentation.LaneDiagnosticLabel(value)} · " +
-          $"{value.FrequencyHz:F1} Hz · " +
-          $"{value.SnrDb:F1} dB · " +
-          CwConsolePresentation.StateText(
-            value);
-      }
-      else
-      {
-        SelectedLaneLabel.Text =
-          "Selected lane is currently unavailable";
-      }
-
-      CommittedTextBox.Text =
-        transcript?.CommittedText ??
-        string.Empty;
-      ProvisionalTextBox.Text =
-        transcript?.ProvisionalText ??
-        string.Empty;
-      CopyBtn.Enabled =
-        !string.IsNullOrEmpty(
-          transcript?.Text);
     }
 
     private void RxToggleBtn_Click(
@@ -1616,17 +1187,6 @@ namespace SkyRoof
           RefreshUi();
         }
       }
-    }
-
-    private void CopyBtn_Click(
-      object? sender,
-      EventArgs e)
-    {
-      string text =
-        CommittedTextBox.Text +
-        ProvisionalTextBox.Text;
-      if (!string.IsNullOrEmpty(text))
-        Clipboard.SetText(text);
     }
 
     private void RefreshTransmitUi()

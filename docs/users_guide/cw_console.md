@@ -46,19 +46,31 @@ As a practical rule: use **IC-9700 USB AF input** only for direct USB AF from
 the radio; use **RS-BA1 playback loopback** for an RS-BA1/LAN receive workflow.
 The status line shows the concrete Windows endpoint that is currently open.
 
-## Compact layout
+## CW Skimmer V1 horizontal workspace
 
-The floating CW Console uses a compact responsive layout suitable for a 1080p
-desktop. Only the waterfall keeps a fixed display height; the transcript and
-transmit sections size from their actual controls so Windows DPI/font scaling
-cannot squeeze text boxes or macro buttons out of view. The lane table consumes
-the remaining space and scrolls when necessary.
+The CW Console is now organized around a **wide left AF spectrum and waterfall,
+right-side Pileup messages, and a permanent bottom transmit strip**. The old
+seven-column Lane DataGridView and separate Selected RX Transcript panel are
+no longer part of the main window.
 
-**Committed** and **Provisional / may change** each have a guaranteed readable
-single-line field. The Command-17 composer is also a compact single-line field
-because the radio accepts at most 30 characters. F1-F8 use fixed-width buttons;
-long macro text remains available in the tooltip instead of expanding and
-breaking the row.
+- **Top:** Start/Stop RX, audio source, display-only Raw/HamNoise selector,
+  settings and decode/worker status.
+- **Left:** live spectrum trace, high-contrast CW waterfall, AF frequency grid,
+  and H/T lane markers. Drag the splitter to change the spectrum/message ratio.
+- **Right:** eight stable, scrollable Pileup cards. Each shows Lane ID,
+  AF Hz, SNR, state, committed text (C), and provisional text (P), along with
+  a Copy button. A card stays in its numbered slot through short QSB/Hold
+  and frequency crossings. Click a card or waterfall marker to select the
+  same lane in both places.
+- **Bottom:** permanent Arm TX, Send, prominent STOP, one-line keyer composer,
+  verified WPM set/readback, and F1-F8 macro keys. Action/macro lines remain
+  individually horizontally scrollable in narrower windows.
+
+**AF navigation:** use the horizontal scrollbar below the waterfall to pan
+and the Zoom control for 1-8x magnification. When the waterfall has focus,
+Ctrl+mouse-wheel zooms and mouse-wheel pans. This is **display only**: it does
+not alter frequency tuning, raw PCM, DeepCW inference, tracking, or TX safety
+interlocks. HamNoise remains optional display-only processing.
 
 ## Install the DeepCW model
 
@@ -88,7 +100,7 @@ window instead of building an unbounded queue.
 
 ### Lane identity
 
-The lane table and waterfall prefer a stable fixed-lag association ID:
+The Pileup cards and waterfall prefer a stable fixed-lag association ID:
 
 - **H123** — stable AssociationHint identity.
 - **T17** — transient TrackId fallback when no association hint exists yet.
@@ -108,10 +120,10 @@ Track markers are deliberately lighter than before. Only the **selected** lane
 shows a full-height ±2 sigma uncertainty band, so diagnostic overlays no longer
 hide the real spectrum.
 
-The lane table uses eight stable numbered UI slots. A lane keeps its row while
-its AssociationHint/Track identity survives; a short Hold/dropout enters a
-grace state instead of causing every lower row to move. A slot is released
-only after the lane has really disappeared for several seconds.
+The right-hand Pileup panel uses eight stable numbered lane cards. A lane
+keeps its card while the AssociationHint/Track identity survives; a short
+Hold/dropout enters a grace state instead of shifting the other cards. A slot
+is released only after the lane has really disappeared for several seconds.
 
 Clicking a lane overlay selects that existing lane. It does not tune the radio
 and does not change AF or RF frequency.
