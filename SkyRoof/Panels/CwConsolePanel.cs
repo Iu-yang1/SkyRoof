@@ -2090,6 +2090,8 @@ namespace SkyRoof
             ctx.Settings.CwConsole.Macros,
             index);
 
+        DetailsTabs.SelectedTab =
+          TransmitDetailsTab;
         TxTextBox.Text = text;
         TxTextBox.SelectionStart =
           TxTextBox.TextLength;
@@ -2116,6 +2118,8 @@ namespace SkyRoof
             ctx.Settings.CwConsole.Macros,
             index);
 
+        DetailsTabs.SelectedTab =
+          TransmitDetailsTab;
         TxTextBox.Text = text;
         await SendTextAsync(text);
       }
