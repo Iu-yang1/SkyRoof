@@ -294,6 +294,10 @@ namespace SkyRoof.CW
           "Frame scanner and PCM sample rates must match.",
           nameof(frameScanner));
 
+      // Only the live, append-only PCM ring guarantees that an absolute
+      // sample position cannot silently be replaced by different audio.
+      FrameScanner.EnableIncrementalCache = true;
+
       Associations = associator ??
         new CwFixedLagAssociator(
           new CwFixedLagAssociatorOptions
