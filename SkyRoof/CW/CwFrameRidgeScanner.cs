@@ -362,7 +362,7 @@ namespace SkyRoof.CW
         }
 
         Array.Sort(noiseScratch);
-        double noisePower = Math.Max(
+        double globalNoisePower = Math.Max(
           MedianSorted(noiseScratch), 1e-20);
 
         var rawPeaks = new List<FramePeak>();
@@ -373,8 +373,19 @@ namespace SkyRoof.CW
               power < powers[b + 1])
             continue;
 
+          // Use a local robust spectral floor rather than one median for
+          // the whole receive band. USB/remote-audio chains often shape the
+          // low-frequency noise floor, making an empty 300-700 Hz region look
+          // 10-15 dB above the global median even without a CW carrier.
+          double localNoisePower =
+            EstimateLocalNoisePower(
+              powers,
+              b,
+              binHz,
+              globalNoisePower);
           double snrDb = 10 * Math.Log10(
-            Math.Max(power, 1e-20) / noisePower);
+            Math.Max(power, 1e-20) /
+            localNoisePower);
           if (snrDb < minimumSnrDb)
             continue;
 
@@ -1086,6 +1097,57 @@ namespace SkyRoof.CW
         1,
         checked((int)Math.Round(
           seconds * sampleRate)));
+
+    private static double EstimateLocalNoisePower(
+      IReadOnlyList<double> powers,
+      int centerBin,
+      double binHz,
+      double fallback)
+    {
+      int halfWidthBins =
+        Math.Max(
+          5,
+          (int)Math.Ceiling(
+            180.0 /
+            Math.Max(binHz, 1e-9)));
+      int guardBins =
+        Math.Max(
+          1,
+          (int)Math.Ceiling(
+            18.0 /
+            Math.Max(binHz, 1e-9)));
+
+      var local = new List<double>(
+        2 * halfWidthBins);
+      int first =
+        Math.Max(
+          0,
+          centerBin - halfWidthBins);
+      int last =
+        Math.Min(
+          powers.Count - 1,
+          centerBin + halfWidthBins);
+
+      for (int i = first; i <= last; i++)
+      {
+        if (Math.Abs(i - centerBin) <= guardBins)
+          continue;
+        double value = powers[i];
+        if (double.IsFinite(value) && value > 0)
+          local.Add(value);
+      }
+
+      if (local.Count < 8)
+        return Math.Max(fallback, 1e-20);
+
+      local.Sort();
+      int middle = local.Count / 2;
+      double median =
+        local.Count % 2 == 0
+          ? (local[middle - 1] + local[middle]) * 0.5
+          : local[middle];
+      return Math.Max(median, 1e-20);
+    }
 
     private static double MedianSorted(
       double[] values)
