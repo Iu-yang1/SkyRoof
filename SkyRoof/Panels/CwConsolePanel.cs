@@ -1186,7 +1186,9 @@ namespace SkyRoof
       CwSignalTrack[] trackSnapshot;
       lock (stateSync)
         trackSnapshot =
-          latestTracks.ToArray();
+          CwConsolePresentation
+            .CollapseDuplicateLaneIdentities(
+              latestTracks);
 
       WaterfallView.SetTracks(
         trackSnapshot,
@@ -1254,7 +1256,9 @@ namespace SkyRoof
       lock (stateSync)
       {
         foreach (CwSignalTrack candidate
-          in latestTracks)
+          in CwConsolePresentation
+            .CollapseDuplicateLaneIdentities(
+              latestTracks))
         {
           if (CwConsolePresentation.Identity(
                 candidate) ==
