@@ -150,6 +150,21 @@ namespace SkyRoof.CW
     private long cacheHits;
     private long cacheMisses;
 
+    private bool incrementalCacheEnabled;
+    // Disabled for stand-alone/offline scanner calls: callers may reuse an
+    // absolute timestamp with different test PCM. The owning live front end
+    // enables it only for its immutable append-only audio history.
+    public bool EnableIncrementalCache
+    {
+      get => incrementalCacheEnabled;
+      set
+      {
+        if (incrementalCacheEnabled == value) return;
+        ResetCache();
+        incrementalCacheEnabled = value;
+      }
+    }
+
     internal long StftCacheHits => cacheHits;
     internal long StftCacheMisses => cacheMisses;
     internal int StftCacheEntries => fastCache.Count + precisionCache.Count;
@@ -371,7 +386,8 @@ namespace SkyRoof.CW
 
       long snapshotStartSample =
         snapshot.EndSampleIndex - snapshot.Samples.Length;
-      bool cacheEnabled = knownDopplerRateHzPerSecond == 0;
+      bool cacheEnabled =
+        incrementalCacheEnabled && knownDopplerRateHzPerSecond == 0;
       Dictionary<long, FramePeak[]> cache =
         scale == CwRidgeObservationScale.Fast
           ? fastCache : precisionCache;
