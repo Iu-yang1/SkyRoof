@@ -264,7 +264,7 @@ namespace SkyRoof.CW
     internal int StftCacheEntries => frameCache.Count;
     internal void ResetFeatureCache() => frameCache.Clear();
 
-    public int MaxLanes { get; set; } = 5;
+    public int MaxLanes { get; set; } = 8;
     public double LaneBandwidthHz { get; set; } = 240;
     public double TargetCenterHz { get; set; } = 800;
 
@@ -277,7 +277,6 @@ namespace SkyRoof.CW
     public int MinimumKeyingTransitions { get; set; } = 2;
     public double MinimumKeyingDutyCycle { get; set; } = 0.04;
     public double MaximumKeyingDutyCycle { get; set; } = 0.96;
-    public double MinimumSymbolConfidence { get; set; } = 0.62;
 
     /// <summary>
     /// Optional decode-window denoiser. Tracking still runs on untouched raw
@@ -496,11 +495,13 @@ namespace SkyRoof.CW
             laneFeatures.DurationSeconds;
         }
 
-        DeepCwDecodedText rawText =
-          decoder.Decode(tensor);
-        DeepCwDecodedText text =
-          FilterLowConfidenceSymbols(
-            rawText);
+        // Do not delete low-margin symbols from the CTC sequence before
+        // temporal reconciliation. Such deletion cannot be recovered by
+        // later overlapping windows and was producing fragments (e.g.
+        // only "5NN" from an otherwise readable CW transmission).
+        // The incremental transcript coordinator already performs
+        // multiple-window, confidence-weighted consensus before commit.
+        DeepCwDecodedText text = decoder.Decode(tensor);
 
         results.Add(new(
           track.Id,
@@ -534,35 +535,5 @@ namespace SkyRoof.CW
         evidence.DutyCycle <= MaximumKeyingDutyCycle;
     }
 
-    private DeepCwDecodedText FilterLowConfidenceSymbols(
-      DeepCwDecodedText decoded)
-    {
-      // Test/experimental decoders may return text without frame symbols.
-      // The real DeepCW ONNX decoder always provides symbols for nonblank
-      // output, so production confidence filtering still remains fail-closed.
-      if (decoded.Symbols.Count == 0)
-        return decoded;
-
-      if (!double.IsFinite(MinimumSymbolConfidence) ||
-          MinimumSymbolConfidence < 0 ||
-          MinimumSymbolConfidence > 1)
-        throw new InvalidOperationException(
-          "CW minimum symbol confidence must be in the range 0..1.");
-
-      DeepCwDecodedSymbol[] kept =
-        decoded.Symbols
-          .Where(symbol =>
-            symbol.Confidence >=
-              MinimumSymbolConfidence)
-          .ToArray();
-
-      return new(
-        new string(
-          kept
-            .Select(symbol => symbol.Character)
-            .ToArray()),
-        kept,
-        decoded.OutputFrameCount);
-    }
   }
 }

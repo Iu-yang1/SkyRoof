@@ -6,7 +6,10 @@ namespace SkyRoof.CW
       TimeSpan.FromMilliseconds(120);
     public double DecodeWindowSeconds { get; init; } = 6.0;
     public double DecodeHopSeconds { get; init; } = 1.0;
-    public int MaxDecodeLanes { get; init; } = 5;
+    // The UI and tracker both expose eight independent CW lanes.
+    // Decode all eight instead of silently leaving the last three
+    // displayed lanes without ONNX inference.
+    public int MaxDecodeLanes { get; init; } = 8;
     public double LaneBandwidthHz { get; init; } = 240;
     public double TargetCenterHz { get; init; } = 800;
     public TimeSpan ModelRetryInterval { get; init; } =

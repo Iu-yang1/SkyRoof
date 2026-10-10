@@ -1,4 +1,5 @@
 using FluentAssertions;
+using SkyRoof;
 using SkyRoof.CW;
 using Xunit;
 
@@ -240,6 +241,23 @@ namespace VE3NEA.Dsp.Tests
       CwConsolePresentation.StateText(
           track)
         .Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(240, 34)]
+    [InlineData(320, 40)]
+    [InlineData(400, 50)]
+    [InlineData(800, 52)]
+    public void EightLaneOverview_FitsReadableCompactRows(
+      int viewportHeight, int expected)
+    {
+      CwPileupLaneList.CalculateRowHeight(viewportHeight)
+        .Should().Be(expected);
+      CwPileupLaneList.LaneCount.Should().Be(8);
+      if (viewportHeight >= CwPileupLaneList.LaneCount *
+          CwPileupLaneList.MinimumRowHeight)
+        (expected * CwPileupLaneList.LaneCount)
+          .Should().BeLessThanOrEqualTo(viewportHeight);
     }
 
     [Fact]

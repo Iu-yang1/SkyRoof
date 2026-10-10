@@ -378,6 +378,51 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void DeepCwDefaults_AllowAllEightVisibleSkimmerSlots()
+    {
+      new CwReceiveWorkerOptions().MaxDecodeLanes.Should().Be(8);
+      var fake = new QueueTensorDecoder("CQ");
+      var decoder = new DeepCwMultiLaneDecoder(
+        DeepCwModelMetadata.Parse(MetadataJson), fake);
+      decoder.MaxLanes.Should().Be(8);
+    }
+
+    [Fact]
+    public void DeepCw_PreservesMarginalCtcLettersUntilConsensus()
+    {
+      var metadata = DeepCwModelMetadata.Parse(MetadataJson);
+      var fake = new MarginalSymbolDecoder();
+      var decoder = new DeepCwMultiLaneDecoder(metadata, fake)
+      {
+        MaxLanes = 1
+      };
+      float[] audio = MakeKeyedAudio(
+        2.0, (800, 0.35f, 0.14, 0.50));
+
+      IReadOnlyList<DeepCwLaneResult> lanes =
+        decoder.Decode(audio, SourceRate, T0, [Track(1, 800, 16)]);
+      lanes.Should().ContainSingle();
+      // Before the fix, the default 0.62 post-CTC cutoff discarded
+      // every valid but 0.55-margin character before consensus could vote.
+      lanes[0].Text.Should().Be("CQ 5NN");
+      lanes[0].Symbols.Should().HaveCount(6);
+      lanes[0].Symbols!.Should().OnlyContain(x =>
+        x.Confidence == 0.55);
+    }
+
+    private sealed class MarginalSymbolDecoder : IDeepCwTensorDecoder
+    {
+      public DeepCwDecodedText Decode(DeepCwTensor tensor)
+      {
+        const string text = "CQ 5NN";
+        return new DeepCwDecodedText(text,
+          text.Select((ch, i) =>
+            new DeepCwDecodedSymbol(ch, 12 + i * 11, 0.55))
+            .ToArray(), 100);
+      }
+    }
+
+    [Fact]
     public void MultiLaneDecoder_InvokesIndependentInferenceForSelectedTracks()
     {
       DeepCwModelMetadata metadata =

@@ -169,6 +169,25 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void MarginalLettersAcrossTwoWindows_CommitWithoutTruncatingAReport()
+    {
+      var coordinator = NewCoordinator();
+      var first = Window(8, 808, 5.0,
+        ('C', 2.00, 0.55), ('Q', 2.25, 0.55),
+        (' ', 2.50, 0.55), ('5', 2.75, 0.55),
+        ('N', 3.00, 0.55), ('N', 3.25, 0.55));
+      var second = Window(8, 808, 6.0,
+        ('C', 2.01, 0.56), ('Q', 2.26, 0.56),
+        (' ', 2.51, 0.56), ('5', 2.76, 0.56),
+        ('N', 3.01, 0.56), ('N', 3.26, 0.56));
+
+      coordinator.Push(first).CommittedText.Should().BeEmpty();
+      var result = coordinator.Push(second);
+      result.CommittedText.Should().Be("CQ 5NN");
+      result.ProvisionalText.Should().BeEmpty();
+    }
+
+    [Fact]
     public void Reset_RemovesAllLaneTranscriptState()
     {
       CwIncrementalTranscriptCoordinator coordinator =
