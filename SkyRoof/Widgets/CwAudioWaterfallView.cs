@@ -84,6 +84,14 @@ namespace SkyRoof
       ViewportChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+      // Focus on explicit interaction, never on hover: RX spectrum hover
+      // must not steal keyboard focus from a live CW TX composer.
+      Focus();
+      base.OnMouseDown(e);
+    }
+
     protected override void OnMouseWheel(MouseEventArgs e)
     {
       base.OnMouseWheel(e);
@@ -119,7 +127,6 @@ namespace SkyRoof
       DoubleBuffered = true;
       TabStop = true;
       MinimumSize = new Size(250, 130);
-      MouseEnter += (_, _) => Focus();
       waterfall =
         new Bitmap(
           spectrumBins,
