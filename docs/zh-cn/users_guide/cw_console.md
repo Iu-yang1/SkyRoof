@@ -115,7 +115,12 @@ Arm 前请自行把电台设置成 CW 或 CW-R，并自行打开 Semi/Full BK-IN
 SkyCAT 持有硬件 lease，并把 CW keyer 与其他 TX 使用者串行化。若客户端断开，
 SkyCAT 也会执行 Command 17 `FF` fail-safe STOP。
 
-发送期间 Console 会显示依据 IC-9700 KEYRAW 换算的实际 WPM 和 watchdog
+发射区域提供 **6–48 WPM** 速度控件。点击 **Set WPM** 后，SkyRoof 通过
+SkyCAT `SETWPM` 写入 IC-9700 CI-V `14 0C`，并要求电台立即回读一致后才
+视为成功。TX 已 Arm 但空闲时，Console 会约每 1 秒刷新一次 `STATUS`，
+因此从电台前面板修改 KEY SPEED 后无需重新 Arm 就能更新显示。
+
+发送期间 Console 会显示依据已校验 IC-9700 KEYRAW 换算的实际 WPM 和 watchdog
 倒计时。
 
 ## 卫星 TX interlock

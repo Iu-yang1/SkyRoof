@@ -116,10 +116,67 @@ namespace SkyRoof.CW
     }
   }
 
+  public readonly record struct CwKeySpeedResult(
+    int KeySpeedRaw,
+    double Wpm)
+  {
+    public static CwKeySpeedResult Parse(
+      string reply)
+    {
+      string[] parts = reply.Split(
+        ' ',
+        StringSplitOptions.RemoveEmptyEntries);
+
+      if (parts.Length < 3 || parts[0] != "OK")
+        throw new FormatException(
+          "SkyCAT returned an invalid CW key-speed response.");
+
+      int? raw = null;
+      double? wpm = null;
+      foreach (string token in parts.Skip(1))
+      {
+        int equals = token.IndexOf('=');
+        if (equals <= 0)
+          continue;
+
+        string name = token[..equals];
+        string value = token[(equals + 1)..];
+        if (name == "KEYRAW" &&
+            int.TryParse(
+              value,
+              NumberStyles.None,
+              CultureInfo.InvariantCulture,
+              out int parsedRaw))
+          raw = parsedRaw;
+        else if (name == "WPM" &&
+                 double.TryParse(
+                   value,
+                   NumberStyles.AllowDecimalPoint,
+                   CultureInfo.InvariantCulture,
+                   out double parsedWpm))
+          wpm = parsedWpm;
+      }
+
+      if (raw is null or < 0 or > 255 ||
+          wpm is null ||
+          !double.IsFinite(wpm.Value) ||
+          wpm.Value < CwMessageTiming.MinimumWpm ||
+          wpm.Value > CwMessageTiming.MaximumWpm)
+        throw new FormatException(
+          "SkyCAT CW key-speed response is missing verified fields.");
+
+      return new(raw.Value, wpm.Value);
+    }
+  }
+
   public interface ICwKeyerSession :
     IAsyncDisposable
   {
     Task<CwKeyerStatus> GetStatusAsync(
+      CancellationToken cancellationToken = default);
+
+    Task<CwKeySpeedResult> SetWpmAsync(
+      double wpm,
       CancellationToken cancellationToken = default);
 
     Task SendAsync(
@@ -233,6 +290,29 @@ namespace SkyRoof.CW
           cancellationToken);
 
       return CwKeyerStatus.Parse(reply);
+    }
+
+    public async Task<CwKeySpeedResult> SetWpmAsync(
+      double wpm,
+      CancellationToken cancellationToken = default)
+    {
+      _ = CwMessageTiming.WpmToRawKeySpeed(wpm);
+
+      string reply = await RequestAsync(
+        "SETWPM " +
+        wpm.ToString(
+          "F2",
+          CultureInfo.InvariantCulture),
+        cancellationToken);
+
+      if (!reply.StartsWith(
+            "OK ",
+            StringComparison.Ordinal))
+        throw CreateProtocolException(
+          "SETWPM",
+          reply);
+
+      return CwKeySpeedResult.Parse(reply);
     }
 
     public async Task SendAsync(

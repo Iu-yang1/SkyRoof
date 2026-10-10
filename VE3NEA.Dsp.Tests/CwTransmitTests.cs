@@ -48,6 +48,28 @@ namespace VE3NEA.Dsp.Tests
           1e-9);
     }
 
+    [Theory]
+    [InlineData(6.0, 0)]
+    [InlineData(20.0, 85)]
+    [InlineData(48.0, 255)]
+    public void Wpm_MapsToDocumentedRawControl(
+      double wpm,
+      int expectedRaw)
+    {
+      CwMessageTiming.WpmToRawKeySpeed(wpm)
+        .Should().Be(expectedRaw);
+    }
+
+    [Fact]
+    public void KeySpeedResult_ParsesVerifiedProtocolReply()
+    {
+      CwKeySpeedResult result =
+        CwKeySpeedResult.Parse(
+          "OK KEYRAW=85 WPM=20.00");
+      result.KeySpeedRaw.Should().Be(85);
+      result.Wpm.Should().Be(20.0);
+    }
+
     [Fact]
     public void ProsignCaret_RemovesNormalInterCharacterGap()
     {
@@ -138,6 +160,25 @@ namespace VE3NEA.Dsp.Tests
 
       controller.Arm();
       controller.State.Armed.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Controller_SetKeySpeedRequiresVerifiedStatusReadback()
+    {
+      var factory = new FakeFactory();
+      await using var controller =
+        new CwTransmitController(
+          EnabledSettings(),
+          factory);
+
+      CwKeyerStatus status =
+        await controller.SetKeySpeedAsync(20.0);
+
+      factory.Session.SetWpmCalls
+        .Should().Be(1);
+      status.KeySpeedRaw.Should().Be(85);
+      controller.State.RadioStatus?.KeySpeedRaw
+        .Should().Be(85);
     }
 
     [Fact]
@@ -637,6 +678,11 @@ namespace VE3NEA.Dsp.Tests
         false,
         128);
 
+      public int SetWpmCalls {
+        get;
+        private set;
+      }
+
       public int SendCalls {
         get;
         private set;
@@ -681,6 +727,24 @@ namespace VE3NEA.Dsp.Tests
         GetStatusAsync(
           CancellationToken cancellationToken = default) =>
         Task.FromResult(Status);
+
+      public Task<CwKeySpeedResult>
+        SetWpmAsync(
+          double wpm,
+          CancellationToken cancellationToken = default)
+      {
+        SetWpmCalls++;
+        int raw =
+          CwMessageTiming.WpmToRawKeySpeed(wpm);
+        Status = Status with
+        {
+          KeySpeedRaw = raw
+        };
+        return Task.FromResult(
+          new CwKeySpeedResult(
+            raw,
+            CwMessageTiming.RawKeySpeedToWpm(raw)));
+      }
 
       public Task SendAsync(
         string text,

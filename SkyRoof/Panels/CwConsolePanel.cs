@@ -40,6 +40,8 @@ namespace SkyRoof
     private readonly Button SendTxBtn = new();
     private readonly Button StopTxBtn = new();
     private readonly Label TxStatusLabel = new();
+    private readonly NumericUpDown KeySpeedBox = new();
+    private readonly Button SetKeySpeedBtn = new();
     private readonly Button[] MacroButtons =
       Enumerable.Range(
         0,
@@ -49,6 +51,8 @@ namespace SkyRoof
     private readonly ToolTip MacroToolTip =
       new();
     private bool sendRequestInProgress;
+    private bool statusPollInProgress;
+    private DateTime nextStatusPollUtc = DateTime.MinValue;
 
     private readonly System.Windows.Forms.Timer UiTimer =
       new() { Interval = 250 };
@@ -702,6 +706,33 @@ namespace SkyRoof
         new Label
         {
           AutoSize = true,
+          Text = "Speed",
+          Margin = new Padding(
+            12, 7, 2, 0)
+        });
+
+      KeySpeedBox.Minimum =
+        (decimal)CwMessageTiming.MinimumWpm;
+      KeySpeedBox.Maximum =
+        (decimal)CwMessageTiming.MaximumWpm;
+      KeySpeedBox.DecimalPlaces = 1;
+      KeySpeedBox.Increment = 0.5m;
+      KeySpeedBox.Value = 20m;
+      KeySpeedBox.Width = 64;
+      buttons.Controls.Add(
+        KeySpeedBox);
+
+      SetKeySpeedBtn.Text = "Set WPM";
+      SetKeySpeedBtn.AutoSize = true;
+      SetKeySpeedBtn.Click +=
+        SetKeySpeedBtn_Click;
+      buttons.Controls.Add(
+        SetKeySpeedBtn);
+
+      buttons.Controls.Add(
+        new Label
+        {
+          AutoSize = true,
           Text =
             "Max 30 chars · radio must already be CW/CW-R with Semi/Full BK-IN",
           Margin = new Padding(
@@ -793,8 +824,11 @@ namespace SkyRoof
 
     private void UiTimer_Tick(
       object? sender,
-      EventArgs e) =>
+      EventArgs e)
+    {
       RefreshUi();
+      PollTransmitStatusIfDue();
+    }
 
     private void WaterfallTimer_Tick(
       object? sender,
@@ -1406,6 +1440,26 @@ namespace SkyRoof
       StopTxBtn.Enabled =
         state.Sending;
 
+      SetKeySpeedBtn.Enabled =
+        settings.TransmitEnabled &&
+        !state.Sending &&
+        !statusPollInProgress;
+      KeySpeedBox.Enabled =
+        settings.TransmitEnabled &&
+        !state.Sending;
+
+      if (state.RadioStatus is CwKeyerStatus speedStatus &&
+          !KeySpeedBox.Focused)
+      {
+        decimal displayed =
+          Math.Clamp(
+            (decimal)speedStatus.Wpm,
+            KeySpeedBox.Minimum,
+            KeySpeedBox.Maximum);
+        KeySpeedBox.Value =
+          Math.Round(displayed, 1);
+      }
+
       TxTextBox.ReadOnly =
         state.Sending;
 
@@ -1600,6 +1654,87 @@ namespace SkyRoof
       finally
       {
         sendRequestInProgress = false;
+        if (!IsDisposed)
+          RefreshTransmitUi();
+      }
+    }
+
+    private async void SetKeySpeedBtn_Click(
+      object? sender,
+      EventArgs e)
+    {
+      CwTransmitController? tx =
+        ctx.CwTransmit;
+      if (tx == null || statusPollInProgress)
+        return;
+
+      SetKeySpeedBtn.Enabled = false;
+      statusPollInProgress = true;
+      try
+      {
+        CwKeyerStatus status =
+          await tx.SetKeySpeedAsync(
+            (double)KeySpeedBox.Value);
+        KeySpeedBox.Value =
+          Math.Round(
+            Math.Clamp(
+              (decimal)status.Wpm,
+              KeySpeedBox.Minimum,
+              KeySpeedBox.Maximum),
+            1);
+        nextStatusPollUtc =
+          DateTime.UtcNow.AddSeconds(1);
+      }
+      catch (Exception ex)
+      {
+        MessageBox.Show(
+          this,
+          ex.Message,
+          "CW WPM control failed",
+          MessageBoxButtons.OK,
+          MessageBoxIcon.Error);
+      }
+      finally
+      {
+        statusPollInProgress = false;
+        if (!IsDisposed)
+          RefreshTransmitUi();
+      }
+    }
+
+    private void PollTransmitStatusIfDue()
+    {
+      CwTransmitController? tx =
+        ctx.CwTransmit;
+      if (tx == null ||
+          statusPollInProgress ||
+          !ctx.Settings.CwConsole.TransmitEnabled ||
+          !tx.State.Armed ||
+          tx.State.Sending ||
+          DateTime.UtcNow < nextStatusPollUtc)
+        return;
+
+      statusPollInProgress = true;
+      nextStatusPollUtc =
+        DateTime.UtcNow.AddSeconds(1);
+      _ = PollTransmitStatusAsync(tx);
+    }
+
+    private async Task PollTransmitStatusAsync(
+      CwTransmitController tx)
+    {
+      try
+      {
+        await tx.QueryStatusAsync();
+      }
+      catch
+      {
+        // QueryStatusAsync preserves the error in controller state. Keep the
+        // UI responsive and retry on the next 1 Hz poll while armed/idle.
+      }
+      finally
+      {
+        statusPollInProgress = false;
         if (!IsDisposed)
           RefreshTransmitUi();
       }

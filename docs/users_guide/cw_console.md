@@ -132,8 +132,14 @@ SkyCAT owns the hardware lease. It verifies the radio state and serializes the
 keyer against other transmit users. A disconnect is also a fail-safe: SkyCAT
 issues Command 17 `FF` STOP when the keyer client disappears.
 
-The CW Console displays the actual key-speed-derived WPM and the watchdog
-countdown while a message is active.
+The transmit area provides a **6-48 WPM** control. **Set WPM** sends SkyCAT
+`SETWPM`, which writes IC-9700 CI-V `14 0C` and only succeeds after an
+immediate matching hardware readback. While TX is armed but idle, the Console
+refreshes `STATUS` at about 1 Hz, so front-panel KEY SPEED changes appear
+without re-arming.
+
+The CW Console displays the verified actual key-speed-derived WPM and the
+watchdog countdown while a message is active.
 
 ## Satellite transmit interlock
 
