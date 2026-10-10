@@ -1454,9 +1454,9 @@ namespace SkyRoof
       // Native Win32 ComboBox selection can change as the user navigates
       // the expanded list. Never overwrite it from an asynchronous
       // 27 00 frame or stale register readback during active editing.
-      if (box.DroppedDown || box.ContainsFocus)
-        return;
-      if (box.SelectedIndex != selectedIndex)
+      if (IcomScopeUiSelectionPolicy.ShouldWriteRemoteSelection(
+            box.DroppedDown, box.ContainsFocus,
+            box.SelectedIndex, selectedIndex))
         box.SelectedIndex = selectedIndex;
     }
 
