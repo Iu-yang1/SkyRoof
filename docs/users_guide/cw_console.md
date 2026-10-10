@@ -506,3 +506,32 @@ Hover over the CW Console **Spectrum** status to compare actual painted FPS,
 frame interval p95/max, GDI painting time mean/p95, and background processing
 time. If processing and painting each take only a few milliseconds yet FPS
 is low, look for UI message-pump pressure or delayed audio callback delivery.
+
+
+### Windows USB microphone waterfall cadence (Raw and HamNoise)
+
+The IC-9700 USB AF microphone source uses the shared Windows WASAPI input
+adapter. Previously it inherited the generic **200-ms WASAPI polling
+buffer** and a **4800-sample (100-ms at 48 kHz)** read block, even though
+the waterfall requested new frames every 33 ms. If PCM only arrives
+about every 100 ms, FFT/GDI performance cannot produce 30 genuinely new
+columns per second. This explains why Raw and HamNoise could both paint
+only ~9–10 FPS while background FFT and GDI averaged just a few ms.
+
+The **CW microphone capture instance only** now requests a 40-ms WASAPI
+buffer and reads at most **1600 mono samples (33.3 ms at 48 kHz)**
+per delivery. Other SkyRoof soundcard clients retain the original 200-ms
+buffer and 4800-sample reader defaults. The receiver tracker, DeepCW,
+HamNoise, TX and RF Icom LAN capture are unchanged. The Windows audio device
+may enforce a larger shared-mode period, so 30 FPS remains a **target**,
+not a hardware guarantee.
+
+Hover over the CW **Spectrum: Raw / HamNoise** status to compare actual
+painted FPS and frame-interval p95 with the new **PCM input: samples/block,
+last delivery interval (ms)** measurement. If PCM still arrives only
+every 100–200 ms, investigate Windows endpoint/audio driver buffering before
+optimizing FFT again.
+
+The Icom LAN Spectrum red-shading explanatory tooltip has been removed
+because it obscured frequency markings; the estimated filter bandwidth
+settings remain available in Spectrum Settings and documented on that page.
