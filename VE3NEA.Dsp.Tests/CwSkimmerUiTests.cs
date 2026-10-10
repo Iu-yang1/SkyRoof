@@ -82,19 +82,24 @@ namespace VE3NEA.Dsp.Tests
 
       int signalY = (int)CwAudioWaterfallView.FrequencyToVerticalPixel(
         100 + 188 * 1900.0 / 511.0, 100, 2000, view.Height);
-      int brightRight = Enumerable.Range(signalY - 2, 5)
-        .Max(y =>
-        {
-          var color = rendered.GetPixel(view.Width - 15, y);
-          return color.R + color.G + color.B;
-        });
-      int darkLeft = Enumerable.Range(signalY - 2, 5)
-        .Max(y =>
-        {
-          var color = rendered.GetPixel(140, y);
-          return color.R + color.G + color.B;
-        });
-      brightRight.Should().BeGreaterThan(darkLeft + 60);
+      // Check an area rather than one pixel: GDI nearest-neighbor pixel
+      // centers and font/DPI scaling can shift the drawn bin by a few px.
+      int PeakBrightness(int left, int right)
+      {
+        int peak = 0;
+        for (int x = left; x < right; x++)
+          for (int y = signalY - 4; y <= signalY + 4; y++)
+          {
+            var color = rendered.GetPixel(x, y);
+            peak = Math.Max(peak, color.R + color.G + color.B);
+          }
+        return peak;
+      }
+
+      int brightRight = PeakBrightness(view.Width - 52, view.Width - 5);
+      int darkLeft = PeakBrightness(180, 230);
+      brightRight.Should().BeGreaterThan(darkLeft + 60,
+        "the newest 40 time columns must appear at the right side");
     }
 
     [Fact]
