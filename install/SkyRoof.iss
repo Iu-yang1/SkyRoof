@@ -77,6 +77,9 @@ Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\libliquid.dll; DestDir: {a
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\libusb-1.0.dll; DestDir: {app}; Flags: overwritereadonly ignoreversion
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\MathNet.Filtering.dll; DestDir: {app}; Flags: overwritereadonly ignoreversion
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\MathNet.Numerics.dll; DestDir: {app}; Flags: overwritereadonly ignoreversion
+Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\Microsoft.ML.OnnxRuntime.dll; DestDir: {app}; Flags: overwritereadonly ignoreversion
+Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\System.Numerics.Tensors.dll; DestDir: {app}; Flags: overwritereadonly ignoreversion
+Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\runtimes\win-x64\native\onnxruntime*.dll; DestDir: {app}\runtimes\win-x64\native; Flags: overwritereadonly ignoreversion
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\MultimediaTimer.dll; DestDir: {app}; Flags: overwritereadonly ignoreversion
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\NAudio.Asio.dll; DestDir: {app}; Flags: overwritereadonly ignoreversion
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\NAudio.Core.dll; DestDir: {app}; Flags: overwritereadonly ignoreversion
