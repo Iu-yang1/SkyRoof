@@ -1442,6 +1442,21 @@ namespace SkyRoof
       }
       catch (Exception ex)
       {
+        if (tx.State.Armed &&
+            !tx.State.Sending)
+        {
+          try
+          {
+            await tx.DisarmAsync();
+          }
+          catch
+          {
+            // No message was active in the normal arm-preflight failure path.
+            // If that ever changes, controller/session teardown remains the
+            // fail-safe and the state preserves the error.
+          }
+        }
+
         MessageBox.Show(
           this,
           ex.Message,
