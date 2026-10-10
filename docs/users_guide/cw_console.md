@@ -388,3 +388,32 @@ This describes isolated per-transform compute cost, **not** total decoder CPU
 or the i5-10400 performance of a different machine. Before judging the
 change, compare recorded audio accuracy, worker skipped windows and total
 process CPU using the same audio, receiver options and display settings.
+
+
+### Incremental STFT cache and ONNX inference metrics
+
+SkyRoof now memoizes Ridge Scanner zero-Doppler frame peaks by **absolute
+input sample start** (not by a snapshot-relative frame number). The cache is
+enabled only on the live append-only PCM frontend, and is cleared on a
+timeline reset. Nonzero-rate Doppler de-chirp retains its uncached complex
+FFT. This preserves the existing 80/15-ms and 240/120-ms STFT grids,
+time-indexed ridge observations and measurement covariance.
+
+The shared DeepCW wideband STFT has a bounded 1600-frame cache scoped to one
+inference session. Only wholly **interior** STFT frames are eligible, because
+the first/last frames use reflection relative to the current 6-second
+window. A 1-second decode hop is not divisible by the 15-ms STFT hop, so
+the absolute frame lattice cycles across three phases: reusing data by
+relative row index would corrupt model input. SkyRoof reuses only an
+*exactly matching absolute PCM interval*. Model metadata, feature scaling,
+gates and inference tensor contents remain unchanged. Optional denoising
+bypasses this cache.
+
+The **Worker** status tooltip now reports Ridge/DeepCW STFT frame cache
+hits/misses and mean ONNX Runtime `Run()` time. ONNX still reuses one CPU
+InferenceSession with limited intra-op parallelism. Its contiguous output
+tensor is decoded directly without allocating an extra logits copy; session
+options are disposed after construction. Those are allocation/diagnostic
+optimizations, **not** a claim of faster ONNX kernels or batched inference.
+Compare the same PCM and RF settings on the same CPU using both the cache
+counters and the completed/skipped decoder-window metrics.
