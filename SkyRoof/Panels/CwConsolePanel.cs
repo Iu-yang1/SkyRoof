@@ -1408,6 +1408,11 @@ namespace SkyRoof
       TxTextBox.ReadOnly =
         state.Sending;
 
+      foreach (Button macroButton
+        in MacroButtons)
+        macroButton.Enabled =
+          !state.Sending;
+
       if (!settings.TransmitEnabled)
       {
         TxStatusLabel.Text =
@@ -1731,7 +1736,8 @@ namespace SkyRoof
           key <= Keys.F8)
       {
         int index =
-          key - Keys.F1;
+          (int)key -
+          (int)Keys.F1;
         bool send =
           (keyData & Keys.Shift) ==
           Keys.Shift;
