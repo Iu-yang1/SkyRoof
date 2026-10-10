@@ -46,6 +46,7 @@ namespace SkyRoof
     private int writeRow;
     private bool hasRows;
     private float displayFloorDb = float.NaN;
+    private float spectrumFloorDb = float.NaN;
     private float[] latestPowerDb = Array.Empty<float>();
     private double minFrequencyHz = 100;
     private double maxFrequencyHz = 2000;
@@ -87,6 +88,7 @@ namespace SkyRoof
       writeRow = 0;
       hasRows = false;
       displayFloorDb = float.NaN;
+      spectrumFloorDb = float.NaN;
       latestPowerDb = Array.Empty<float>();
       Invalidate();
     }
@@ -106,6 +108,15 @@ namespace SkyRoof
         frame.MaxFrequencyHz;
       latestPowerDb =
         (float[])frame.PowerDb.Clone();
+      float targetFloor =
+        Percentile(
+          frame.PowerDb,
+          0.35);
+      spectrumFloorDb =
+        float.IsFinite(spectrumFloorDb)
+          ? 0.90f * spectrumFloorDb +
+            0.10f * targetFloor
+          : targetFloor;
       Invalidate();
     }
 
@@ -136,7 +147,7 @@ namespace SkyRoof
       // dynamic range. Noise stays dark while a 6-10 dB keyed carrier is
       // already visible; strong carriers progress toward yellow/white.
       double floor =
-        displayFloorDb + 1.0;
+        spectrumFloorDb + 1.0;
 
       writeRow =
         (writeRow - 1 +
@@ -266,7 +277,7 @@ namespace SkyRoof
       Rectangle body)
     {
       if (latestPowerDb.Length < 2 ||
-          !float.IsFinite(displayFloorDb))
+          !float.IsFinite(spectrumFloorDb))
         return;
 
       using var pen =
