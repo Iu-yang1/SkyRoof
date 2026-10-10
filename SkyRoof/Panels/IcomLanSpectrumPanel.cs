@@ -1605,6 +1605,9 @@ namespace SkyRoof
     private void ApplyScopeReadback(
       IcomScopeReadbackState state)
     {
+      // Only matched values confirm queued controls; late readbacks must
+      // not overwrite newer operator choices while awaiting radio ACK.
+      PendingScopeControls.ObserveReadback(state);
       LastScopeReadback =
         state;
       LastScopeReadbackUtc =
@@ -1631,24 +1634,40 @@ namespace SkyRoof
       {
         if (activeScope == 1)
         {
-          if (state.HasField("SUB.EDGE"))
+          if (state.HasField("SUB.EDGE") &&
+              !PendingScopeControls.TryGet(
+                1, IcomScopeControlKind.Edge, out _))
             settings.ScopeEdgeNumber = state.SubEdge;
-          if (state.HasField("SUB.REF"))
+          if (state.HasField("SUB.REF") &&
+              !PendingScopeControls.TryGet(
+                1, IcomScopeControlKind.ReferenceLevel, out _))
             settings.ScopeReferenceLevelDb = state.SubReferenceDb;
-          if (state.HasField("SUB.SPEED"))
+          if (state.HasField("SUB.SPEED") &&
+              !PendingScopeControls.TryGet(
+                1, IcomScopeControlKind.SweepSpeed, out _))
             settings.ScopeSweepSpeed = state.SubSpeed;
-          if (state.HasField("SUB.VBW"))
+          if (state.HasField("SUB.VBW") &&
+              !PendingScopeControls.TryGet(
+                1, IcomScopeControlKind.Vbw, out _))
             settings.ScopeVbw = state.SubVbw;
         }
         else
         {
-          if (state.HasField("MAIN.EDGE"))
+          if (state.HasField("MAIN.EDGE") &&
+              !PendingScopeControls.TryGet(
+                0, IcomScopeControlKind.Edge, out _))
             settings.ScopeEdgeNumber = state.MainEdge;
-          if (state.HasField("MAIN.REF"))
+          if (state.HasField("MAIN.REF") &&
+              !PendingScopeControls.TryGet(
+                0, IcomScopeControlKind.ReferenceLevel, out _))
             settings.ScopeReferenceLevelDb = state.MainReferenceDb;
-          if (state.HasField("MAIN.SPEED"))
+          if (state.HasField("MAIN.SPEED") &&
+              !PendingScopeControls.TryGet(
+                0, IcomScopeControlKind.SweepSpeed, out _))
             settings.ScopeSweepSpeed = state.MainSpeed;
-          if (state.HasField("MAIN.VBW"))
+          if (state.HasField("MAIN.VBW") &&
+              !PendingScopeControls.TryGet(
+                0, IcomScopeControlKind.Vbw, out _))
             settings.ScopeVbw = state.MainVbw;
         }
 
