@@ -47,6 +47,9 @@ namespace SkyRoof
       // and the last accepted target are no longer known; resend any pending target.
       LastReadBearing = null;
       LastWrittenBearing = null;
+      Volatile.Write(
+        ref appliedContinuousDirection,
+        0);
       Interlocked.Exchange(ref LastSuccessfulBearingReadTicks, 0);
       return true;
     }
@@ -71,6 +74,13 @@ namespace SkyRoof
     internal void StartContinuousMove(
       RotatorContinuousDirection direction)
     {
+      if (stopNotSupported)
+      {
+        Log.Warning(
+          "Continuous rotator movement is disabled because this rotctld endpoint did not acknowledge STOP. Reapply rotator settings before trying manual hold control again.");
+        return;
+      }
+
       int value = (int)direction;
       if (value is not (2 or 4 or 8 or 16))
         throw new ArgumentOutOfRangeException(
