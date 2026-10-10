@@ -184,8 +184,6 @@ namespace SkyRoof.CW
           "CW activity timeline must match the wideband frame count.",
           nameof(activity));
 
-      float[] ridge =
-        GetRidgeMagnitudeSeries(track);
       var localSnr =
         new double[FrameCount];
       var centerMagnitude =
@@ -205,7 +203,9 @@ namespace SkyRoof.CW
           relativeToEnd;
         double center =
           Math.Max(
-            ridge[frame],
+            SampleCalibratedMagnitude(
+              frame,
+              ridgeHz),
             1e-12f);
         centerMagnitude[frame] = center;
 
