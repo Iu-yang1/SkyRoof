@@ -1,20 +1,28 @@
 namespace SkyRoof
 {
   /// <summary>
-  /// At most one pending WinForms BeginInvoke callback, retaining one
-  /// newest frame per MAIN/SUB receiver. Keeping both matters when AUTO
-  /// scope selection prefers MAIN during interleaved CI-V frame bursts.
+  /// One pending WinForms callback, but keep complete 475-bin sweep frames
+  /// separately from partial serial waveform updates for each receiver.
+  /// If a new partial update overwrites the just-completed sweep, the
+  /// spectrum trace still works while the waterfall silently misses rows.
   /// </summary>
   internal sealed class IcomScopeUiFrameMailbox
   {
     private readonly object gate = new();
-    private readonly IcomScopeFrame?[] latest = new IcomScopeFrame?[2];
+    private readonly IcomScopeFrame?[] completed = new IcomScopeFrame?[2];
+    private readonly IcomScopeFrame?[] partial = new IcomScopeFrame?[2];
     private bool callbackScheduled;
     private long replacedFrames;
+    private long replacedCompleteSweeps;
 
     internal long ReplacedFrames
     {
       get { lock (gate) return replacedFrames; }
+    }
+
+    internal long ReplacedCompleteSweeps
+    {
+      get { lock (gate) return replacedCompleteSweeps; }
     }
 
     internal bool Offer(IcomScopeFrame frame)
@@ -23,18 +31,35 @@ namespace SkyRoof
       lock (gate)
       {
         int receiver = frame.Scope == 1 ? 1 : 0;
-        IcomScopeFrame? previous = latest[receiver];
-        if (previous != null)
+        IcomScopeFrame?[] target = frame.SweepComplete
+          ? completed : partial;
+
+        // Reject an out-of-order frame rather than rolling back its
+        // receiver's newest plot or time axis.
+        IcomScopeFrame? newest = partial[receiver];
+        if (completed[receiver] is IcomScopeFrame complete &&
+            (newest == null || newest.TimestampUtc < complete.TimestampUtc))
+          newest = complete;
+        if (newest != null && frame.TimestampUtc <= newest.TimestampUtc)
+          return false;
+
+        if (target[receiver] != null)
         {
-          if (frame.TimestampUtc.Ticks <= previous.TimestampUtc.Ticks)
-            return false;
+          replacedFrames++;
+          if (frame.SweepComplete)
+            replacedCompleteSweeps++;
+        }
+
+        target[receiver] = frame;
+        if (frame.SweepComplete && partial[receiver] != null)
+        {
+          // An older partial is superseded by the completed sweep.
+          partial[receiver] = null;
           replacedFrames++;
         }
 
-        latest[receiver] = frame;
         if (callbackScheduled)
           return false;
-
         callbackScheduled = true;
         return true;
       }
@@ -44,11 +69,15 @@ namespace SkyRoof
     {
       lock (gate)
       {
-        var result = latest.Where(x => x != null)
-          .Select(x => x!).OrderBy(x => x.TimestampUtc.Ticks)
+        // At most four items: one completed sweep and one newer partial
+        // for MAIN and SUB. Sort for the existing timestamp gate.
+        var result = completed.Concat(partial)
+          .Where(x => x != null)
+          .Select(x => x!)
+          .OrderBy(x => x.TimestampUtc.Ticks)
           .ToArray();
-        latest[0] = null;
-        latest[1] = null;
+        Array.Clear(completed);
+        Array.Clear(partial);
         callbackScheduled = false;
         return result;
       }
@@ -58,10 +87,11 @@ namespace SkyRoof
     {
       lock (gate)
       {
-        latest[0] = null;
-        latest[1] = null;
+        Array.Clear(completed);
+        Array.Clear(partial);
         callbackScheduled = false;
         replacedFrames = 0;
+        replacedCompleteSweeps = 0;
       }
     }
   }
