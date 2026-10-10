@@ -130,36 +130,25 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
-    public async Task Controller_RequiresPersistentEnableAndNonPersistentArm()
+    public async Task Controller_ManualSendDoesNotRequireLegacyEnableOrArm()
     {
-      var settings =
-        new CwConsoleSettings
-        {
-          TransmitEnabled = false,
-          CwKeyerPort = 4538
-        };
-      var factory =
-        new FakeFactory();
+      var settings = new CwConsoleSettings
+      {
+        TransmitEnabled = false, // legacy persisted setting is ignored
+        CwKeyerPort = 4538
+      };
+      var factory = new FakeFactory();
       await using var controller =
-        new CwTransmitController(
-          settings,
-          factory);
+        new CwTransmitController(settings, factory);
 
-      Action arm = controller.Arm;
-      arm.Should()
-        .Throw<InvalidOperationException>();
-
-      settings.TransmitEnabled = true;
-
-      Func<Task> unarmedSend =
-        () => controller.SendAsync("CQ");
-      await unarmedSend.Should()
-        .ThrowAsync<InvalidOperationException>();
-
-      factory.ConnectCalls.Should().Be(0);
-
-      controller.Arm();
-      controller.State.Armed.Should().BeTrue();
+      // No Arm call, RX decoder, selected satellite, model, horizon or
+      // transponder mode is needed for explicit operator CW keying.
+      await controller.SendAsync("CQ");
+      factory.ConnectCalls.Should().Be(1);
+      factory.Session.SendCalls.Should().Be(1);
+      controller.State.Sending.Should().BeTrue();
+      await controller.StopAsync();
+      controller.State.Sending.Should().BeFalse();
     }
 
     [Fact]
@@ -439,47 +428,31 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
-    public async Task DisablingTransmitSetting_IsAuthoritativeEvenIfStopFails()
+    public async Task LegacyTransmitDisabledSetting_DoesNotStopManualCwLease()
     {
-      var factory =
-        new FakeFactory();
-
+      var factory = new FakeFactory();
       await using var controller =
-        new CwTransmitController(
-          EnabledSettings(),
-          factory);
+        new CwTransmitController(EnabledSettings(), factory);
 
-      controller.Arm();
       await controller.SendAsync("CQ");
+      controller.State.Sending.Should().BeTrue();
 
-      factory.Session.StopError =
-        new IOException(
-          "simulated STOP failure");
+      await controller.ApplySettingsAsync(new CwConsoleSettings
+      {
+        TransmitEnabled = false,
+        CwKeyerPort = 4538
+      });
 
-      var disabled =
-        new CwConsoleSettings
-        {
-          TransmitEnabled = false,
-          CwKeyerPort = 4538
-        };
+      // Changing a deprecated UI flag must not abort manual CW.
+      // Explicit STOP, watchdog and connection teardown still apply.
+      controller.State.Sending.Should().BeTrue();
+      factory.Session.StopCalls.Should().Be(0);
+      await controller.StopAsync();
+      factory.Session.StopCalls.Should().Be(1);
 
-      Func<Task> apply =
-        () =>
-          controller.ApplySettingsAsync(
-            disabled);
-
-      await apply.Should()
-        .ThrowAsync<IOException>();
-
-      controller.State.Armed
-        .Should().BeFalse();
-      controller.State.Sending
-        .Should().BeFalse();
-
-      Action rearm =
-        controller.Arm;
-      rearm.Should()
-        .Throw<InvalidOperationException>();
+      await controller.SendAsync("TEST");
+      factory.Session.SendCalls.Should().Be(2);
+      await controller.StopAsync();
     }
 
     [Fact]
