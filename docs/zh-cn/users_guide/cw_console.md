@@ -42,10 +42,14 @@ CW 接收默认关闭。确认输入源后，在面板中按 **Start**。
 
 ## 紧凑窗口布局
 
-CW Console 浮动窗口现在默认使用更紧凑的尺寸，适合 1080p 桌面；频谱、
-Transcript 与 TX 区域不再保留首版那样大的固定高度。**Committed** 与
-**Provisional / may change** 改为近似等高，缩小窗口后 provisional 文本框
-不会再被压成一条很窄的横线。
+CW Console 在紧凑浮动窗口中始终保留频谱和 8 个稳定 Lane 槽位。下方现在
+使用 **RX transcript / CW transmit** 两个标签页，而不是把接收文本和发射
+编辑器塞在两个互相挤压的固定高度面板里。RX 标签页的 **Committed** 与
+**Provisional / may change** 文本区域各占约一半；TX 标签页独立显示编辑器、
+F1–F8、Arm、Send、STOP 和 WPM 控件，窗口窄时工具行可以横向滚动。
+
+正在发送时 TX 标签会明确显示 SENDING，主工具栏也会额外显示红色 **STOP
+TX**，因此即使切回接收页也不会失去紧急停止入口。
 
 ## 安装 DeepCW 模型
 
