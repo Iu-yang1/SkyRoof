@@ -120,6 +120,36 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void PileupTranscript_WrapsAndScrollsLongMessages()
+    {
+      using var card = new CwPileupLaneCard(0);
+      var layout = card.Controls.OfType<TableLayoutPanel>().Single();
+      var transcript = layout.Controls.OfType<RichTextBox>().Single();
+
+      transcript.ReadOnly.Should().BeTrue();
+      transcript.Multiline.Should().BeTrue();
+      transcript.WordWrap.Should().BeTrue();
+      transcript.ScrollBars.Should().Be(RichTextBoxScrollBars.Vertical);
+      transcript.BorderStyle.Should().Be(BorderStyle.None);
+    }
+
+    [Fact]
+    public void MacroRightClickEditor_UsesValidatedPersistentPresets()
+    {
+      var macros = new CwMacroSettings();
+      CwMacroBank.Set(macros, 0, "CQ CQ BG5JSU");
+      CwMacroBank.Get(macros, 0).Should().Be("CQ CQ BG5JSU");
+      CwMacroBank.Prepare(macros, 0).Should().Be("CQ CQ BG5JSU");
+
+      CwMacroBank.Set(macros, 0, "");
+      CwMacroBank.Get(macros, 0).Should().BeEmpty();
+
+      Action invalid = () => CwMacroBank.Set(macros, 1, "CW#BAD");
+      invalid.Should().Throw<ArgumentException>();
+      CwMacroBank.Get(macros, 1).Should().BeEmpty();
+    }
+
+    [Fact]
     public void StableMessageCards_KeepTheirSlotDuringFrequencyCrossing()
     {
       var map = new CwConsoleLaneSlotMap(

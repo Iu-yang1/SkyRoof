@@ -52,7 +52,7 @@ namespace SkyRoof
 
     [DisplayName("Enable CW Transmit")]
     [Description(
-      "Permit the CW Console to use SkyCAT's fail-closed IC-9700 Command 17 keyer. Enabled by default for new configurations. The Console still requires an explicit non-persistent Arm TX action before every transmitting session.")]
+      "Permit operator-initiated Send/Shift+F1-F8 through SkyCAT's fail-closed IC-9700 Command 17 keyer. The Console captures TX interlocks on demand; no separate Arm TX button is required.")]
     [DefaultValue(true)]
     public bool TransmitEnabled { get; set; } = true;
 
@@ -64,7 +64,7 @@ namespace SkyRoof
 
     [DisplayName("CW Message Macros")]
     [Description(
-      "Persistent F1-F8 text presets. F1-F8 load a preset into the composer; Shift+F1-F8 explicitly sends it only when TX is already enabled and armed.")]
+      "Persistent F1-F8 text presets. Right-click a macro button to edit; F1-F8 load into the composer and Shift+F1-F8 explicitly sends after automatic radio/interlock preflight.")]
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public CwMacroSettings Macros { get; set; } = new();
 
