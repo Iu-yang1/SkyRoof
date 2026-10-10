@@ -45,6 +45,8 @@ namespace SkyRoof
 
     private CwConsoleLaneIdentity? currentIdentity;
     private string copyText = string.Empty;
+    private int committedLength;
+    private int provisionalLength;
 
     internal string StatusText => status.Text;
     internal string DisplayedText => transcript.Text;
@@ -114,6 +116,8 @@ namespace SkyRoof
         currentIdentity = null;
         status.Text = "RX: select a Pileup lane or waterfall track";
         copyText = string.Empty;
+        committedLength = 0;
+        provisionalLength = 0;
         copy.Enabled = false;
         if (changed || transcript.Text != "Select a lane to see CW text.")
         {
@@ -139,19 +143,26 @@ namespace SkyRoof
 
       string shown = copyText.Length > 0
         ? copyText : "Listening for CW…";
-      if (laneChanged || transcript.Text != shown)
+      // A provisional suffix can become committed while the combined
+      // characters remain identical; repaint its styling in that case.
+      bool stylingChanged =
+        committedLength != committed.Length ||
+        provisionalLength != provisional.Length;
+      if (laneChanged || transcript.Text != shown || stylingChanged)
       {
         transcript.Text = shown;
+        transcript.SelectAll();
+        transcript.SelectionColor = SystemColors.WindowText;
         if (provisional.Length > 0)
         {
           transcript.Select(committed.Length, provisional.Length);
           transcript.SelectionColor = Color.FromArgb(155, 93, 32);
-          transcript.SelectionFont =
-            new Font(transcript.Font, FontStyle.Italic);
         }
         transcript.Select(transcript.TextLength, 0);
         transcript.ScrollToCaret();
       }
+      committedLength = committed.Length;
+      provisionalLength = provisional.Length;
     }
   }
 }
