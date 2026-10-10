@@ -1227,9 +1227,15 @@ namespace SkyRoof
           if (IsDisposed || epoch != ScopeCaptureEpoch)
             return;
 
-          IcomScopeFrame? newest = ScopeFrameMailbox.Take();
-          if (newest != null && Capture != null)
-            RenderScopeFrame(newest);
+          // Both receivers retain their latest independent snapshot.
+          // Oldest first preserves the global frame timestamp gate, while
+          // AUTO selection can still observe fresh MAIN and SUB state.
+          IcomScopeFrame[] frames = ScopeFrameMailbox.TakeAll();
+          if (Capture != null)
+          {
+            foreach (IcomScopeFrame newest in frames)
+              RenderScopeFrame(newest);
+          }
         }));
       }
       catch (InvalidOperationException)
