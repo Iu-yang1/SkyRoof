@@ -123,9 +123,12 @@ namespace SkyRoof
 
       if (SatBearing != null && engine != null && TrackCheckbox.Checked)
       {
-        var maxError = 0.5 * ctx.Settings.Rotator.StepSize * Geo.RinD;
+        double maxError =
+          TrackingTriggerAngleRadians(
+            ctx.Settings.Rotator.StepSize);
         var bearing = Sanitize(SatBearing);
-        if (AntBearing == null || AngleBetween(bearing, AntBearing) >= maxError)
+        if (AntBearing == null ||
+            AngleBetween(bearing, AntBearing) >= maxError)
           RotateTo(Path.GetNextAntennaBearing());
       }
     }
@@ -243,6 +246,105 @@ namespace SkyRoof
         new Bearing(
           target.AzimuthDeg * Trig.RinD,
           target.ElevationDeg * Trig.RinD));
+    }
+
+    internal static double TrackingTriggerAngleRadians(
+      float stepSizeDegrees)
+    {
+      if (!float.IsFinite(stepSizeDegrees) ||
+          stepSizeDegrees <= 0)
+        throw new ArgumentOutOfRangeException(
+          nameof(stepSizeDegrees));
+
+      return
+        0.5 *
+        stepSizeDegrees *
+        Geo.RinD;
+    }
+
+    internal void SetTrackingStepSize(
+      double stepSizeDegrees)
+    {
+      if (!double.IsFinite(stepSizeDegrees))
+        return;
+
+      float value =
+        (float)Math.Clamp(
+          stepSizeDegrees,
+          0.1,
+          30.0);
+      RotatorSettings settings =
+        ctx.Settings.Rotator;
+
+      if (Math.Abs(
+            settings.StepSize - value) <
+          0.0001f)
+        return;
+
+      settings.StepSize = value;
+      ctx.Settings.SaveToFile();
+
+      // OptimizedRotationPath snapshots StepSize in its constructor. Rebuild
+      // the current path immediately so the UI spinner really affects the
+      // active pass instead of waiting until the next satellite/pass change.
+      if (Path?.Pass != null)
+      {
+        bool wasTracking =
+          TrackCheckbox.Checked;
+        Path =
+          new OptimizedRotationPath(
+            Path.Pass,
+            settings,
+            AntBearing);
+        UpdatePathOptimizerForm();
+
+        if (wasTracking)
+          RotateTo(
+            Path.GetNextAntennaBearing());
+      }
+
+      BearingToUi();
+    }
+
+    internal void BeginManualContinuousMove(
+      RotatorJogDirection direction)
+    {
+      if (engine == null ||
+          IsManualControlLocked)
+        return;
+
+      RotatorContinuousDirection? move =
+        direction switch
+        {
+          RotatorJogDirection.AzimuthDown =>
+            RotatorContinuousDirection.Left,
+          RotatorJogDirection.AzimuthUp =>
+            RotatorContinuousDirection.Right,
+          RotatorJogDirection.ElevationUp =>
+            RotatorContinuousDirection.Up,
+          RotatorJogDirection.ElevationDown =>
+            RotatorContinuousDirection.Down,
+          _ => null
+        };
+
+      if (!move.HasValue)
+        return;
+
+      // Manual ownership supersedes PARK and pre-position tracking exactly as
+      // GO/manual-jog did before. During an active pass manual input remains
+      // locked by IsManualControlLocked.
+      CancelParkSequence(
+        stopMotor: false);
+      if (TrackCheckbox.Checked)
+        TrackCheckbox.Checked = false;
+
+      engine.StartContinuousMove(
+        move.Value);
+    }
+
+    internal void EndManualContinuousMove()
+    {
+      engine?.StopRotation();
     }
 
     internal void ManualJog(
