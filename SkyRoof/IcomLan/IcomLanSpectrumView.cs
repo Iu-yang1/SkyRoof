@@ -87,6 +87,8 @@ namespace SkyRoof
     private long SubDisplayFrequencyOffsetHz;
     private Slicer.Mode? ReceiveMode;
     private Slicer.Mode? TransmitMode;
+    private IcomScopeRxPassbandPreferences RxPassbandPreferences =
+      new(2400, 1200, 500, 15000);
 
     internal event Action<int>? SpectrumPercentChanged;
     internal event Action<int>? ZoomChanged;
@@ -278,9 +280,13 @@ namespace SkyRoof
       long transmitFrequencyHz,
       Slicer.Mode? transmitMode,
       long mainDisplayFrequencyOffsetHz = 0,
-      long subDisplayFrequencyOffsetHz = 0)
+      long subDisplayFrequencyOffsetHz = 0,
+      IcomScopeRxPassbandPreferences? passbandPreferences = null)
     {
-      if (ReceiveFrequencyHz == receiveFrequencyHz &&
+      IcomScopeRxPassbandPreferences nextPreferences =
+        passbandPreferences ?? new(2400, 1200, 500, 15000);
+      if (RxPassbandPreferences == nextPreferences &&
+          ReceiveFrequencyHz == receiveFrequencyHz &&
           TransmitFrequencyHz == transmitFrequencyHz &&
           MainDisplayFrequencyOffsetHz == mainDisplayFrequencyOffsetHz &&
           SubDisplayFrequencyOffsetHz == subDisplayFrequencyOffsetHz &&
@@ -300,6 +306,7 @@ namespace SkyRoof
         receiveMode;
       TransmitMode =
         transmitMode;
+      RxPassbandPreferences = nextPreferences;
       Invalidate();
     }
 
@@ -2292,6 +2299,51 @@ namespace SkyRoof
       }
     }
 
+    /// <summary>
+    /// Convert estimated RX filter edges into the same zoomed frequency
+    /// axis as the waveform, waterfall, grid and tuning cursor. Separate
+    /// frequency-to-pixel mapping prevents scale/spanning mistakes.
+    /// </summary>
+    internal static bool TryGetPassbandPlotBounds(
+      IcomScopeGeometry geometry,
+      long displayOffsetHz,
+      IcomScopeRxPassband passband,
+      Rectangle plot,
+      double zoomFactor,
+      double zoomCenter,
+      out Rectangle bounds)
+    {
+      bounds = Rectangle.Empty;
+      if (!geometry.IsValid || plot.Width < 2 || plot.Height < 1 ||
+          passband.UpperHz <= passband.LowerHz)
+        return false;
+
+      double low = ToVisiblePlotFraction(
+        geometry.FractionForFrequency(
+          checked(passband.LowerHz - displayOffsetHz)),
+        zoomFactor, zoomCenter);
+      double high = ToVisiblePlotFraction(
+        geometry.FractionForFrequency(
+          checked(passband.UpperHz - displayOffsetHz)),
+        zoomFactor, zoomCenter);
+
+      if (!double.IsFinite(low) || !double.IsFinite(high) ||
+          high <= 0 || low >= 1 || high <= low)
+        return false;
+
+      double visibleLow = Math.Clamp(low, 0, 1);
+      double visibleHigh = Math.Clamp(high, 0, 1);
+      if (visibleHigh <= visibleLow)
+        return false;
+
+      // Use the same (width - 1) convention as frequency grid/marker.
+      int left = plot.Left + (int)Math.Round(visibleLow * (plot.Width - 1));
+      int right = plot.Left + (int)Math.Round(visibleHigh * (plot.Width - 1));
+      right = Math.Min(plot.Right, Math.Max(left + 1, right));
+      bounds = Rectangle.FromLTRB(left, plot.Top, right, plot.Bottom);
+      return bounds.Width > 0;
+    }
+
     private void DrawPassband(
       Graphics graphics,
       Rectangle plot,
@@ -2300,96 +2352,20 @@ namespace SkyRoof
       long tunedFrequencyHz,
       Slicer.Mode? tunedMode)
     {
-      if (!geometry.IsValid ||
-          tunedFrequencyHz <= 0 ||
-          tunedMode == null)
+      // Scope CI-V 27 00 has no FIL1/FIL2/FIL3, actual IF BW or Twin
+      // PBT information. This is an operator-configurable estimate,
+      // never the independent SkyRoof SDR Slicer bandwidth.
+      if (!IcomScopeRxPassbandEstimator.TryEstimate(
+            tunedMode, tunedFrequencyHz,
+            RxPassbandPreferences, out IcomScopeRxPassband passband) ||
+          !TryGetPassbandPlotBounds(
+            geometry, displayOffsetHz, passband, plot,
+            HorizontalZoomFactor, HorizontalZoomCenter,
+            out Rectangle shading))
         return;
 
-      int bandwidth =
-        Slicer.GetBandwidth(
-          tunedMode.Value);
-
-      int offset =
-        Slicer.GetModeOffset(
-          tunedMode.Value);
-
-      long center =
-        tunedFrequencyHz +
-        offset;
-
-      long low =
-        center -
-        bandwidth / 2;
-
-      long high =
-        low +
-        bandwidth;
-
-      double lowFraction =
-        geometry.FractionForFrequency(
-          checked(low - displayOffsetHz));
-      double highFraction =
-        geometry.FractionForFrequency(
-          checked(high - displayOffsetHz));
-
-      if (double.IsNaN(lowFraction) ||
-          double.IsNaN(highFraction))
-        return;
-
-      lowFraction =
-        ToVisiblePlotFraction(
-          lowFraction,
-          HorizontalZoomFactor,
-          HorizontalZoomCenter);
-      highFraction =
-        ToVisiblePlotFraction(
-          highFraction,
-          HorizontalZoomFactor,
-          HorizontalZoomCenter);
-
-      if (highFraction < 0 ||
-          lowFraction > 1)
-        return;
-
-      lowFraction =
-        Math.Clamp(
-          lowFraction,
-          0,
-          1);
-      highFraction =
-        Math.Clamp(
-          highFraction,
-          0,
-          1);
-
-      int left =
-        plot.Left +
-        (int)Math.Round(
-          lowFraction *
-          (plot.Width - 1));
-
-      int right =
-        plot.Left +
-        (int)Math.Round(
-          highFraction *
-          (plot.Width - 1));
-
-      if (right <= left)
-        right = left + 1;
-
-      using var brush =
-        new SolidBrush(
-          ScopeTxFill);
-
-      graphics.FillRectangle(
-        brush,
-        Rectangle.FromLTRB(
-          left,
-          plot.Top,
-          Math.Min(
-            plot.Right,
-            right),
-          plot.Bottom));
+      using var brush = new SolidBrush(ScopeTxFill);
+      graphics.FillRectangle(brush, shading);
     }
 
     // RS-BA1-style marker behavior: CENTER/SCROLL-C use the scope
