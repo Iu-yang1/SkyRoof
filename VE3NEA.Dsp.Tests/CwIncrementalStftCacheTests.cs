@@ -47,6 +47,39 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void WidebandCache_ReusesOnlyMatchingInteriorSamples()
+    {
+      var metadata = new DeepCwModelMetadata
+      {
+        Chars = ["A"], BlankIndex = 1, NumClasses = 2,
+        SampleRate = 3200, FftLength = 256, HopLength = 48,
+        MinFrequencyHz = 400, MaxFrequencyHz = 1200,
+        FrequencyBins = 65, Normalization = "log1p",
+        InputName = "spectrogram", OutputName = "log_probs",
+        InputLayout = ["batch", "channel", "time", "frequency"],
+        OutputLayout = ["batch", "time", "class"],
+        ChannelCount = 1, InputDtype = "float32", OutputDtype = "float32"
+      };
+      float[] all = Tone(9 * Rate);
+      var cache = new CwStftMagnitudeCache(1600);
+      for (int step = 0; step < 4; step++)
+      {
+        float[] window = all.AsSpan(step * Rate, 6 * Rate).ToArray();
+        long absoluteEnd = (6L + step) * Rate;
+        var uncached = DeepCwWidebandFeatureWindow.Create(
+          window, Rate, metadata);
+        var cached = DeepCwWidebandFeatureWindow.Create(
+          window, Rate, metadata, absoluteEnd, cache);
+        for (int frame = 0; frame < cached.FrameCount; frame += 11)
+          foreach (double hz in new[] { 400.0, 735.0, 1000.0 })
+            cached.SampleCalibratedMagnitude(frame, hz)
+              .Should().Be(uncached.SampleCalibratedMagnitude(frame, hz));
+      }
+      cache.Hits.Should().BeGreaterThan(200);
+      cache.Count.Should().BeLessOrEqualTo(1600);
+    }
+
+    [Fact]
     public void StftCache_IsBoundedAndResettable()
     {
       var cache = new CwStftMagnitudeCache(3);
