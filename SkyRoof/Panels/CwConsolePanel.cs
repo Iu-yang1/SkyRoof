@@ -25,7 +25,7 @@ namespace SkyRoof
 
     private readonly CwAudioWaterfallAnalyzer WaterfallAnalyzer;
     private readonly CwAudioWaterfallView WaterfallView =
-      new();
+      new(spectrumBins: 512);
     private long waterfallGeneration = -1;
     private long lastWaterfallSampleIndex = -1;
 
@@ -65,6 +65,8 @@ namespace SkyRoof
       CwConsoleLaneIdentity,
       CwTranscriptSnapshot> transcripts =
         new();
+    private readonly CwConsoleLaneSlotMap laneSlots =
+      new(maxSlots: 8);
 
     private long displayGeneration = -1;
     private CwConsoleLaneIdentity? selectedIdentity;
@@ -91,9 +93,12 @@ namespace SkyRoof
               sampleRate: scanner.SampleRate,
               minFrequencyHz:
                 scanner.MinFrequencyHz,
+              fftSize: 8192,
+              minFrequencyHz:
+                scanner.MinFrequencyHz,
               maxFrequencyHz:
                 scanner.MaxFrequencyHz,
-              outputBins: 384);
+              outputBins: 512);
 
       Text = "CW Console [TX disabled]";
       Name = "CwConsolePanel";
@@ -214,10 +219,24 @@ namespace SkyRoof
 
       SourceBox.DropDownStyle =
         ComboBoxStyle.DropDownList;
-      SourceBox.Width = 156;
+      SourceBox.Width = 230;
       SourceBox.DataSource =
         Enum.GetValues<
           CwReceiveAudioSource>();
+      SourceBox.FormattingEnabled = true;
+      SourceBox.Format +=
+        (_, e) =>
+        {
+          if (e.ListItem is CwReceiveAudioSource source)
+            e.Value =
+              CwAudioSourceController
+                .SourceDisplayName(source);
+        };
+      var sourceTip = new ToolTip();
+      sourceTip.SetToolTip(
+        SourceBox,
+        "Radio USB / WASAPI capture = Windows capture/input endpoint such as Microphone (USB Audio CODEC).\r\n" +
+        "RS-BA1 speaker loopback = Windows playback/render endpoint that RS-BA1 is actually playing into.");
       SourceBox.SelectedIndexChanged +=
         SourceBox_SelectedIndexChanged;
       toolbar.Controls.Add(
@@ -342,6 +361,7 @@ namespace SkyRoof
       LaneGrid.AllowUserToAddRows = false;
       LaneGrid.AllowUserToDeleteRows = false;
       LaneGrid.AllowUserToResizeRows = false;
+      LaneGrid.AllowUserToOrderColumns = false;
       LaneGrid.MultiSelect = false;
       LaneGrid.SelectionMode =
         DataGridViewSelectionMode.FullRowSelect;
@@ -357,8 +377,8 @@ namespace SkyRoof
       LaneGrid.Columns.Add(
         MakeTextColumn(
           "Lane",
-          "Lane",
-          55,
+          "Slot / Lane",
+          76,
           0.45f));
       LaneGrid.Columns.Add(
         MakeTextColumn(
@@ -422,7 +442,7 @@ namespace SkyRoof
         FillWeight = fillWeight,
         SortMode =
           DataGridViewColumnSortMode
-            .Automatic
+            .NotSortable
       };
 
     private Control BuildTranscriptPanel()
@@ -820,6 +840,7 @@ namespace SkyRoof
       latestTracks =
         Array.Empty<CwSignalTrack>();
       transcripts.Clear();
+      laneSlots.Reset();
       selectedIdentity = null;
     }
 
@@ -899,9 +920,15 @@ namespace SkyRoof
             ? "running"
             : "waiting";
 
+      string role =
+        CwAudioSourceController.SourceRoleHint(
+          status.Value.Source);
       InputStatusLabel.Text =
-        $"Input: {status.Value.Source} · {state} · " +
-        $"{status.Value.DeviceName}";
+        $"Input: {CwAudioSourceController.SourceDisplayName(status.Value.Source)} · {state} · " +
+        $"{status.Value.DeviceName}" +
+        (string.IsNullOrEmpty(role)
+          ? string.Empty
+          : $" · {role}");
     }
 
     private void RefreshWorkerStatus()
@@ -969,13 +996,14 @@ namespace SkyRoof
 
       lock (stateSync)
       {
-        tracks =
-          CwConsolePresentation
-            .CollapseDuplicateLaneIdentities(
-              latestTracks);
-        textByLane =
-          new(transcripts);
+        tracks = latestTracks.ToArray();
+        textByLane = new(transcripts);
       }
+
+      IReadOnlyList<CwConsoleLaneSlot> slots =
+        laneSlots.Update(
+          tracks,
+          DateTime.UtcNow);
 
       CwConsoleLaneIdentity? preserve =
         SelectedRowIdentity() ??
@@ -984,103 +1012,66 @@ namespace SkyRoof
       LaneGrid.SuspendLayout();
       try
       {
-        DataGridViewRow[] taggedRows =
-          LaneGrid.Rows
-            .Cast<DataGridViewRow>()
-            .Where(row =>
-              row.Tag is
-                CwConsoleLaneIdentity)
-            .ToArray();
+        while (LaneGrid.Rows.Count < laneSlots.MaxSlots)
+          LaneGrid.Rows.Add();
+        while (LaneGrid.Rows.Count > laneSlots.MaxSlots)
+          LaneGrid.Rows.RemoveAt(
+            LaneGrid.Rows.Count - 1);
 
-        var existingRows =
-          taggedRows
-            .GroupBy(row =>
-              (CwConsoleLaneIdentity)
-                row.Tag!)
-            .ToDictionary(
-              group => group.Key,
-              group => group.First());
-
-        bool duplicateExistingRows =
-          taggedRows.Length !=
-            existingRows.Count;
-
-        bool sameLaneSet =
-          !duplicateExistingRows &&
-          existingRows.Count ==
-            tracks.Length &&
-          tracks.All(track =>
-            existingRows.ContainsKey(
-              CwConsolePresentation.Identity(
-                track)));
-
-        if (!sameLaneSet)
+        foreach (CwConsoleLaneSlot slot in slots)
         {
-          LaneGrid.Rows.Clear();
-          existingRows.Clear();
+          DataGridViewRow row =
+            LaneGrid.Rows[slot.Index];
 
-          foreach (CwSignalTrack track
-            in tracks)
+          if (slot.Identity is not CwConsoleLaneIdentity identity ||
+              slot.Track is not CwSignalTrack track)
           {
-            int index =
-              LaneGrid.Rows.Add();
-            DataGridViewRow row =
-              LaneGrid.Rows[index];
-            CwConsoleLaneIdentity identity =
-              CwConsolePresentation.Identity(
-                track);
-            row.Tag = identity;
-            existingRows[identity] = row;
+            ClearLaneRow(row, slot.Index);
+            continue;
           }
-        }
 
-        foreach (CwSignalTrack track
-          in tracks)
-        {
-          CwConsoleLaneIdentity identity =
-            CwConsolePresentation.Identity(
-              track);
-
+          row.Tag = identity;
           textByLane.TryGetValue(
             identity,
             out CwTranscriptSnapshot transcript);
 
           UpdateLaneRow(
-            existingRows[identity],
+            row,
+            slot.Index,
             track,
-            transcript);
+            transcript,
+            slot.Present);
         }
 
-        if (tracks.Length > 0)
+        DataGridViewRow? select = null;
+        if (preserve.HasValue)
+          select =
+            LaneGrid.Rows
+              .Cast<DataGridViewRow>()
+              .FirstOrDefault(row =>
+                row.Tag is CwConsoleLaneIdentity identity &&
+                identity == preserve.Value);
+
+        select ??=
+          slots
+            .Where(slot => slot.Present && slot.Identity.HasValue)
+            .Select(slot => LaneGrid.Rows[slot.Index])
+            .FirstOrDefault();
+
+        if (select != null &&
+            select.Tag is CwConsoleLaneIdentity selectIdentity)
         {
-          DataGridViewRow? select =
-            preserve.HasValue &&
-            existingRows.TryGetValue(
-              preserve.Value,
-              out DataGridViewRow? preservedRow)
-              ? preservedRow
-              : existingRows[
-                  CwConsolePresentation.Identity(
-                    tracks[0])];
-
-          CwConsoleLaneIdentity selectIdentity =
-            (CwConsoleLaneIdentity)
-              select.Tag!;
-
-          if (SelectedRowIdentity() !=
-              selectIdentity)
+          if (SelectedRowIdentity() != selectIdentity)
           {
             LaneGrid.ClearSelection();
             select.Selected = true;
-            LaneGrid.CurrentCell =
-              select.Cells[0];
+            LaneGrid.CurrentCell = select.Cells[0];
           }
-
-          selectedIdentity =
-            selectIdentity;
+          selectedIdentity = selectIdentity;
         }
         else
         {
+          LaneGrid.ClearSelection();
           selectedIdentity = null;
         }
       }
@@ -1090,14 +1081,29 @@ namespace SkyRoof
       }
     }
 
+    private static void ClearLaneRow(
+      DataGridViewRow row,
+      int slotIndex)
+    {
+      row.Tag = null;
+      row.Cells[0].Value =
+        $"{slotIndex + 1} · —";
+      for (int i = 1; i < row.Cells.Count; i++)
+        row.Cells[i].Value = string.Empty;
+      row.DefaultCellStyle.ForeColor =
+        SystemColors.GrayText;
+    }
+
     private static void UpdateLaneRow(
       DataGridViewRow row,
+      int slotIndex,
       CwSignalTrack track,
-      CwTranscriptSnapshot? transcript)
+      CwTranscriptSnapshot? transcript,
+      bool present)
     {
       row.Cells[0].Value =
-        CwConsolePresentation.LaneLabel(
-          track);
+        $"{slotIndex + 1} · " +
+        CwConsolePresentation.LaneLabel(track);
       row.Cells[1].Value =
         track.FrequencyHz.ToString("F1");
       row.Cells[2].Value =
@@ -1106,21 +1112,22 @@ namespace SkyRoof
         track.DriftHzPerSecond.ToString(
           "+0.0;-0.0;0.0");
       row.Cells[4].Value =
-        CwConsolePresentation.StateText(
-          track);
+        present
+          ? CwConsolePresentation.StateText(track)
+          : "Grace";
       row.Cells[5].Value =
-        track.IdentityConfidence.ToString(
-          "P0");
+        track.IdentityConfidence.ToString("P0");
       row.Cells[6].Value =
-        CwConsolePresentation.GridTranscript(
-          transcript);
+        CwConsolePresentation.GridTranscript(transcript);
 
       row.DefaultCellStyle.ForeColor =
-        track.Ambiguous
-          ? Theme.SpectrumPeak
-          : !track.Active
-            ? SystemColors.GrayText
-            : SystemColors.ControlText;
+        !present
+          ? SystemColors.GrayText
+          : track.Ambiguous
+            ? Theme.SpectrumPeak
+            : !track.Active
+              ? SystemColors.GrayText
+              : SystemColors.ControlText;
     }
 
     private void LaneGrid_SelectionChanged(
@@ -1197,7 +1204,12 @@ namespace SkyRoof
       CwAudioHub hub =
         audio.Ingress.FrontEnd.Audio;
 
-      const double snapshotSeconds = 0.10;
+      double snapshotSeconds =
+        Math.Max(
+          0.20,
+          WaterfallAnalyzer.FftSize /
+            (double)WaterfallAnalyzer.SampleRate +
+          0.02);
       if (!audio.Ingress.Enabled ||
           !hub.TrySnapshot(
             snapshotSeconds,
