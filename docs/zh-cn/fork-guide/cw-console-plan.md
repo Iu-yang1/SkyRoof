@@ -65,7 +65,7 @@ Frame-level Scanner 另外通过单元测试验证单调 sample-index 时间轴�
 | 09 | WinForms UI | DockContent：RX Start/Stop、三源选择、模型状态/安装、Pileup 表、selected committed/provisional transcript、AF waterfall，以及独立 TX composer | UI 不拥有 tracker/ONNX；关闭窗口不停止 RX，但会 Disarm/STOP 本窗口启动的 CW TX |
 | 10 | SkyCAT CW | 独立 loopback `4538`：PING/CAPS/STATUS/SEND/STOP；IC-9700 CI-V 17 / 17 FF；16 47 BK-IN；14 0C KEYRAW | 30 字符/字符集、模式/BK-IN/TX preflight、PTT 互斥、超时/断线 fail-safe 测试（SkyCAT PR #27） |
 | 11 | TX 状态机 | 持久 TX Enable（默认关）+ 非持久 Arm；Send/STOP；KEYRAW→WPM Morse 时长 watchdog；连接 teardown 二次 fail-safe | 未 Enable/未 Arm 禁发；关闭 Console/退出程序 STOP；ACK 不冒充拍发完成（SkyRoof PR #51） |
-| 12 | 卫星联动 | SAT MAIN 接收 / SUB 发射、CW/CW-R、当前上下行及 Doppler、PTT 所有权 | 错 VFO/外部 PTT/切卫星阻止 TX |
+| 12 | 卫星 TX interlock | Arm 锁定卫星/转发器/no-Doppler uplink/mode/transverter；TXHZ + SENDHZ 实际 VFO；发送中冻结 SkyRoof TX CAT 写入；CW lease 阻断其他 TX-side CAT 写入 | 错 TX VFO、外部 PTT、切卫星/转发器、改 uplink/mode/transverter 均阻止或中止 TX；正常 Doppler 漂移不误触发 |
 | 13 | 综合验收 | AWGN、QSB、1/10/30 Hz 扩展、0–20 Hz/s 漂移、3/5/8 路 CER | Windows CI + 模拟 CAT + 实机分阶段验证 |
 
 **里程碑：** 00→01→02→03→04→05→06→07→09 完成**真实多路接收**；02→08 提供降噪；10→11→12 才启用发射；13 负责全量回归。只完成 04 不等于支持 Pileup 解码。
@@ -87,13 +87,13 @@ Frame-level Scanner 另外通过单元测试验证单调 sample-index 时间轴�
 
 SDR 48 kHz Slicer / 选定 WASAPI Capture / RS-BA1 render-endpoint Loopback（多声道混单声道并重采样到 48 kHz）→ CwPcmIngress 源隔离与时间线保护 → 48 kHz 有界宽带音频 Hub → Fast 80/15 ms ridge portions + Precision 240/120 ms observations → 3-batch bounded beam/MHT → 带 AssociationHintId 的 Precision batch → CwPileupTrackManager / Kalman/GNN / MergeGroup fallback（空 batch 也推进 coast 时间）→ 默认：校准宽带 STFT + activity-aware all-track soft mask → latest-only DeepCW。HamNoise 只存在于 **tracker 之后的 benchmark 分支**：A) 对选中 Track 用 CwLaneExtractor DDC 到 9.6 kHz，再做 LaneDry/Classic/V2；或 B) 将整个 immutable decode snapshot 重采样到 9.6 kHz，只运行一次 Shared Classic/V2，然后继续使用原 all-track soft mask。两种 placement 都不会改变检测/跟踪统计。之后统一进入带 OutputFrame/置信度的 CTC → Incremental Transcript（稳定前缀 + provisional 后缀）→ Pileup 列表/选中路文本/QSO 辅助。
 
-候选 AF 频率不等于 RF 下行频率；正确的接收音调到射频转换取决于 CW/CW-R 与解调方式。音频推理不得直接操作 TX VFO。当前安全 TX 第一阶段只拍发用户显式输入的文本，**尚未**把所选 RX Lane、卫星 TX VFO、许可频段或 Doppler 自动转换成发射频率；这些属于下一阶段 CW-12。
+候选 AF 频率不等于 RF 下行频率；正确的接收音调到射频转换取决于 CW/CW-R 与解调方式。音频推理不得直接操作 TX VFO。CW-12 **仍不会根据所选 RX Lane 自动算出或设置发射频率**：发射目标始终来自现有 RadioLink/卫星转发器模型和用户调谐。Arm 时仅验证当前上下文，线性转发器要求 no-Doppler uplink 位于 base-corrected 发布 passband 内，单频 uplink 限制在校正 base ±5 kHz；实际电台 TX VFO 还必须通过 SkyCAT TXHZ/SENDHZ 与预期 CAT/IF 频率一致。这里的 2m/70cm 检查只是 SkyRoof 支持范围的 sanity check，**不是对用户所在司法辖区、执照等级或当前发射权限的法律判断**；操作者仍必须自行确保合法发射。
 
 RS-BA1 Loopback 使用 Windows render endpoint loopback，**会捕获该输出设备的整个混音，而不是仅隔离 Remote Utility 进程**。因此建议把 RS-BA1 Remote Utility 放在专用输出端点；CW 显式选择的 loopback endpoint 优先，未选择时才复用 AF Gain 已绑定的 Remote Utility endpoint。
 
 ## 发射安全和验证
 
-SkyCAT 保留 4532 主 CAT 与 4537 Remote Control Switch 的原有职责，CW 发射另设**只监听本机**的 4538 白名单端口，不提供 raw CI-V。`SEND` 前 SkyCAT 在同一个 CI-V `commandLock` 内确认 TX mode 已经是 CW/CW-R、16 47 BK-IN 已经是 Semi/Full、硬件当前未 TX，并从共享 lease 阻止 CAT/WSJT-X PTT 与 Command 17 重叠。SkyCAT **不会**替用户切模式、打开 BK-IN 或拉起 PTT。CI-V 17 最多 30 字符，17 FF Abort；Command ACK 不代表文字已经拍发完。SkyRoof 通过 14 0C KEYRAW 估算当前 6–48 WPM 的消息时长，watchdog 到期主动 STOP；STOP 失败时关闭 TCP，由 SkyCAT disconnect handler 再次执行 fail-safe。无法确认 STOP 时 SkyCAT 保持 fail-closed lease，禁止其他 PTT/CW 客户端继续发射。
+SkyCAT 保留 4532 主 CAT 与 4537 Remote Control Switch 的原有职责，CW 发射另设**只监听本机**的 4538 白名单端口，不提供 raw CI-V。`STATUS` 返回 TX mode、BK-IN、TX、KEYRAW，并在新协议中返回电台实际 TX 频率 `TXHZ`；卫星发送使用 `SENDHZ <expectedHz> <toleranceHz> <text>`，SkyCAT 在同一个串行/lease 临界区再次回读 TX VFO，超差直接 `ERR FREQ`，**只验证而不改频率**。发送期间 Command-17 CW lease 同时让主 CAT 的 TX frequency/mode/CTCSS/operating-mode 写入 fail-closed，而 RX frequency/mode 与只读请求仍可继续。SkyCAT 依旧要求 CW/CW-R、Semi/Full BK-IN、硬件未 TX 和共享 PTT lease；不会替用户切模式、打开 BK-IN 或拉起 PTT。CI-V 17 最多 30 字符，17 FF Abort；Command ACK 不代表文字已经拍发完。SkyRoof 通过 14 0C KEYRAW 估算 6–48 WPM 消息时长并启动 watchdog；STOP 失败时关闭 TCP，由 SkyCAT disconnect handler 再次 fail-safe STOP。
 
 验收用多个混合 CW WAV 测 per-lane CER、误检率、丢路率、串扰率及音频->文字延迟。涵盖 10/20/30/40 WPM，3/5/8 路，低 SNR、QSB、频率扩展、多普勒、邻频及不可分离同频，并作 Raw/HamNoise 对照。CI-V 用模拟串口先验收，真实 RF 发射必须另行实机验证。
 
@@ -110,5 +110,6 @@ SkyCAT 保留 4532 主 CAT 与 4537 Remote Control Switch 的原有职责，CW �
 9. HamNoise benchmark-only 实验后端：固定 revision native bridge、per-lane/shared Classic 与 CW V2、LaneDry 对照、独立 real-model A/B workflow；量化结论暂不进入 UI/Release。同时修复 8 s 长窗口在 **CwLaneExtractor** 和 **CwWindowedSincResampler** 两处 48 kHz→9.6 kHz 输出长度计算的 Int32 乘法溢出（**PR #50**）。
 10. SkyCAT 独立 4538 CW CI-V 白名单协议、共享 PTT lease、断线/重连/退出 fail-safe（**SkyCAT PR #27**）。
 11. SkyRoof 两级 TX gate、RS-BA1 风格文本 composer、KEYRAW 时长 watchdog、关闭/退出 STOP（**SkyRoof PR #51**）。
-12. 卫星 TX VFO / Doppler / 许可频段联动与受控 IC-9700 实机 RF 验收。
+12. 卫星 TX interlock：TXHZ/SENDHZ、卫星/转发器/no-Doppler uplink/mode/transverter 上下文锁定、TX CAT freeze、发送中变化 STOP+Disarm，以及 SkyCAT CW lease 的 TX-side CAT write gate（**SkyCAT PR #28/#29；SkyRoof PR #52**）。
+13. 受控 IC-9700 实机 RF 验收：dummy load/低功率优先，核对 CW/CW-R、BK-IN、实际 uplink、Doppler catch-up 和 STOP 行为；软件检查不替代当地法规/执照要求。
 12. 端到端 WAV corpus 指标、中英文用户指南、许可证与正式发布。

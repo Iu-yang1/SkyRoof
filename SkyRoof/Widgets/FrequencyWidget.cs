@@ -450,7 +450,8 @@ namespace SkyRoof
             RadioLink.CorrectedDownlinkFrequency);
       }
 
-      if (RadioLink.CorrectedUplinkFrequency != 0)
+      if (RadioLink.CorrectedUplinkFrequency != 0 &&
+          ctx.CwTransmit?.TxCatWritesFrozen != true)
       {
         ctx.CatControl.Tx?.SetTxMode(
           RadioLink.UplinkMode);

@@ -79,6 +79,15 @@ namespace SkyRoof
     //----------------------------------------------------------------------------------------------
     private void SetSelectedGroup(SatelliteGroup group)
     {
+      if (IsCwTransmitSelectionLocked())
+      {
+        changing = true;
+        GroupComboBox.SelectedItem =
+          SelectedGroup;
+        changing = false;
+        return;
+      }
+
       Debug.Assert(group.SelectedSatId != null);
 
       ctx.Settings.Satellites.SelectedGroupId = group.Id;
@@ -90,6 +99,13 @@ namespace SkyRoof
 
     public void SetSelectedSatellite(SatnogsDbSatellite satellite)
     {
+      if (IsCwTransmitSelectionLocked())
+      {
+        if (SelectedSatellite != null)
+          SetSatelliteInCombobox();
+        return;
+      }
+
       ctx.Settings.Satellites.SelectedSatelliteId = satellite.sat_id;
 
       if (SelectedGroup.SatelliteIds.Contains(satellite.sat_id))
@@ -100,6 +116,15 @@ namespace SkyRoof
 
     public void SetSelectedTransmitter(SatnogsDbTransmitter tx)
     {
+      if (IsCwTransmitSelectionLocked())
+      {
+        changing = true;
+        TransmitterComboBox.SelectedItem =
+          SelectedTransmitter;
+        changing = false;
+        return;
+      }
+
       ctx.Settings.Satellites.SatelliteCustomizations.GetOrCreate(tx.Satellite.sat_id)
         .SelectedTransmitterId = tx.uuid;
 
@@ -272,6 +297,18 @@ namespace SkyRoof
       ShowSelectedTransmitter();
     }
 
+
+
+
+    private bool IsCwTransmitSelectionLocked()
+    {
+      if (ctx?.CwTransmit?.State.Sending != true)
+        return false;
+
+      Serilog.Log.Warning(
+        "Satellite/transmitter selection is locked while a CW Command-17 message lease is active. Stop CW TX before changing selection.");
+      return true;
+    }
 
 
 
