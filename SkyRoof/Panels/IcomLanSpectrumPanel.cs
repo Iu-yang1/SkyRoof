@@ -42,6 +42,8 @@ namespace SkyRoof
     private readonly System.Windows.Forms.Timer UiTimer = new() { Interval = 500 };
     private readonly IcomScopeState ScopeState = new();
     private readonly IcomScopeController ScopeController;
+    private readonly IcomScopePendingControls PendingScopeControls = new();
+    private long UnconfirmedScopeControlCount;
 
     private IcomLanSpectrumCapture? Capture;
     private IcomLanSpectrumCapture? NativeLanAssistCapture;
@@ -67,6 +69,7 @@ namespace SkyRoof
     private static readonly TimeSpan ScopeReadbackRetryDelay = TimeSpan.FromSeconds(35);
     private bool PendingControlSettingsApply;
     private string LastDiagnosticsText = "Spectrum diagnostics are not available while capture is stopped.";
+    private DateTime LastFixedEdgeConfirmationRequestUtc = DateTime.MinValue;
     private IcomScopeReadbackState? LastScopeReadback;
     private DateTime? LastScopeReadbackUtc;
     private CatControlEngine? LastScopeControlBackend;
@@ -1060,6 +1063,9 @@ namespace SkyRoof
       PendingControlSettingsApply = false;
       LastScopeReadback = null;
       LastScopeReadbackUtc = null;
+      PendingScopeControls.Clear();
+      UnconfirmedScopeControlCount = 0;
+      LastFixedEdgeConfirmationRequestUtc = DateTime.MinValue;
       LastScopeControlBackend = null;
 
       StartStopBtn.Text = "Stop";
@@ -1126,6 +1132,9 @@ namespace SkyRoof
       PendingControlSettingsApply = false;
       LastScopeReadback = null;
       LastScopeReadbackUtc = null;
+      PendingScopeControls.Clear();
+      UnconfirmedScopeControlCount = 0;
+      LastFixedEdgeConfirmationRequestUtc = DateTime.MinValue;
       LastScopeControlBackend = null;
       LastDiagnosticsText =
         "Spectrum diagnostics are not available while capture is stopped.";
@@ -1222,6 +1231,9 @@ namespace SkyRoof
       }
 
       ScopeState.Update(frame);
+      // A queued CI-V write is not an applied radio setting. Incoming
+      // frames may confirm MODE/SPAN for either receiver independently.
+      PendingScopeControls.ObserveFrame(frame);
       if (!ScopeState.ShouldDisplay(frame))
         return;
 
@@ -1293,40 +1305,48 @@ namespace SkyRoof
       UpdatingScopeControlUi = true;
       try
       {
+        byte displayedMode = frame.Mode;
+        if (PendingScopeControls.TryGet(
+              frame.Scope, IcomScopeControlKind.Mode,
+              out IcomScopeControlRequest pendingMode))
+          displayedMode = (byte)pendingMode.Mode;
+
         ScopeModeBox.SelectedIndex =
-          frame.Mode <=
-            (byte)IcomScopeMode.ScrollFixed
-            ? frame.Mode
-            : -1;
+          displayedMode <= (byte)IcomScopeMode.ScrollFixed
+            ? displayedMode : -1;
 
         bool spanMode =
-          frame.Mode is
+          displayedMode is
             (byte)IcomScopeMode.Center or
             (byte)IcomScopeMode.ScrollCenter;
 
         ConfigureSpanEdgeControl(
           spanMode);
 
-        if (spanMode &&
-            geometry.IsValid)
+        if (spanMode)
         {
-          int spanIndex =
-            Array.IndexOf(
-              ScopeSpanValues,
-              geometry.SpanHz);
+          long actualOrRequestedSpan = geometry.SpanHz;
+          if (PendingScopeControls.TryGet(
+                frame.Scope, IcomScopeControlKind.Span,
+                out IcomScopeControlRequest pendingSpan))
+            actualOrRequestedSpan = pendingSpan.SpanHz;
 
+          int spanIndex = Array.IndexOf(
+            ScopeSpanValues, actualOrRequestedSpan);
           if (spanIndex >= 0)
-            SpanEdgeBox.SelectedIndex =
-              spanIndex;
+            SpanEdgeBox.SelectedIndex = spanIndex;
         }
-        else if (!spanMode)
+        else
         {
+          int actualOrRequestedEdge =
+            ctx.Settings.IcomLanSpectrum.ScopeEdgeNumber;
+          if (PendingScopeControls.TryGet(
+                frame.Scope, IcomScopeControlKind.Edge,
+                out IcomScopeControlRequest pendingEdge))
+            actualOrRequestedEdge = pendingEdge.EdgeNumber;
+
           SpanEdgeBox.SelectedIndex =
-            Math.Clamp(
-              ctx.Settings.IcomLanSpectrum
-                .ScopeEdgeNumber,
-              1,
-              4) - 1;
+            Math.Clamp(actualOrRequestedEdge, 1, 4) - 1;
         }
 
         ReferenceBox.Value =
@@ -1373,6 +1393,14 @@ namespace SkyRoof
               geometry.SpanHz)
           : $"{FormatToolbarFrequency(checked(geometry.LowerFrequencyHz + displayOffsetHz))} — " +
             $"{FormatToolbarFrequency(checked(geometry.UpperFrequencyHz + displayOffsetHz))}";
+
+      // Show the hardware-reported width separately from the operator's
+      // requested width while SkyCAT is still awaiting confirmation.
+      if (PendingScopeControls.TryGet(
+            frame.Scope, IcomScopeControlKind.Span,
+            out IcomScopeControlRequest pendingGeometrySpan))
+        GeometryLabel.Text +=
+          $" · {FormatSpanChoice(pendingGeometrySpan.SpanHz)} pending";
 
       UpdateScopeControlAvailability();
     }
@@ -1593,6 +1621,9 @@ namespace SkyRoof
     private void ApplyScopeReadback(
       IcomScopeReadbackState state)
     {
+      // Only matched values confirm queued controls; late readbacks must
+      // not overwrite newer operator choices while awaiting radio ACK.
+      PendingScopeControls.ObserveReadback(state);
       LastScopeReadback =
         state;
       LastScopeReadbackUtc =
@@ -1619,24 +1650,40 @@ namespace SkyRoof
       {
         if (activeScope == 1)
         {
-          if (state.HasField("SUB.EDGE"))
+          if (state.HasField("SUB.EDGE") &&
+              !PendingScopeControls.TryGet(
+                1, IcomScopeControlKind.Edge, out _))
             settings.ScopeEdgeNumber = state.SubEdge;
-          if (state.HasField("SUB.REF"))
+          if (state.HasField("SUB.REF") &&
+              !PendingScopeControls.TryGet(
+                1, IcomScopeControlKind.ReferenceLevel, out _))
             settings.ScopeReferenceLevelDb = state.SubReferenceDb;
-          if (state.HasField("SUB.SPEED"))
+          if (state.HasField("SUB.SPEED") &&
+              !PendingScopeControls.TryGet(
+                1, IcomScopeControlKind.SweepSpeed, out _))
             settings.ScopeSweepSpeed = state.SubSpeed;
-          if (state.HasField("SUB.VBW"))
+          if (state.HasField("SUB.VBW") &&
+              !PendingScopeControls.TryGet(
+                1, IcomScopeControlKind.Vbw, out _))
             settings.ScopeVbw = state.SubVbw;
         }
         else
         {
-          if (state.HasField("MAIN.EDGE"))
+          if (state.HasField("MAIN.EDGE") &&
+              !PendingScopeControls.TryGet(
+                0, IcomScopeControlKind.Edge, out _))
             settings.ScopeEdgeNumber = state.MainEdge;
-          if (state.HasField("MAIN.REF"))
+          if (state.HasField("MAIN.REF") &&
+              !PendingScopeControls.TryGet(
+                0, IcomScopeControlKind.ReferenceLevel, out _))
             settings.ScopeReferenceLevelDb = state.MainReferenceDb;
-          if (state.HasField("MAIN.SPEED"))
+          if (state.HasField("MAIN.SPEED") &&
+              !PendingScopeControls.TryGet(
+                0, IcomScopeControlKind.SweepSpeed, out _))
             settings.ScopeSweepSpeed = state.MainSpeed;
-          if (state.HasField("MAIN.VBW"))
+          if (state.HasField("MAIN.VBW") &&
+              !PendingScopeControls.TryGet(
+                0, IcomScopeControlKind.Vbw, out _))
             settings.ScopeVbw = state.MainVbw;
         }
 
@@ -1736,12 +1783,14 @@ namespace SkyRoof
           request);
 
       if (routed)
-        ScopeReadbackRequestedForSession =
-          false;
+      {
+        PendingScopeControls.Track(request, DateTime.UtcNow);
+        ScopeReadbackRequestedForSession = false;
+      }
 
       StatusLabel.Text =
         routed
-          ? $"Scope control queued via {ScopeController.EffectivePath}: {description}."
+          ? $"Scope control queued via {ScopeController.EffectivePath}: {description}; awaiting radio confirmation."
           : "Scope control is read-only or no active SkyCAT control engine is available. " +
             "Set Scope control path to SkyCAT when using RS-BA1 waveform data.";
 
@@ -1802,6 +1851,21 @@ namespace SkyRoof
           {
             if (IsDisposed)
               return;
+
+            PendingScopeControls.ObserveFixedEdgeReadback(state);
+            bool stillPending =
+              PendingScopeControls.TryGet(
+                0, IcomScopeControlKind.FixedEdge,
+                out IcomScopeControlRequest pendingEdge) &&
+              pendingEdge.FrequencyRange == state.FrequencyRange &&
+              pendingEdge.EdgeNumber == state.EdgeNumber;
+            if (stillPending)
+            {
+              StatusLabel.Text =
+                $"Fixed Edge {state.EdgeNumber} readback did not match " +
+                "the requested preset; awaiting confirmation.";
+              return;
+            }
 
             IcomLanSpectrumSettings settings =
               ctx.Settings.IcomLanSpectrum;
@@ -1922,17 +1986,9 @@ namespace SkyRoof
           DialogResult.OK)
         return;
 
-      settings.FixedEdgePresets[key] =
-        new IcomScopeFixedEdgePreset
-        {
-          LowerHz =
-            dialog.LowerHz,
-          UpperHz =
-            dialog.UpperHz
-        };
-
-      ctx.Settings.SaveToFile();
-
+      // Do not save unconfirmed requested radio-register values as though
+      // they were installed presets. The matching post-write EDGE readback
+      // persists the actual device state on successful confirmation.
       bool routed =
         SendScopeControl(
           IcomScopeControlRequest.ForFixedEdge(
@@ -2179,6 +2235,9 @@ namespace SkyRoof
         LastScopeReadback = null;
         LastScopeReadbackUtc = null;
         PendingEdgeSyncScope = -1;
+        PendingScopeControls.Clear();
+        UnconfirmedScopeControlCount = 0;
+        LastFixedEdgeConfirmationRequestUtc = DateTime.MinValue;
         ScopeController.Reset();
         UpdateScopeControlAvailability();
       }
@@ -2194,6 +2253,22 @@ namespace SkyRoof
       }
 
       DateTime now = DateTime.UtcNow;
+      IcomScopeControlRequest[] unconfirmed =
+        PendingScopeControls.Expire(now);
+      if (unconfirmed.Length > 0)
+      {
+        UnconfirmedScopeControlCount += unconfirmed.Length;
+        // Do not assume the CAT queue's acceptance implies a hardware
+        // write. Restore actual frame geometry and request a fresh register
+        // readback after the confirmation deadline.
+        ScopeReadbackRequestedForSession = false;
+        RequestScopeReadback();
+        StatusLabel.Text =
+          $"IC-9700 did not confirm {unconfirmed.Length} spectrum setting(s) " +
+          "within 20 seconds; displaying actual radio state. Check SkyCAT " +
+          "command logs/control path.";
+        RefreshScopeGeometryUi();
+      }
       IcomLanSpectrumCapture? nativeLan = NativeLanAssistCapture;
       DateTime? nativeLast = nativeLan?.LastScopeFrameUtc;
       bool nativeLanActive =
@@ -2259,6 +2334,22 @@ namespace SkyRoof
       (int Pending, long Dropped, long Rejected)? queueStats =
         ctx.CatControl.GetIcomScopeControlQueueStats();
 
+      if (queueStats?.Pending == 0 &&
+          CanUseSkyCatScopeControl() &&
+          PendingScopeControls.TryGet(
+            0, IcomScopeControlKind.FixedEdge,
+            out IcomScopeControlRequest pendingFixedEdge) &&
+          now - LastFixedEdgeConfirmationRequestUtc >
+            TimeSpan.FromSeconds(4) &&
+          ctx.CatControl.RequestIcomFixedEdgeReadback(
+            pendingFixedEdge.FrequencyRange,
+            pendingFixedEdge.EdgeNumber))
+      {
+        // Query only after the queued write has drained, never on each
+        // waveform frame. The reply is checked against the exact preset.
+        LastFixedEdgeConfirmationRequestUtc = now;
+      }
+
       if (!LocalHold &&
           ScopeReadbackCompletedForSession &&
           !ScopeReadbackRequestedForSession &&
@@ -2307,7 +2398,11 @@ namespace SkyRoof
       StatsLabel.Text =
         $"{FormatSpectrumSource(spectrumSettings.Source)} · " +
         $"{transportSummary} · Ctrl {FormatControlPath(resolvedControlPath)}{controlHint} · " +
-        $"475 bins · {DisplayFps:0.0} fps · {health}";
+        $"475 bins · {DisplayFps:0.0} fps · {health}" +
+        (PendingScopeControls.Count > 0
+          ? $" · Ctrl pending {PendingScopeControls.Count}" : "") +
+        (UnconfirmedScopeControlCount > 0
+          ? $" · Unconfirmed {UnconfirmedScopeControlCount}" : "");
 
       LastDiagnosticsText =
         string.Join(
@@ -2320,6 +2415,8 @@ namespace SkyRoof
           $"Queue pending: {queueStats?.Pending.ToString("N0") ?? "n/a"}",
           $"Queue dropped: {queueStats?.Dropped.ToString("N0") ?? "n/a"}",
           $"Queue rejected: {queueStats?.Rejected.ToString("N0") ?? "n/a"}",
+          $"Control changes awaiting radio confirmation: {PendingScopeControls.Count}",
+          $"Unconfirmed controls after timeout: {UnconfirmedScopeControlCount}",
           $"Packets: {effectiveCapture.PacketCount:N0}",
           $"CI-V frames: {effectiveCapture.CivFrameCount:N0}",
           $"Complete sweeps: {scopeFrames:N0}",

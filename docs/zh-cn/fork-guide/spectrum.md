@@ -45,3 +45,30 @@ RS-BA1 被动捕获需要兼容的 **WinDivert DLL/驱动**及管理员权限。
 **Direct LAN 目前仅限实验验证**；即使凭据在设置文件中受到保护，也不要在公开 Issue 上传未经脱敏的登录信息或原始鉴权网络报文。
 
 更多：[SkyCAT](https://iu-yang1.github.io/SkyCAT/zh-cn/skycatd.html) · [原 SDR 瀑布](../../users_guide/waterfall_display.md)。
+
+
+### 频谱控制确认：50 kHz 带宽、模式、REF、SPEED、VBW
+
+Icom LAN Spectrum 的波形取自电台接收的 CI-V `27 00` 帧。
+**控制命令成功进入发送队列，不代表电台已经执行。** 旧版每接收一帧
+频谱都会用原有几何参数立即覆盖 Span 下拉框，因此选择 50 kHz 后，
+若电台仍报告 25 kHz，界面便会立即跳回 25 kHz。
+
+现在为 MAIN 和 SUB 分别记录**待确认设置**。模式和 Span 在收到电台
+对应的 `27 00` 帧（或一致的寄存器回读）之前保持用户请求的值；
+旁边的频率几何文字仍展示电台**实际报告**的跨度，并以 `pending`
+提示未确认。REF、扫频速度、VBW 与固定边界 EDGE 也不会被到达较晚
+的旧回读立刻覆盖。HOLD、PEAK、瀑布、AVG、SMOOTH、ZOOM
+则属于本地绘制控制，不需要发送这些电台设置命令。
+
+如果 **20 秒**内未获得对应的实际设备确认，待确认状态会过期：
+模式和 Span 恢复显示无线电实际报告的状态，同时请求 SkyCAT
+重新读取电台寄存器。Spectrum Diagnostics 中还可查看当前
+待确认设置数量。停止/重启采集、切换控制后端或音频/频谱来源时，
+会清除旧会话的待确认状态。
+
+**重要限制：** 被动抓取 RS-BA1 波形本身不能向电台写入设置。
+若使用 RS-BA1 被动数据，需要到 Settings 将 **Scope control path**
+显式设置为 **SkyCAT**，并确保 SkyCAT 控制后端在线。
+如仍然无法修改，应进一步检查 SkyCAT 发送日志以及电台实际回读。
+Direct LAN 控制仍为实验性路径，不能将写入排队等同于执行成功。
