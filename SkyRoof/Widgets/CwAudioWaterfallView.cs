@@ -89,8 +89,11 @@ namespace SkyRoof
       base.OnMouseWheel(e);
       if (ModifierKeys.HasFlag(Keys.Control))
       {
+        // Keep wheel zoom aligned with the integer 1–8x toolbar control.
         SetViewport(viewportStartFraction,
-          viewportZoom * (e.Delta > 0 ? 1.25 : 0.8));
+          Math.Clamp(
+            Math.Round(viewportZoom) + Math.Sign(e.Delta),
+            1, 8));
       }
       else
       {
