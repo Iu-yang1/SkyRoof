@@ -862,12 +862,16 @@ namespace SkyRoof
         $"Mean ONNX Run: {status.MeanOnnxInferenceMs:F1} ms");
 
       CwDisplayCadenceSnapshot paint = WaterfallView.PaintMetrics;
+      (double paintMeanMs, double paintP95Ms) =
+        WaterfallView.PaintDurationMetrics;
       MacroToolTip.SetToolTip(
         SpectrumStatusLabel,
         $"CW waterfall (new frames actually painted): " +
         $"{paint.ActualFps:F1} FPS\n" +
         $"Painted interval p95: {paint.P95IntervalMs:F1} ms; " +
         $"max: {paint.MaximumIntervalMs:F1} ms\n" +
+        $"GDI paint: {paintMeanMs:F1} ms mean / " +
+        $"{paintP95Ms:F1} ms p95\n" +
         $"Background display processing: " +
         $"{DisplayFrames.LastProcessingMilliseconds:F1} ms last, " +
         $"{DisplayFrames.MeanProcessingMilliseconds:F1} ms mean\n" +
