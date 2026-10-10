@@ -255,18 +255,26 @@ namespace SkyRoof.CW
         disposed,
         this);
 
+      using var timeout =
+        CancellationTokenSource.CreateLinkedTokenSource(
+          cancellationToken);
+      timeout.CancelAfter(
+        TimeSpan.FromSeconds(2.5));
+      CancellationToken requestToken =
+        timeout.Token;
+
       await requestLock.WaitAsync(
-        cancellationToken);
+        requestToken);
 
       try
       {
         await writer.WriteLineAsync(
           request.AsMemory(),
-          cancellationToken);
+          requestToken);
 
         string? reply =
           await reader.ReadLineAsync(
-            cancellationToken);
+            requestToken);
 
         if (reply is null)
           throw new IOException(
