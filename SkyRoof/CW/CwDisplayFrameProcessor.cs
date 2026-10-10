@@ -28,6 +28,7 @@ namespace SkyRoof.CW
     private CwDenoiseMode denoiserMode = CwDenoiseMode.Bypass;
     private Task<CwDisplayFrameResult>? running;
     private bool disposed;
+    internal event Action? FrameReady;
     private long busyTicks;
     private long finishedFrames;
     private long processingTicks;
@@ -96,6 +97,19 @@ namespace SkyRoof.CW
           generation, mode, waterfallFrame, spectrumFrame,
           1000.0 * ticks / Stopwatch.Frequency);
       });
+      // Notify the UI once a native FFT/HamNoise job is really completed.
+      // A WinForms Timer remains as a fallback: event delivery can be
+      // throttled or delayed by the message pump. No extra display work is
+      // scheduled on this completion thread.
+      _ = running.ContinueWith(
+        _ =>
+        {
+          if (!disposed)
+            FrameReady?.Invoke();
+        },
+        CancellationToken.None,
+        TaskContinuationOptions.ExecuteSynchronously,
+        TaskScheduler.Default);
       return true;
     }
 

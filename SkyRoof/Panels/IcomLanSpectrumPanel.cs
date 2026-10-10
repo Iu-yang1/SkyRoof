@@ -42,6 +42,12 @@ namespace SkyRoof
     private readonly System.Windows.Forms.Timer UiTimer = new() { Interval = 500 };
     private readonly IcomScopeState ScopeState = new();
     private readonly IcomScopeController ScopeController;
+    private readonly IcomScopeUiFrameMailbox ScopeFrameMailbox = new();
+    private int ScopeCaptureEpoch;
+    private byte LastGeometryUiScope = byte.MaxValue;
+    private byte LastGeometryUiMode = byte.MaxValue;
+    private long LastGeometryUiA = -1;
+    private long LastGeometryUiB = -1;
     private readonly IcomScopePendingControls PendingScopeControls = new();
     private long UnconfirmedScopeControlCount;
 
@@ -218,7 +224,7 @@ namespace SkyRoof
         });
       ScopeModeBox.Margin =
         new Padding(0, 3, 6, 3);
-      ScopeModeBox.SelectedIndexChanged +=
+      ScopeModeBox.SelectionChangeCommitted +=
         (_, _) =>
         {
           if (UpdatingScopeControlUi ||
@@ -231,7 +237,8 @@ namespace SkyRoof
 
           ConfigureSpanEdgeControl(
             mode is IcomScopeMode.Center or
-              IcomScopeMode.ScrollCenter);
+              IcomScopeMode.ScrollCenter,
+            operatorInitiated: true);
           UpdateScopeControlAvailability();
 
           if (!TryGetControlScope(
@@ -271,7 +278,7 @@ namespace SkyRoof
       SpanEdgeBox.Width = 86;
       SpanEdgeBox.Margin =
         new Padding(0, 3, 6, 3);
-      SpanEdgeBox.SelectedIndexChanged +=
+      SpanEdgeBox.SelectionChangeCommitted +=
         (_, _) =>
         {
           if (UpdatingScopeControlUi ||
@@ -386,7 +393,7 @@ namespace SkyRoof
         });
       SweepSpeedBox.Margin =
         new Padding(0, 3, 8, 3);
-      SweepSpeedBox.SelectedIndexChanged +=
+      SweepSpeedBox.SelectionChangeCommitted +=
         (_, _) =>
         {
           if (UpdatingScopeControlUi ||
@@ -431,7 +438,7 @@ namespace SkyRoof
         });
       VbwBox.Margin =
         new Padding(0, 3, 8, 3);
-      VbwBox.SelectedIndexChanged +=
+      VbwBox.SelectionChangeCommitted +=
         (_, _) =>
         {
           if (UpdatingScopeControlUi ||
@@ -1055,6 +1062,12 @@ namespace SkyRoof
       ScopeFps = 0;
       DisplayFps = 0;
       LastRenderedScopeFrameTicks = 0;
+      Interlocked.Increment(ref ScopeCaptureEpoch);
+      ScopeFrameMailbox.Clear();
+      LastGeometryUiScope = byte.MaxValue;
+      LastGeometryUiMode = byte.MaxValue;
+      LastGeometryUiA = -1;
+      LastGeometryUiB = -1;
       LastStatsUsedNativeLan = false;
       ScopeReadbackCompletedForSession = false;
       ScopeReadbackRequestedForSession = false;
@@ -1139,6 +1152,12 @@ namespace SkyRoof
       LastDiagnosticsText =
         "Spectrum diagnostics are not available while capture is stopped.";
       ScopeState.Clear();
+      Interlocked.Increment(ref ScopeCaptureEpoch);
+      ScopeFrameMailbox.Clear();
+      LastGeometryUiScope = byte.MaxValue;
+      LastGeometryUiMode = byte.MaxValue;
+      LastGeometryUiA = -1;
+      LastGeometryUiB = -1;
       LastRenderedScopeFrameTicks = 0;
 
       if (LocalHold)
@@ -1176,42 +1195,52 @@ namespace SkyRoof
     {
       if (IsDisposed || !IsHandleCreated) return;
 
-      // When a current combined LAN waveform is arriving, do not interleave a
-      // second serial-style representation of the same scope into the display.
+      // Prefer high-rate combined LAN frames whenever the native passive
+      // stream is current. Keep older SkyCAT serial frames out of the
+      // shared UI mailbox.
       DateTime? nativeLast = NativeLanAssistCapture?.LastScopeFrameUtc;
       if (nativeLast != null &&
           (DateTime.UtcNow - nativeLast.Value).TotalSeconds < 0.75)
         return;
 
-      try
-      {
-        BeginInvoke((Action)(() =>
-        {
-          if (!IsDisposed)
-            RenderScopeFrame(frame);
-        }));
-      }
-      catch (InvalidOperationException)
-      {
-        // The panel is closing.
-      }
+      QueueScopeRender(frame);
     }
 
     private void NativeLanAssist_ScopeFrameReceived(IcomScopeFrame frame)
     {
       if (IsDisposed || !IsHandleCreated) return;
+      QueueScopeRender(frame);
+    }
 
+    private void QueueScopeRender(IcomScopeFrame frame)
+    {
+      if (!ScopeFrameMailbox.Offer(frame))
+        return;
+
+      int epoch = Volatile.Read(ref ScopeCaptureEpoch);
       try
       {
         BeginInvoke((Action)(() =>
         {
-          if (!IsDisposed)
-            RenderScopeFrame(frame);
+          // Stale callbacks from a previous capture session must not paint
+          // or consume the new source's pending scope frame.
+          if (IsDisposed || epoch != ScopeCaptureEpoch)
+            return;
+
+          // Both receivers retain their latest independent snapshot.
+          // Oldest first preserves the global frame timestamp gate, while
+          // AUTO selection can still observe fresh MAIN and SUB state.
+          IcomScopeFrame[] frames = ScopeFrameMailbox.TakeAll();
+          if (Capture != null)
+          {
+            foreach (IcomScopeFrame newest in frames)
+              RenderScopeFrame(newest);
+          }
         }));
       }
       catch (InvalidOperationException)
       {
-        // The panel is closing.
+        ScopeFrameMailbox.Clear();
       }
     }
 
@@ -1241,7 +1270,23 @@ namespace SkyRoof
         frame);
       SpectrumView.PushFrame(frame);
       LastRenderedScopeFrameTicks = ticks;
-      RefreshScopeGeometryUi();
+
+      // Do not write all ComboBox selections / NumericUpDown values on
+      // every 27 00 frame. That repeatedly mutates native Win32 controls
+      // even if only the 475 waveform amplitude values changed, and can
+      // steal selection in an open dropdown. Geometry still refreshes
+      // immediately on a real MODE/SPAN/frequency transition.
+      if (LastGeometryUiScope != frame.Scope ||
+          LastGeometryUiMode != frame.Mode ||
+          LastGeometryUiA != frame.FrequencyAHz ||
+          LastGeometryUiB != frame.FrequencyBHz)
+      {
+        LastGeometryUiScope = frame.Scope;
+        LastGeometryUiMode = frame.Mode;
+        LastGeometryUiA = frame.FrequencyAHz;
+        LastGeometryUiB = frame.FrequencyBHz;
+        RefreshScopeGeometryUi();
+      }
     }
 
     private void SynchronizePendingEdgeIfNeeded(
@@ -1285,8 +1330,10 @@ namespace SkyRoof
         UpdatingScopeControlUi = true;
         try
         {
-          ScopeModeBox.SelectedIndex = -1;
-          SpanEdgeBox.SelectedIndex = -1;
+          if (!ScopeModeBox.ContainsFocus)
+            ScopeModeBox.SelectedIndex = -1;
+          if (!SpanEdgeBox.ContainsFocus)
+            SpanEdgeBox.SelectedIndex = -1;
         }
         finally
         {
@@ -1311,9 +1358,10 @@ namespace SkyRoof
               out IcomScopeControlRequest pendingMode))
           displayedMode = (byte)pendingMode.Mode;
 
-        ScopeModeBox.SelectedIndex =
+        SetRadioSelectedIndex(
+          ScopeModeBox,
           displayedMode <= (byte)IcomScopeMode.ScrollFixed
-            ? displayedMode : -1;
+            ? displayedMode : -1);
 
         bool spanMode =
           displayedMode is
@@ -1334,7 +1382,7 @@ namespace SkyRoof
           int spanIndex = Array.IndexOf(
             ScopeSpanValues, actualOrRequestedSpan);
           if (spanIndex >= 0)
-            SpanEdgeBox.SelectedIndex = spanIndex;
+            SetRadioSelectedIndex(SpanEdgeBox, spanIndex);
         }
         else
         {
@@ -1345,28 +1393,29 @@ namespace SkyRoof
                 out IcomScopeControlRequest pendingEdge))
             actualOrRequestedEdge = pendingEdge.EdgeNumber;
 
-          SpanEdgeBox.SelectedIndex =
-            Math.Clamp(actualOrRequestedEdge, 1, 4) - 1;
+          SetRadioSelectedIndex(
+            SpanEdgeBox,
+            Math.Clamp(actualOrRequestedEdge, 1, 4) - 1);
         }
 
-        ReferenceBox.Value =
-          (decimal)NormalizeReferenceLevel(
-            ctx.Settings.IcomLanSpectrum
-              .ScopeReferenceLevelDb);
+        if (!ReferenceBox.ContainsFocus)
+        {
+          decimal desiredReference =
+            (decimal)NormalizeReferenceLevel(
+              ctx.Settings.IcomLanSpectrum.ScopeReferenceLevelDb);
+          if (ReferenceBox.Value != desiredReference)
+            ReferenceBox.Value = desiredReference;
+        }
 
-        SweepSpeedBox.SelectedIndex =
-          Math.Clamp(
-            (int)ctx.Settings.IcomLanSpectrum
-              .ScopeSweepSpeed,
-            0,
-            2);
+        SetRadioSelectedIndex(
+          SweepSpeedBox,
+          Math.Clamp((int)ctx.Settings.IcomLanSpectrum
+            .ScopeSweepSpeed, 0, 2));
 
-        VbwBox.SelectedIndex =
-          Math.Clamp(
-            (int)ctx.Settings.IcomLanSpectrum
-              .ScopeVbw,
-            0,
-            1);
+        SetRadioSelectedIndex(
+          VbwBox,
+          Math.Clamp((int)ctx.Settings.IcomLanSpectrum
+            .ScopeVbw, 0, 1));
 
       }
       finally
@@ -1405,9 +1454,28 @@ namespace SkyRoof
       UpdateScopeControlAvailability();
     }
 
-    private void ConfigureSpanEdgeControl(
-      bool showSpan)
+    private static void SetRadioSelectedIndex(
+      ComboBox box, int selectedIndex)
     {
+      // Native Win32 ComboBox selection can change as the user navigates
+      // the expanded list. Never overwrite it from an asynchronous
+      // 27 00 frame or stale register readback during active editing.
+      if (IcomScopeUiSelectionPolicy.ShouldWriteRemoteSelection(
+            box.DroppedDown, box.ContainsFocus,
+            box.SelectedIndex, selectedIndex))
+        box.SelectedIndex = selectedIndex;
+    }
+
+    private void ConfigureSpanEdgeControl(
+      bool showSpan,
+      bool operatorInitiated = false)
+    {
+      // A mode/edge readback must never clear the actual dropdown Items
+      // while the user is hovering/selecting one of its entries.
+      if (!operatorInitiated &&
+          (SpanEdgeBox.DroppedDown || ScopeModeBox.DroppedDown))
+        return;
+
       if (SpanEdgeBox.Items.Count > 0 &&
           SpanEdgeShowsSpan == showSpan)
         return;
@@ -1702,27 +1770,26 @@ namespace SkyRoof
       UpdatingScopeControlUi = true;
       try
       {
-        ReferenceBox.Value =
-          (decimal)NormalizeReferenceLevel(
-            settings.ScopeReferenceLevelDb);
-        SweepSpeedBox.SelectedIndex =
-          Math.Clamp(
-            (int)settings.ScopeSweepSpeed,
-            0,
-            2);
-        VbwBox.SelectedIndex =
-          Math.Clamp(
-            (int)settings.ScopeVbw,
-            0,
-            1);
+        if (!ReferenceBox.ContainsFocus)
+        {
+          decimal referenceValue =
+            (decimal)NormalizeReferenceLevel(
+              settings.ScopeReferenceLevelDb);
+          if (ReferenceBox.Value != referenceValue)
+            ReferenceBox.Value = referenceValue;
+        }
+
+        SetRadioSelectedIndex(
+          SweepSpeedBox,
+          Math.Clamp((int)settings.ScopeSweepSpeed, 0, 2));
+        SetRadioSelectedIndex(
+          VbwBox,
+          Math.Clamp((int)settings.ScopeVbw, 0, 1));
 
         if (!SpanEdgeShowsSpan)
-          SpanEdgeBox.SelectedIndex =
-            Math.Clamp(
-              settings.ScopeEdgeNumber,
-              1,
-              4) -
-            1;
+          SetRadioSelectedIndex(
+            SpanEdgeBox,
+            Math.Clamp(settings.ScopeEdgeNumber, 1, 4) - 1);
       }
       finally
       {
@@ -2415,6 +2482,7 @@ namespace SkyRoof
           $"Queue pending: {queueStats?.Pending.ToString("N0") ?? "n/a"}",
           $"Queue dropped: {queueStats?.Dropped.ToString("N0") ?? "n/a"}",
           $"Queue rejected: {queueStats?.Rejected.ToString("N0") ?? "n/a"}",
+          $"Scope UI coalesced waveform frames: {ScopeFrameMailbox.ReplacedFrames:N0}",
           $"Control changes awaiting radio confirmation: {PendingScopeControls.Count}",
           $"Unconfirmed controls after timeout: {UnconfirmedScopeControlCount}",
           $"Packets: {effectiveCapture.PacketCount:N0}",

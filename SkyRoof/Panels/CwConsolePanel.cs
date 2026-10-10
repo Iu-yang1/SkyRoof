@@ -1,4 +1,5 @@
 using SkyRoof.CW;
+using System.Diagnostics;
 using WeifenLuo.WinFormsUI.Docking;
 
 namespace SkyRoof
@@ -69,6 +70,7 @@ namespace SkyRoof
     // because the WinForms message loop may coalesce timer/paint events.
     private readonly System.Windows.Forms.Timer WaterfallTimer =
       new() { Interval = 33 };
+    private long lastWaterfallPresentationTicks;
 
     private IReadOnlyList<CwSignalTrack> latestTracks =
       Array.Empty<CwSignalTrack>();
@@ -125,6 +127,7 @@ namespace SkyRoof
           outputBins: 512);
       DisplayFrames = new CwDisplayFrameProcessor(
         WaterfallAnalyzer, SpectrumAnalyzer);
+      DisplayFrames.FrameReady += DisplayFrames_FrameReady;
 
       Text = "CW Console [TX disabled]";
       Name = "CwConsolePanel";
@@ -692,6 +695,32 @@ namespace SkyRoof
       EventArgs e) =>
       RefreshWaterfall();
 
+    private void DisplayFrames_FrameReady()
+    {
+      if (IsDisposed || !IsHandleCreated)
+        return;
+      try
+      {
+        BeginInvoke((Action)(() =>
+        {
+          if (IsDisposed)
+            return;
+          // Native FFT completion is often between two 33-ms WinForms
+          // timer ticks. Present it promptly if the target interval has
+          // elapsed; otherwise the existing timer will deliver it.
+          if (lastWaterfallPresentationTicks == 0 ||
+              Stopwatch.GetElapsedTime(
+                lastWaterfallPresentationTicks) >=
+                  TimeSpan.FromMilliseconds(32))
+            RefreshWaterfall();
+        }));
+      }
+      catch (InvalidOperationException)
+      {
+        // Dock panel can close while a native FFT finishes.
+      }
+    }
+
     private void RefreshUi()
     {
       RefreshSourceStatus();
@@ -833,12 +862,16 @@ namespace SkyRoof
         $"Mean ONNX Run: {status.MeanOnnxInferenceMs:F1} ms");
 
       CwDisplayCadenceSnapshot paint = WaterfallView.PaintMetrics;
+      (double paintMeanMs, double paintP95Ms) =
+        WaterfallView.PaintDurationMetrics;
       MacroToolTip.SetToolTip(
         SpectrumStatusLabel,
         $"CW waterfall (new frames actually painted): " +
         $"{paint.ActualFps:F1} FPS\n" +
         $"Painted interval p95: {paint.P95IntervalMs:F1} ms; " +
         $"max: {paint.MaximumIntervalMs:F1} ms\n" +
+        $"GDI paint: {paintMeanMs:F1} ms mean / " +
+        $"{paintP95Ms:F1} ms p95\n" +
         $"Background display processing: " +
         $"{DisplayFrames.LastProcessingMilliseconds:F1} ms last, " +
         $"{DisplayFrames.MeanProcessingMilliseconds:F1} ms mean\n" +
@@ -992,6 +1025,7 @@ namespace SkyRoof
             WaterfallView.SetSpectrum(result.Spectrum);
             WaterfallView.Append(result.Waterfall);
             lastWaterfallSampleIndex = result.Waterfall.EndSampleIndex;
+            lastWaterfallPresentationTicks = Stopwatch.GetTimestamp();
           }
           else
           {
@@ -1746,6 +1780,7 @@ namespace SkyRoof
       WaterfallTimer.Stop();
       WaterfallTimer.Tick -=
         WaterfallTimer_Tick;
+      DisplayFrames.FrameReady -= DisplayFrames_FrameReady;
       WaterfallView.LaneClicked -=
         WaterfallView_LaneClicked;
       // The background display worker may still be inside native HamNoise.

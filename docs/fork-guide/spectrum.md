@@ -77,3 +77,28 @@ itself. To modify IC-9700 scope registers with passive waveform data, select
 SkyCAT radio control backend is online, and inspect its command logs if a
 write times out. Direct LAN scope writes remain experimental and are not
 silently claimed to be supported.
+
+
+### Spectrum dropdown stability with high-rate scope frames
+
+The Icom LAN spectrum display and the CI-V radio-control selections no longer
+share a one-to-one UI update cadence. Incoming `27 00` waveform frames are
+coalesced into **at most one pending WinForms callback**, using the newest
+frame when the UI is temporarily occupied. Only actual mode/frequency/span
+geometry changes refresh the radio-control selector values, rather than
+every amplitude-only frame. The normal 500-ms status/readback poll still
+handles backend reconnection and incomplete metadata.
+
+Opening, hovering, or keyboard-focusing the **MODE, SPAN/EDGE, SPEED or VBW**
+dropdown prevents incoming scope data from rewriting its active selection.
+A write command is now emitted on **SelectionChangeCommitted**, not on a
+programmatic selection change during UI synchronization. REF numeric edits
+are similarly protected while focused. The prior queued-versus-confirmed
+radio write handling remains in effect: a selection that eventually reverts
+after the 20-second confirmation timeout is a radio-control/CI-V issue and
+should be diagnosed through SkyCAT, not hidden as a successful change.
+
+Coalesced UI scope frames and pending/unconfirmed CI-V commands are shown in
+Spectrum Diagnostics. The latest frame is preferred over replaying old
+waveform frames, preserving the existing Direct LAN, SkyCAT and passive
+RS-BA1 capture behavior while reducing contention with CW Console painting.

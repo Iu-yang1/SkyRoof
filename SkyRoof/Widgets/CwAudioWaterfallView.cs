@@ -2,6 +2,7 @@ using SkyRoof.CW;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
+using System.Diagnostics;
 
 namespace SkyRoof
 {
@@ -50,6 +51,26 @@ namespace SkyRoof
     private long frameRevision;
     private long lastPaintedFrameRevision;
     private readonly CwDisplayCadenceMeter paintCadence = new();
+    private readonly double[] paintDurationsMs = new double[120];
+    private int paintDurationNext;
+    private int paintDurationCount;
+
+    internal (double MeanMs, double P95Ms) PaintDurationMetrics
+    {
+      get
+      {
+        if (paintDurationCount == 0)
+          return default;
+        double[] sorted = paintDurationsMs.AsSpan(
+          0, paintDurationCount).ToArray();
+        double mean = sorted.Average();
+        Array.Sort(sorted);
+        int index = Math.Clamp(
+          (int)Math.Ceiling(0.95 * sorted.Length) - 1,
+          0, sorted.Length - 1);
+        return (mean, sorted[index]);
+      }
+    }
 
     internal CwDisplayCadenceSnapshot PaintMetrics =>
       paintCadence.Snapshot();
@@ -160,6 +181,8 @@ namespace SkyRoof
       frameRevision = 0;
       lastPaintedFrameRevision = 0;
       paintCadence.Reset();
+      paintDurationNext = 0;
+      paintDurationCount = 0;
       displayFloorDb = float.NaN;
       spectrumFloorDb = float.NaN;
       latestPowerDb = Array.Empty<float>();
@@ -338,8 +361,16 @@ namespace SkyRoof
 
     protected override void OnPaint(PaintEventArgs e)
     {
+      long started = Stopwatch.GetTimestamp();
       base.OnPaint(e);
       PaintContents(e.Graphics);
+      paintDurationsMs[paintDurationNext] =
+        Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+      paintDurationNext = (paintDurationNext + 1) %
+        paintDurationsMs.Length;
+      if (paintDurationCount < paintDurationsMs.Length)
+        paintDurationCount++;
+
       // Count actual newly-painted waterfall columns, not timer callbacks
       // or invalidate requests (which WinForms may merge under load).
       if (hasRows && frameRevision != lastPaintedFrameRevision)

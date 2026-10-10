@@ -482,3 +482,27 @@ For i5-10400 testing, compare Raw, HamNoise Classic and HamNoise V2
 after at least 10 seconds, noting painted FPS, interval p95 and mean
 processing time. A fast spectrum trace with low painted FPS indicates
 UI/message-loop or painting delays, rather than necessarily FFT latency.
+
+
+### Shared WinForms message-pump contention
+
+CW Console and Icom LAN Spectrum share the SkyRoof WinForms UI thread.
+Previously, the LAN pane could post a separate UI callback for every
+received CI-V spectrum frame and reassign radio-control dropdown selections
+each time, potentially delaying CW paints even when FFT/HamNoise ran on
+background threads. LAN frame callbacks are now coalesced to the newest frame,
+and unchanged radio-control geometry no longer triggers high-frequency
+ComboBox updates.
+
+CW Console also uses a **frame-ready notification** after background FFT
+completion: if at least ~32 ms have elapsed since the last presentation,
+the completed frame can be published without waiting for the next 33-ms
+WinForms timer tick. The timer remains a fallback; both paths preserve
+single-in-flight backpressure. This improves responsiveness but does not
+guarantee 30 actual paintings per second if native denoising or GDI work
+takes longer.
+
+Hover over the CW Console **Spectrum** status to compare actual painted FPS,
+frame interval p95/max, GDI painting time mean/p95, and background processing
+time. If processing and painting each take only a few milliseconds yet FPS
+is low, look for UI message-pump pressure or delayed audio callback delivery.
