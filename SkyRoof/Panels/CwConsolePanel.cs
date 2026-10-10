@@ -48,6 +48,7 @@ namespace SkyRoof
       .ToArray();
     private readonly ToolTip MacroToolTip =
       new();
+    private bool sendRequestInProgress;
 
     private readonly System.Windows.Forms.Timer UiTimer =
       new() { Interval = 250 };
@@ -1573,9 +1574,14 @@ namespace SkyRoof
     {
       CwTransmitController? tx =
         ctx.CwTransmit;
-      if (tx == null)
+      if (tx == null ||
+          sendRequestInProgress)
         return;
 
+      // WinForms may deliver repeated Shift+Fn key messages while the first
+      // asynchronous preflight is still awaiting SkyCAT. Keep only one UI
+      // send request in flight. STOP remains independent and always available.
+      sendRequestInProgress = true;
       SendTxBtn.Enabled = false;
 
       try
@@ -1593,6 +1599,7 @@ namespace SkyRoof
       }
       finally
       {
+        sendRequestInProgress = false;
         if (!IsDisposed)
           RefreshTransmitUi();
       }
