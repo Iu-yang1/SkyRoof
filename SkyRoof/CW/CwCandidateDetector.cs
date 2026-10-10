@@ -393,6 +393,7 @@ namespace SkyRoof.CW
     public void Reset()
     {
       Audio.Reset();
+      FrameScanner.ResetCache();
       Associations.Reset();
       Tracks.Reset();
       lastPrecisionSampleIndex = long.MinValue;
