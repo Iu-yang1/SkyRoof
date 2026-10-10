@@ -4,7 +4,7 @@ _layout: landing
 
 <center>
 
-# SkyRoof v.1.55
+# SkyRoof fork v.1.57
 
 A Windows application for Hams and satellite enthusiasts
 
@@ -60,7 +60,7 @@ The program can work without an SDR, or even without any radio at all, but many 
 
 This site includes the original SkyRoof user guide and the additional features
 implemented in the **[Iu-yang1/SkyRoof](https://github.com/Iu-yang1/SkyRoof)** fork,
-based on upstream v1.55. The fork-specific material covers custom orbit sources,
+based on upstream v1.56. The fork-specific material covers custom orbit sources,
 JPL Moon/Sun/Venus targets, persisted Base frequencies, editable transmitters,
 SkyCAT/RS-BA1, IC-9700 scope, rotator PARK routes, themes, AF/RF gain and
 reliability improvements.

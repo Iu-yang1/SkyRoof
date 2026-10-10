@@ -2,13 +2,19 @@
 
 ## Which build do I need?
 
+**Fork version v.1.57**: [GitHub Releases](https://github.com/Iu-yang1/SkyRoof/releases).
+This fork includes the upstream v.1.56 changes and its own CW, CAT,
+rotator, IC-9700 LAN spectrum and bilingual documentation extensions.
+The published asset is marked as a pre-release if it cannot be signed.
+
+
 For the **Iu-yang1/SkyRoof fork extensions** described in the
 [English](fork-guide/overview.md) and
 [Chinese](zh-cn/fork-guide/overview.md) guides, use the
 [SkyRoof fork GitHub Actions](https://github.com/Iu-yang1/SkyRoof/actions)
 or [fork Releases](https://github.com/Iu-yang1/SkyRoof/releases) when available.
 A successful Compile Check may provide an **unsigned test installer**; it is not
-the signed upstream v1.55 installer. See
+the upstream v1.56 installer. See
 [docs deployment status](https://github.com/Iu-yang1/SkyRoof/deployments).
 
 The section below lists the **upstream VE3NEA releases**, not fork-specific builds.
@@ -17,7 +23,7 @@ The section below lists the **upstream VE3NEA releases**, not fork-specific buil
 
 ### Current Version
 
-[SkyRoof v.1.55](https://github.com/VE3NEA/SkyRoof/releases/download/v.1.55/SkyRoofSetup-v.1.55.exe)
+[SkyRoof v.1.56](https://github.com/VE3NEA/SkyRoof/releases/download/v.1.56/SkyRoofSetup-v.1.56.exe)
 
 <br>
 
@@ -28,6 +34,11 @@ See [All Releases](https://github.com/VE3NEA/SkyRoof/releases)
 <br>
 
 ### Release Notes
+
+#### v.1.56
+
+- support of SSDV format used by AO-123
+- user-selected default SSTV filter: None, Wiener, or NLM
 
 #### v.1.55
 
