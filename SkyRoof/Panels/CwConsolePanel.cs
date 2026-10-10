@@ -135,7 +135,7 @@ namespace SkyRoof
       if (ctx.CwAudio != null)
         ctx.CwAudio.Ingress.SamplesAccepted += Ingress_SamplesAccepted;
 
-      Text = "CW Console [TX disabled]";
+      Text = "CW Console [RX / TX]";
       Name = "CwConsolePanel";
       // Keep the Console usable as a compact floating tool window. The old
       // 1040x900 / 720x720 geometry was unnecessarily tall on 1080p displays.
@@ -1483,7 +1483,6 @@ namespace SkyRoof
         ctx.CwTransmit;
       if (tx == null ||
           statusPollInProgress ||
-          !ctx.Settings.CwConsole.TransmitEnabled ||
           !tx.State.Armed ||
           tx.State.Sending ||
           DateTime.UtcNow < nextStatusPollUtc)
