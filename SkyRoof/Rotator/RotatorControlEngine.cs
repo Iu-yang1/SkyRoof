@@ -15,6 +15,14 @@ using VE3NEA;
 
 namespace SkyRoof
 {
+  internal enum RotatorContinuousDirection
+  {
+    Up = 2,
+    Down = 4,
+    Left = 8,
+    Right = 16
+  }
+
   public class RotatorControlEngine : ControlEngine
   {
     public volatile Bearing? RequestedBearing, LastReadBearing, LastWrittenBearing;
@@ -23,6 +31,8 @@ namespace SkyRoof
       new DateTime(Interlocked.Read(ref LastSuccessfulBearingReadTicks), DateTimeKind.Utc);
     private volatile bool stopRequested = false;
     private volatile bool stopNotSupported = false;
+    private int requestedContinuousDirection;
+    private int appliedContinuousDirection;
 
     public event EventHandler? BearingChanged;
 
@@ -43,8 +53,45 @@ namespace SkyRoof
 
     public void RotateTo(Bearing bearing)
     {
-      stopRequested = false;
+      bool continuousWasActive =
+        Volatile.Read(ref requestedContinuousDirection) != 0 ||
+        Volatile.Read(ref appliedContinuousDirection) != 0;
+
+      Volatile.Write(
+        ref requestedContinuousDirection,
+        0);
       RequestedBearing = bearing;
+
+      // A position command must not race an earlier continuous M command.
+      // Stop the continuous move first, then the normal cycle may issue P.
+      stopRequested =
+        continuousWasActive;
+    }
+
+    internal void StartContinuousMove(
+      RotatorContinuousDirection direction)
+    {
+      int value = (int)direction;
+      if (value is not (2 or 4 or 8 or 16))
+        throw new ArgumentOutOfRangeException(
+          nameof(direction));
+
+      RequestedBearing = null;
+      LastWrittenBearing = null;
+
+      int applied =
+        Volatile.Read(
+          ref appliedContinuousDirection);
+
+      // Switching axes/direction is fail-safe: queue an all-stop before the
+      // new move. Starting the same direction again is idempotent.
+      stopRequested =
+        applied != 0 &&
+        applied != value;
+
+      Volatile.Write(
+        ref requestedContinuousDirection,
+        value);
     }
 
     private void OnBearingChanged()
@@ -57,6 +104,9 @@ namespace SkyRoof
     public void StopRotation()
     {
       RequestedBearing = LastWrittenBearing = null;
+      Volatile.Write(
+        ref requestedContinuousDirection,
+        0);
       stopRequested = true;
     }
 
@@ -68,6 +118,50 @@ namespace SkyRoof
       {
         stopRequested = false;
         SendStopCommand();
+        Volatile.Write(
+          ref appliedContinuousDirection,
+          0);
+
+        // A direction switch or transition back to absolute positioning may
+        // already be queued. Continue this cycle after the stop so the motor
+        // does not sit idle for an unnecessary full polling interval.
+      }
+
+      int requestedMove =
+        Volatile.Read(
+          ref requestedContinuousDirection);
+      if (requestedMove != 0)
+      {
+        int appliedMove =
+          Volatile.Read(
+            ref appliedContinuousDirection);
+
+        if (requestedMove != appliedMove)
+        {
+          // Hamlib rotctld M: 2=UP, 4=DOWN, 8=LEFT/CCW, 16=RIGHT/CW.
+          // Speed -1 means keep the controller/backend's current speed.
+          if (SendWriteCommand(
+                $"M {requestedMove} -1"))
+          {
+            Volatile.Write(
+              ref appliedContinuousDirection,
+              requestedMove);
+          }
+          else
+          {
+            // Fail closed. Do not hammer an unsupported backend with M every
+            // cycle and do not synthesize relative P commands behind the user's
+            // back.
+            Volatile.Write(
+              ref requestedContinuousDirection,
+              0);
+            Volatile.Write(
+              ref appliedContinuousDirection,
+              0);
+          }
+        }
+
+        ReadBearing();
         return;
       }
 
