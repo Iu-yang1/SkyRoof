@@ -121,8 +121,10 @@ namespace SkyRoof
 
       Text = "CW Console [TX disabled]";
       Name = "CwConsolePanel";
-      ClientSize = new Size(1040, 900);
-      MinimumSize = new Size(720, 720);
+      // Keep the Console usable as a compact floating tool window. The old
+      // 1040x900 / 720x720 geometry was unnecessarily tall on 1080p displays.
+      ClientSize = new Size(860, 620);
+      MinimumSize = new Size(700, 560);
       KeyPreview = true;
 
       BuildUi();
@@ -204,7 +206,7 @@ namespace SkyRoof
       root.RowStyles.Add(
         new RowStyle(
           SizeType.Absolute,
-          170));
+          120));
       root.RowStyles.Add(
         new RowStyle(
           SizeType.Percent,
@@ -212,11 +214,11 @@ namespace SkyRoof
       root.RowStyles.Add(
         new RowStyle(
           SizeType.Absolute,
-          190));
+          145));
       root.RowStyles.Add(
         new RowStyle(
           SizeType.Absolute,
-          220));
+          155));
 
       var toolbar =
         new FlowLayoutPanel
@@ -238,7 +240,7 @@ namespace SkyRoof
 
       SourceBox.DropDownStyle =
         ComboBoxStyle.DropDownList;
-      SourceBox.Width = 230;
+      SourceBox.Width = 205;
       SourceBox.DataSource =
         Enum.GetValues<
           CwReceiveAudioSource>();
@@ -254,8 +256,10 @@ namespace SkyRoof
       var sourceTip = new ToolTip();
       sourceTip.SetToolTip(
         SourceBox,
-        "Radio USB / WASAPI capture = Windows capture/input endpoint such as Microphone (USB Audio CODEC).\r\n" +
-        "RS-BA1 speaker loopback = Windows playback/render endpoint that RS-BA1 is actually playing into.");
+        "Choose the signal path here; choose the concrete Windows endpoint in Settings > CW Console.\r\n\r\n" +
+        "IC-9700 USB AF input = Windows recording endpoint such as Microphone (USB Audio CODEC). The radio's USB AF/IF Output must be AF, not IF.\r\n" +
+        "RS-BA1 playback loopback = the Windows playback/render endpoint that RS-BA1 is actually playing into.\r\n" +
+        "SkyRoof SDR audio = the existing internal 48 kHz SDR/Slicer AF stream.");
       SourceBox.SelectedIndexChanged +=
         SourceBox_SelectedIndexChanged;
       toolbar.Controls.Add(
@@ -293,7 +297,7 @@ namespace SkyRoof
       toolbar.Controls.Add(
         SpectrumCleanupBox);
 
-      SettingsBtn.Text = "Settings…";
+      SettingsBtn.Text = "CW Settings…";
       SettingsBtn.AutoSize = true;
       SettingsBtn.Click +=
         (_, _) =>
@@ -510,7 +514,7 @@ namespace SkyRoof
           Dock = DockStyle.Fill,
           Text = "Selected RX Transcript",
           Padding = new Padding(8),
-          MinimumSize = new Size(0, 180)
+          MinimumSize = new Size(0, 115)
         };
 
       var layout =
@@ -538,14 +542,14 @@ namespace SkyRoof
       layout.RowStyles.Add(
         new RowStyle(
           SizeType.Percent,
-          70));
+          50));
       layout.RowStyles.Add(
         new RowStyle(
           SizeType.AutoSize));
       layout.RowStyles.Add(
         new RowStyle(
           SizeType.Percent,
-          30));
+          50));
 
       SelectedLaneLabel.Text =
         "No lane selected";
@@ -600,6 +604,9 @@ namespace SkyRoof
           Text = "Provisional / may change",
           AutoSize = true,
           ForeColor = Theme.ScaleAccent,
+          Font = new Font(
+            Font,
+            FontStyle.Bold),
           Margin = new Padding(
             0, 5, 0, 2)
         };
@@ -685,6 +692,8 @@ namespace SkyRoof
           11f);
       TxTextBox.ScrollBars =
         ScrollBars.Vertical;
+      TxTextBox.MinimumSize =
+        new Size(0, 42);
       TxTextBox.TextChanged +=
         (_, _) =>
           RefreshTransmitUi();

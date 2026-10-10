@@ -162,6 +162,24 @@ namespace VE3NEA.Dsp.Tests
         .Should().Be(T0.AddSeconds(1));
     }
 
+    [Theory]
+    [InlineData(CwReceiveAudioSource.SDR, "SkyRoof SDR audio", "internal 48 kHz AF")]
+    [InlineData(CwReceiveAudioSource.WasapiCapture, "IC-9700 USB AF input", "must be AF, not IF")]
+    [InlineData(CwReceiveAudioSource.RsBa1Loopback, "RS-BA1 playback loopback", "endpoint RS-BA1 plays into")]
+    public void AudioSourceLabelsExplainTheExpectedSignalPath(
+      CwReceiveAudioSource source,
+      string displayName,
+      string roleFragment)
+    {
+      CwAudioSourceController
+        .SourceDisplayName(source)
+        .Should().Be(displayName);
+
+      CwAudioSourceController
+        .SourceRoleHint(source)
+        .Should().Contain(roleFragment);
+    }
+
     [Fact]
     public void RsBa1LoopbackDevice_ExplicitCwSelectionWins()
     {

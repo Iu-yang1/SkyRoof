@@ -279,11 +279,11 @@ namespace SkyRoof.CW
       source switch
       {
         CwReceiveAudioSource.SDR =>
-          "SDR audio",
+          "SkyRoof SDR audio",
         CwReceiveAudioSource.WasapiCapture =>
-          "Radio USB / WASAPI capture",
+          "IC-9700 USB AF input",
         CwReceiveAudioSource.RsBa1Loopback =>
-          "RS-BA1 speaker loopback",
+          "RS-BA1 playback loopback",
         _ => source.ToString()
       };
 
@@ -291,10 +291,12 @@ namespace SkyRoof.CW
       CwReceiveAudioSource source) =>
       source switch
       {
+        CwReceiveAudioSource.SDR =>
+          "internal 48 kHz AF",
         CwReceiveAudioSource.WasapiCapture =>
-          "capture/input endpoint",
+          "Windows recording input; radio USB output must be AF, not IF",
         CwReceiveAudioSource.RsBa1Loopback =>
-          "playback/render endpoint",
+          "Windows playback loopback; use the endpoint RS-BA1 plays into",
         _ => string.Empty
       };
 

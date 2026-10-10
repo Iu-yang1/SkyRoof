@@ -21,11 +21,13 @@ SkyRoof panels.
 
 Choose one receive source in the CW Console:
 
-- **SDR** — reuses SkyRoof's existing 48 kHz Slicer audio.
-- **Radio USB / WASAPI Capture** — opens a Windows **capture/input** endpoint.
+- **SkyRoof SDR audio** — reuses SkyRoof's existing 48 kHz Slicer AF audio.
+- **IC-9700 USB AF input** — opens a Windows **capture/input** endpoint.
   New configurations prefer an endpoint whose name contains **USB Audio CODEC**
-  or **ICOM**, which is the normal direct-RX path for an IC-9700 USB cable.
-- **RS-BA1 speaker loopback** — captures a selected Windows **playback/render**
+  or **ICOM**. For an IC-9700 this is normally **Microphone (USB Audio CODEC)**,
+  but the radio's **USB AF/IF Output must be AF**. Do not use this path when the
+  radio is supplying IF instead of demodulated AF.
+- **RS-BA1 playback loopback** — captures a selected Windows **playback/render**
   endpoint in loopback mode, downmixes it to mono, and resamples it to 48 kHz.
   Select the speaker/virtual endpoint that RS-BA1 is actually playing into.
 
@@ -39,6 +41,18 @@ two sources cannot be mixed into one lane history.
 
 CW receive is disabled by default. Use **Start** in the panel after selecting
 the intended source.
+
+As a practical rule: use **IC-9700 USB AF input** only for direct USB AF from
+the radio; use **RS-BA1 playback loopback** for an RS-BA1/LAN receive workflow.
+The status line shows the concrete Windows endpoint that is currently open.
+
+## Compact layout
+
+The floating CW Console opens in a compact geometry suitable for a 1080p
+desktop. The spectrum, transcript and transmit areas no longer reserve the
+large fixed heights used by the first release. **Committed** and **Provisional
+/ may change** receive equal transcript space so the provisional suffix remains
+readable while the window is reduced.
 
 ## Install the DeepCW model
 

@@ -22,14 +22,14 @@ namespace SkyRoof
 
     [DisplayName("Audio Source")]
     [Description(
-      "Radio USB / WASAPI Capture reads a Windows capture endpoint such as Microphone (USB Audio CODEC). RS-BA1 Loopback captures the Windows playback/render endpoint that RS-BA1 is playing into.")]
+      "IC-9700 USB AF Input reads a Windows capture endpoint such as Microphone (USB Audio CODEC); the radio USB AF/IF Output must be AF, not IF. RS-BA1 Playback Loopback captures the Windows playback/render endpoint that RS-BA1 is playing into.")]
     [DefaultValue(CwReceiveAudioSource.WasapiCapture)]
     public CwReceiveAudioSource AudioSource { get; set; } =
       CwReceiveAudioSource.WasapiCapture;
 
     [DisplayName("Radio / USB Capture Device (RX)")]
     [Description(
-      "Windows capture/input endpoint used for direct radio RX audio. For an IC-9700 USB connection this is normally Microphone (USB Audio CODEC), not the Speakers/USB Audio CODEC render endpoint.")]
+      "Windows capture/input endpoint used for direct radio RX AF audio. For an IC-9700 USB connection this is normally Microphone (USB Audio CODEC), not the Speakers/USB Audio CODEC render endpoint. The IC-9700 USB AF/IF Output must be set to AF for the CW decoder; IF output is not this input mode.")]
     [TypeConverter(typeof(InputSoundcardNameConverter))]
     public string? CaptureDeviceId { get; set; } =
       Soundcard.GetPreferredSoundcardId(
