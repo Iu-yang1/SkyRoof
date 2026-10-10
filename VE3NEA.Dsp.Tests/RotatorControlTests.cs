@@ -60,12 +60,12 @@ public sealed class RotatorControlTests
     }
 
     [Theory]
-    [InlineData(RotatorContinuousDirection.Up, "M 2 -1")]
-    [InlineData(RotatorContinuousDirection.Down, "M 4 -1")]
-    [InlineData(RotatorContinuousDirection.Left, "M 8 -1")]
-    [InlineData(RotatorContinuousDirection.Right, "M 16 -1")]
+    [InlineData(2, "M 2 -1")]
+    [InlineData(4, "M 4 -1")]
+    [InlineData(8, "M 8 -1")]
+    [InlineData(16, "M 16 -1")]
     public async Task ContinuousMoveStartsOnceAndReleaseSendsStop(
-        RotatorContinuousDirection direction,
+        int directionValue,
         string expectedMove)
     {
         await using var server = new FakeRotctld((command, _) =>
@@ -75,7 +75,8 @@ public sealed class RotatorControlTests
         using var engine = StartEngine(server.Port);
 
         await WaitUntilAsync(() => server.Count("p") >= 1);
-        engine.StartContinuousMove(direction);
+        engine.StartContinuousMove(
+            (RotatorContinuousDirection)directionValue);
 
         await WaitUntilAsync(() => server.Count(expectedMove) >= 1);
         await Task.Delay(120);
