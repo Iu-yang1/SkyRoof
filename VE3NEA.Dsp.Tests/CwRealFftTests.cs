@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Numerics;
+using System.Text.Json;
 using FluentAssertions;
 using MathNet.Numerics.IntegralTransforms;
 using SkyRoof.CW;
@@ -168,10 +169,30 @@ namespace VE3NEA.Dsp.Tests
 
       double nativeUs = MedianUs(Native);
       double managedUs = MedianUs(Managed);
+      string backend = real.UsesNativeFftw
+        ? "FFTW3f-R2C" : "MathNet-R2C-fallback";
       output.WriteLine(
-        $"size={n}; backend={(real.UsesNativeFftw ? "FFTW3f-R2C" : "MathNet-R2C-fallback")}; " +
+        $"size={n}; backend={backend}; " +
         $"real_median_us={nativeUs:F3}; complex_median_us={managedUs:F3}; " +
         $"speedup={managedUs / nativeUs:F2}x");
+      string? metricsPath = Environment.GetEnvironmentVariable(
+        "SKYROOF_FFT_BENCHMARK_OUTPUT");
+      if (!string.IsNullOrWhiteSpace(metricsPath))
+      {
+        string? directory = Path.GetDirectoryName(metricsPath);
+        if (!string.IsNullOrEmpty(directory))
+          Directory.CreateDirectory(directory);
+        File.AppendAllText(metricsPath,
+          JsonSerializer.Serialize(new
+          {
+            size = n,
+            backend,
+            real_median_us = nativeUs,
+            complex_median_us = managedUs,
+            speedup = managedUs / nativeUs,
+            cpu = Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER")
+          }) + Environment.NewLine);
+      }
     }
 
     private static float[] Input(int n)
