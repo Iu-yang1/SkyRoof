@@ -70,7 +70,7 @@ namespace VE3NEA.Dsp.Tests
           window, Rate, metadata);
         var cached = DeepCwWidebandFeatureWindow.Create(
           window, Rate, metadata, absoluteEnd, cache);
-        for (int frame = 0; frame < cached.FrameCount; frame += 11)
+        for (int frame = 0; frame < cached.FrameCount; frame++)
           foreach (double hz in new[] { 400.0, 735.0, 1000.0 })
             cached.SampleCalibratedMagnitude(frame, hz)
               .Should().Be(uncached.SampleCalibratedMagnitude(frame, hz));
