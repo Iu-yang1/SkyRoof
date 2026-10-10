@@ -1,0 +1,143 @@
+name: CW Recorded Corpus Benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      corpus_url:
+        description: "HTTPS URL of a ZIP containing manifest.json and WAV files"
+        required: true
+        type: string
+      corpus_sha256:
+        description: "Expected SHA-256 of the corpus ZIP"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@fd55a6f3b34392fa83fde1454582407d8c714123 # v4.0
+
+      - name: Download WinDivert 2.2.2 x64
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $url = "https://github.com/basil00/WinDivert/releases/download/v2.2.2/WinDivert-2.2.2-A.zip"
+          $zip = Join-Path $env:RUNNER_TEMP "WinDivert-2.2.2-A.zip"
+          $extract = Join-Path $env:RUNNER_TEMP "WinDivert-2.2.2-A"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          $expectedSha256 = "63cb41763bb4b20f600b6de04e991a9c2be73279e317d4d82f237b150c5f3f15"
+          $actualSha256 = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha256 -ne $expectedSha256) {
+            throw "WinDivert archive SHA-256 mismatch"
+          }
+          Expand-Archive -Path $zip -DestinationPath $extract -Force
+          $dll = Get-ChildItem $extract -Recurse -File -Filter "WinDivert.dll" |
+            Where-Object { $_.FullName -match "[\\/]x64[\\/]" } |
+            Select-Object -First 1
+          $sys = Get-ChildItem $extract -Recurse -File -Filter "WinDivert64.sys" |
+            Select-Object -First 1
+          if (-not $dll -or -not $sys) {
+            throw "Pinned WinDivert x64 files were not found"
+          }
+          $dest = Join-Path $env:GITHUB_WORKSPACE "Vendor\WinDivert\x64"
+          New-Item -ItemType Directory -Path $dest -Force | Out-Null
+          Copy-Item $dll.FullName (Join-Path $dest "WinDivert.dll") -Force
+          Copy-Item $sys.FullName (Join-Path $dest "WinDivert64.sys") -Force
+
+      - name: Restore packages
+        run: nuget restore SkyRoof.sln -LockedMode
+
+      - name: Build corpus benchmark target
+        run: msbuild SkyRoof.sln /m /p:Configuration=Release /p:Platform=x64
+
+      - name: Download and verify corpus
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $url = "${{ inputs.corpus_url }}".Trim()
+          $expected = "${{ inputs.corpus_sha256 }}".Trim().ToLowerInvariant()
+
+          if (-not $url.StartsWith("https://", [StringComparison]::OrdinalIgnoreCase)) {
+            throw "corpus_url must use HTTPS"
+          }
+          if ($expected -notmatch '^[0-9a-f]{64}$') {
+            throw "corpus_sha256 must be exactly 64 hexadecimal characters"
+          }
+
+          $zip = Join-Path $env:RUNNER_TEMP "cw-recorded-corpus.zip"
+          $extract = Join-Path $env:RUNNER_TEMP "cw-recorded-corpus"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+
+          $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) {
+            throw "CW corpus SHA-256 mismatch: expected $expected, got $actual"
+          }
+
+          if (Test-Path $extract) {
+            Remove-Item $extract -Recurse -Force
+          }
+          Expand-Archive -Path $zip -DestinationPath $extract -Force
+
+          $manifests = @(Get-ChildItem $extract -Recurse -File -Filter "manifest.json")
+          if ($manifests.Count -ne 1) {
+            throw "Corpus ZIP must contain exactly one manifest.json; found $($manifests.Count)"
+          }
+
+          $root = $manifests[0].Directory.FullName
+          "CW_CORPUS_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "CW_CORPUS_OUTPUT=$env:GITHUB_WORKSPACE\artifacts\cw-recorded-corpus.json" |
+            Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "Verified corpus root: $root"
+          Write-Host "Corpus SHA-256: $actual"
+
+      - name: Download pinned DeepCW model
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $revision = "8e264d243bbd4467bd19f3f28292219405b47e0e"
+          $dir = Join-Path $env:RUNNER_TEMP "deepcw"
+          New-Item -ItemType Directory -Path $dir -Force | Out-Null
+          $base = "https://raw.githubusercontent.com/e04/deepcw-engine/$revision"
+          $model = Join-Path $dir "model.onnx"
+          $metadata = Join-Path $dir "model.onnx.json"
+          Invoke-WebRequest -Uri "$base/model.onnx" -OutFile $model
+          Invoke-WebRequest -Uri "$base/model.onnx.json" -OutFile $metadata
+          if ((Get-Item $model).Length -ne 15139839) {
+            throw "Pinned DeepCW model size mismatch"
+          }
+          Get-Content $metadata -Raw | ConvertFrom-Json | Out-Null
+          "DEEPCW_MODEL_PATH=$model" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "DEEPCW_METADATA_PATH=$metadata" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "SKYROOF_RUN_CW_RECORDED_CORPUS=1" |
+            Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Run end-to-end recorded corpus benchmark
+        run: >
+          dotnet test VE3NEA.Dsp.Tests/VE3NEA.Dsp.Tests.csproj
+          -c Release -p:Platform=x64 --no-restore
+          --filter FullyQualifiedName~CwRecordedCorpusBenchmarkTests.RecordedCorpus_EndToEnd
+          --logger "console;verbosity=normal"
+
+      - name: Print corpus metrics
+        shell: pwsh
+        run: Get-Content $env:CW_CORPUS_OUTPUT
+
+      - name: Upload corpus metrics
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cw-recorded-corpus-metrics
+          path: artifacts/cw-recorded-corpus.json
+          if-no-files-found: error
+          retention-days: 30
