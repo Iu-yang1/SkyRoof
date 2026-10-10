@@ -269,6 +269,29 @@ namespace VE3NEA
       return entries.ToArray();
     }
 
+    public static string? GetPreferredSoundcardId(
+      DataFlow direction,
+      params string[] preferredNameFragments)
+    {
+      AudioDeviceEntry[] devices =
+        ListDevices(direction);
+
+      foreach (string fragment in
+        preferredNameFragments.Where(x =>
+          !string.IsNullOrWhiteSpace(x)))
+      {
+        AudioDeviceEntry? match =
+          devices.FirstOrDefault(device =>
+            device.Name.Contains(
+              fragment,
+              StringComparison.OrdinalIgnoreCase));
+        if (match != null)
+          return match.Id;
+      }
+
+      return GetDefaultSoundcardId(direction);
+    }
+
     public static string? GetDefaultSoundcardId(DataFlow direction)
     {
       try

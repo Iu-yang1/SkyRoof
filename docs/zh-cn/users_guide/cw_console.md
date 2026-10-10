@@ -19,9 +19,12 @@ CW Console 可以和其他 SkyRoof 面板一样停靠和恢复布局。
 CW Console 支持三种输入：
 
 - **SDR**：直接复用 SkyRoof 现有 48 kHz Slicer 音频；
-- **WASAPI Capture**：打开选定的 Windows 录音端点；
-- **RS-BA1 Loopback**：对选定的 Windows 播放端点做 loopback capture，
-  自动混合为单声道并重采样到 48 kHz。
+- **Radio USB / WASAPI Capture**：打开 Windows **录音/输入**端点。新配置会
+  优先选择名称中含 **USB Audio CODEC** 或 **ICOM** 的设备；IC-9700 USB
+  直连接收时通常应选“麦克风 (USB Audio CODEC)”这一类 Capture 端点；
+- **RS-BA1 speaker loopback**：对 Windows **播放/Render** 端点做 loopback
+  capture。这里应选择 RS-BA1 Remote Utility 实际正在播放到的扬声器/虚拟
+  音频设备，而不是电台的麦克风 Capture 端点。
 
 RS-BA1 Loopback 捕获的是**整个播放端点的混音**，不是只隔离 Remote
 Utility 进程。若希望只接收 RS-BA1 音频，建议给 Remote Utility 使用独立的
@@ -63,15 +66,18 @@ Tracker 与 ONNX 推理解耦。Tracker 通常约每 120 ms 更新；DeepCW 使�
 因此两个 CW 载波交叉时，即使底层 Track 实例发生重建，UI 也尽量保持同一
 视觉身份。
 
-### 瀑布叠加
+### CW Skimmer 风格频谱与稳定槽位
 
-CW 瀑布跟随当前 Scanner AF 范围。轨迹叠加显示：
+频谱/瀑布改为暗底、高对比的 CW Skimmer 风格：顶部显示实时 spectrum trace，
+噪底保持暗色，不再每帧把噪声自动拉到满动态范围；窄 CW 载波随强度由绿色逐步
+过渡到黄/白色，频率网格贯穿 spectrum 与 waterfall。
 
-- Active / Hold / Ambiguous；
-- 当前选中的 Lane；
-- Kalman 频率状态的半透明 **±2σ** 不确定度带。
+轨迹叠加也改得更轻：只有**当前选中的 Lane**才显示完整的 ±2σ 频率不确定度
+带，避免大量半透明色块遮住真实频谱。
 
-±2σ 是跟踪置信度，不是接收滤波器带宽。
+下方解码表使用 8 个固定编号 UI 槽位。只要同一 AssociationHint/Track 身份还
+存在，它就保持在原来的行；短暂 Hold/QSB 进入 grace 状态，而不是让下方所有
+Lane 每帧上下移动。真正消失数秒后才释放该槽位。
 
 点击瀑布上的 Lane 只会选择已经存在的 Lane，**不会调电台，也不会修改 AF/RF
 频率**。
@@ -177,12 +183,23 @@ STOP。
 宏仍必须经过 Enable TX、Arm、CW/BK-IN、卫星 TXHZ/SENDHZ、SkyCAT lease、
 watchdog、STOP 和断线 fail-safe。不存在宏队列，也不存在自动回复。
 
-## HamNoise 状态
+## 可选 HamNoise 频谱清理
 
-HamNoise Classic 和 CW V2 目前只保留为 **benchmark-only 研究后端**，
-不出现在 CW Console，也不随正式安装包发布。
+正式安装包现在包含固定 revision 的 AGPL HamNoise 后端，但它**只处理显示**。
+CW Console 的 Spectrum 下拉框可选：
 
-正式解码仍使用 raw wideband + activity-aware 多 Track 分离链。
+- **Raw**：原始显示 PCM；
+- **HamNoise Classic**；
+- **HamNoise CW V2**。
+
+HamNoise 只处理一份给 spectrum/waterfall 使用的不可变副本。Ridge Scanner、
+fixed-lag tracker、DeepCW、Transcript 与 TX 始终使用未经 HamNoise 处理的原始
+PCM。因此打开/关闭 HamNoise 只会改变“你看到的频谱”，不会改变 detector 或
+DeepCW 的判决。
+
+另外，为解决空频谱上出现虚假高 SNR Lane/乱码的问题，正式解码链会独立检查
+局部频谱突出度和真实 CW 键控 on/off 证据，只有物理上像 CW 的 confirmed lane
+才进入 ONNX；低 margin 的 CTC 字符也会在进入 transcript 投票前被丢弃。
 
 ## 第一次实机 RF 验收
 

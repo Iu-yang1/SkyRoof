@@ -308,6 +308,64 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void FrontEnd_UsesSampleAxisWhenAudioCallbackClockJitters()
+    {
+      CwDetectorOptions detectorOptions = new()
+      {
+        SampleRate = SampleRate,
+        MinFrequencyHz = 500,
+        MaxFrequencyHz = 1200,
+        MinimumSnrDb = 5,
+        PeakDeduplicationHz = 20,
+        MaxCandidates = 8
+      };
+
+      var frontEnd =
+        new CwPileupFrontEnd(
+          SampleRate,
+          1.5,
+          detectorOptions,
+          new CwPileupTrackManager(
+            confirmationDelay:
+              TimeSpan.FromMilliseconds(240)));
+
+      float[] first =
+        MakeKeyedTone(
+          1.5,
+          780,
+          0,
+          0.30f,
+          0.11,
+          0.62);
+      frontEnd.AddSamples(
+        first,
+        first.Length,
+        T0);
+      frontEnd.Analyze();
+
+      // The next callback wall clock advances only 10 ms even though 800 ms
+      // of PCM arrived. This can happen with callback jitter/endpoint clocks.
+      // Tracker time must still advance from sample indices, never regress.
+      float[] second =
+        MakeKeyedTone(
+          0.8,
+          780,
+          0,
+          0.30f,
+          0.11,
+          0.62);
+      frontEnd.AddSamples(
+        second,
+        second.Length,
+        T0.AddMilliseconds(10));
+
+      Action analyze = () =>
+        frontEnd.Analyze();
+
+      analyze.Should().NotThrow();
+    }
+
+    [Fact]
     public void FrontEnd_DoesNotReplayPrecisionFramesFromOverlappingSnapshot()
     {
       CwDetectorOptions detectorOptions = new()

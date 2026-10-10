@@ -102,12 +102,13 @@ DeepCW model                e04/deepcw-engine, pinned revision
                             Downloaded only when the operator explicitly installs
                             the CW model; not included in the SkyRoof installer.
 
-HamNoise research backend   e04/HamNoise, pinned revision documented in
+HamNoise display backend    e04/HamNoise, pinned revision documented in
                             HamNoise-NOTICE.txt
                             AGPL-3.0 ............................... HamNoise-NOTICE.txt,
                                                                       AGPL-3.0.txt
-                            Benchmark-only; its native DLL is not included in
-                            production SkyRoof installers.
+                            The native DLL is shipped for optional CW spectrum/
+                            waterfall cleanup only. It is not connected to the
+                            detector, tracker, DeepCW decoder or transcript path.
 
 
 Signal processing libraries

@@ -1,7 +1,7 @@
 HamNoise integration notice
 ===========================
 
-SkyRoof's optional CW denoise backend is built from the HamNoise project:
+SkyRoof's optional display-only CW spectrum denoise backend is built from the HamNoise project:
 
   Project: https://github.com/e04/HamNoise
   Pinned revision: 1af3a77b2ff18dada2149f36686430cdae7cf13c
@@ -17,6 +17,11 @@ with SkyRoof's thin native bridge:
 Corresponding source for the shipped hamnoise_skyroof.dll is therefore the
 combination of the pinned HamNoise revision above and the SkyRoof source tree
 for the same release.
+
+In the production application this backend is wired only to the CW Console
+spectrum/waterfall display copy. Raw receive PCM continues directly to the CW
+ridge detector, tracker, DeepCW inference path and transcript coordinator,
+independent of whether HamNoise display cleanup is enabled.
 
 HamNoise remains copyright its respective authors/contributors. This notice
 does not alter either project's license terms.

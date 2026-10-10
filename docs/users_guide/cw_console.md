@@ -22,9 +22,12 @@ SkyRoof panels.
 Choose one receive source in the CW Console:
 
 - **SDR** — reuses SkyRoof's existing 48 kHz Slicer audio.
-- **WASAPI Capture** — opens the selected Windows capture endpoint.
-- **RS-BA1 Loopback** — captures a selected Windows render endpoint in loopback
-  mode, downmixes it to mono, and resamples it to 48 kHz.
+- **Radio USB / WASAPI Capture** — opens a Windows **capture/input** endpoint.
+  New configurations prefer an endpoint whose name contains **USB Audio CODEC**
+  or **ICOM**, which is the normal direct-RX path for an IC-9700 USB cable.
+- **RS-BA1 speaker loopback** — captures a selected Windows **playback/render**
+  endpoint in loopback mode, downmixes it to mono, and resamples it to 48 kHz.
+  Select the speaker/virtual endpoint that RS-BA1 is actually playing into.
 
 RS-BA1 loopback captures the **whole render-endpoint mix**, not only the
 Remote Utility process. A dedicated playback endpoint is recommended when you
@@ -73,16 +76,22 @@ The lane table and waterfall prefer a stable fixed-lag association ID:
 A lane can therefore keep the same visible identity through a frequency
 crossing even if the low-level tracker instance changes.
 
-### Waterfall overlays
+### CW Skimmer-style spectrum and stable lane slots
 
-The CW waterfall follows the current scanner AF range. Track overlays show:
+The CW display uses a dark, high-contrast CW-Skimmer-style spectrum/waterfall:
+a live spectrum trace is drawn above the waterfall, the noise floor remains
+dark instead of being stretched to full brightness every frame, and narrow CW
+carriers progress from green toward yellow/white as they become stronger.
+Frequency grid lines continue through the spectrum and waterfall.
 
-- Active / Hold / Ambiguous state;
-- the selected lane;
-- a translucent **±2 sigma** frequency-uncertainty band from the Kalman state.
+Track markers are deliberately lighter than before. Only the **selected** lane
+shows a full-height ±2 sigma uncertainty band, so diagnostic overlays no longer
+hide the real spectrum.
 
-The uncertainty band is diagnostic. A wider band means the tracker is less
-certain about the instantaneous AF position; it is not an RF filter width.
+The lane table uses eight stable numbered UI slots. A lane keeps its row while
+its AssociationHint/Track identity survives; a short Hold/dropout enters a
+grace state instead of causing every lower row to move. A slot is released
+only after the lane has really disappeared for several seconds.
 
 Clicking a lane overlay selects that existing lane. It does not tune the radio
 and does not change AF or RF frequency.
@@ -206,14 +215,25 @@ guard, the lease, watchdog, STOP, or disconnect fail-safe.
 
 There is no macro queue and no auto-reply.
 
-## HamNoise status
+## Optional HamNoise spectrum cleanup
 
-HamNoise Classic and CW V2 are currently **benchmark-only research backends**.
-They are not shown in the CW Console and are not included in production
-installers.
+The installer includes the pinned AGPL HamNoise backend for **display only**.
+The CW Console Spectrum selector provides:
 
-The production decoder continues to use the raw wideband activity-aware
-multi-track separation path.
+- **Raw** — unprocessed display PCM;
+- **HamNoise Classic**;
+- **HamNoise CW V2**.
+
+HamNoise is applied only to an immutable copy used by the live spectrum and
+waterfall. The ridge detector, fixed-lag tracker, DeepCW model, transcript
+coordinator and TX logic always receive the untouched receive PCM. Therefore
+changing Spectrum cleanup can change what the operator sees, but cannot change
+which lanes are detected or what DeepCW decodes.
+
+To reduce false decodes independently from display cleanup, the production
+decoder also requires local spectral prominence and real CW on/off keying
+evidence before sending a confirmed track to ONNX, and rejects low-margin CTC
+symbols before transcript voting.
 
 ## First RF test
 

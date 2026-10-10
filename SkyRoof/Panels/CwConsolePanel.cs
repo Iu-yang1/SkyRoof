@@ -16,6 +16,8 @@ namespace SkyRoof
 
     private readonly Button RxToggleBtn = new();
     private readonly ComboBox SourceBox = new();
+    private readonly ComboBox SpectrumCleanupBox = new();
+    private readonly Label SpectrumStatusLabel = new();
     private readonly Button SettingsBtn = new();
     private readonly Button InstallModelBtn = new();
 
@@ -24,8 +26,9 @@ namespace SkyRoof
     private readonly Label WorkerStatusLabel = new();
 
     private readonly CwAudioWaterfallAnalyzer WaterfallAnalyzer;
+    private readonly CwAudioWaterfallAnalyzer SpectrumAnalyzer;
     private readonly CwAudioWaterfallView WaterfallView =
-      new();
+      new(spectrumBins: 512);
     private long waterfallGeneration = -1;
     private long lastWaterfallSampleIndex = -1;
 
@@ -57,7 +60,7 @@ namespace SkyRoof
     private readonly System.Windows.Forms.Timer UiTimer =
       new() { Interval = 250 };
     private readonly System.Windows.Forms.Timer WaterfallTimer =
-      new() { Interval = 100 };
+      new() { Interval = 50 };
 
     private IReadOnlyList<CwSignalTrack> latestTracks =
       Array.Empty<CwSignalTrack>();
@@ -65,10 +68,15 @@ namespace SkyRoof
       CwConsoleLaneIdentity,
       CwTranscriptSnapshot> transcripts =
         new();
+    private readonly CwConsoleLaneSlotMap laneSlots =
+      new(maxSlots: 8);
 
     private long displayGeneration = -1;
     private CwConsoleLaneIdentity? selectedIdentity;
     private bool updatingSourceUi;
+    private HamNoiseAudioDenoiser? displayDenoiser;
+    private CwDenoiseMode displayDenoiserMode =
+      CwDenoiseMode.Bypass;
     private bool modelInstalled;
     private CancellationTokenSource? modelInstallStop;
 
@@ -84,16 +92,32 @@ namespace SkyRoof
           .FrontEnd
           .FrameScanner
           .Options;
+
+      int displayRate =
+        scanner?.SampleRate ??
+        SdrConst.AUDIO_SAMPLING_RATE;
+      double displayMinHz =
+        scanner?.MinFrequencyHz ?? 100;
+      double displayMaxHz =
+        scanner?.MaxFrequencyHz ?? 2000;
+
+      // CW Skimmer-style split display: the spectrum gets a long FFT for
+      // frequency resolution while the waterfall gets a short FFT and fast
+      // line rate so dots/dashes remain visually recognizable.
       WaterfallAnalyzer =
-        scanner == null
-          ? new CwAudioWaterfallAnalyzer()
-          : new CwAudioWaterfallAnalyzer(
-              sampleRate: scanner.SampleRate,
-              minFrequencyHz:
-                scanner.MinFrequencyHz,
-              maxFrequencyHz:
-                scanner.MaxFrequencyHz,
-              outputBins: 384);
+        new CwAudioWaterfallAnalyzer(
+          sampleRate: displayRate,
+          fftSize: 2048,
+          minFrequencyHz: displayMinHz,
+          maxFrequencyHz: displayMaxHz,
+          outputBins: 512);
+      SpectrumAnalyzer =
+        new CwAudioWaterfallAnalyzer(
+          sampleRate: displayRate,
+          fftSize: 8192,
+          minFrequencyHz: displayMinHz,
+          maxFrequencyHz: displayMaxHz,
+          outputBins: 512);
 
       Text = "CW Console [TX disabled]";
       Name = "CwConsolePanel";
@@ -214,14 +238,60 @@ namespace SkyRoof
 
       SourceBox.DropDownStyle =
         ComboBoxStyle.DropDownList;
-      SourceBox.Width = 156;
+      SourceBox.Width = 230;
       SourceBox.DataSource =
         Enum.GetValues<
           CwReceiveAudioSource>();
+      SourceBox.FormattingEnabled = true;
+      SourceBox.Format +=
+        (_, e) =>
+        {
+          if (e.ListItem is CwReceiveAudioSource source)
+            e.Value =
+              CwAudioSourceController
+                .SourceDisplayName(source);
+        };
+      var sourceTip = new ToolTip();
+      sourceTip.SetToolTip(
+        SourceBox,
+        "Radio USB / WASAPI capture = Windows capture/input endpoint such as Microphone (USB Audio CODEC).\r\n" +
+        "RS-BA1 speaker loopback = Windows playback/render endpoint that RS-BA1 is actually playing into.");
       SourceBox.SelectedIndexChanged +=
         SourceBox_SelectedIndexChanged;
       toolbar.Controls.Add(
         SourceBox);
+
+      toolbar.Controls.Add(
+        new Label
+        {
+          AutoSize = true,
+          Text = "Spectrum",
+          Margin = new Padding(10, 7, 2, 0)
+        });
+
+      SpectrumCleanupBox.DropDownStyle =
+        ComboBoxStyle.DropDownList;
+      SpectrumCleanupBox.Width = 150;
+      SpectrumCleanupBox.DataSource =
+        Enum.GetValues<CwDenoiseMode>();
+      SpectrumCleanupBox.FormattingEnabled = true;
+      SpectrumCleanupBox.Format +=
+        (_, e) =>
+        {
+          if (e.ListItem is not CwDenoiseMode mode)
+            return;
+          e.Value = mode switch
+          {
+            CwDenoiseMode.Bypass => "Raw",
+            CwDenoiseMode.HamNoiseClassic => "HamNoise Classic",
+            CwDenoiseMode.HamNoiseV2 => "HamNoise CW V2",
+            _ => mode.ToString()
+          };
+        };
+      SpectrumCleanupBox.SelectedIndexChanged +=
+        SpectrumCleanupBox_SelectedIndexChanged;
+      toolbar.Controls.Add(
+        SpectrumCleanupBox);
 
       SettingsBtn.Text = "Settings…";
       SettingsBtn.AutoSize = true;
@@ -296,6 +366,12 @@ namespace SkyRoof
         InputStatusLabel);
       statusPanel.Controls.Add(
         ModelStatusLabel);
+      SpectrumStatusLabel.AutoSize = true;
+      SpectrumStatusLabel.Margin =
+        new Padding(
+          0, 4, 18, 4);
+      statusPanel.Controls.Add(
+        SpectrumStatusLabel);
       statusPanel.Controls.Add(
         WorkerStatusLabel);
 
@@ -342,6 +418,7 @@ namespace SkyRoof
       LaneGrid.AllowUserToAddRows = false;
       LaneGrid.AllowUserToDeleteRows = false;
       LaneGrid.AllowUserToResizeRows = false;
+      LaneGrid.AllowUserToOrderColumns = false;
       LaneGrid.MultiSelect = false;
       LaneGrid.SelectionMode =
         DataGridViewSelectionMode.FullRowSelect;
@@ -357,8 +434,8 @@ namespace SkyRoof
       LaneGrid.Columns.Add(
         MakeTextColumn(
           "Lane",
-          "Lane",
-          55,
+          "Slot / Lane",
+          76,
           0.45f));
       LaneGrid.Columns.Add(
         MakeTextColumn(
@@ -422,7 +499,7 @@ namespace SkyRoof
         FillWeight = fillWeight,
         SortMode =
           DataGridViewColumnSortMode
-            .Automatic
+            .NotSortable
       };
 
     private Control BuildTranscriptPanel()
@@ -820,6 +897,7 @@ namespace SkyRoof
       latestTracks =
         Array.Empty<CwSignalTrack>();
       transcripts.Clear();
+      laneSlots.Reset();
       selectedIdentity = null;
     }
 
@@ -899,9 +977,15 @@ namespace SkyRoof
             ? "running"
             : "waiting";
 
+      string role =
+        CwAudioSourceController.SourceRoleHint(
+          status.Value.Source);
       InputStatusLabel.Text =
-        $"Input: {status.Value.Source} · {state} · " +
-        $"{status.Value.DeviceName}";
+        $"Input: {CwAudioSourceController.SourceDisplayName(status.Value.Source)} · {state} · " +
+        $"{status.Value.DeviceName}" +
+        (string.IsNullOrEmpty(role)
+          ? string.Empty
+          : $" · {role}");
     }
 
     private void RefreshWorkerStatus()
@@ -946,6 +1030,16 @@ namespace SkyRoof
         ModelStatusLabel.Text +=
           " · " + status.LastError;
 
+      CwDenoiseMode cleanup =
+        ctx.Settings.CwConsole.SpectrumDenoiseMode;
+      SpectrumStatusLabel.Text =
+        cleanup == CwDenoiseMode.Bypass
+          ? "Spectrum: Raw"
+          : $"Spectrum: {(
+              cleanup == CwDenoiseMode.HamNoiseV2
+                ? "HamNoise CW V2"
+                : "HamNoise Classic")} · display only";
+
       WorkerStatusLabel.Text =
         $"Worker: tracks {status.TrackCount} · " +
         $"decode {status.CompletedInferenceWindows} · " +
@@ -969,13 +1063,14 @@ namespace SkyRoof
 
       lock (stateSync)
       {
-        tracks =
-          CwConsolePresentation
-            .CollapseDuplicateLaneIdentities(
-              latestTracks);
-        textByLane =
-          new(transcripts);
+        tracks = latestTracks.ToArray();
+        textByLane = new(transcripts);
       }
+
+      IReadOnlyList<CwConsoleLaneSlot> slots =
+        laneSlots.Update(
+          tracks,
+          DateTime.UtcNow);
 
       CwConsoleLaneIdentity? preserve =
         SelectedRowIdentity() ??
@@ -984,103 +1079,66 @@ namespace SkyRoof
       LaneGrid.SuspendLayout();
       try
       {
-        DataGridViewRow[] taggedRows =
-          LaneGrid.Rows
-            .Cast<DataGridViewRow>()
-            .Where(row =>
-              row.Tag is
-                CwConsoleLaneIdentity)
-            .ToArray();
+        while (LaneGrid.Rows.Count < laneSlots.MaxSlots)
+          LaneGrid.Rows.Add();
+        while (LaneGrid.Rows.Count > laneSlots.MaxSlots)
+          LaneGrid.Rows.RemoveAt(
+            LaneGrid.Rows.Count - 1);
 
-        var existingRows =
-          taggedRows
-            .GroupBy(row =>
-              (CwConsoleLaneIdentity)
-                row.Tag!)
-            .ToDictionary(
-              group => group.Key,
-              group => group.First());
-
-        bool duplicateExistingRows =
-          taggedRows.Length !=
-            existingRows.Count;
-
-        bool sameLaneSet =
-          !duplicateExistingRows &&
-          existingRows.Count ==
-            tracks.Length &&
-          tracks.All(track =>
-            existingRows.ContainsKey(
-              CwConsolePresentation.Identity(
-                track)));
-
-        if (!sameLaneSet)
+        foreach (CwConsoleLaneSlot slot in slots)
         {
-          LaneGrid.Rows.Clear();
-          existingRows.Clear();
+          DataGridViewRow row =
+            LaneGrid.Rows[slot.Index];
 
-          foreach (CwSignalTrack track
-            in tracks)
+          if (slot.Identity is not CwConsoleLaneIdentity identity ||
+              slot.Track is not CwSignalTrack track)
           {
-            int index =
-              LaneGrid.Rows.Add();
-            DataGridViewRow row =
-              LaneGrid.Rows[index];
-            CwConsoleLaneIdentity identity =
-              CwConsolePresentation.Identity(
-                track);
-            row.Tag = identity;
-            existingRows[identity] = row;
+            ClearLaneRow(row, slot.Index);
+            continue;
           }
-        }
 
-        foreach (CwSignalTrack track
-          in tracks)
-        {
-          CwConsoleLaneIdentity identity =
-            CwConsolePresentation.Identity(
-              track);
-
+          row.Tag = identity;
           textByLane.TryGetValue(
             identity,
             out CwTranscriptSnapshot transcript);
 
           UpdateLaneRow(
-            existingRows[identity],
+            row,
+            slot.Index,
             track,
-            transcript);
+            transcript,
+            slot.Present);
         }
 
-        if (tracks.Length > 0)
+        DataGridViewRow? select = null;
+        if (preserve.HasValue)
+          select =
+            LaneGrid.Rows
+              .Cast<DataGridViewRow>()
+              .FirstOrDefault(row =>
+                row.Tag is CwConsoleLaneIdentity identity &&
+                identity == preserve.Value);
+
+        select ??=
+          slots
+            .Where(slot => slot.Present && slot.Identity.HasValue)
+            .Select(slot => LaneGrid.Rows[slot.Index])
+            .FirstOrDefault();
+
+        if (select != null &&
+            select.Tag is CwConsoleLaneIdentity selectIdentity)
         {
-          DataGridViewRow? select =
-            preserve.HasValue &&
-            existingRows.TryGetValue(
-              preserve.Value,
-              out DataGridViewRow? preservedRow)
-              ? preservedRow
-              : existingRows[
-                  CwConsolePresentation.Identity(
-                    tracks[0])];
-
-          CwConsoleLaneIdentity selectIdentity =
-            (CwConsoleLaneIdentity)
-              select.Tag!;
-
-          if (SelectedRowIdentity() !=
-              selectIdentity)
+          if (SelectedRowIdentity() != selectIdentity)
           {
             LaneGrid.ClearSelection();
             select.Selected = true;
-            LaneGrid.CurrentCell =
-              select.Cells[0];
+            LaneGrid.CurrentCell = select.Cells[0];
           }
-
-          selectedIdentity =
-            selectIdentity;
+          selectedIdentity = selectIdentity;
         }
         else
         {
+          LaneGrid.ClearSelection();
           selectedIdentity = null;
         }
       }
@@ -1090,14 +1148,29 @@ namespace SkyRoof
       }
     }
 
+    private static void ClearLaneRow(
+      DataGridViewRow row,
+      int slotIndex)
+    {
+      row.Tag = null;
+      row.Cells[0].Value =
+        $"{slotIndex + 1} · —";
+      for (int i = 1; i < row.Cells.Count; i++)
+        row.Cells[i].Value = string.Empty;
+      row.DefaultCellStyle.ForeColor =
+        SystemColors.GrayText;
+    }
+
     private static void UpdateLaneRow(
       DataGridViewRow row,
+      int slotIndex,
       CwSignalTrack track,
-      CwTranscriptSnapshot? transcript)
+      CwTranscriptSnapshot? transcript,
+      bool present)
     {
       row.Cells[0].Value =
-        CwConsolePresentation.LaneLabel(
-          track);
+        $"{slotIndex + 1} · " +
+        CwConsolePresentation.LaneLabel(track);
       row.Cells[1].Value =
         track.FrequencyHz.ToString("F1");
       row.Cells[2].Value =
@@ -1106,21 +1179,22 @@ namespace SkyRoof
         track.DriftHzPerSecond.ToString(
           "+0.0;-0.0;0.0");
       row.Cells[4].Value =
-        CwConsolePresentation.StateText(
-          track);
+        present
+          ? CwConsolePresentation.StateText(track)
+          : "Grace";
       row.Cells[5].Value =
-        track.IdentityConfidence.ToString(
-          "P0");
+        track.IdentityConfidence.ToString("P0");
       row.Cells[6].Value =
-        CwConsolePresentation.GridTranscript(
-          transcript);
+        CwConsolePresentation.GridTranscript(transcript);
 
       row.DefaultCellStyle.ForeColor =
-        track.Ambiguous
-          ? Theme.SpectrumPeak
-          : !track.Active
-            ? SystemColors.GrayText
-            : SystemColors.ControlText;
+        !present
+          ? SystemColors.GrayText
+          : track.Ambiguous
+            ? Theme.SpectrumPeak
+            : !track.Active
+              ? SystemColors.GrayText
+              : SystemColors.ControlText;
     }
 
     private void LaneGrid_SelectionChanged(
@@ -1197,7 +1271,12 @@ namespace SkyRoof
       CwAudioHub hub =
         audio.Ingress.FrontEnd.Audio;
 
-      const double snapshotSeconds = 0.10;
+      double snapshotSeconds =
+        Math.Max(
+          0.20,
+          SpectrumAnalyzer.FftSize /
+            (double)SpectrumAnalyzer.SampleRate +
+          0.02);
       if (!audio.Ingress.Enabled ||
           !hub.TrySnapshot(
             snapshotSeconds,
@@ -1208,18 +1287,74 @@ namespace SkyRoof
 
       try
       {
-        CwAudioSpectrumFrame frame =
-          WaterfallAnalyzer.Analyze(
+        CwAudioSnapshot displaySnapshot =
+          PrepareSpectrumDisplaySnapshot(
             snapshot);
+        CwAudioSpectrumFrame spectrumFrame =
+          SpectrumAnalyzer.Analyze(
+            displaySnapshot);
+        CwAudioSpectrumFrame waterfallFrame =
+          WaterfallAnalyzer.Analyze(
+            displaySnapshot);
         lastWaterfallSampleIndex =
           snapshot.EndSampleIndex;
-        WaterfallView.Append(frame);
+        WaterfallView.SetSpectrum(
+          spectrumFrame);
+        WaterfallView.Append(
+          waterfallFrame);
       }
       catch (ArgumentException)
       {
         // Source/timeline may have reset between status polling and snapshot
         // analysis. The next UI tick will retry on the new generation.
       }
+    }
+
+    private CwAudioSnapshot PrepareSpectrumDisplaySnapshot(
+      CwAudioSnapshot raw)
+    {
+      CwDenoiseMode mode =
+        ctx.Settings.CwConsole.SpectrumDenoiseMode;
+      if (mode == CwDenoiseMode.Bypass)
+        return raw;
+
+      if (displayDenoiser == null ||
+          displayDenoiserMode != mode)
+      {
+        displayDenoiser =
+          new HamNoiseAudioDenoiser(mode);
+        displayDenoiserMode = mode;
+      }
+
+      // The HamNoise bridge runs at 9.6 kHz. Resample only this immutable
+      // display copy down and back up; the receive worker, ridge scanner,
+      // tracker, DeepCW and transcript coordinator never see these samples.
+      float[] modelRate =
+        CwWindowedSincResampler.Resample(
+          raw.Samples,
+          raw.SampleRate,
+          displayDenoiser.SampleRate);
+      float[] cleaned =
+        displayDenoiser.Process(
+          modelRate,
+          displayDenoiser.SampleRate,
+          wet: 1.0);
+      float[] restored =
+        CwWindowedSincResampler.Resample(
+          cleaned,
+          displayDenoiser.SampleRate,
+          raw.SampleRate);
+
+      if (restored.Length != raw.Samples.Length)
+        Array.Resize(
+          ref restored,
+          raw.Samples.Length);
+
+      return new CwAudioSnapshot(
+        raw.SampleRate,
+        raw.EndUtc,
+        raw.EndSampleIndex,
+        restored);
     }
 
     private CwConsoleLaneIdentity?
@@ -1312,6 +1447,59 @@ namespace SkyRoof
       settings.ReceiveEnabled =
         !settings.ReceiveEnabled;
       ctx.CwAudio?.ApplySettings();
+      ctx.Settings.SaveToFile();
+      RefreshUi();
+    }
+
+    private void SpectrumCleanupBox_SelectedIndexChanged(
+      object? sender,
+      EventArgs e)
+    {
+      if (updatingSourceUi ||
+          SpectrumCleanupBox.SelectedItem is not
+            CwDenoiseMode mode)
+        return;
+
+      if (mode != CwDenoiseMode.Bypass &&
+          !HamNoiseAudioDenoiser.IsAvailable())
+      {
+        updatingSourceUi = true;
+        try
+        {
+          SpectrumCleanupBox.SelectedItem =
+            CwDenoiseMode.Bypass;
+        }
+        finally
+        {
+          updatingSourceUi = false;
+        }
+
+        ctx.Settings.CwConsole.SpectrumDenoiseMode =
+          CwDenoiseMode.Bypass;
+        displayDenoiser = null;
+        displayDenoiserMode =
+          CwDenoiseMode.Bypass;
+        ctx.Settings.SaveToFile();
+
+        MessageBox.Show(
+          this,
+          "HamNoise spectrum cleanup is not available in this build. " +
+          "The display has been returned to Raw. Decode always continues " +
+          "from untouched PCM.",
+          "CW Spectrum Cleanup",
+          MessageBoxButtons.OK,
+          MessageBoxIcon.Information);
+        RefreshUi();
+        return;
+      }
+
+      ctx.Settings.CwConsole.SpectrumDenoiseMode =
+        mode;
+      displayDenoiser = null;
+      displayDenoiserMode =
+        CwDenoiseMode.Bypass;
+      WaterfallView.Clear();
+      lastWaterfallSampleIndex = -1;
       ctx.Settings.SaveToFile();
       RefreshUi();
     }
@@ -1802,6 +1990,8 @@ namespace SkyRoof
       {
         SourceBox.SelectedItem =
           ctx.Settings.CwConsole.AudioSource;
+        SpectrumCleanupBox.SelectedItem =
+          ctx.Settings.CwConsole.SpectrumDenoiseMode;
       }
       finally
       {

@@ -230,6 +230,17 @@ namespace SkyRoof.CW
     public double LaneBandwidthHz { get; set; } = 240;
     public double TargetCenterHz { get; set; } = 800;
 
+    // Physical pre-decode gate. A confirmed tracker ridge is not sufficient
+    // evidence that keyed CW exists: shaped noise and steady birdies can
+    // produce stable ridges. Require local prominence plus real on/off keying
+    // in the immutable decode window before invoking ONNX.
+    public double MinimumPhysicalSnrDb { get; set; } = 3.5;
+    public double MinimumKeyingDepthDb { get; set; } = 2.0;
+    public int MinimumKeyingTransitions { get; set; } = 2;
+    public double MinimumKeyingDutyCycle { get; set; } = 0.04;
+    public double MaximumKeyingDutyCycle { get; set; } = 0.96;
+    public double MinimumSymbolConfidence { get; set; } = 0.62;
+
     /// <summary>
     /// Optional decode-window denoiser. Tracking still runs on untouched raw
     /// PCM; only the immutable inference snapshot is resampled to this
@@ -284,14 +295,10 @@ namespace SkyRoof.CW
         .OrderBy(t => t.FrequencyHz)
         .ToArray();
 
-      CwSignalTrack[] decodeSelectedTracks = allDetectedTracks
-        .OrderByDescending(t => t.Active)
-        .ThenByDescending(t => t.SnrDb)
-        .ThenBy(t => t.FrequencyHz)
-        .Take(MaxLanes)
-        .ToArray();
-      if (decodeSelectedTracks.Length == 0)
+      if (allDetectedTracks.Length == 0)
         return Array.Empty<DeepCwLaneResult>();
+
+      CwSignalTrack[] decodeSelectedTracks;
 
       if (!double.IsFinite(DenoiseWet) ||
           DenoiseWet < 0 ||
@@ -350,7 +357,43 @@ namespace SkyRoof.CW
           widebandFeatures.EstimateActivities(
             allDetectedTracks,
             activityEstimator);
+
+        var physicalEvidence =
+          allDetectedTracks.ToDictionary(
+            track => track.Id,
+            track =>
+              widebandFeatures.EvaluatePhysicalEvidence(
+                track,
+                activityByTrack[track.Id]));
+
+        decodeSelectedTracks =
+          allDetectedTracks
+            .Where(track =>
+              IsPlausibleKeyedCarrier(
+                physicalEvidence[track.Id]))
+            // Physical evidence is a reject gate, not a new resource-ranking
+            // policy. Preserve the established Active -> tracker SNR order.
+            .OrderByDescending(track => track.Active)
+            .ThenByDescending(track => track.SnrDb)
+            .ThenBy(track => track.FrequencyHz)
+            .Take(MaxLanes)
+            .ToArray();
       }
+      else
+      {
+        // Experimental per-lane denoiser path lacks the shared wideband
+        // physical-evidence estimator. Preserve its legacy selection policy.
+        decodeSelectedTracks =
+          allDetectedTracks
+            .OrderByDescending(t => t.Active)
+            .ThenByDescending(t => t.SnrDb)
+            .ThenBy(t => t.FrequencyHz)
+            .Take(MaxLanes)
+            .ToArray();
+      }
+
+      if (decodeSelectedTracks.Length == 0)
+        return Array.Empty<DeepCwLaneResult>();
 
       // allDetectedTracks is intentionally not truncated to MaxLanes. On the
       // default wideband path, every confirmed station still participates in
@@ -405,8 +448,11 @@ namespace SkyRoof.CW
             laneFeatures.DurationSeconds;
         }
 
-        DeepCwDecodedText text =
+        DeepCwDecodedText rawText =
           decoder.Decode(tensor);
+        DeepCwDecodedText text =
+          FilterLowConfidenceSymbols(
+            rawText);
 
         results.Add(new(
           track.Id,
@@ -422,6 +468,53 @@ namespace SkyRoof.CW
       }
 
       return results;
+    }
+
+    private bool IsPlausibleKeyedCarrier(
+      CwPhysicalLaneEvidence evidence)
+    {
+      if (!double.IsFinite(evidence.LocalSnrDb) ||
+          !double.IsFinite(evidence.KeyingDepthDb) ||
+          !double.IsFinite(evidence.DutyCycle))
+        return false;
+
+      return
+        evidence.LocalSnrDb >= MinimumPhysicalSnrDb &&
+        evidence.KeyingDepthDb >= MinimumKeyingDepthDb &&
+        evidence.KeyingTransitions >= MinimumKeyingTransitions &&
+        evidence.DutyCycle >= MinimumKeyingDutyCycle &&
+        evidence.DutyCycle <= MaximumKeyingDutyCycle;
+    }
+
+    private DeepCwDecodedText FilterLowConfidenceSymbols(
+      DeepCwDecodedText decoded)
+    {
+      // Test/experimental decoders may return text without frame symbols.
+      // The real DeepCW ONNX decoder always provides symbols for nonblank
+      // output, so production confidence filtering still remains fail-closed.
+      if (decoded.Symbols.Count == 0)
+        return decoded;
+
+      if (!double.IsFinite(MinimumSymbolConfidence) ||
+          MinimumSymbolConfidence < 0 ||
+          MinimumSymbolConfidence > 1)
+        throw new InvalidOperationException(
+          "CW minimum symbol confidence must be in the range 0..1.");
+
+      DeepCwDecodedSymbol[] kept =
+        decoded.Symbols
+          .Where(symbol =>
+            symbol.Confidence >=
+              MinimumSymbolConfidence)
+          .ToArray();
+
+      return new(
+        new string(
+          kept
+            .Select(symbol => symbol.Character)
+            .ToArray()),
+        kept,
+        decoded.OutputFrameCount);
     }
   }
 }
