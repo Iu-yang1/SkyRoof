@@ -43,7 +43,7 @@ namespace SkyRoof.CW
     {
     }
 
-    internal CwTransmitController(
+    public CwTransmitController(
       CwConsoleSettings settings,
       ICwKeyerSessionFactory sessionFactory)
     {
