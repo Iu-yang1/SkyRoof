@@ -42,10 +42,14 @@ CW 接收默认关闭。确认输入源后，在面板中按 **Start**。
 
 ## 紧凑窗口布局
 
-CW Console 浮动窗口现在默认使用更紧凑的尺寸，适合 1080p 桌面；频谱、
-Transcript 与 TX 区域不再保留首版那样大的固定高度。**Committed** 与
-**Provisional / may change** 改为近似等高，缩小窗口后 provisional 文本框
-不会再被压成一条很窄的横线。
+CW Console 现在使用紧凑但可响应 DPI/字体缩放的布局。只有 Waterfall 保留
+固定显示高度；Transcript 和 TX 区域按照内部控件实际需要自动决定高度，不再
+通过压低固定像素高度来“缩小窗口”，因此不会再把文本框或 F1-F8 按钮挤出
+可视区域。Lane 表格使用剩余空间，空间不足时由表格自身滚动。
+
+**Committed** 与 **Provisional / may change** 都有保证可读的单行文本框。
+Command-17 最多只有 30 字符，所以 TX Composer 也改为紧凑单行输入。F1-F8
+使用固定宽度按钮，较长宏内容继续通过 tooltip 查看，不会再把按钮行撑乱。
 
 ## 安装 DeepCW 模型
 
