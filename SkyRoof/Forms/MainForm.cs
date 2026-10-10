@@ -95,6 +95,9 @@ namespace SkyRoof
       ctx.CwReceiveWorker =
         new CwReceiveWorker(ctx.CwAudio.Ingress);
       ctx.CwReceiveWorker.Start();
+      ctx.CwTransmit =
+        new CwTransmitController(
+          ctx.Settings.CwConsole);
       ApplyOutputStreamSettings();
       ApplyKissServerSettings();
       ctx.CatControl.ApplySettings();
@@ -147,6 +150,27 @@ namespace SkyRoof
       // the global keyboard hook so no new PTT request can race shutdown.
       ctx.PttHotkey?.Dispose();
       ctx.PttHotkey = null;
+
+      // Stop any Command-17 CW message while SkyCAT/CI-V is still available.
+      // The controller sends STOP and closes its lease connection; SkyCAT then
+      // performs its own disconnect fail-safe if STOP cannot be confirmed.
+      if (ctx.CwTransmit != null)
+      {
+        try
+        {
+          ctx.CwTransmit.DisposeAsync()
+            .AsTask()
+            .GetAwaiter()
+            .GetResult();
+        }
+        catch (Exception ex)
+        {
+          Log.Warning(
+            ex,
+            "CW transmit shutdown failed.");
+        }
+        ctx.CwTransmit = null;
+      }
 
       // Dispose CAT engines while the UI and TCP path are still alive. A CAT
       // engine releases PTT here only if SkyRoof itself successfully asserted it;

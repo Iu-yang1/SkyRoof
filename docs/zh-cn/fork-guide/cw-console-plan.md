@@ -1,6 +1,6 @@
 # CW Console：多路 Pileup 解码与自动拍发实施规划
 
-**状态：接收链和 RX Console 已进入可交互阶段。** 仓库现已具备多载波检测/跟踪、双分辨率 Frame-level Ridge Scanner、约 360 ms fixed-lag beam/MHT、多 Lane 独立 ONNX/CTC 推理、连续 Transcript、实时 SDR / WASAPI Capture / RS-BA1 loopback PCM、非阻塞 receive worker，以及 RX-only Dockable CW Console。RX Console 已提供源选择、Start/Stop、DeepCW 模型状态/安装、Pileup Lane 表、选中 Lane 的 committed/provisional 文本，并加入独立 display-only AF waterfall：跟随当前 Scanner AF 范围、约 10 FPS 刷新、稳定 AssociationHint lane 标签、Active/Hold/Ambiguous 样式、选中 lane 高亮和 ±2σ 频率不确定度带。HamNoise Classic/CW V2 已作为 **benchmark-only 实验后端**完成可重复构建与真实 DeepCW A/B；它不进入原始 48 kHz tracker 链、不在 CW Console 暴露，也不随正式安装包发布。TX/keyer 仍未实现。
+**状态：接收链和第一阶段安全 TX Console 已进入可交互阶段。** 仓库现已具备多载波检测/跟踪、双分辨率 Frame-level Ridge Scanner、约 360 ms fixed-lag beam/MHT、多 Lane 独立 ONNX/CTC 推理、连续 Transcript、实时 SDR / WASAPI Capture / RS-BA1 loopback PCM、非阻塞 receive worker、AF waterfall，以及显式 Arm 的 IC-9700 Command 17 文本拍发。SkyCAT 使用独立的本机回环 `127.0.0.1:4538` CW keyer：只接受 STATUS/SEND/STOP 等白名单命令，与 CAT/WSJT-X PTT 共用互斥 TX lease，并在超时、断线、重连和退出时执行 `17 FF` fail-safe STOP。SkyRoof 的持久 `Enable CW Transmit` 默认关闭，Console 的 Arm 状态永不持久化；Send 使用电台 `14 0C` KEYRAW 读回估算 6–48 WPM 拍发时长并启动 STOP watchdog。当前阶段**不会**自动切 CW/CW-R、不会自动打开 BK-IN、不会自动回复解码呼号，也尚未实现卫星 TX VFO/许可频段自动校验。HamNoise 仍仅为 benchmark-only 实验后端。
 
 参考：[deepcw-engine](https://github.com/e04/deepcw-engine) 是**正式 CW 解码模型**，包含 model.onnx、model.onnx.json 与推理示例；[web-deep-cw-decoder](https://github.com/e04/web-deep-cw-decoder) 提供多路检测与 Pileup 结构参考；[HamNoise](https://github.com/e04/HamNoise) 提供可选神经降噪 C 核心。英文方案见 [English plan](../../fork-guide/cw-console-plan.md)。
 
@@ -62,9 +62,9 @@ Frame-level Scanner 另外通过单元测试验证单调 sample-index 时间轴�
 | 06 | 多路推理 + 连续转录 | ONNX Runtime + 元数据 STFT/log1p/CTC；OutputFrame 时间对齐；Committed/Provisional；AssociationHintId 归属 | 重叠窗口不重复；误字可在提交前纠正；重复字符不误合并；每 Lane 独立 |
 | 07 | 性能调度 | tracker 独立 120 ms cadence；DeepCW 6 s snapshot / 1 s hop；latest-only 单实例推理；默认最多 5 路 | ONNX 忙时跳过旧 hop 不排队；tracker 不被推理阻塞；状态统计 completed/skipped windows |
 | 08 | 降噪研究 | 固定 HamNoise revision 的 Classic/CW V2 native bridge、per-lane DDC 与 shared decode-window 两种 placement、LaneDry/Raw A/B | 独立 HamNoise workflow 比较 CER/WER/Callsign/RTF；当前 Shared V2 仅 CER 持平、WER/呼号退化，因此不进入 UI/Release |
-| 09 | WinForms UI | RX-only DockContent：Start/Stop、三源选择、模型状态/安装、Pileup 表、selected committed/provisional transcript、worker 指标、独立 AF waterfall、lane overlay、±2σ uncertainty band | RX UI 不拥有 tracker/ONNX 资源；waterfall FFT 仅消费 PCM snapshot；关闭窗口不停止后台接收；TX 控件在安全 TX 阶段前不存在 |
-| 10 | SkyCAT CW | 受控 CW_SEND/CW_ABORT/CW_SPEED；IC-9700 CI-V 17 和 17 FF | 30 字符分包、异常、ACK、超时模拟测试 |
-| 11 | TX 状态机 | Idle→Armed→Queued→Sending→Stopping/Failed，F1–F8 宏、WPM、Break-in | 默认 TX 关；STOP 优先清队列；ACK 不冒充拍发完成 |
+| 09 | WinForms UI | DockContent：RX Start/Stop、三源选择、模型状态/安装、Pileup 表、selected committed/provisional transcript、AF waterfall，以及独立 TX composer | UI 不拥有 tracker/ONNX；关闭窗口不停止 RX，但会 Disarm/STOP 本窗口启动的 CW TX |
+| 10 | SkyCAT CW | 独立 loopback `4538`：PING/CAPS/STATUS/SEND/STOP；IC-9700 CI-V 17 / 17 FF；16 47 BK-IN；14 0C KEYRAW | 30 字符/字符集、模式/BK-IN/TX preflight、PTT 互斥、超时/断线 fail-safe 测试（SkyCAT PR #27） |
+| 11 | TX 状态机 | 持久 TX Enable（默认关）+ 非持久 Arm；Send/STOP；KEYRAW→WPM Morse 时长 watchdog；连接 teardown 二次 fail-safe | 未 Enable/未 Arm 禁发；关闭 Console/退出程序 STOP；ACK 不冒充拍发完成（SkyRoof PR #51） |
 | 12 | 卫星联动 | SAT MAIN 接收 / SUB 发射、CW/CW-R、当前上下行及 Doppler、PTT 所有权 | 错 VFO/外部 PTT/切卫星阻止 TX |
 | 13 | 综合验收 | AWGN、QSB、1/10/30 Hz 扩展、0–20 Hz/s 漂移、3/5/8 路 CER | Windows CI + 模拟 CAT + 实机分阶段验证 |
 
@@ -74,11 +74,11 @@ Frame-level Scanner 另外通过单元测试验证单调 sample-index 时间轴�
 
 | 布局 | 内容 | 交互 |
 |---|---|---|
-| 顶栏（当前 RX-only） | RX Start/Stop、SDR/WASAPI/RS-BA1 源选择、Settings、DeepCW 模型安装/状态 | RX 与 TX 完全分开；当前版本没有任何 TX 控件 |
+| 顶栏 | RX Start/Stop、SDR/WASAPI/RS-BA1 源选择、Settings、DeepCW 模型安装/状态 | RX 与 TX 资源/状态完全分开 |
 | 音频频谱/瀑布（约 180px） | 跟随当前 Frame Scanner AF 范围、250 Hz 标尺、稳定 H/T lane 标签、Active/Hold/Ambiguous 轨迹、±2σ 频率协方差带 | 左键选择现有 lane；只改变 UI 选中项，不调电台、不改 AF/RF |
 | Pileup 表（主要区域） | Lane、AF Hz、检测 SNR、漂移 Hz/s、状态、最近呼号/文本 | 3–8 路独立文字；按频率/SNR 排序不改变 ID |
 | RX Transcript（可拖动） | 所选通道确定/暂定文字、UTC、Copy、QSO Entry | 暂定文字不得用于自动拍发 |
-| TX Composer（底部） | 文本、F1–F8 宏、WPM、Break-in、Arm、Send、醒目的 Abort | 窄窗也必须保留 Abort；未 Arm 禁止发送 |
+| TX Composer（底部） | 最多 30 字符文本、非持久 Arm/Disarm、Send、醒目的 STOP、当前 mode/BK-IN/WPM/watchdog | 未在 Settings Enable 或未 Arm 禁止发送；STOP 始终优先；当前不提供自动回复/宏队列 |
 | 状态栏 | 有效采样率、模型状态、延迟、活动 Lane 数、CAT/TX 状态 | 错误与降级清晰可见 |
 
 基于现有 SkyRoof Context/MainForm/Ft4ConsolePanel 模式注册一个 DockContent；使用现有主题调色板，不复制网页 JSX。持久化音频源、宏、路数、门限和布局，但**不持久化 TX Armed 状态**。
@@ -87,13 +87,13 @@ Frame-level Scanner 另外通过单元测试验证单调 sample-index 时间轴�
 
 SDR 48 kHz Slicer / 选定 WASAPI Capture / RS-BA1 render-endpoint Loopback（多声道混单声道并重采样到 48 kHz）→ CwPcmIngress 源隔离与时间线保护 → 48 kHz 有界宽带音频 Hub → Fast 80/15 ms ridge portions + Precision 240/120 ms observations → 3-batch bounded beam/MHT → 带 AssociationHintId 的 Precision batch → CwPileupTrackManager / Kalman/GNN / MergeGroup fallback（空 batch 也推进 coast 时间）→ 默认：校准宽带 STFT + activity-aware all-track soft mask → latest-only DeepCW。HamNoise 只存在于 **tracker 之后的 benchmark 分支**：A) 对选中 Track 用 CwLaneExtractor DDC 到 9.6 kHz，再做 LaneDry/Classic/V2；或 B) 将整个 immutable decode snapshot 重采样到 9.6 kHz，只运行一次 Shared Classic/V2，然后继续使用原 all-track soft mask。两种 placement 都不会改变检测/跟踪统计。之后统一进入带 OutputFrame/置信度的 CTC → Incremental Transcript（稳定前缀 + provisional 后缀）→ Pileup 列表/选中路文本/QSO 辅助。
 
-候选 AF 频率不等于 RF 下行频率；正确的接收音调到射频转换取决于 CW/CW-R 与解调方式。音频推理不得直接操作 TX VFO。
+候选 AF 频率不等于 RF 下行频率；正确的接收音调到射频转换取决于 CW/CW-R 与解调方式。音频推理不得直接操作 TX VFO。当前安全 TX 第一阶段只拍发用户显式输入的文本，**尚未**把所选 RX Lane、卫星 TX VFO、许可频段或 Doppler 自动转换成发射频率；这些属于下一阶段 CW-12。
 
 RS-BA1 Loopback 使用 Windows render endpoint loopback，**会捕获该输出设备的整个混音，而不是仅隔离 Remote Utility 进程**。因此建议把 RS-BA1 Remote Utility 放在专用输出端点；CW 显式选择的 loopback endpoint 优先，未选择时才复用 AF Gain 已绑定的 Remote Utility endpoint。
 
 ## 发射安全和验证
 
-SkyCAT 现有 4532 主 CAT 通道独占 RS-BA1 虚拟 COM 并串行仲裁，新增受限 CW 命令，不给 4537 Remote Control Switch 发送/PPT/任意 CI-V 权限。IC-9700 文本自动拍发须遵照 CI-V 17 ASCII 最多 30 字符和 17 FF Abort，设备 ACK 不代表真正发完。失联不能确认 Abort 被电台收到时应显示“TX 状态未知”，禁止自动恢复排队发射。必须人工解锁并确认正确卫星、TX VFO、模式、PTT 所有权后方可发送。
+SkyCAT 保留 4532 主 CAT 与 4537 Remote Control Switch 的原有职责，CW 发射另设**只监听本机**的 4538 白名单端口，不提供 raw CI-V。`SEND` 前 SkyCAT 在同一个 CI-V `commandLock` 内确认 TX mode 已经是 CW/CW-R、16 47 BK-IN 已经是 Semi/Full、硬件当前未 TX，并从共享 lease 阻止 CAT/WSJT-X PTT 与 Command 17 重叠。SkyCAT **不会**替用户切模式、打开 BK-IN 或拉起 PTT。CI-V 17 最多 30 字符，17 FF Abort；Command ACK 不代表文字已经拍发完。SkyRoof 通过 14 0C KEYRAW 估算当前 6–48 WPM 的消息时长，watchdog 到期主动 STOP；STOP 失败时关闭 TCP，由 SkyCAT disconnect handler 再次执行 fail-safe。无法确认 STOP 时 SkyCAT 保持 fail-closed lease，禁止其他 PTT/CW 客户端继续发射。
 
 验收用多个混合 CW WAV 测 per-lane CER、误检率、丢路率、串扰率及音频->文字延迟。涵盖 10/20/30/40 WPM，3/5/8 路，低 SNR、QSB、频率扩展、多普勒、邻频及不可分离同频，并作 Raw/HamNoise 对照。CI-V 用模拟串口先验收，真实 RF 发射必须另行实机验证。
 
@@ -108,6 +108,7 @@ SkyCAT 现有 4532 主 CAT 通道独占 RS-BA1 虚拟 COM 并串行仲裁，新�
 7. RX-only Dockable CW Console：源/模型/worker 状态、Pileup Lane grid、selected committed/provisional transcript、停靠恢复（**PR #48**）。
 8. CW AF waterfall、稳定 lane overlay、±2σ uncertainty band、约 10 FPS 独立 UI 刷新（**PR #49**）。
 9. HamNoise benchmark-only 实验后端：固定 revision native bridge、per-lane/shared Classic 与 CW V2、LaneDry 对照、独立 real-model A/B workflow；量化结论暂不进入 UI/Release。同时修复 8 s 长窗口在 **CwLaneExtractor** 和 **CwWindowedSincResampler** 两处 48 kHz→9.6 kHz 输出长度计算的 Int32 乘法溢出（**PR #50**）。
-10. SkyCAT CW CI-V 协议（白名单/错误处理/模拟器）。
-11. 安全 TX + SAT 与 CI-V 协同（受控实机验收后启用）。
+10. SkyCAT 独立 4538 CW CI-V 白名单协议、共享 PTT lease、断线/重连/退出 fail-safe（**SkyCAT PR #27**）。
+11. SkyRoof 两级 TX gate、RS-BA1 风格文本 composer、KEYRAW 时长 watchdog、关闭/退出 STOP（**SkyRoof PR #51**）。
+12. 卫星 TX VFO / Doppler / 许可频段联动与受控 IC-9700 实机 RF 验收。
 12. 端到端 WAV corpus 指标、中英文用户指南、许可证与正式发布。

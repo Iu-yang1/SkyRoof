@@ -4,8 +4,10 @@ using WeifenLuo.WinFormsUI.Docking;
 namespace SkyRoof
 {
   /// <summary>
-  /// Receive-only view over the shared CW receive worker. The panel owns no
-  /// audio device, tracker or ONNX session; closing it never stops receiving.
+  /// View over the shared CW receive worker plus the explicitly armed,
+  /// fail-closed SkyCAT Command-17 transmitter. The panel owns no audio,
+  /// tracker or ONNX resource; closing it never stops RX, but it always
+  /// disarms/stops any CW transmission started from this Console.
   /// </summary>
   public sealed class CwConsolePanel : DockContent
   {
@@ -32,6 +34,12 @@ namespace SkyRoof
     private readonly TextBox CommittedTextBox = new();
     private readonly TextBox ProvisionalTextBox = new();
     private readonly Button CopyBtn = new();
+
+    private readonly TextBox TxTextBox = new();
+    private readonly Button ArmTxBtn = new();
+    private readonly Button SendTxBtn = new();
+    private readonly Button StopTxBtn = new();
+    private readonly Label TxStatusLabel = new();
 
     private readonly System.Windows.Forms.Timer UiTimer =
       new() { Interval = 250 };
@@ -74,10 +82,10 @@ namespace SkyRoof
                 scanner.MaxFrequencyHz,
               outputBins: 384);
 
-      Text = "CW Console (RX)";
+      Text = "CW Console";
       Name = "CwConsolePanel";
-      ClientSize = new Size(980, 720);
-      MinimumSize = new Size(620, 500);
+      ClientSize = new Size(980, 850);
+      MinimumSize = new Size(680, 650);
 
       BuildUi();
 
@@ -141,7 +149,7 @@ namespace SkyRoof
         {
           Dock = DockStyle.Fill,
           ColumnCount = 1,
-          RowCount = 5,
+          RowCount = 6,
           Padding = new Padding(8)
         };
 
@@ -167,6 +175,10 @@ namespace SkyRoof
         new RowStyle(
           SizeType.Percent,
           42));
+      root.RowStyles.Add(
+        new RowStyle(
+          SizeType.Absolute,
+          158));
 
       var toolbar =
         new FlowLayoutPanel
@@ -205,6 +217,24 @@ namespace SkyRoof
           using var dialog =
             new SettingsDialog(ctx);
           dialog.ShowDialog(this);
+
+          if (!ctx.Settings.CwConsole.TransmitEnabled &&
+              ctx.CwTransmit?.State.Armed == true)
+          {
+            try
+            {
+              ctx.CwTransmit
+                .DisarmAsync()
+                .GetAwaiter()
+                .GetResult();
+            }
+            catch
+            {
+              // Controller connection teardown still triggers SkyCAT's
+              // disconnect fail-safe; the state retains the error for UI.
+            }
+          }
+
           LoadSettingsIntoControls();
         };
       toolbar.Controls.Add(
@@ -282,6 +312,11 @@ namespace SkyRoof
         BuildTranscriptPanel(),
         0,
         4);
+
+      root.Controls.Add(
+        BuildTransmitPanel(),
+        0,
+        5);
 
       Controls.Add(root);
     }
@@ -501,6 +536,130 @@ namespace SkyRoof
       return group;
     }
 
+    private Control BuildTransmitPanel()
+    {
+      var group =
+        new GroupBox
+        {
+          Dock = DockStyle.Fill,
+          Text =
+            "CW Transmit — IC-9700 / SkyCAT Command 17",
+          Padding = new Padding(8),
+          Margin = new Padding(
+            0, 6, 0, 0)
+        };
+
+      var layout =
+        new TableLayoutPanel
+        {
+          Dock = DockStyle.Fill,
+          ColumnCount = 1,
+          RowCount = 3
+        };
+
+      layout.RowStyles.Add(
+        new RowStyle(
+          SizeType.AutoSize));
+      layout.RowStyles.Add(
+        new RowStyle(
+          SizeType.Percent,
+          100));
+      layout.RowStyles.Add(
+        new RowStyle(
+          SizeType.AutoSize));
+
+      TxStatusLabel.AutoSize = true;
+      TxStatusLabel.Text =
+        "TX: disabled";
+      TxStatusLabel.Margin =
+        new Padding(
+          0, 0, 0, 5);
+      layout.Controls.Add(
+        TxStatusLabel,
+        0,
+        0);
+
+      TxTextBox.Dock =
+        DockStyle.Fill;
+      TxTextBox.Multiline = true;
+      TxTextBox.MaxLength =
+        CwMessageTiming.MaxCharacters;
+      TxTextBox.Font =
+        new Font(
+          FontFamily.GenericMonospace,
+          11f);
+      TxTextBox.ScrollBars =
+        ScrollBars.Vertical;
+      TxTextBox.TextChanged +=
+        (_, _) =>
+          RefreshTransmitUi();
+      layout.Controls.Add(
+        TxTextBox,
+        0,
+        1);
+
+      var buttons =
+        new FlowLayoutPanel
+        {
+          AutoSize = true,
+          Dock = DockStyle.Fill,
+          FlowDirection =
+            FlowDirection.LeftToRight,
+          WrapContents = true,
+          Margin = new Padding(
+            0, 5, 0, 0)
+        };
+
+      ArmTxBtn.Text =
+        "Arm TX";
+      ArmTxBtn.AutoSize = true;
+      ArmTxBtn.Click +=
+        ArmTxBtn_Click;
+      buttons.Controls.Add(
+        ArmTxBtn);
+
+      SendTxBtn.Text =
+        "Send";
+      SendTxBtn.AutoSize = true;
+      SendTxBtn.Click +=
+        SendTxBtn_Click;
+      buttons.Controls.Add(
+        SendTxBtn);
+
+      StopTxBtn.Text =
+        "STOP";
+      StopTxBtn.AutoSize = true;
+      StopTxBtn.BackColor =
+        Color.Firebrick;
+      StopTxBtn.ForeColor =
+        Color.White;
+      StopTxBtn.UseVisualStyleBackColor =
+        false;
+      StopTxBtn.Click +=
+        StopTxBtn_Click;
+      buttons.Controls.Add(
+        StopTxBtn);
+
+      buttons.Controls.Add(
+        new Label
+        {
+          AutoSize = true,
+          Text =
+            "Max 30 chars · radio must already be CW/CW-R with Semi/Full BK-IN",
+          Margin = new Padding(
+            12, 7, 0, 0)
+        });
+
+      layout.Controls.Add(
+        buttons,
+        0,
+        2);
+
+      group.Controls.Add(
+        layout);
+      return group;
+    }
+
     private static void ConfigureTranscriptBox(
       TextBox box)
     {
@@ -590,6 +749,7 @@ namespace SkyRoof
       RefreshWorkerStatus();
       RefreshGrid();
       RefreshSelectedTranscript();
+      RefreshTransmitUi();
     }
 
     private void RefreshSourceStatus()
@@ -1148,6 +1308,235 @@ namespace SkyRoof
         Clipboard.SetText(text);
     }
 
+    private void RefreshTransmitUi()
+    {
+      CwTransmitController? tx =
+        ctx.CwTransmit;
+      CwConsoleSettings settings =
+        ctx.Settings.CwConsole;
+
+      if (tx == null)
+      {
+        TxStatusLabel.Text =
+          "TX: controller unavailable";
+        ArmTxBtn.Enabled = false;
+        SendTxBtn.Enabled = false;
+        StopTxBtn.Enabled = false;
+        TxTextBox.ReadOnly = true;
+        return;
+      }
+
+      CwTransmitState state =
+        tx.State;
+
+      ArmTxBtn.Text =
+        state.Armed
+          ? "Disarm TX"
+          : "Arm TX";
+
+      ArmTxBtn.Enabled =
+        settings.TransmitEnabled &&
+        !state.Sending;
+
+      SendTxBtn.Enabled =
+        settings.TransmitEnabled &&
+        state.Armed &&
+        !state.Sending &&
+        !string.IsNullOrWhiteSpace(
+          TxTextBox.Text);
+
+      StopTxBtn.Enabled =
+        state.Sending;
+
+      TxTextBox.ReadOnly =
+        state.Sending;
+
+      if (!settings.TransmitEnabled)
+      {
+        TxStatusLabel.Text =
+          "TX: disabled in Settings";
+        TxStatusLabel.ForeColor =
+          SystemColors.GrayText;
+        return;
+      }
+
+      if (state.Sending)
+      {
+        string timing =
+          state.RadioStatus is
+            CwKeyerStatus status
+            ? $" · {status.Wpm:F1} WPM"
+            : string.Empty;
+
+        string watchdog =
+          state.WatchdogDueUtc is
+            DateTime due
+            ? $" · STOP watchdog {Math.Max(0, (due - DateTime.UtcNow).TotalSeconds):F1}s"
+            : string.Empty;
+
+        TxStatusLabel.Text =
+          $"TX: SENDING \"{state.ActiveText}\"" +
+          timing +
+          watchdog;
+        TxStatusLabel.ForeColor =
+          Color.Firebrick;
+        return;
+      }
+
+      string radio =
+        state.RadioStatus is
+          CwKeyerStatus ready
+          ? $" · {ready.Mode} · BK-IN {ready.BreakIn} · {ready.Wpm:F1} WPM"
+          : string.Empty;
+
+      TxStatusLabel.Text =
+        state.Armed
+          ? "TX: ARMED" + radio
+          : "TX: disarmed" + radio;
+
+      if (!string.IsNullOrWhiteSpace(
+            state.LastError))
+        TxStatusLabel.Text +=
+          " · " +
+          state.LastError;
+
+      TxStatusLabel.ForeColor =
+        state.Armed
+          ? Theme.SpectrumPeak
+          : SystemColors.ControlText;
+    }
+
+    private async void ArmTxBtn_Click(
+      object? sender,
+      EventArgs e)
+    {
+      CwTransmitController? tx =
+        ctx.CwTransmit;
+      if (tx == null)
+        return;
+
+      ArmTxBtn.Enabled = false;
+
+      try
+      {
+        if (tx.State.Armed)
+        {
+          await tx.DisarmAsync();
+          return;
+        }
+
+        tx.Arm();
+
+        CwKeyerStatus status =
+          await tx.QueryStatusAsync();
+
+        if (!status.ReadyToSend)
+        {
+          await tx.DisarmAsync();
+
+          throw new InvalidOperationException(
+            $"SkyCAT keyer is not ready: lease={status.Lease}, " +
+            $"mode={status.Mode}, BK-IN={status.BreakIn}, " +
+            $"TX={(status.Transmitting ? 1 : 0)}.");
+        }
+      }
+      catch (Exception ex)
+      {
+        if (tx.State.Armed &&
+            !tx.State.Sending)
+        {
+          try
+          {
+            await tx.DisarmAsync();
+          }
+          catch
+          {
+            // No message was active in the normal arm-preflight failure path.
+            // If that ever changes, controller/session teardown remains the
+            // fail-safe and the state preserves the error.
+          }
+        }
+
+        MessageBox.Show(
+          this,
+          ex.Message,
+          "CW TX arm failed",
+          MessageBoxButtons.OK,
+          MessageBoxIcon.Warning);
+      }
+      finally
+      {
+        if (!IsDisposed)
+          RefreshTransmitUi();
+      }
+    }
+
+    private async void SendTxBtn_Click(
+      object? sender,
+      EventArgs e)
+    {
+      CwTransmitController? tx =
+        ctx.CwTransmit;
+      if (tx == null)
+        return;
+
+      string text =
+        TxTextBox.Text;
+
+      SendTxBtn.Enabled = false;
+
+      try
+      {
+        await tx.SendAsync(text);
+      }
+      catch (Exception ex)
+      {
+        MessageBox.Show(
+          this,
+          ex.Message,
+          "CW send failed",
+          MessageBoxButtons.OK,
+          MessageBoxIcon.Error);
+      }
+      finally
+      {
+        if (!IsDisposed)
+          RefreshTransmitUi();
+      }
+    }
+
+    private async void StopTxBtn_Click(
+      object? sender,
+      EventArgs e)
+    {
+      CwTransmitController? tx =
+        ctx.CwTransmit;
+      if (tx == null)
+        return;
+
+      StopTxBtn.Enabled = false;
+
+      try
+      {
+        await tx.StopAsync();
+      }
+      catch (Exception ex)
+      {
+        MessageBox.Show(
+          this,
+          ex.Message +
+          "\r\n\r\nThe TCP lease was closed so SkyCAT can run its disconnect fail-safe STOP.",
+          "CW STOP failed",
+          MessageBoxButtons.OK,
+          MessageBoxIcon.Error);
+      }
+      finally
+      {
+        if (!IsDisposed)
+          RefreshTransmitUi();
+      }
+    }
+
     private void LoadSettingsIntoControls()
     {
       updatingSourceUi = true;
@@ -1178,6 +1567,22 @@ namespace SkyRoof
         WaterfallView_LaneClicked;
 
       modelInstallStop?.Cancel();
+
+      if (ctx.CwTransmit?.State.Armed == true)
+      {
+        try
+        {
+          ctx.CwTransmit
+            .DisarmAsync()
+            .GetAwaiter()
+            .GetResult();
+        }
+        catch
+        {
+          // Closing the keyer session invokes SkyCAT's disconnect STOP even
+          // if the explicit STOP acknowledgement was lost.
+        }
+      }
 
       CwReceiveWorker? worker =
         ctx.CwReceiveWorker;

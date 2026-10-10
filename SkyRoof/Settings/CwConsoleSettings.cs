@@ -37,6 +37,18 @@ namespace SkyRoof
     [TypeConverter(typeof(OutputSoundcardNameConverter))]
     public string? RsBa1LoopbackDeviceId { get; set; }
 
+    [DisplayName("Enable CW Transmit")]
+    [Description(
+      "Permit the CW Console to use SkyCAT's fail-closed IC-9700 Command 17 keyer. Disabled by default. The Console still requires an explicit non-persistent Arm TX action before every transmitting session.")]
+    [DefaultValue(false)]
+    public bool TransmitEnabled { get; set; } = false;
+
+    [DisplayName("SkyCAT CW Keyer Port")]
+    [Description(
+      "Loopback-only SkyCAT CW keyer TCP port. Default 4538. This must match skycatd --cw-port.")]
+    [DefaultValue(4538)]
+    public int CwKeyerPort { get; set; } = 4538;
+
     [Browsable(false)]
     [DefaultValue(2.4)]
     public double TrackingAnalysisSeconds { get; set; } = 2.4;
