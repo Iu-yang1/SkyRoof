@@ -82,24 +82,39 @@ namespace SkyRoof.CW
       ArgumentNullException.ThrowIfNull(
         newSettings);
 
-      CwConsoleSettings previous =
-        settings;
+      bool safetyBoundaryChanged;
+      bool mustStop;
 
-      bool safetyBoundaryChanged =
-        !newSettings.TransmitEnabled ||
-        newSettings.CwKeyerPort !=
-          previous.CwKeyerPort;
-
-      if (safetyBoundaryChanged &&
-          State.Armed)
+      lock (this)
       {
-        // Stop using the existing live session before replacing settings.
-        // STOP does not depend on the configured port once a lease exists.
-        await DisarmAsync();
+        CwConsoleSettings previous =
+          settings;
+
+        safetyBoundaryChanged =
+          !newSettings.TransmitEnabled ||
+          newSettings.CwKeyerPort !=
+            previous.CwKeyerPort;
+
+        settings = newSettings;
+        mustStop =
+          safetyBoundaryChanged &&
+          (armed ||
+           activeSession != null);
+
+        if (safetyBoundaryChanged)
+          armed = false;
       }
 
-      settings = newSettings;
       OnStateChanged();
+
+      if (!mustStop)
+        return;
+
+      // The new safety setting is already authoritative before touching the
+      // network. Even if STOP fails, subsequent Send/Arm calls see the new
+      // disabled/changed configuration. An active session does not need the
+      // configured port to stop because it retains its original TCP lease.
+      await StopAsync();
     }
 
     public void Arm()
