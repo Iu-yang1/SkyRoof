@@ -65,7 +65,11 @@ namespace VE3NEA.Dsp.Tests
         Size = new System.Drawing.Size(740, 250)
       };
       var power = Enumerable.Repeat(-100f, 512).ToArray();
-      power[188] = -10f; // ~799 Hz, away from 750-Hz grid
+      // A 2048-point Hann FFT has a multi-bin main lobe when interpolated
+      // onto the 512-bin display grid. A one-bin impulse can disappear when
+      // a 512-pixel texture is minified to a 250-pixel WinForms view.
+      for (int bin = 185; bin <= 191; bin++)
+        power[bin] = -10f; // ~799 Hz, away from the 750-Hz grid
       var frame = new CwAudioSpectrumFrame(
         DateTime.UtcNow, 0, 100, 2000, power);
       view.SetSpectrum(frame);
