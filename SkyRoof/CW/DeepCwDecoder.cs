@@ -1,4 +1,5 @@
 using Microsoft.ML.OnnxRuntime;
+using System.Diagnostics;
 using Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace SkyRoof.CW
@@ -131,7 +132,15 @@ namespace SkyRoof.CW
   public sealed class DeepCwOnnxDecoder : IDeepCwTensorDecoder, IDisposable
   {
     private readonly InferenceSession session;
+    private long inferenceElapsedTicks;
+    private long inferenceCalls;
+
     public DeepCwModelMetadata Metadata { get; }
+    public long InferenceCalls => Interlocked.Read(ref inferenceCalls);
+    public double MeanInferenceMilliseconds =>
+      InferenceCalls == 0 ? 0 :
+      1000.0 * Interlocked.Read(ref inferenceElapsedTicks) /
+        Stopwatch.Frequency / InferenceCalls;
 
     public DeepCwOnnxDecoder(
       string modelPath,
@@ -147,7 +156,7 @@ namespace SkyRoof.CW
       // scanner and can occupy every logical processor on 6-core hosts.
       // Keep one reusable session and bound its internal parallelism.
       // This is a CPU budget, not an assumption about AVX capabilities.
-      var options = new SessionOptions
+      using var options = new SessionOptions
       {
         LogSeverityLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_WARNING,
         IntraOpNumThreads = Math.Clamp(
@@ -189,12 +198,17 @@ namespace SkyRoof.CW
         tensor.Data,
         tensor.Dimensions);
 
+      long startTicks = Stopwatch.GetTimestamp();
       using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results =
         session.Run(
         [
           NamedOnnxValue.CreateFromTensor(
             Metadata.InputName, inputTensor)
         ]);
+      Interlocked.Add(
+        ref inferenceElapsedTicks,
+        Stopwatch.GetTimestamp() - startTicks);
+      Interlocked.Increment(ref inferenceCalls);
 
       DisposableNamedOnnxValue output = results.FirstOrDefault(
         item => string.Equals(
@@ -204,6 +218,14 @@ namespace SkyRoof.CW
 
       Tensor<float> resultTensor = output.AsTensor<float>();
       int[] dims = resultTensor.Dimensions.ToArray();
+      // The CPU execution provider returns a contiguous DenseTensor.
+      // Decode its live span while the native output collection is owned,
+      // rather than allocating another time×class float array per lane.
+      if (resultTensor is DenseTensor<float> contiguous &&
+          !contiguous.IsReversedStride)
+        return DeepCwCtcDecoder.Decode(
+          contiguous.Buffer.Span, dims, Metadata);
+
       return DeepCwCtcDecoder.Decode(
         resultTensor.ToArray(), dims, Metadata);
     }
