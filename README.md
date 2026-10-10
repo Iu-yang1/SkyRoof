@@ -27,16 +27,6 @@ See the bilingual [fork documentation](https://iu-yang1.github.io/SkyRoof/). The
 The original upstream website does not necessarily document or ship these features.
 The IC-9700 independent Direct LAN scope source remains experimental.
 
-### GitHub Pages publishing (site 404 troubleshooting)
-
-The Docs workflow builds the DocFX HTML and **deploys it through GitHub's official Pages API**.
-For initial setup, an admin must open [Settings → Pages](https://github.com/Iu-yang1/SkyRoof/settings/pages)
-and select **Build and deployment → Source: GitHub Actions**. Then run
-[Deploy DocFX Site to GitHub Pages](https://github.com/Iu-yang1/SkyRoof/actions/workflows/deploy-docfx.yml)
-from `master`. A successful build alone, or a historical push to `gh-pages`,
-does **not** establish that the live website was published. The deploy job's
-`github-pages` environment links to the actual Pages site after publication.
-
 
 ## Building The Solution
 
