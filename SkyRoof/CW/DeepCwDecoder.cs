@@ -496,11 +496,13 @@ namespace SkyRoof.CW
             laneFeatures.DurationSeconds;
         }
 
-        DeepCwDecodedText rawText =
-          decoder.Decode(tensor);
-        DeepCwDecodedText text =
-          FilterLowConfidenceSymbols(
-            rawText);
+        // Do not delete low-margin symbols from the CTC sequence before
+        // temporal reconciliation. Such deletion cannot be recovered by
+        // later overlapping windows and was producing fragments (e.g.
+        // only "5NN" from an otherwise readable CW transmission).
+        // The incremental transcript coordinator already performs
+        // multiple-window, confidence-weighted consensus before commit.
+        DeepCwDecodedText text = decoder.Decode(tensor);
 
         results.Add(new(
           track.Id,
