@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Iu-yang1/SkyRoof/benchmarks/cw-recorded-corpus/manifest.schema.json",
+  "title": "SkyRoof recorded CW corpus manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "name", "cases"],
+  "properties": {
+    "version": { "const": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "wav", "lanes"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "wav": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^/\\\\].*\\.wav$"
+          },
+          "knownDopplerRateHzPerSecond": {
+            "type": "number",
+            "minimum": -200,
+            "maximum": 200,
+            "default": 0
+          },
+          "minFrequencyHz": {
+            "type": "number",
+            "minimum": 20,
+            "maximum": 9999,
+            "default": 100
+          },
+          "maxFrequencyHz": {
+            "type": "number",
+            "minimum": 21,
+            "maximum": 10000,
+            "default": 2000
+          },
+          "minimumSnrDb": {
+            "type": "number",
+            "minimum": -10,
+            "maximum": 40,
+            "default": 6
+          },
+          "analysisSeconds": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 10,
+            "default": 2.4
+          },
+          "decodeWindowSeconds": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 6
+          },
+          "decodeHopSeconds": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 30,
+            "default": 1
+          },
+          "maxDecodeLanes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8,
+            "default": 8
+          },
+          "lanes": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "referenceFrequencyHz",
+                "text"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "referenceFrequencyHz": {
+                  "type": "number"
+                },
+                "frequencyToleranceHz": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 500,
+                  "default": 60
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "callsign": {
+                  "type": ["string", "null"]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

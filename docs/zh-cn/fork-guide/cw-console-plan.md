@@ -45,7 +45,7 @@ SkyRoof 当前采用 **Frame Ridge Scanner → bounded fixed-lag beam/MHT → la
 
 CW 算法变更除了普通单元测试，还必须运行专门的真实 `deepcw-engine` ONNX Pileup benchmark。第一层采用 oracle Track，把“分离器 + 模型”的误差与 detector/tracker 的 ID 错误隔离开，分别记录 mask 后与 unmasked baseline 的 CER、WER、完整呼号识别率和 Real-Time Factor。场景覆盖固定 5 / 10 / 15 / 25 / 40 Hz 间隔、强弱台功率差、0–20 Hz/s Doppler，以及 1600 Hz 以上宽带 AF Lane。
 
-Frame-level Scanner 另外通过单元测试验证单调 sample-index 时间轴、Fast/Precision 分工、近频分辨、静默期间 coast 时间推进和 Doppler 去 chirp。连续 Transcript 还用真实 ONNX 的 40 Hz 双 Lane、6 秒窗/1 秒 hop 滑动基准同时记录 naive 字符串拼接 CER 与稳定 Transcript CER/WER，从而量化窗口去重和字符纠错的实际收益。下一层端到端 corpus benchmark 将继续统计 detection recall / false alarm、Frequency RMSE、ID switch、最终 CER/WER、呼号准确率和延迟。**Track ID 更稳定并不自动等于解码更好**：如果 fixed-lag 降低 ID switch 却明显增加 CER 或实时延迟，则不能作为默认配置直接验收。
+Frame-level Scanner 另外通过单元测试验证单调 sample-index 时间轴、Fast/Precision 分工、近频分辨、静默期间 coast 时间推进和 Doppler 去 chirp。连续 Transcript 还用真实 ONNX 的 40 Hz 双 Lane、6 秒窗/1 秒 hop 滑动基准同时记录 naive 字符串拼接 CER 与稳定 Transcript CER/WER，从而量化窗口去重和字符纠错的实际收益。PR #54 已加入可重复的 recorded-WAV corpus runner：真实录音可从仓库外部以 manifest + WAV 输入，完整走 Frame Scanner / fixed-lag / tracker / DeepCW / Incremental Transcript，并输出 lane recall、最终 CER/WER、呼号准确率和 RTF。truth 的参考 AF 频率只在解码后用于评分配对，不会作为 detector/tracker 的 oracle 输入。实际录音 corpus 的量化结果仍取决于后续提供的录音数据。**Track ID 更稳定并不自动等于解码更好**：如果 fixed-lag 降低 ID switch 却明显增加 CER 或实时延迟，则不能作为默认配置直接验收。
 
 **PR #50 HamNoise 真实模型 A/B 结论（Wet=1，固定 HamNoise `1af3a77b...` / DeepCW `8e264d24...`）：** 当前 wideband soft-mask baseline 的平均 CER/WER 为 **0.2273 / 0.2381**，完整呼号 **18/28**，mean RTF **0.0618**。per-lane DDC 的 LaneDry 为 CER **0.4513**；Classic 改善到 **0.4221**，V2 改善到 **0.3669**，说明 HamNoise 对同一 per-lane 路径有净收益，但两者都无法弥补丢失 all-track soft mask 的损失，且 Lane V2 mean RTF **2.1088**，超过实时。把 HamNoise 改为 **tracker 之后、整个 decode snapshot 只执行一次，再保留原 soft mask** 后，Shared Classic 仍退化到 CER **0.3896** / 呼号 **8/28**；Shared V2 的 CER **0.2273** 与 baseline 持平且 mean RTF **0.4260** 仍可实时，但 WER 升到 **0.3214**、呼号降到 **15/28**，因此仍不进入 UI/Release。对这 14 个 synthetic case 做后验组合时，“最近邻 ≤10 Hz 才启用 Shared V2”可得到 CER **0.1981**、WER **0.2381**、呼号 **18/28**，但这只是研究候选，必须先用更密的间隔/功率差/Doppler 网格和录音 corpus 独立验证，不能据此自动启用。
 
@@ -113,4 +113,4 @@ SkyCAT 保留 4532 主 CAT 与 4537 Remote Control Switch 的原有职责，CW �
 12. 卫星 TX interlock：TXHZ/SENDHZ、卫星/转发器/no-Doppler uplink/mode/transverter 上下文锁定、TX CAT freeze、发送中变化 STOP+Disarm，以及 SkyCAT CW lease 的 TX-side CAT write gate（**SkyCAT PR #28/#29；SkyRoof PR #52**）。
 13. 持久化 F1–F8 CW 消息预设：普通 F 键/按钮只装载，Shift+F1–F8 显式发送并复用完整 TX 安全状态机；不提供自动回复或宏队列（**SkyRoof PR #53**）。
 14. 受控 IC-9700 实机 RF 验收：dummy load/低功率优先，核对 CW/CW-R、BK-IN、实际 uplink、Doppler catch-up、宏 Shift-send 和 STOP；软件检查不替代当地法规/执照要求。
-15. 端到端 WAV corpus 指标、中英文用户指南、许可证审计与正式发布检查。
+15. Recorded-WAV corpus v1 schema/runner、HTTPS+SHA-256 手动 CI、完整中英文 CW Console 用户指南、DeepCW/HamNoise 许可来源审计，以及 Compile/Docs/Release invariant gate（**PR #54**）。实际录音 corpus 的最终质量数字仍需外部录音；软件基础设施已完成。

@@ -50,6 +50,8 @@ jobs:
           test -s docs/_site/zh-cn/fork-guide/overview.html
           test -s docs/_site/fork-guide/spectrum.html
           test -s docs/_site/zh-cn/fork-guide/spectrum.html
+          test -s docs/_site/users_guide/cw_console.html
+          test -s docs/_site/zh-cn/users_guide/cw_console.html
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

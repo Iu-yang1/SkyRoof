@@ -8,6 +8,10 @@ on:
       - 'README.md'
       - '.github/workflows/deploy-docfx.yml'
       - '.github/workflows/docs-validation.yml'
+      - 'benchmarks/cw-recorded-corpus/**'
+      - 'scripts/validate-cw-release.ps1'
+      - 'licenses/DeepCW-NOTICE.txt'
+      - 'licenses/HamNoise-NOTICE.txt'
   workflow_dispatch:
 
 permissions:
@@ -19,6 +23,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Validate CW docs/corpus release inputs
+        shell: pwsh
+        run: ./scripts/validate-cw-release.ps1 -DocsOnly
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
@@ -35,3 +42,5 @@ jobs:
           test -s docs/_site/zh-cn/fork-guide/overview.html
           test -s docs/_site/fork-guide/spectrum.html
           test -s docs/_site/zh-cn/fork-guide/spectrum.html
+          test -s docs/_site/users_guide/cw_console.html
+          test -s docs/_site/zh-cn/users_guide/cw_console.html
