@@ -142,9 +142,19 @@ namespace SkyRoof.CW
       Metadata = metadata ?? throw new ArgumentNullException(nameof(metadata));
       Metadata.Validate();
 
+      // Each decode hop can run up to five ONNX inferences. ORT's
+      // default per-session CPU pool competes with the real-time ridge
+      // scanner and can occupy every logical processor on 6-core hosts.
+      // Keep one reusable session and bound its internal parallelism.
+      // This is a CPU budget, not an assumption about AVX capabilities.
       var options = new SessionOptions
       {
-        LogSeverityLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_WARNING
+        LogSeverityLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_WARNING,
+        IntraOpNumThreads = Math.Clamp(
+          Environment.ProcessorCount / 4, 1, 4),
+        InterOpNumThreads = 1,
+        ExecutionMode = ExecutionMode.ORT_SEQUENTIAL,
+        GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL
       };
       session = new InferenceSession(modelPath, options);
 
