@@ -332,3 +332,29 @@ FFT 工作缓冲区通过 FFTW 自带的对齐分配器分配，使其可以使�
 `cw-fft-r2c-benchmark`（JSON Lines）。这只反映 FFT 变换成本，
 **不能直接等同于整机 DeepCW 解码 CPU 占用率**。请在相同音频和设置下，
 进一步比较 i5-10400 的总 CPU、skipped inference windows 和抄收准确率。
+
+
+### 增量 STFT 缓存与 ONNX 推理监控
+
+Ridge Scanner 对**已知多普勒速率为零**的帧按绝对 PCM 起始采样索引缓存
+峰值观测结果。该缓存仅在音频来源为连续追加、不会覆写历史的实时接收前端
+启用，音频时间线重置时清空。非零多普勒去啁啾仍使用原有复数 FFT。
+80/15 ms 快速 STFT 与 240/120 ms 精密 STFT 的时间网格、Kalman
+观测时间和测量协方差没有更改。
+
+共享 DeepCW 宽带 STFT 采用**每个推理 Session 独立、至多 1600 帧**
+的缓存。只有完全位于 PCM 窗口内部的帧才可复用；窗口首尾的反射填充
+依赖本次窗口边界，必须重新计算。注意：6 秒解码窗口每约 1 秒推进，
+但 STFT Hop 是 15 ms，1 秒并非 15 ms 的整数倍，因此不能用
+“上一窗口第 N 帧”直接对应本窗口第 N 帧。实现仅在**绝对采样区间相同**
+时复用，保持特征幅度、模型输入张量、判决门限和译码时间轴不变。
+启用实验性 Window Denoiser 时跳过此缓存。
+
+将鼠标悬停在 CW Console 顶部 **Worker** 状态文字上，可查看 Ridge STFT
+和 DeepCW STFT 的缓存命中/重新计算帧数，以及 ONNX Runtime `Run()`
+的平均毫秒数。ONNX 仍复用单个 CPU InferenceSession，保留受限的
+内部线程数；连续输出张量可直接供 CTC 解码而无需复制一份大数组，
+SessionOptions 初始化后会正确释放。此处没有修改 ONNX 模型、
+改变 Batch 大小或声称 ONNX 内核本身获得同比例加速。
+比较 i5-10400 优化前后的 CPU 占用时，应使用同一输入 PCM、
+解码 Lane 数和设置，并同时关注 completed/skipped windows。
