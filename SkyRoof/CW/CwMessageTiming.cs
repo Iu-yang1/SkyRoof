@@ -216,7 +216,7 @@ namespace SkyRoof.CW
         Math.Clamp(
           watchdogSeconds,
           2.0,
-          90.0));
+          210.0));
     }
   }
 }
