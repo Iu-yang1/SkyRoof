@@ -68,6 +68,7 @@ namespace SkyRoof
     private static readonly TimeSpan ScopeReadbackRetryDelay = TimeSpan.FromSeconds(35);
     private bool PendingControlSettingsApply;
     private string LastDiagnosticsText = "Spectrum diagnostics are not available while capture is stopped.";
+    private DateTime LastFixedEdgeConfirmationRequestUtc = DateTime.MinValue;
     private IcomScopeReadbackState? LastScopeReadback;
     private DateTime? LastScopeReadbackUtc;
     private CatControlEngine? LastScopeControlBackend;
@@ -1062,6 +1063,7 @@ namespace SkyRoof
       LastScopeReadback = null;
       LastScopeReadbackUtc = null;
       PendingScopeControls.Clear();
+      LastFixedEdgeConfirmationRequestUtc = DateTime.MinValue;
       LastScopeControlBackend = null;
 
       StartStopBtn.Text = "Stop";
@@ -1129,6 +1131,7 @@ namespace SkyRoof
       LastScopeReadback = null;
       LastScopeReadbackUtc = null;
       PendingScopeControls.Clear();
+      LastFixedEdgeConfirmationRequestUtc = DateTime.MinValue;
       LastScopeControlBackend = null;
       LastDiagnosticsText =
         "Spectrum diagnostics are not available while capture is stopped.";
@@ -1846,6 +1849,21 @@ namespace SkyRoof
             if (IsDisposed)
               return;
 
+            PendingScopeControls.ObserveFixedEdgeReadback(state);
+            bool stillPending =
+              PendingScopeControls.TryGet(
+                0, IcomScopeControlKind.FixedEdge,
+                out IcomScopeControlRequest pendingEdge) &&
+              pendingEdge.FrequencyRange == state.FrequencyRange &&
+              pendingEdge.EdgeNumber == state.EdgeNumber;
+            if (stillPending)
+            {
+              StatusLabel.Text =
+                $"Fixed Edge {state.EdgeNumber} readback did not match " +
+                "the requested preset; awaiting confirmation.";
+              return;
+            }
+
             IcomLanSpectrumSettings settings =
               ctx.Settings.IcomLanSpectrum;
 
@@ -2223,6 +2241,7 @@ namespace SkyRoof
         LastScopeReadbackUtc = null;
         PendingEdgeSyncScope = -1;
         PendingScopeControls.Clear();
+        LastFixedEdgeConfirmationRequestUtc = DateTime.MinValue;
         ScopeController.Reset();
         UpdateScopeControlAvailability();
       }
@@ -2317,6 +2336,22 @@ namespace SkyRoof
 
       (int Pending, long Dropped, long Rejected)? queueStats =
         ctx.CatControl.GetIcomScopeControlQueueStats();
+
+      if (queueStats?.Pending == 0 &&
+          CanUseSkyCatScopeControl() &&
+          PendingScopeControls.TryGet(
+            0, IcomScopeControlKind.FixedEdge,
+            out IcomScopeControlRequest pendingFixedEdge) &&
+          now - LastFixedEdgeConfirmationRequestUtc >
+            TimeSpan.FromSeconds(4) &&
+          ctx.CatControl.RequestIcomFixedEdgeReadback(
+            pendingFixedEdge.FrequencyRange,
+            pendingFixedEdge.EdgeNumber))
+      {
+        // Query only after the queued write has drained, never on each
+        // waveform frame. The reply is checked against the exact preset.
+        LastFixedEdgeConfirmationRequestUtc = now;
+      }
 
       if (!LocalHold &&
           ScopeReadbackCompletedForSession &&
