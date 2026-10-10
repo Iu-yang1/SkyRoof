@@ -535,3 +535,36 @@ optimizing FFT again.
 The Icom LAN Spectrum red-shading explanatory tooltip has been removed
 because it obscured frequency markings; the estimated filter bandwidth
 settings remain available in Spectrum Settings and documented on that page.
+
+
+### PCM-driven waterfall presentation (follow-up to 40 ms WASAPI fix)
+
+With 1440 samples per audio block and a measured 30.3-ms PCM input
+interval, a CW Console Raw display still showed only 16.8 actual
+new-frame FPS while the Icom LAN spectrum achieved 28.8 WF/s.
+Its GDI paint p95 was only 3.9 ms and background FFT computation
+averaged 0.6 ms, ruling out slow FFT or GDI drawing as the primary
+suspect on this measurement.
+
+Previously the CW display only **scheduled new work from its 33-ms
+WinForms timer**, and the FFT-completion callback declined to publish
+a ready frame if less than 32 ms had passed since the preceding
+presentation. When that happened, the ready frame had to wait for a
+later timer event; Windows timers can be coalesced/delayed by other UI
+messages, producing irregular 50–115 ms presentation intervals despite
+timely audio delivery.
+
+CW waterfall scheduling now receives **PCM-accepted** notifications
+from the existing audio ingress and **FFT-ready** completion signals.
+Both use one coalesced BeginInvoke callback, performing no UI or FFT
+work on the audio thread and retaining a single in-flight
+FFT/HamNoise task. The completion callback no longer discards a
+notification based on an arbitrary 32-ms gate. A 100-ms WinForms
+timer remains only as a recovery poll when notifications are delayed.
+
+The Spectrum tooltip reports the cumulative PCM/FFT-ready signals
+and number of coalesced UI-pump executions so the real-device
+measurement can distinguish event delivery from rendering. A ~30 FPS
+target is not a guarantee: actual FPS also depends on Windows
+message-pump scheduling and hardware availability. No decoding or
+CW TX behavior is changed.
