@@ -267,6 +267,7 @@ namespace SkyRoof
             s.StartsWith("SkyRoof.CwConsoleSettings.")))
       {
         ctx.CwAudio?.ApplySettings();
+        ctx.MainForm.UpdateCwConsoleMenuText();
 
         if (ctx.CwTransmit != null)
         {
