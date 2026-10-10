@@ -47,6 +47,12 @@ namespace SkyRoof
     private readonly Bitmap waterfall;
     private int nextWriteColumn;
     private bool hasRows;
+    private long frameRevision;
+    private long lastPaintedFrameRevision;
+    private readonly CwDisplayCadenceMeter paintCadence = new();
+
+    internal CwDisplayCadenceSnapshot PaintMetrics =>
+      paintCadence.Snapshot();
     private float displayFloorDb = float.NaN;
     private float spectrumFloorDb = float.NaN;
     private float[] latestPowerDb = Array.Empty<float>();
@@ -151,6 +157,9 @@ namespace SkyRoof
         SkimmerBackground);
       nextWriteColumn = 0;
       hasRows = false;
+      frameRevision = 0;
+      lastPaintedFrameRevision = 0;
+      paintCadence.Reset();
       displayFloorDb = float.NaN;
       spectrumFloorDb = float.NaN;
       latestPowerDb = Array.Empty<float>();
@@ -245,6 +254,7 @@ namespace SkyRoof
         (nextWriteColumn + 1) % HistoryColumns;
 
       hasRows = true;
+      frameRevision++;
       Invalidate();
     }
 
@@ -253,16 +263,39 @@ namespace SkyRoof
       CwConsoleLaneIdentity? selected)
     {
       ArgumentNullException.ThrowIfNull(value);
-      tracks =
-        value
-          .Where(x =>
-            double.IsFinite(
-              x.FrequencyHz))
-          .OrderBy(x =>
-            x.FrequencyHz)
-          .ToArray();
-      selectedIdentity =
-        selected;
+      CwSignalTrack[] next = value
+        .Where(x => double.IsFinite(x.FrequencyHz))
+        .OrderBy(x => x.FrequencyHz)
+        .ToArray();
+
+      // Every 250-ms status refresh can deliver an unchanged tracker
+      // snapshot. Avoid redundant full-control invalidations that would
+      // otherwise compete with the ~30 Hz waterfall paint requests.
+      bool sameMarkers = selectedIdentity == selected &&
+        tracks.Count == next.Length;
+      if (sameMarkers)
+      {
+        for (int i = 0; i < next.Length; i++)
+        {
+          CwSignalTrack a = tracks[i];
+          CwSignalTrack b = next[i];
+          if (CwConsolePresentation.Identity(a) !=
+                CwConsolePresentation.Identity(b) ||
+              a.FrequencyHz != b.FrequencyHz ||
+              a.FrequencySigmaHz != b.FrequencySigmaHz ||
+              a.Active != b.Active ||
+              a.Ambiguous != b.Ambiguous)
+          {
+            sameMarkers = false;
+            break;
+          }
+        }
+      }
+
+      if (sameMarkers)
+        return;
+      tracks = next;
+      selectedIdentity = selected;
       Invalidate();
     }
 
@@ -307,6 +340,13 @@ namespace SkyRoof
     {
       base.OnPaint(e);
       PaintContents(e.Graphics);
+      // Count actual newly-painted waterfall columns, not timer callbacks
+      // or invalidate requests (which WinForms may merge under load).
+      if (hasRows && frameRevision != lastPaintedFrameRevision)
+      {
+        lastPaintedFrameRevision = frameRevision;
+        paintCadence.Record();
+      }
     }
 
     // Shared by the real Control paint path and raster tests, without

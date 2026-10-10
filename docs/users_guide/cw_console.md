@@ -447,3 +447,38 @@ SetPixel calls. Track markers refresh with the status/selection view instead
 of issuing redraws on each 50-ms display timer tick. If a native display
 denoiser fails, the optional display mode falls back to Raw; decoding is
 not stopped.
+
+### 30 FPS CW waterfall target and stutter diagnostics
+
+The **Raw** CW waterfall now requests a display update every **33 ms**
+(about 30.3 opportunities/s), instead of every 50 ms (20/s).
+This is a **target**, not a guaranteed rendered frame rate: WinForms
+timers are driven by the Windows UI message loop, and background work,
+audio delivery, window painting and system scheduling can all cause jitter.
+FFT/HamNoise remain on the independent latest-only display processor.
+The 8192-point spectrum trace is computed with every completed 2048-point
+waterfall frame; there is no artificial 5-FPS cap.
+
+To see the **measured** values, hover over the **Spectrum: Raw /
+HamNoise** status text in the CW Console. The tooltip reports:
+
+- **Painted waterfall FPS**: new waterfall columns actually drawn,
+  excluding timer ticks and merged/duplicate paint invalidations.
+- **p95/max painted frame interval**: 95th-percentile and worst
+  inter-frame gap (ms) for recent samples, useful to identify brief pauses.
+- **Last/mean background processing ms**: combined optional
+  resampling/HamNoise and both FFT transforms.
+- **Busy ticks / stale frames**: display work deliberately skipped when
+  processing is already in flight, and generation/mode-invalidated results.
+
+Repeated PCM positions are not enqueued as duplicate frames when an
+audio callback pauses. Unchanged Pileup lane markers no longer trigger
+unnecessary 250-ms full-control invalidations. On a slower machine,
+HamNoise can still complete fewer than 30 frames/s: the scheduler never
+builds an old-frame backlog, keeping the remainder of SkyRoof responsive.
+The receive/DeepCW algorithms and CW transmit state machine are unchanged.
+
+For i5-10400 testing, compare Raw, HamNoise Classic and HamNoise V2
+after at least 10 seconds, noting painted FPS, interval p95 and mean
+processing time. A fast spectrum trace with low painted FPS indicates
+UI/message-loop or painting delays, rather than necessarily FFT latency.
