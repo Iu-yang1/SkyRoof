@@ -42,6 +42,7 @@ namespace SkyRoof
     private readonly System.Windows.Forms.Timer UiTimer = new() { Interval = 500 };
     private readonly IcomScopeState ScopeState = new();
     private readonly IcomScopeController ScopeController;
+    private readonly IcomScopePendingControls PendingScopeControls = new();
 
     private IcomLanSpectrumCapture? Capture;
     private IcomLanSpectrumCapture? NativeLanAssistCapture;
@@ -1222,6 +1223,9 @@ namespace SkyRoof
       }
 
       ScopeState.Update(frame);
+      // A queued CI-V write is not an applied radio setting. Incoming
+      // frames may confirm MODE/SPAN for either receiver independently.
+      PendingScopeControls.ObserveFrame(frame);
       if (!ScopeState.ShouldDisplay(frame))
         return;
 
@@ -1293,40 +1297,48 @@ namespace SkyRoof
       UpdatingScopeControlUi = true;
       try
       {
+        byte displayedMode = frame.Mode;
+        if (PendingScopeControls.TryGet(
+              frame.Scope, IcomScopeControlKind.Mode,
+              out IcomScopeControlRequest pendingMode))
+          displayedMode = (byte)pendingMode.Mode;
+
         ScopeModeBox.SelectedIndex =
-          frame.Mode <=
-            (byte)IcomScopeMode.ScrollFixed
-            ? frame.Mode
-            : -1;
+          displayedMode <= (byte)IcomScopeMode.ScrollFixed
+            ? displayedMode : -1;
 
         bool spanMode =
-          frame.Mode is
+          displayedMode is
             (byte)IcomScopeMode.Center or
             (byte)IcomScopeMode.ScrollCenter;
 
         ConfigureSpanEdgeControl(
           spanMode);
 
-        if (spanMode &&
-            geometry.IsValid)
+        if (spanMode)
         {
-          int spanIndex =
-            Array.IndexOf(
-              ScopeSpanValues,
-              geometry.SpanHz);
+          long actualOrRequestedSpan = geometry.SpanHz;
+          if (PendingScopeControls.TryGet(
+                frame.Scope, IcomScopeControlKind.Span,
+                out IcomScopeControlRequest pendingSpan))
+            actualOrRequestedSpan = pendingSpan.SpanHz;
 
+          int spanIndex = Array.IndexOf(
+            ScopeSpanValues, actualOrRequestedSpan);
           if (spanIndex >= 0)
-            SpanEdgeBox.SelectedIndex =
-              spanIndex;
+            SpanEdgeBox.SelectedIndex = spanIndex;
         }
-        else if (!spanMode)
+        else
         {
+          int actualOrRequestedEdge =
+            ctx.Settings.IcomLanSpectrum.ScopeEdgeNumber;
+          if (PendingScopeControls.TryGet(
+                frame.Scope, IcomScopeControlKind.Edge,
+                out IcomScopeControlRequest pendingEdge))
+            actualOrRequestedEdge = pendingEdge.EdgeNumber;
+
           SpanEdgeBox.SelectedIndex =
-            Math.Clamp(
-              ctx.Settings.IcomLanSpectrum
-                .ScopeEdgeNumber,
-              1,
-              4) - 1;
+            Math.Clamp(actualOrRequestedEdge, 1, 4) - 1;
         }
 
         ReferenceBox.Value =
@@ -1736,12 +1748,14 @@ namespace SkyRoof
           request);
 
       if (routed)
-        ScopeReadbackRequestedForSession =
-          false;
+      {
+        PendingScopeControls.Track(request, DateTime.UtcNow);
+        ScopeReadbackRequestedForSession = false;
+      }
 
       StatusLabel.Text =
         routed
-          ? $"Scope control queued via {ScopeController.EffectivePath}: {description}."
+          ? $"Scope control queued via {ScopeController.EffectivePath}: {description}; awaiting radio confirmation."
           : "Scope control is read-only or no active SkyCAT control engine is available. " +
             "Set Scope control path to SkyCAT when using RS-BA1 waveform data.";
 
