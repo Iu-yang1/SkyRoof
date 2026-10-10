@@ -1,8 +1,8 @@
 # CW Console 用户指南
 
 CW Console 是 SkyRoof 的多路 CW 接收与文本拍发面板。它把多载波跟踪、
-DeepCW 文本解码、AF 瀑布、多 Lane 连续 Transcript，以及显式 Arm 的
-IC-9700 Command 17 文本 keyer 放在同一个 DockContent 中。
+DeepCW 文本解码、AF 瀑布、多 Lane 连续 Transcript，以及按 Send 时自动
+进行发射联锁检查的 IC-9700 Command 17 文本 keyer 放在同一个 DockContent 中。
 
 接收与发射权限严格分离。**解码出来的文字不会自动发射，也不会自动选择
 发射频率。**
@@ -53,10 +53,11 @@ CW Console 按 **左侧大频谱、右侧多路 Pileup 消息、底部常驻 TX 
   **向左横向滚动**；H/T Lane 标记改成对应 AF 的水平线。
   拖动中央分隔条即可调整频谱和消息区的宽度。
 - **右侧**：8 个稳定编号的 Pileup 消息卡，支持纵向滚动。每卡显示
-  Lane 身份、AF Hz、SNR、状态、C（Committed 稳定文本）及
-  P（Provisional 可变文本），并提供 Copy 按钮。短暂 QSB、Hold 或载波
+  Lane 身份、AF Hz、SNR、状态，以及可**自动换行、选择和独立滚动**的
+  完整解码文本。临时 Provisional 后缀用单独颜色表示，长报文不再截断，
+  仍可用 Copy 复制全文。短暂 QSB、Hold 或载波
   交叉都不会让卡片按频率重新排序。点击消息卡或瀑布轨迹可以双向联动选中。
-- **底部**：始终可用的 Arm、Send、红色 STOP、单行 CW 编辑框、
+- **底部**：Send（自动发射预检）、红色 STOP、单行 CW 编辑框、
   WPM 设置与实际回读、F1–F8 宏按钮。窗口较窄时按钮行单独横向滚动。
 
 **竖直 AF 导航**：使用瀑布右侧的竖直滚动条上下平移可见频率范围，
@@ -130,9 +131,9 @@ SkyRoof 会利用 CTC OutputFrame 的时间位置对齐多个重叠窗口，并�
 CW TX 有两个独立门：
 
 1. **Settings > CW Console > Enable CW Transmit** 必须打开；
-2. 用户必须在 CW Console 中按 **Arm TX**。
-
-**Arm 状态永不持久化。** 每次新的应用/面板会话都从 Disarmed 开始。
+2. 点击 **Send** 或 **Shift+F1…F8** 才会明确发起一次 CW 拍发请求；
+   界面不再设置 Arm TX 按钮。每次请求都会自动取得最新卫星/发射上下文，
+   并执行原有发射联锁、模式和硬件预检。内部 Arm 状态不会持久化。
 
 SkyRoof 不会自动：
 
@@ -141,9 +142,11 @@ SkyRoof 不会自动：
 - 在此 keyer 路径自动控制 PTT；
 - 根据 RX Lane 自动选择 TX 频率。
 
-CW 发射能力现在默认启用，但**不会自动发射**；每次实际发射仍必须显式点击 **Arm TX**，并通过 CW/CW-R、Semi/Full BK-IN、SkyCAT lease 与频率 interlock 检查。
+CW 发射能力现在默认启用，但**接收和解码不会自动发射**。每次实际发射
+仍须操作员明确按下 Send，并通过 CW/CW-R、Semi/Full BK-IN、
+SkyCAT lease 和频率 interlock 检查。
 
-Arm 前请自行把电台设置成 CW 或 CW-R，并自行打开 Semi/Full BK-IN。
+Send 前请自行把电台设置为 CW 或 CW-R，并打开 Semi/Full BK-IN。
 
 ## SkyCAT keyer
 
@@ -156,8 +159,8 @@ SkyCAT 也会执行 Command 17 `FF` fail-safe STOP。
 
 发射区域提供 **6–48 WPM** 速度控件。点击 **Set WPM** 后，SkyRoof 通过
 SkyCAT `SETWPM` 写入 IC-9700 CI-V `14 0C`，并要求电台立即回读一致后才
-视为成功。TX 已 Arm 但空闲时，Console 会约每 1 秒刷新一次 `STATUS`，
-因此从电台前面板修改 KEY SPEED 后无需重新 Arm 就能更新显示。
+视为成功。内部已完成预检且空闲时，Console 会约每秒刷新一次 `STATUS`，
+因此从电台前面板修改 KEY SPEED 后可以更新显示。
 
 发送期间 Console 会显示依据已校验 IC-9700 KEYRAW 换算的实际 WPM 和 watchdog
 倒计时。
@@ -166,7 +169,7 @@ SkyCAT `SETWPM` 写入 IC-9700 CI-V `14 0C`，并要求电台立即回读一致�
 
 卫星 CW 发射增加一层上下文与实际 VFO 校验。
 
-Arm 时 SkyRoof 记录当前卫星、转发器、no-Doppler uplink 位置、uplink mode
+每次明确点击 Send 时，SkyRoof 记录当前卫星、转发器、no-Doppler uplink 位置、uplink mode
 和 transverter 映射。真正 Send 之前：
 
 - 只冻结 SkyRoof 自己的 TX CAT 频率/mode/CTCSS 写入；
@@ -188,7 +191,7 @@ mode 或 transverter 上下文，系统会 STOP 并 Disarm。正常 Doppler 演�
 
 Composer 最多接受 30 个 Command-17 字符。
 
-TX 已 Arm 后按 **Send**。每次发送都会重新执行电台状态 preflight。消息 lease
+直接按 **Send**，Console 会自动准备联锁并执行完整电台状态 preflight。消息 lease
 一直保持到 STOP 或 watchdog 结束。
 
 Watchdog 根据 IC-9700 KEYRAW 对应的键速估算 Morse 时长并加入安全裕量；若
@@ -199,10 +202,8 @@ STOP。
 
 ## F1-F8 消息宏
 
-在以下位置编辑：
-
-**Settings > CW Console > CW Message Macros**
-
+**右键点击 F1–F8 任意按钮**即可原地编辑并保存消息到 Settings.json；
+也可在 **Settings > CW Console > CW Message Macros** 中编辑。
 默认全部为空。
 
 - **F1…F8** 或点击按钮：只把宏装入 composer；
@@ -211,7 +212,7 @@ STOP。
 
 第一次 Shift+Fn 正在异步 preflight 时，键盘自动重复不会排队多个发送请求。
 
-宏仍必须经过 Enable TX、Arm、CW/BK-IN、卫星 TXHZ/SENDHZ、SkyCAT lease、
+宏仍必须经过 Enable TX、CW/BK-IN、卫星 TXHZ/SENDHZ、SkyCAT lease、
 watchdog、STOP 和断线 fail-safe。不存在宏队列，也不存在自动回复。
 
 ## 可选 HamNoise 频谱清理
@@ -243,8 +244,7 @@ DeepCW 的判决。
 3. 自行打开 Semi/Full BK-IN；
 4. 核对 Console 显示的预期卫星/transverter TX VFO；
 5. 在 Settings 打开 **CW Transmit**；
-6. Arm TX；
-7. 只发送一个很短的测试消息；
+6. 直接按 Send 发送很短的测试消息（自动执行预检）；
 8. 按 STOP，确认拍发立即终止；
 9. 确认 lease 释放后 Doppler TX 调谐能够 catch-up；
 10. 最后才进行符合本地法规、执照和 band plan 的实际通联测试。
@@ -272,7 +272,7 @@ RS-BA1 Loopback 时还要确认 Remote Utility 确实输出到所选播放端点
 查看 H/T 身份、Ambiguous 状态以及 ±2σ 区域。强重叠、merged peak 或很小的
 载波间隔会暂时增加身份不确定度。
 
-### Arm 失败
+### Send 预检失败
 
 逐项检查：
 
@@ -287,3 +287,9 @@ RS-BA1 Loopback 时还要确认 Remote Utility 确实输出到所选播放端点
 
 不要仅为了消除报错而扩大 tolerance。应先检查所选卫星/转发器、Base 修正、
 transverter LO、用户 no-Doppler 调谐位置和电台实际 TX VFO。
+
+## CW 接收 CPU 性能说明
+
+本版本缓存 Ridge Scanner 的 Hann 窗函数，并对零多普勒速率跳过不必要的逐采样三角运算。CW 频谱仍以约 20 Hz 更新，但仅用于显示的 8192 点长 FFT 约每 4 帧刷新一次。DeepCW ONNX Runtime 使用一个会话，并限制模型内部 CPU 并行线程，避免与 120 ms 跟踪循环竞争。这些优化不改变 Decode Window、Hop、物理证据门限、跟踪协方差或卫星 TX interlock。
+
+请在相同音频、相同最大 Lane 数、相同 Spectrum 模式下，比较 CPU、已完成/跳过的推理窗口及实际抄收效果。i5-10400 与 i7-14650HX 的 Windows 进程 CPU 百分比不能直接作为每次解码 CPU 成本比值；仍需在实际机器上做性能基准。
