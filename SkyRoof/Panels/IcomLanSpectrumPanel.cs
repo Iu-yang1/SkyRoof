@@ -1061,6 +1061,7 @@ namespace SkyRoof
       PendingControlSettingsApply = false;
       LastScopeReadback = null;
       LastScopeReadbackUtc = null;
+      PendingScopeControls.Clear();
       LastScopeControlBackend = null;
 
       StartStopBtn.Text = "Stop";
@@ -1127,6 +1128,7 @@ namespace SkyRoof
       PendingControlSettingsApply = false;
       LastScopeReadback = null;
       LastScopeReadbackUtc = null;
+      PendingScopeControls.Clear();
       LastScopeControlBackend = null;
       LastDiagnosticsText =
         "Spectrum diagnostics are not available while capture is stopped.";
@@ -2212,6 +2214,7 @@ namespace SkyRoof
         LastScopeReadback = null;
         LastScopeReadbackUtc = null;
         PendingEdgeSyncScope = -1;
+        PendingScopeControls.Clear();
         ScopeController.Reset();
         UpdateScopeControlAvailability();
       }
@@ -2227,6 +2230,21 @@ namespace SkyRoof
       }
 
       DateTime now = DateTime.UtcNow;
+      IcomScopeControlRequest[] unconfirmed =
+        PendingScopeControls.Expire(now);
+      if (unconfirmed.Length > 0)
+      {
+        // Do not assume the CAT queue's acceptance implies a hardware
+        // write. Restore actual frame geometry and request a fresh register
+        // readback after the confirmation deadline.
+        ScopeReadbackRequestedForSession = false;
+        RequestScopeReadback();
+        StatusLabel.Text =
+          $"IC-9700 did not confirm {unconfirmed.Length} spectrum setting(s) " +
+          "within 20 seconds; displaying actual radio state. Check SkyCAT " +
+          "command logs/control path.";
+        RefreshScopeGeometryUi();
+      }
       IcomLanSpectrumCapture? nativeLan = NativeLanAssistCapture;
       DateTime? nativeLast = nativeLan?.LastScopeFrameUtc;
       bool nativeLanActive =
@@ -2353,6 +2371,7 @@ namespace SkyRoof
           $"Queue pending: {queueStats?.Pending.ToString("N0") ?? "n/a"}",
           $"Queue dropped: {queueStats?.Dropped.ToString("N0") ?? "n/a"}",
           $"Queue rejected: {queueStats?.Rejected.ToString("N0") ?? "n/a"}",
+          $"Control changes awaiting radio confirmation: {PendingScopeControls.Count}",
           $"Packets: {effectiveCapture.PacketCount:N0}",
           $"CI-V frames: {effectiveCapture.CivFrameCount:N0}",
           $"Complete sweeps: {scopeFrames:N0}",
