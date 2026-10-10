@@ -857,6 +857,33 @@ namespace SkyRoof
       CwConsoleLaneIdentity identity)
     {
       selectedIdentity = identity;
+      // Card-to-spectrum selection follows the existing RX carrier only.
+      // This never tunes an RF VFO or changes the decoder's full AF span.
+      CwSignalTrack? selected = null;
+      lock (stateSync)
+        selected = CwConsolePresentation
+          .CollapseDuplicateLaneIdentities(latestTracks)
+          .FirstOrDefault(t =>
+            CwConsolePresentation.Identity(t) == identity);
+
+      if (selected is CwSignalTrack track &&
+          WaterfallView.ViewportZoom > 1.0 &&
+          (track.FrequencyHz < WaterfallView.VisibleMinimumHz ||
+           track.FrequencyHz > WaterfallView.VisibleMaximumHz))
+      {
+        double fullMin = SpectrumAnalyzer.MinFrequencyHz;
+        double fullMax = SpectrumAnalyzer.MaxFrequencyHz;
+        double span = fullMax - fullMin;
+        double visible = span / WaterfallView.ViewportZoom;
+        double room = span - visible;
+        if (room > 0)
+          WaterfallView.SetViewport(
+            Math.Clamp(
+              (track.FrequencyHz - visible / 2 - fullMin) / room,
+              0, 1),
+            WaterfallView.ViewportZoom);
+      }
+
       RefreshPileupCards();
       RefreshWaterfallSelection();
     }
