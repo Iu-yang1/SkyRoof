@@ -45,3 +45,35 @@ There are three typical independent failure causes:
 Treat Direct LAN as **lab/experimental** only. Credentials are protected in saved settings, but never publish network login details or raw authenticated packet dumps in bug reports.
 
 More background: [SkyCAT documentation](https://iu-yang1.github.io/SkyCAT/skycatd.html) · [original SDR waterfall](../users_guide/waterfall_display.md).
+
+
+### Confirming spectrum controls (50 kHz span, mode, REF, SPEED, VBW)
+
+The Icom LAN Spectrum waveform comes from received CI-V `27 00` frames.
+**A queued CI-V write is not confirmation that the radio has applied a control.**
+Previously every arriving scope frame could reset the Span selection back to
+the old reported value (e.g., 50 kHz immediately returned to 25 kHz).
+
+The panel now maintains per-receiver **pending control state** for operator
+requests routed to SkyCAT. The MODE/SPAN selector shows the requested value
+while awaiting the real MAIN/SUB `27 00` frame (or a matching scope-register
+readback), and the adjacent geometry text continues to show radio-reported
+frequency coverage. A pending SPAN also receives a `pending` label.
+REF, SPEED, VBW and EDGE changes are protected from stale asynchronous
+readbacks. These are separate from display-only **HOLD, PEAK, waterfall,
+averaging, smoothing and zoom** controls.
+
+A successful enqueue means **queued**, not applied. A setting is confirmed
+only after matching hardware evidence. If the radio does not confirm it
+within 20 seconds, the request expires, the actual reported mode/span becomes
+visible again, and the panel requests a fresh SkyCAT readback. The Spectrum
+Diagnostics window includes the number of changes still awaiting confirmation.
+Pending changes are cleared on capture restart, control-backend changes, and
+source switches.
+
+**Transport limitation:** a passive RS-BA1 waveform capture is read-only by
+itself. To modify IC-9700 scope registers with passive waveform data, select
+**SkyCAT** explicitly for the *Scope control path* in Settings, ensure the
+SkyCAT radio control backend is online, and inspect its command logs if a
+write times out. Direct LAN scope writes remain experimental and are not
+silently claimed to be supported.
