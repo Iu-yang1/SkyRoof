@@ -241,6 +241,23 @@ namespace SkyRoof
 
       UpdateSpinnerLimits();
 
+      if (!StepSpinner.Focused)
+      {
+        updatingStepUi = true;
+        try
+        {
+          StepSpinner.Value =
+            Math.Clamp(
+              (decimal)ctx.Settings.Rotator.StepSize,
+              StepSpinner.Minimum,
+              StepSpinner.Maximum);
+        }
+        finally
+        {
+          updatingStepUi = false;
+        }
+      }
+
       Bearing? actual = rotator.GetManualActualBearing();
       Bearing? target = rotator.GetManualTargetBearing();
       Bearing? satellite = rotator.SatelliteBearing;
