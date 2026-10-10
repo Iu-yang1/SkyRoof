@@ -26,6 +26,7 @@ namespace SkyRoof
     private readonly Label WorkerStatusLabel = new();
 
     private readonly CwAudioWaterfallAnalyzer WaterfallAnalyzer;
+    private readonly CwAudioWaterfallAnalyzer SpectrumAnalyzer;
     private readonly CwAudioWaterfallView WaterfallView =
       new(spectrumBins: 512);
     private long waterfallGeneration = -1;
@@ -59,7 +60,7 @@ namespace SkyRoof
     private readonly System.Windows.Forms.Timer UiTimer =
       new() { Interval = 250 };
     private readonly System.Windows.Forms.Timer WaterfallTimer =
-      new() { Interval = 100 };
+      new() { Interval = 50 };
 
     private IReadOnlyList<CwSignalTrack> latestTracks =
       Array.Empty<CwSignalTrack>();
@@ -91,19 +92,32 @@ namespace SkyRoof
           .FrontEnd
           .FrameScanner
           .Options;
+
+      int displayRate =
+        scanner?.SampleRate ??
+        SdrConst.AUDIO_SAMPLING_RATE;
+      double displayMinHz =
+        scanner?.MinFrequencyHz ?? 100;
+      double displayMaxHz =
+        scanner?.MaxFrequencyHz ?? 2000;
+
+      // CW Skimmer-style split display: the spectrum gets a long FFT for
+      // frequency resolution while the waterfall gets a short FFT and fast
+      // line rate so dots/dashes remain visually recognizable.
       WaterfallAnalyzer =
-        scanner == null
-          ? new CwAudioWaterfallAnalyzer()
-          : new CwAudioWaterfallAnalyzer(
-              sampleRate: scanner.SampleRate,
-              minFrequencyHz:
-                scanner.MinFrequencyHz,
-              fftSize: 8192,
-              minFrequencyHz:
-                scanner.MinFrequencyHz,
-              maxFrequencyHz:
-                scanner.MaxFrequencyHz,
-              outputBins: 512);
+        new CwAudioWaterfallAnalyzer(
+          sampleRate: displayRate,
+          fftSize: 2048,
+          minFrequencyHz: displayMinHz,
+          maxFrequencyHz: displayMaxHz,
+          outputBins: 512);
+      SpectrumAnalyzer =
+        new CwAudioWaterfallAnalyzer(
+          sampleRate: displayRate,
+          fftSize: 8192,
+          minFrequencyHz: displayMinHz,
+          maxFrequencyHz: displayMaxHz,
+          outputBins: 512);
 
       Text = "CW Console [TX disabled]";
       Name = "CwConsolePanel";
@@ -1260,8 +1274,8 @@ namespace SkyRoof
       double snapshotSeconds =
         Math.Max(
           0.20,
-          WaterfallAnalyzer.FftSize /
-            (double)WaterfallAnalyzer.SampleRate +
+          SpectrumAnalyzer.FftSize /
+            (double)SpectrumAnalyzer.SampleRate +
           0.02);
       if (!audio.Ingress.Enabled ||
           !hub.TrySnapshot(
@@ -1276,12 +1290,18 @@ namespace SkyRoof
         CwAudioSnapshot displaySnapshot =
           PrepareSpectrumDisplaySnapshot(
             snapshot);
-        CwAudioSpectrumFrame frame =
+        CwAudioSpectrumFrame spectrumFrame =
+          SpectrumAnalyzer.Analyze(
+            displaySnapshot);
+        CwAudioSpectrumFrame waterfallFrame =
           WaterfallAnalyzer.Analyze(
             displaySnapshot);
         lastWaterfallSampleIndex =
           snapshot.EndSampleIndex;
-        WaterfallView.Append(frame);
+        WaterfallView.SetSpectrum(
+          spectrumFrame);
+        WaterfallView.Append(
+          waterfallFrame);
       }
       catch (ArgumentException)
       {
