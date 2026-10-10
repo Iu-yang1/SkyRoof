@@ -143,6 +143,19 @@ namespace SkyRoof.CW
       Fourier.Forward(output, FourierOptions.Matlab);
     }
 
+    internal Complex Bin(int bin)
+    {
+      ThrowIfUnavailable();
+      if ((uint)bin >= (uint)PositiveBins)
+        throw new ArgumentOutOfRangeException(nameof(bin));
+      if (nativeEnabled)
+      {
+        float* spectrum = (float*)nativeOutput;
+        return new Complex(spectrum[2 * bin], spectrum[2 * bin + 1]);
+      }
+      return managedOutput![bin];
+    }
+
     internal double Power(int bin)
     {
       ThrowIfUnavailable();
