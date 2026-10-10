@@ -224,7 +224,7 @@ namespace SkyRoof
         });
       ScopeModeBox.Margin =
         new Padding(0, 3, 6, 3);
-      ScopeModeBox.SelectedIndexChanged +=
+      ScopeModeBox.SelectionChangeCommitted +=
         (_, _) =>
         {
           if (UpdatingScopeControlUi ||
@@ -278,7 +278,7 @@ namespace SkyRoof
       SpanEdgeBox.Width = 86;
       SpanEdgeBox.Margin =
         new Padding(0, 3, 6, 3);
-      SpanEdgeBox.SelectedIndexChanged +=
+      SpanEdgeBox.SelectionChangeCommitted +=
         (_, _) =>
         {
           if (UpdatingScopeControlUi ||
@@ -393,7 +393,7 @@ namespace SkyRoof
         });
       SweepSpeedBox.Margin =
         new Padding(0, 3, 8, 3);
-      SweepSpeedBox.SelectedIndexChanged +=
+      SweepSpeedBox.SelectionChangeCommitted +=
         (_, _) =>
         {
           if (UpdatingScopeControlUi ||
@@ -438,7 +438,7 @@ namespace SkyRoof
         });
       VbwBox.Margin =
         new Padding(0, 3, 8, 3);
-      VbwBox.SelectedIndexChanged +=
+      VbwBox.SelectionChangeCommitted +=
         (_, _) =>
         {
           if (UpdatingScopeControlUi ||
@@ -1764,27 +1764,26 @@ namespace SkyRoof
       UpdatingScopeControlUi = true;
       try
       {
-        ReferenceBox.Value =
-          (decimal)NormalizeReferenceLevel(
-            settings.ScopeReferenceLevelDb);
-        SweepSpeedBox.SelectedIndex =
-          Math.Clamp(
-            (int)settings.ScopeSweepSpeed,
-            0,
-            2);
-        VbwBox.SelectedIndex =
-          Math.Clamp(
-            (int)settings.ScopeVbw,
-            0,
-            1);
+        if (!ReferenceBox.ContainsFocus)
+        {
+          decimal referenceValue =
+            (decimal)NormalizeReferenceLevel(
+              settings.ScopeReferenceLevelDb);
+          if (ReferenceBox.Value != referenceValue)
+            ReferenceBox.Value = referenceValue;
+        }
+
+        SetRadioSelectedIndex(
+          SweepSpeedBox,
+          Math.Clamp((int)settings.ScopeSweepSpeed, 0, 2));
+        SetRadioSelectedIndex(
+          VbwBox,
+          Math.Clamp((int)settings.ScopeVbw, 0, 1));
 
         if (!SpanEdgeShowsSpan)
-          SpanEdgeBox.SelectedIndex =
-            Math.Clamp(
-              settings.ScopeEdgeNumber,
-              1,
-              4) -
-            1;
+          SetRadioSelectedIndex(
+            SpanEdgeBox,
+            Math.Clamp(settings.ScopeEdgeNumber, 1, 4) - 1);
       }
       finally
       {
