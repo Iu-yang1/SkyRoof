@@ -95,10 +95,10 @@ namespace SkyRoof
                 scanner.MaxFrequencyHz,
               outputBins: 384);
 
-      Text = "CW Console";
+      Text = "CW Console [TX disabled]";
       Name = "CwConsolePanel";
-      ClientSize = new Size(980, 850);
-      MinimumSize = new Size(680, 650);
+      ClientSize = new Size(1040, 900);
+      MinimumSize = new Size(720, 720);
       KeyPreview = true;
 
       BuildUi();
@@ -164,7 +164,8 @@ namespace SkyRoof
           Dock = DockStyle.Fill,
           ColumnCount = 1,
           RowCount = 6,
-          Padding = new Padding(8)
+          Padding = new Padding(8),
+          MinimumSize = new Size(0, 180)
         };
 
       root.ColumnStyles.Add(
@@ -180,19 +181,19 @@ namespace SkyRoof
       root.RowStyles.Add(
         new RowStyle(
           SizeType.Absolute,
-          182));
+          170));
       root.RowStyles.Add(
         new RowStyle(
           SizeType.Percent,
-          58));
-      root.RowStyles.Add(
-        new RowStyle(
-          SizeType.Percent,
-          42));
+          100));
       root.RowStyles.Add(
         new RowStyle(
           SizeType.Absolute,
-          208));
+          190));
+      root.RowStyles.Add(
+        new RowStyle(
+          SizeType.Absolute,
+          220));
 
       var toolbar =
         new FlowLayoutPanel
@@ -969,9 +970,9 @@ namespace SkyRoof
       lock (stateSync)
       {
         tracks =
-          latestTracks
-            .OrderBy(x => x.FrequencyHz)
-            .ToArray();
+          CwConsolePresentation
+            .CollapseDuplicateLaneIdentities(
+              latestTracks);
         textByLane =
           new(transcripts);
       }
@@ -983,18 +984,29 @@ namespace SkyRoof
       LaneGrid.SuspendLayout();
       try
       {
-        var existingRows =
+        DataGridViewRow[] taggedRows =
           LaneGrid.Rows
             .Cast<DataGridViewRow>()
             .Where(row =>
               row.Tag is
                 CwConsoleLaneIdentity)
+            .ToArray();
+
+        var existingRows =
+          taggedRows
+            .GroupBy(row =>
+              (CwConsoleLaneIdentity)
+                row.Tag!)
             .ToDictionary(
-              row =>
-                (CwConsoleLaneIdentity)
-                  row.Tag!);
+              group => group.Key,
+              group => group.First());
+
+        bool duplicateExistingRows =
+          taggedRows.Length !=
+            existingRows.Count;
 
         bool sameLaneSet =
+          !duplicateExistingRows &&
           existingRows.Count ==
             tracks.Length &&
           tracks.All(track =>
@@ -1406,6 +1418,13 @@ namespace SkyRoof
         ctx.CwTransmit;
       CwConsoleSettings settings =
         ctx.Settings.CwConsole;
+
+      string txCapability =
+        settings.TransmitEnabled
+          ? "TX enabled"
+          : "TX disabled";
+      Text = $"CW Console [{txCapability}]";
+      ctx.MainForm.UpdateCwConsoleMenuText();
 
       if (tx == null)
       {
