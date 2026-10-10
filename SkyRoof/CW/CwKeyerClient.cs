@@ -21,9 +21,89 @@ namespace SkyRoof.CW
       Mode is "CW" or "CW-R" &&
       BreakIn is 1 or 2 &&
       !Transmitting;
+
+    public static CwKeyerStatus Parse(
+      string reply)
+    {
+      string[] parts =
+        reply.Split(
+          ' ',
+          StringSplitOptions.RemoveEmptyEntries);
+
+      if (parts.Length < 6 ||
+          parts[0] != "STATUS")
+        throw new FormatException(
+          "SkyCAT returned an invalid CW STATUS response.");
+
+      string lease = parts[1];
+      string? mode = null;
+      int? breakIn = null;
+      bool? tx = null;
+      int? keyRaw = null;
+
+      foreach (string token in
+        parts.Skip(2))
+      {
+        int equals =
+          token.IndexOf('=');
+        if (equals <= 0)
+          continue;
+
+        string name =
+          token[..equals];
+        string value =
+          token[(equals + 1)..];
+
+        switch (name)
+        {
+          case "MODE":
+            mode = value;
+            break;
+
+          case "BKIN":
+            if (int.TryParse(
+                  value,
+                  NumberStyles.None,
+                  CultureInfo.InvariantCulture,
+                  out int bkin))
+              breakIn = bkin;
+            break;
+
+          case "TX":
+            if (value == "0")
+              tx = false;
+            else if (value == "1")
+              tx = true;
+            break;
+
+          case "KEYRAW":
+            if (int.TryParse(
+                  value,
+                  NumberStyles.None,
+                  CultureInfo.InvariantCulture,
+                  out int raw))
+              keyRaw = raw;
+            break;
+        }
+      }
+
+      if (mode is null ||
+          breakIn is not (0 or 1 or 2) ||
+          tx is null ||
+          keyRaw is null or < 0 or > 255)
+        throw new FormatException(
+          "SkyCAT CW STATUS is missing or contains invalid fields.");
+
+      return new(
+        lease,
+        mode,
+        breakIn.Value,
+        tx.Value,
+        keyRaw.Value);
+    }
   }
 
-  internal interface ICwKeyerSession :
+  public interface ICwKeyerSession :
     IAsyncDisposable
   {
     Task<CwKeyerStatus> GetStatusAsync(
@@ -37,7 +117,7 @@ namespace SkyRoof.CW
       CancellationToken cancellationToken = default);
   }
 
-  internal interface ICwKeyerSessionFactory
+  public interface ICwKeyerSessionFactory
   {
     Task<ICwKeyerSession> ConnectAsync(
       int port,
@@ -133,7 +213,7 @@ namespace SkyRoof.CW
           "STATUS",
           cancellationToken);
 
-      return ParseStatus(reply);
+      return CwKeyerStatus.Parse(reply);
     }
 
     public async Task SendAsync(
@@ -165,86 +245,6 @@ namespace SkyRoof.CW
         throw CreateProtocolException(
           "STOP",
           reply);
-    }
-
-    internal static CwKeyerStatus ParseStatus(
-      string reply)
-    {
-      string[] parts =
-        reply.Split(
-          ' ',
-          StringSplitOptions.RemoveEmptyEntries);
-
-      if (parts.Length < 6 ||
-          parts[0] != "STATUS")
-        throw new FormatException(
-          "SkyCAT returned an invalid CW STATUS response.");
-
-      string lease = parts[1];
-      string? mode = null;
-      int? breakIn = null;
-      bool? tx = null;
-      int? keyRaw = null;
-
-      foreach (string token in
-        parts.Skip(2))
-      {
-        int equals =
-          token.IndexOf('=');
-        if (equals <= 0)
-          continue;
-
-        string name =
-          token[..equals];
-        string value =
-          token[(equals + 1)..];
-
-        switch (name)
-        {
-          case "MODE":
-            mode = value;
-            break;
-
-          case "BKIN":
-            if (int.TryParse(
-                  value,
-                  NumberStyles.None,
-                  CultureInfo.InvariantCulture,
-                  out int bkin))
-              breakIn = bkin;
-            break;
-
-          case "TX":
-            if (value == "0")
-              tx = false;
-            else if (value == "1")
-              tx = true;
-            break;
-
-          case "KEYRAW":
-            if (int.TryParse(
-                  value,
-                  NumberStyles.None,
-                  CultureInfo.InvariantCulture,
-                  out int raw))
-              keyRaw = raw;
-            break;
-        }
-      }
-
-      if (mode is null ||
-          breakIn is not (0 or 1 or 2) ||
-          tx is null ||
-          keyRaw is null or < 0 or > 255)
-        throw new FormatException(
-          "SkyCAT CW STATUS is missing or contains invalid fields.");
-
-      return new(
-        lease,
-        mode,
-        breakIn.Value,
-        tx.Value,
-        keyRaw.Value);
     }
 
     private async Task<string> RequestAsync(
