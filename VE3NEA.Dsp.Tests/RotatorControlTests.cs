@@ -119,6 +119,66 @@ public sealed class RotatorControlTests
     }
 
     [Fact]
+    public async Task ContinuousMoveStopsAcceptedAbsoluteTargetBeforeStarting()
+    {
+        await using var server = new FakeRotctld((command, _) =>
+            command == "p"
+                ? "90.0\n30.0\n"
+                : "RPRT 0\n");
+        using var engine = StartEngine(server.Port);
+
+        engine.RotateTo(
+            new SkyRoof.Bearing(
+                Math.PI / 2,
+                Math.PI / 6));
+        await WaitUntilAsync(() =>
+            server.Commands.Any(command =>
+                command.StartsWith(
+                    "P ",
+                    StringComparison.Ordinal)));
+
+        engine.StartContinuousMove(
+            RotatorContinuousDirection.Left);
+
+        await WaitUntilAsync(() =>
+            server.Count("S") >= 1 &&
+            server.Count("M 8 -1") >= 1);
+
+        string[] commands = server.Commands.ToArray();
+        int stop = Array.IndexOf(commands, "S");
+        int left = Array.IndexOf(commands, "M 8 -1");
+        Assert.True(stop >= 0 && left > stop);
+    }
+
+    [Fact]
+    public async Task RejectedStopFailsClosedOnDirectionChange()
+    {
+        await using var server = new FakeRotctld((command, _) =>
+        {
+            if (command == "p")
+                return "90.0\n30.0\n";
+            if (command == "S")
+                return "RPRT -1\n";
+            return "RPRT 0\n";
+        });
+        using var engine = StartEngine(server.Port);
+
+        await WaitUntilAsync(() => server.Count("p") >= 1);
+        engine.StartContinuousMove(
+            RotatorContinuousDirection.Right);
+        await WaitUntilAsync(() =>
+            server.Count("M 16 -1") == 1);
+
+        engine.StartContinuousMove(
+            RotatorContinuousDirection.Up);
+        await WaitUntilAsync(() =>
+            server.Count("S") >= 1);
+
+        await Task.Delay(150);
+        Assert.Equal(0, server.Count("M 2 -1"));
+    }
+
+    [Fact]
     public async Task ReconnectResendsAcceptedMoveToRestartedController()
     {
         int moves = 0;
