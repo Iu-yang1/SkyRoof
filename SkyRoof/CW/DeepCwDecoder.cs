@@ -489,6 +489,12 @@ namespace SkyRoof.CW
     private DeepCwDecodedText FilterLowConfidenceSymbols(
       DeepCwDecodedText decoded)
     {
+      // Test/experimental decoders may return text without frame symbols.
+      // The real DeepCW ONNX decoder always provides symbols for nonblank
+      // output, so production confidence filtering still remains fail-closed.
+      if (decoded.Symbols.Count == 0)
+        return decoded;
+
       if (!double.IsFinite(MinimumSymbolConfidence) ||
           MinimumSymbolConfidence < 0 ||
           MinimumSymbolConfidence > 1)
