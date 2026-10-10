@@ -31,7 +31,7 @@ namespace SkyRoof
       new(spectrumBins: 512);
     private long waterfallGeneration = -1;
     private long lastWaterfallSampleIndex = -1;
-    private int spectrumFrameDivider;
+    private readonly CwDisplayFrameProcessor DisplayFrames;
 
     private readonly CwPileupLaneList PileupList = new();
     private readonly CwSelectedLaneView SelectedRxView = new();
@@ -76,9 +76,6 @@ namespace SkyRoof
     private long displayGeneration = -1;
     private CwConsoleLaneIdentity? selectedIdentity;
     private bool updatingSourceUi;
-    private HamNoiseAudioDenoiser? displayDenoiser;
-    private CwDenoiseMode displayDenoiserMode =
-      CwDenoiseMode.Bypass;
     private bool modelInstalled;
     private CancellationTokenSource? modelInstallStop;
 
@@ -120,6 +117,8 @@ namespace SkyRoof
           minFrequencyHz: displayMinHz,
           maxFrequencyHz: displayMaxHz,
           outputBins: 512);
+      DisplayFrames = new CwDisplayFrameProcessor(
+        WaterfallAnalyzer, SpectrumAnalyzer);
 
       Text = "CW Console [TX disabled]";
       Name = "CwConsolePanel";
@@ -678,6 +677,7 @@ namespace SkyRoof
       EventArgs e)
     {
       RefreshUi();
+      RefreshWaterfallSelection();
       PollTransmitStatusIfDue();
     }
 
@@ -1094,9 +1094,6 @@ namespace SkyRoof
 
         ctx.Settings.CwConsole.SpectrumDenoiseMode =
           CwDenoiseMode.Bypass;
-        displayDenoiser = null;
-        displayDenoiserMode =
-          CwDenoiseMode.Bypass;
         ctx.Settings.SaveToFile();
 
         MessageBox.Show(
@@ -1113,9 +1110,6 @@ namespace SkyRoof
 
       ctx.Settings.CwConsole.SpectrumDenoiseMode =
         mode;
-      displayDenoiser = null;
-      displayDenoiserMode =
-        CwDenoiseMode.Bypass;
       WaterfallView.Clear();
       lastWaterfallSampleIndex = -1;
       ctx.Settings.SaveToFile();
@@ -1754,10 +1748,9 @@ namespace SkyRoof
         WaterfallTimer_Tick;
       WaterfallView.LaneClicked -=
         WaterfallView_LaneClicked;
-      // FFTW plans belong to the display analyzers, not the receiver;
-      // release their aligned native buffers when the Console closes.
-      WaterfallAnalyzer.Dispose();
-      SpectrumAnalyzer.Dispose();
+      // The background display worker may still be inside native HamNoise.
+      // Dispose FFTW plans only after its last calculation has completed.
+      DisplayFrames.Dispose();
 
       modelInstallStop?.Cancel();
 
