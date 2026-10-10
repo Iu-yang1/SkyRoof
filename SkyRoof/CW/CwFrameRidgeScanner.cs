@@ -138,6 +138,7 @@ namespace SkyRoof.CW
     private readonly int precisionHop;
     private readonly double[] fastHann;
     private readonly double[] precisionHann;
+    private readonly object cacheSync = new();
     // Cache only exact absolute sample windows at zero known Doppler rate.
     // The frame grid is intentionally unchanged; no sample resynchronization.
     private readonly Dictionary<long, FramePeak[]> fastCache = new();
@@ -165,11 +166,26 @@ namespace SkyRoof.CW
       }
     }
 
-    internal long StftCacheHits => cacheHits;
-    internal long StftCacheMisses => cacheMisses;
-    internal int StftCacheEntries => fastCache.Count + precisionCache.Count;
+    internal long StftCacheHits
+    {
+      get { lock (cacheSync) return cacheHits; }
+    }
+    internal long StftCacheMisses
+    {
+      get { lock (cacheSync) return cacheMisses; }
+    }
+    internal int StftCacheEntries
+    {
+      get { lock (cacheSync) return fastCache.Count + precisionCache.Count; }
+    }
 
     public void ResetCache()
+    {
+      lock (cacheSync)
+        ResetCacheCore();
+    }
+
+    private void ResetCacheCore()
     {
       fastCache.Clear();
       precisionCache.Clear();
@@ -249,6 +265,14 @@ namespace SkyRoof.CW
       CwAudioSnapshot snapshot,
       double knownDopplerRateHzPerSecond = 0)
     {
+      lock (cacheSync)
+        return ScanCore(snapshot, knownDopplerRateHzPerSecond);
+    }
+
+    private CwFrameRidgeScanResult ScanCore(
+      CwAudioSnapshot snapshot,
+      double knownDopplerRateHzPerSecond)
+    {
       if (snapshot.SampleRate != options.SampleRate)
         throw new ArgumentException(
           "CW ridge scanner and snapshot sample rates must match.",
@@ -267,7 +291,7 @@ namespace SkyRoof.CW
       // cache on its explicit PCM reset, before counters can be reused.
       if (lastScanEndIndex >= 0 &&
           snapshot.EndSampleIndex < lastScanEndIndex)
-        ResetCache();
+        ResetCacheCore();
       lastScanEndIndex = snapshot.EndSampleIndex;
 
       if (snapshot.Samples.Length < precisionWindow)
