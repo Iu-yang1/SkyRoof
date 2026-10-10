@@ -168,6 +168,10 @@ namespace SkyRoof
           ValidateInt(e, 20, 1);
           break;
 
+        case "SkyRoof.CwConsoleSettings.CwKeyerPort":
+          ValidateInt(e, 65535, 1);
+          break;
+
         case "SkyRoof.RotatorSettings.StepSize":
           ValidateFloat(e, 30, 0.01f);
           break;
@@ -261,7 +265,30 @@ namespace SkyRoof
 
       if (ChangedFields.Exists(s =>
             s.StartsWith("SkyRoof.CwConsoleSettings.")))
+      {
         ctx.CwAudio?.ApplySettings();
+
+        if (ctx.CwTransmit != null)
+        {
+          try
+          {
+            ctx.CwTransmit
+              .ApplySettingsAsync(
+                ctx.Settings.CwConsole)
+              .GetAwaiter()
+              .GetResult();
+          }
+          catch (Exception ex)
+          {
+            MessageBox.Show(
+              "CW transmit settings were applied, but the active transmitter could not be stopped cleanly:\r\n\r\n" +
+              ex.Message,
+              "CW TX",
+              MessageBoxButtons.OK,
+              MessageBoxIcon.Warning);
+          }
+        }
+      }
 
       if (ChangedFields.Exists(s => s.StartsWith("SkyRoof.Announcement.Minutes")) ||
           ChangedFields.Exists(s => s.StartsWith("SkyRoof.Announcement.Enabled")))
