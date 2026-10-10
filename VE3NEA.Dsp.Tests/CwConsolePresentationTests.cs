@@ -109,6 +109,85 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void StableSlots_DoNotReorderWhenFrequencyOrderChanges()
+    {
+      var slots =
+        new CwConsoleLaneSlotMap(
+          maxSlots: 4,
+          releaseDelay:
+            TimeSpan.FromSeconds(4));
+
+      CwSignalTrack a =
+        Track(1, 101) with
+        {
+          FrequencyHz = 700
+        };
+      CwSignalTrack b =
+        Track(2, 202) with
+        {
+          FrequencyHz = 900
+        };
+
+      IReadOnlyList<CwConsoleLaneSlot> first =
+        slots.Update(
+          new[] { a, b },
+          T0);
+      int aSlot =
+        first.Single(x =>
+          x.Identity?.Id == 101).Index;
+      int bSlot =
+        first.Single(x =>
+          x.Identity?.Id == 202).Index;
+
+      IReadOnlyList<CwConsoleLaneSlot> crossed =
+        slots.Update(
+          new[]
+          {
+            a with { FrequencyHz = 980 },
+            b with { FrequencyHz = 620 }
+          },
+          T0.AddSeconds(1));
+
+      crossed.Single(x =>
+          x.Identity?.Id == 101)
+        .Index.Should().Be(aSlot);
+      crossed.Single(x =>
+          x.Identity?.Id == 202)
+        .Index.Should().Be(bSlot);
+    }
+
+    [Fact]
+    public void StableSlots_HoldGraceBeforeReleasingRow()
+    {
+      var slots =
+        new CwConsoleLaneSlotMap(
+          maxSlots: 2,
+          releaseDelay:
+            TimeSpan.FromSeconds(4));
+      CwSignalTrack lane =
+        Track(1, 101);
+
+      slots.Update(
+        new[] { lane },
+        T0);
+
+      CwConsoleLaneSlot grace =
+        slots.Update(
+            Array.Empty<CwSignalTrack>(),
+            T0.AddSeconds(2))
+          .Single(x =>
+            x.Identity?.Id == 101);
+      grace.Present.Should().BeFalse();
+
+      IReadOnlyList<CwConsoleLaneSlot> released =
+        slots.Update(
+          Array.Empty<CwSignalTrack>(),
+          T0.AddSeconds(5));
+      released.Should().NotContain(x =>
+        x.Identity?.Id == 101);
+    }
+
+    [Fact]
     public void LaneLabels_PreferStableAssociationHintButKeepTrackDiagnostic()
     {
       CwSignalTrack hinted =
