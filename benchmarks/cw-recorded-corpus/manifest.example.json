@@ -1,0 +1,35 @@
+{
+  "$schema": "./manifest.schema.json",
+  "version": 1,
+  "name": "example-two-lane-pass",
+  "cases": [
+    {
+      "name": "two-lane-40hz",
+      "wav": "two-lane-40hz.wav",
+      "knownDopplerRateHzPerSecond": 0,
+      "minFrequencyHz": 300,
+      "maxFrequencyHz": 1600,
+      "minimumSnrDb": 5,
+      "analysisSeconds": 2.4,
+      "decodeWindowSeconds": 6.0,
+      "decodeHopSeconds": 1.0,
+      "maxDecodeLanes": 5,
+      "lanes": [
+        {
+          "id": "lane-a",
+          "referenceFrequencyHz": 780,
+          "frequencyToleranceHz": 45,
+          "text": "CQ DE K1ABC",
+          "callsign": "K1ABC"
+        },
+        {
+          "id": "lane-b",
+          "referenceFrequencyHz": 820,
+          "frequencyToleranceHz": 45,
+          "text": "CQ DE W9XYZ",
+          "callsign": "W9XYZ"
+        }
+      ]
+    }
+  ]
+}
