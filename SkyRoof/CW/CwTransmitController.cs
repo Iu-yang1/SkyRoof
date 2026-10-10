@@ -16,7 +16,7 @@ namespace SkyRoof.CW
   public sealed class CwTransmitController :
     IAsyncDisposable
   {
-    private readonly CwConsoleSettings settings;
+    private CwConsoleSettings settings;
     private readonly ICwKeyerSessionFactory sessionFactory;
     private readonly SemaphoreSlim operationLock =
       new(1, 1);
@@ -73,6 +73,33 @@ namespace SkyRoof.CW
             lastError);
         }
       }
+    }
+
+    public async Task ApplySettingsAsync(
+      CwConsoleSettings newSettings)
+    {
+      ThrowIfDisposed();
+      ArgumentNullException.ThrowIfNull(
+        newSettings);
+
+      CwConsoleSettings previous =
+        settings;
+
+      bool safetyBoundaryChanged =
+        !newSettings.TransmitEnabled ||
+        newSettings.CwKeyerPort !=
+          previous.CwKeyerPort;
+
+      if (safetyBoundaryChanged &&
+          State.Armed)
+      {
+        // Stop using the existing live session before replacing settings.
+        // STOP does not depend on the configured port once a lease exists.
+        await DisarmAsync();
+      }
+
+      settings = newSettings;
+      OnStateChanged();
     }
 
     public void Arm()
