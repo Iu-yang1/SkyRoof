@@ -417,3 +417,33 @@ options are disposed after construction. Those are allocation/diagnostic
 optimizations, **not** a claim of faster ONNX kernels or batched inference.
 Compare the same PCM and RF settings on the same CPU using both the cache
 counters and the completed/skipped decoder-window metrics.
+
+
+### Smooth CW waterfall and HamNoise display processing
+
+CW display operations now run on a **separate, latest-only background
+processor**. Every completed frame includes the 2048-point waterfall FFT and
+the 8192-point live spectrum FFT; the earlier deliberate approximately 5-Hz
+spectrum-trace throttle has been removed. Both traces are computed off the
+WinForms UI thread, then published together on the next display timer tick.
+
+When **Spectrum > HamNoise Classic/CW V2** is selected, the 9.6-kHz
+resampling, native denoising and resampling back to the audio rate also run
+off the UI thread. The processor allows **at most one pending frame**:
+if HamNoise takes longer than the 50-ms display interval, intermediate
+frames are skipped rather than queued and replayed later. This keeps the
+CW Console, RF spectrum and other SkyRoof windows responsive without claiming
+that native HamNoise is guaranteed to sustain 20 frames/second. The effective
+HamNoise frame rate still depends on hardware inference time.
+
+Denoiser-mode changes and new PCM timeline generations discard any
+in-flight stale display results. Closing the Console defers native FFT
+buffer disposal until its outstanding calculation finishes. The CW decoder,
+tracker and transmit chain still consume untouched raw PCM, independently
+of display denoising.
+
+Waterfall columns now use one GDI+ bitmap lock instead of 512 per-pixel
+SetPixel calls. Track markers refresh with the status/selection view instead
+of issuing redraws on each 50-ms display timer tick. If a native display
+denoiser fails, the optional display mode falls back to Raw; decoding is
+not stopped.
