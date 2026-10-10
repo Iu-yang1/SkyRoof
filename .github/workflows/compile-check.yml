@@ -29,6 +29,10 @@ jobs:
       - name: Setup NuGet
         uses: NuGet/setup-nuget@fd55a6f3b34392fa83fde1454582407d8c714123 # v4.0
 
+      - name: Build pinned HamNoise display backend
+        shell: pwsh
+        run: ./scripts/build-hamnoise.ps1
+
       - name: Download WinDivert 2.2.2 x64
         shell: powershell
         run: |
