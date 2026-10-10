@@ -40,16 +40,27 @@ CW 接收默认关闭。确认输入源后，在面板中按 **Start**。
 使用 **RS-BA1 / LAN 收音**时选 **RS-BA1 playback loopback**。状态行会显示
 当前真正打开的 Windows 设备名称。
 
-## 紧凑窗口布局
+## CW Skimmer V1 横向工作区
 
-CW Console 现在使用紧凑但可响应 DPI/字体缩放的布局。只有 Waterfall 保留
-固定显示高度；Transcript 和 TX 区域按照内部控件实际需要自动决定高度，不再
-通过压低固定像素高度来“缩小窗口”，因此不会再把文本框或 F1-F8 按钮挤出
-可视区域。Lane 表格使用剩余空间，空间不足时由表格自身滚动。
+CW Console 按 **左侧大频谱、右侧多路 Pileup 消息、底部常驻 TX 工具条**
+重新设计。原来占据中间位置的七列表格和独立的 Selected RX Transcript 大区域
+已经从主界面移除。
 
-**Committed** 与 **Provisional / may change** 都有保证可读的单行文本框。
-Command-17 最多只有 30 字符，所以 TX Composer 也改为紧凑单行输入。F1-F8
-使用固定宽度按钮，较长宏内容继续通过 tooltip 查看，不会再把按钮行撑乱。
+- **顶部**：Start/Stop RX、音频源、只影响显示的 Raw/HamNoise 选项、
+  CW Settings、解码器与 Worker 状态。
+- **左侧**：实时 AF spectrum trace、高对比度 CW 瀑布、AF 频率刻度和 H/T
+  Lane 标记。拖动中央分隔条即可调整频谱和消息区的宽度。
+- **右侧**：8 个稳定编号的 Pileup 消息卡，支持纵向滚动。每卡显示
+  Lane 身份、AF Hz、SNR、状态、C（Committed 稳定文本）及
+  P（Provisional 可变文本），并提供 Copy 按钮。短暂 QSB、Hold 或载波
+  交叉都不会让卡片按频率重新排序。点击消息卡或瀑布轨迹可以双向联动选中。
+- **底部**：始终可用的 Arm、Send、红色 STOP、单行 CW 编辑框、
+  WPM 设置与实际回读、F1–F8 宏按钮。窗口较窄时按钮行单独横向滚动。
+
+**横向 AF 导航**：使用瀑布下方水平滚动条平移，用 Zoom 设置 1–8 倍显示
+缩放；频谱获得焦点后，Ctrl+滚轮用于缩放，普通滚轮用于平移。
+这些操作**只改变显示范围**，不调电台频率，不改原始 PCM、Ridge Scanner、
+DeepCW、卫星 Doppler 或 TX 安全联锁。HamNoise 也仍然只影响显示。
 
 ## 安装 DeepCW 模型
 
@@ -74,7 +85,7 @@ Tracker 与 ONNX 推理解耦。Tracker 通常约每 120 ms 更新；DeepCW 使�
 
 ### Lane 身份
 
-表格和瀑布优先显示稳定的多帧身份：
+Pileup 消息卡和瀑布优先显示稳定的多帧身份：
 
 - **H123**：AssociationHint 稳定身份；
 - **T17**：尚无 Hint 时使用临时 TrackId。
