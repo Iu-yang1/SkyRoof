@@ -258,6 +258,71 @@ namespace SkyRoof.CW
       }
     }
 
+    public async Task<CwKeyerStatus> SetKeySpeedAsync(
+      double wpm,
+      CancellationToken cancellationToken = default)
+    {
+      ThrowIfDisposed();
+      int expectedRaw =
+        CwMessageTiming.WpmToRawKeySpeed(wpm);
+
+      await operationLock.WaitAsync(
+        cancellationToken);
+
+      try
+      {
+        lock (this)
+        {
+          if (!settings.TransmitEnabled)
+            throw new InvalidOperationException(
+              "CW transmit is disabled in Settings.");
+          if (activeSession != null)
+            throw new InvalidOperationException(
+              "CW key speed cannot be changed while a message is active.");
+        }
+
+        await using ICwKeyerSession session =
+          await sessionFactory.ConnectAsync(
+            settings.CwKeyerPort,
+            cancellationToken);
+
+        CwKeySpeedResult result =
+          await session.SetWpmAsync(
+            wpm,
+            cancellationToken);
+
+        if (result.KeySpeedRaw != expectedRaw)
+          throw new InvalidOperationException(
+            $"SkyCAT verified an unexpected key-speed value: requested raw {expectedRaw}, got {result.KeySpeedRaw}.");
+
+        CwKeyerStatus status =
+          await session.GetStatusAsync(
+            cancellationToken);
+
+        if (status.KeySpeedRaw != result.KeySpeedRaw)
+          throw new InvalidOperationException(
+            $"CW key-speed verification changed between SETWPM and STATUS: {result.KeySpeedRaw} -> {status.KeySpeedRaw}.");
+
+        lock (this)
+        {
+          radioStatus = status;
+          lastError = null;
+        }
+
+        OnStateChanged();
+        return status;
+      }
+      catch (Exception ex)
+      {
+        SetError(ex);
+        throw;
+      }
+      finally
+      {
+        operationLock.Release();
+      }
+    }
+
     public async Task SendAsync(
       string text,
       CancellationToken cancellationToken = default)
