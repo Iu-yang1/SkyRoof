@@ -84,10 +84,25 @@ namespace VE3NEA.Dsp.Tests
       fallback.Should().BeGreaterThan(fast);
       fallback.Should()
         .BeLessThanOrEqualTo(
-          TimeSpan.FromSeconds(90));
+          TimeSpan.FromSeconds(210));
       fast.Should()
         .BeGreaterThanOrEqualTo(
           TimeSpan.FromSeconds(2));
+
+      TimeSpan worstCase =
+        CwMessageTiming.ComputeWatchdog(
+          new string('0', 30),
+          keySpeedRaw: 0);
+      TimeSpan actualDuration =
+        CwMessageTiming.EstimateDuration(
+          new string('0', 30),
+          6);
+
+      worstCase.Should()
+        .BeGreaterThan(actualDuration);
+      worstCase.Should()
+        .BeLessThanOrEqualTo(
+          TimeSpan.FromSeconds(210));
     }
 
     [Fact]
