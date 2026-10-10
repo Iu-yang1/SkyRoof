@@ -4,10 +4,10 @@ using WeifenLuo.WinFormsUI.Docking;
 namespace SkyRoof
 {
   /// <summary>
-  /// View over the shared CW receive worker plus the explicitly armed,
-  /// fail-closed SkyCAT Command-17 transmitter. The panel owns no audio,
-  /// tracker or ONNX resource; closing it never stops RX, but it always
-  /// disarms/stops any CW transmission started from this Console.
+  /// View over the shared CW receive worker and fail-closed SkyCAT
+  /// Command-17 transmitter. An explicit Send or Shift+F1-F8 prepares the
+  /// interlock on demand; received text is never automatically transmitted.
+  /// Closing the panel stops/disarms any active keyer lease.
   /// </summary>
   public sealed class CwConsolePanel : DockContent
   {
@@ -31,6 +31,7 @@ namespace SkyRoof
       new(spectrumBins: 512);
     private long waterfallGeneration = -1;
     private long lastWaterfallSampleIndex = -1;
+    private int spectrumFrameDivider;
 
     private readonly CwPileupLaneList PileupList = new();
     private readonly SplitContainer WorkSplit = new();
@@ -39,7 +40,6 @@ namespace SkyRoof
     private readonly Label AfWindowLabel = new();
 
     private readonly TextBox TxTextBox = new();
-    private readonly Button ArmTxBtn = new();
     private readonly Button SendTxBtn = new();
     private readonly Button StopTxBtn = new();
     private readonly Label TxStatusLabel = new();
@@ -54,6 +54,7 @@ namespace SkyRoof
     private readonly ToolTip MacroToolTip =
       new();
     private bool sendRequestInProgress;
+    private CancellationTokenSource? sendRequestStop;
     private bool statusPollInProgress;
     private DateTime nextStatusPollUtc = DateTime.MinValue;
 
@@ -551,11 +552,6 @@ namespace SkyRoof
         Margin = new Padding(0, 2, 0, 0)
       };
 
-      ArmTxBtn.Text = "Arm TX";
-      ArmTxBtn.AutoSize = true;
-      ArmTxBtn.Click += ArmTxBtn_Click;
-      actions.Controls.Add(ArmTxBtn);
-
       SendTxBtn.Text = "Send";
       SendTxBtn.AutoSize = true;
       SendTxBtn.Click += SendTxBtn_Click;
@@ -606,6 +602,11 @@ namespace SkyRoof
         button.Tag = index;
         button.Click += (_, _) =>
           LoadMacroIntoComposer(index);
+        button.MouseUp += (_, e) =>
+        {
+          if (e.Button == MouseButtons.Right)
+            EditMacro(index);
+        };
         macros.Controls.Add(button);
       }
       layout.Controls.Add(macros, 0, 3);
@@ -919,6 +920,7 @@ namespace SkyRoof
         waterfallGeneration =
           workerStatus.TimelineGeneration;
         lastWaterfallSampleIndex = -1;
+        spectrumFrameDivider = 0;
         WaterfallView.Clear();
       }
 
@@ -955,16 +957,16 @@ namespace SkyRoof
         CwAudioSnapshot displaySnapshot =
           PrepareSpectrumDisplaySnapshot(
             snapshot);
-        CwAudioSpectrumFrame spectrumFrame =
-          SpectrumAnalyzer.Analyze(
-            displaySnapshot);
+        // The long 8192-point live spectrum need not be recomputed
+        // for every 2048-point waterfall time column. Keep ~20 Hz
+        // waterfall motion while budgeting the spectrum trace at ~5 Hz.
+        if (spectrumFrameDivider++ % 4 == 0)
+          WaterfallView.SetSpectrum(
+            SpectrumAnalyzer.Analyze(displaySnapshot));
         CwAudioSpectrumFrame waterfallFrame =
-          WaterfallAnalyzer.Analyze(
-            displaySnapshot);
+          WaterfallAnalyzer.Analyze(displaySnapshot);
         lastWaterfallSampleIndex =
           snapshot.EndSampleIndex;
-        WaterfallView.SetSpectrum(
-          spectrumFrame);
         WaterfallView.Append(
           waterfallFrame);
       }
@@ -1195,7 +1197,6 @@ namespace SkyRoof
       {
         TxStatusLabel.Text =
           "TX: controller unavailable";
-        ArmTxBtn.Enabled = false;
         SendTxBtn.Enabled = false;
         StopTxBtn.Enabled = false;
         TxTextBox.ReadOnly = true;
@@ -1205,24 +1206,15 @@ namespace SkyRoof
       CwTransmitState state =
         tx.State;
 
-      ArmTxBtn.Text =
-        state.Armed
-          ? "Disarm TX"
-          : "Arm TX";
-
-      ArmTxBtn.Enabled =
-        settings.TransmitEnabled &&
-        !state.Sending;
-
       SendTxBtn.Enabled =
         settings.TransmitEnabled &&
-        state.Armed &&
         !state.Sending &&
+        !sendRequestInProgress &&
         !string.IsNullOrWhiteSpace(
           TxTextBox.Text);
 
       StopTxBtn.Enabled =
-        state.Sending;
+        state.Sending || sendRequestInProgress;
 
       SetKeySpeedBtn.Enabled =
         settings.TransmitEnabled &&
@@ -1298,8 +1290,8 @@ namespace SkyRoof
 
       TxStatusLabel.Text =
         state.Armed
-          ? "TX: ARMED" + radio
-          : "TX: disarmed" + radio;
+          ? "TX: ready" + radio
+          : "TX: idle · Send automatically checks SkyCAT" + radio;
 
       if (!string.IsNullOrWhiteSpace(
             state.LastError))
@@ -1336,71 +1328,6 @@ namespace SkyRoof
         $"{value.ExpectedCatTxHz:N0} Hz";
     }
 
-    private async void ArmTxBtn_Click(
-      object? sender,
-      EventArgs e)
-    {
-      CwTransmitController? tx =
-        ctx.CwTransmit;
-      if (tx == null)
-        return;
-
-      ArmTxBtn.Enabled = false;
-
-      try
-      {
-        if (tx.State.Armed)
-        {
-          await tx.DisarmAsync();
-          return;
-        }
-
-        tx.Arm();
-
-        CwKeyerStatus status =
-          await tx.QueryStatusAsync();
-
-        if (!status.ReadyToSend)
-        {
-          await tx.DisarmAsync();
-
-          throw new InvalidOperationException(
-            $"SkyCAT keyer is not ready: lease={status.Lease}, " +
-            $"mode={status.Mode}, BK-IN={status.BreakIn}, " +
-            $"TX={(status.Transmitting ? 1 : 0)}.");
-        }
-      }
-      catch (Exception ex)
-      {
-        if (tx.State.Armed &&
-            !tx.State.Sending)
-        {
-          try
-          {
-            await tx.DisarmAsync();
-          }
-          catch
-          {
-            // No message was active in the normal arm-preflight failure path.
-            // If that ever changes, controller/session teardown remains the
-            // fail-safe and the state preserves the error.
-          }
-        }
-
-        MessageBox.Show(
-          this,
-          ex.Message,
-          "CW TX arm failed",
-          MessageBoxButtons.OK,
-          MessageBoxIcon.Warning);
-      }
-      finally
-      {
-        if (!IsDisposed)
-          RefreshTransmitUi();
-      }
-    }
-
     private async void SendTxBtn_Click(
       object? sender,
       EventArgs e) =>
@@ -1421,10 +1348,20 @@ namespace SkyRoof
       // send request in flight. STOP remains independent and always available.
       sendRequestInProgress = true;
       SendTxBtn.Enabled = false;
+      using var requestStop = new CancellationTokenSource();
+      sendRequestStop = requestStop;
 
       try
       {
-        await tx.SendAsync(text);
+        // Capture the satellite/TX interlock at the operator's explicit
+        // send action, not when the Console was opened minutes earlier.
+        if (!tx.State.Armed)
+          tx.Arm();
+        await tx.SendAsync(text, requestStop.Token);
+      }
+      catch (OperationCanceledException) when (requestStop.IsCancellationRequested)
+      {
+        // The STOP button cancelled a pending preflight/send request.
       }
       catch (Exception ex)
       {
@@ -1437,6 +1374,7 @@ namespace SkyRoof
       }
       finally
       {
+        sendRequestStop = null;
         sendRequestInProgress = false;
         if (!IsDisposed)
           RefreshTransmitUi();
@@ -1534,10 +1472,13 @@ namespace SkyRoof
         return;
 
       StopTxBtn.Enabled = false;
+      // STOP is also actionable while an asynchronous preflight is waiting:
+      // cancel the request before taking the keyer session lock.
+      sendRequestStop?.Cancel();
 
       try
       {
-        await tx.StopAsync();
+        await tx.DisarmAsync();
       }
       catch (Exception ex)
       {
@@ -1598,9 +1539,78 @@ namespace SkyRoof
         MacroToolTip.SetToolTip(
           button,
           string.IsNullOrWhiteSpace(raw)
-            ? $"F{i + 1} is empty. Edit it in Settings > CW Console > CW Message Macros."
-            : $"F{i + 1}: load macro\r\nShift+F{i + 1}: send after explicit Arm\r\n\r\n{raw}");
+            ? $"F{i + 1} is empty. Right-click to edit."
+            : $"F{i + 1}: load · right-click: edit\r\nShift+F{i + 1}: send\r\n\r\n{raw}");
       }
+    }
+
+    private void EditMacro(int index)
+    {
+      string initial = CwMacroBank.Get(
+        ctx.Settings.CwConsole.Macros, index);
+
+      using var dialog = new Form
+      {
+        Text = $"Edit CW macro F{index + 1}",
+        StartPosition = FormStartPosition.CenterParent,
+        ClientSize = new Size(455, 185),
+        MinimumSize = new Size(300, 160),
+        FormBorderStyle = FormBorderStyle.SizableToolWindow
+      };
+      var input = new TextBox
+      {
+        Dock = DockStyle.Fill,
+        Multiline = true,
+        AcceptsReturn = true,
+        ScrollBars = ScrollBars.Vertical,
+        MaxLength = CwMessageTiming.MaxCharacters,
+        Text = initial,
+        Font = new Font(FontFamily.GenericMonospace, 10f)
+      };
+      var footer = new FlowLayoutPanel
+      {
+        Dock = DockStyle.Bottom,
+        FlowDirection = FlowDirection.RightToLeft,
+        Height = 40,
+        Padding = new Padding(4)
+      };
+      var cancel = new Button
+      {
+        Text = "Cancel",
+        DialogResult = DialogResult.Cancel,
+        AutoSize = true
+      };
+      var save = new Button
+      {
+        Text = "Save",
+        AutoSize = true
+      };
+      save.Click += (_, _) =>
+      {
+        try
+        {
+          string value = input.Text.Trim().ToUpperInvariant();
+          // Validate before changing the persistent preset.
+          if (value.Length > 0)
+            CwMessageTiming.ValidateText(value);
+          CwMacroBank.Set(ctx.Settings.CwConsole.Macros, index, value);
+          ctx.Settings.SaveToFile();
+          dialog.DialogResult = DialogResult.OK;
+          dialog.Close();
+        }
+        catch (Exception ex)
+        {
+          MessageBox.Show(dialog, ex.Message, "CW macro",
+            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+      };
+      footer.Controls.Add(cancel);
+      footer.Controls.Add(save);
+      dialog.CancelButton = cancel;
+      dialog.Controls.Add(input);
+      dialog.Controls.Add(footer);
+      if (dialog.ShowDialog(this) == DialogResult.OK)
+        RefreshMacroButtons();
     }
 
     private void LoadMacroIntoComposer(
