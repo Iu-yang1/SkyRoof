@@ -77,8 +77,8 @@ namespace VE3NEA.Dsp.Tests
 
       using var rendered = new System.Drawing.Bitmap(
         view.Width, view.Height);
-      view.DrawToBitmap(rendered, new System.Drawing.Rectangle(
-        0, 0, view.Width, view.Height));
+      using (var g = System.Drawing.Graphics.FromImage(rendered))
+        view.PaintContents(g);
 
       int signalY = (int)CwAudioWaterfallView.FrequencyToVerticalPixel(
         100 + 188 * 1900.0 / 511.0, 100, 2000, view.Height);
