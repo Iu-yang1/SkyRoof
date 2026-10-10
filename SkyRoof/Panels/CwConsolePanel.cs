@@ -185,29 +185,7 @@ namespace SkyRoof
     private void BuildUi()
     {
       var root =
-        new TableLayoutPanel
-        {
-          Dock = DockStyle.Fill,
-          AutoScroll = false,
-          ColumnCount = 1,
-          RowCount = 4,
-          Padding = new Padding(6)
-        };
-
-      root.ColumnStyles.Add(
-        new ColumnStyle(
-          SizeType.Percent,
-          100));
-      root.RowStyles.Add(
-        new RowStyle(
-          SizeType.AutoSize));
-      root.RowStyles.Add(
-        new RowStyle(
-          SizeType.AutoSize));
-      root.RowStyles.Add(
-        new RowStyle(SizeType.Percent, 100));
-      root.RowStyles.Add(
-        new RowStyle(SizeType.Absolute, 150));
+        CreateSkimmerRootLayout();
 
       var toolbar =
         new FlowLayoutPanel
@@ -777,11 +755,10 @@ namespace SkyRoof
         CwAudioSourceController.SourceRoleHint(
           status.Value.Source);
       InputStatusLabel.Text =
-        $"Input: {CwAudioSourceController.SourceDisplayName(status.Value.Source)} · {state} · " +
-        $"{status.Value.DeviceName}" +
-        (string.IsNullOrEmpty(role)
-          ? string.Empty
-          : $" · {role}");
+        $"RX: {state} · {status.Value.DeviceName}";
+      SourceBox.AccessibleDescription =
+        CwAudioSourceController.SourceDisplayName(status.Value.Source) +
+        (string.IsNullOrEmpty(role) ? "" : $" · {role}");
     }
 
     private void RefreshWorkerStatus()
