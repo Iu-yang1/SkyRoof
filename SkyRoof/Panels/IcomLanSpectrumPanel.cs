@@ -1395,9 +1395,9 @@ namespace SkyRoof
       // requested width while SkyCAT is still awaiting confirmation.
       if (PendingScopeControls.TryGet(
             frame.Scope, IcomScopeControlKind.Span,
-            out IcomScopeControlRequest pendingSpan))
+            out IcomScopeControlRequest pendingGeometrySpan))
         GeometryLabel.Text +=
-          $" · {FormatSpanChoice(pendingSpan.SpanHz)} pending";
+          $" · {FormatSpanChoice(pendingGeometrySpan.SpanHz)} pending";
 
       UpdateScopeControlAvailability();
     }
