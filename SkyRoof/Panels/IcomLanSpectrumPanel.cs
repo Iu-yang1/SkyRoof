@@ -39,6 +39,7 @@ namespace SkyRoof
     private readonly Label StatusLabel = new();
     private readonly Label StatsLabel = new();
     private readonly IcomLanSpectrumView SpectrumView = new();
+    private readonly ToolTip RxPassbandHelp = new();
     private readonly System.Windows.Forms.Timer UiTimer = new() { Interval = 500 };
     private readonly IcomScopeState ScopeState = new();
     private readonly IcomScopeController ScopeController;
@@ -104,6 +105,11 @@ namespace SkyRoof
       ctx.MainForm.IcomLanSpectrumMNU.Checked = true;
 
       BuildUi();
+      RxPassbandHelp.SetToolTip(
+        SpectrumView,
+        "Red shading = estimated IC-9700 RX filter bandwidth, not live " +
+        "FIL/BW/Twin PBT readback. Edit 'Estimated RX ... filter width' " +
+        "in Spectrum Settings to match the radio.");
       LoadSettingsToUi();
 
       Shown += (_, _) =>
