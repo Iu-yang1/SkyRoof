@@ -122,7 +122,11 @@ namespace SkyRoof
     private readonly Button copy = new()
     {
       Text = "Copy",
-      Size = new Size(49, 24),
+      AutoSize = true,
+      AutoSizeMode = AutoSizeMode.GrowAndShrink,
+      MinimumSize = new Size(70, 28),
+      Padding = new Padding(7, 1, 7, 1),
+      Margin = new Padding(3, 1, 3, 1),
       Dock = DockStyle.Fill
     };
 
@@ -147,10 +151,12 @@ namespace SkyRoof
       };
       layout.ColumnStyles.Add(
         new ColumnStyle(SizeType.Percent, 100));
+      // Auto-size this column to the button's *preferred* text width at
+      // the current Windows DPI. A fixed 51px cell clipped Copy to Cop.
       layout.ColumnStyles.Add(
-        new ColumnStyle(SizeType.Absolute, 51));
+        new ColumnStyle(SizeType.AutoSize));
       layout.RowStyles.Add(
-        new RowStyle(SizeType.Absolute, 26));
+        new RowStyle(SizeType.Absolute, 34));
       layout.RowStyles.Add(
         new RowStyle(SizeType.Percent, 50));
       layout.RowStyles.Add(
