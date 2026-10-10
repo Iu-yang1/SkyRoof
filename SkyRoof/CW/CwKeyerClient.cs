@@ -10,7 +10,8 @@ namespace SkyRoof.CW
     string Mode,
     int BreakIn,
     bool Transmitting,
-    int KeySpeedRaw)
+    int KeySpeedRaw,
+    long? ActualTxFrequencyHz = null)
   {
     public double Wpm =>
       CwMessageTiming.RawKeySpeedToWpm(
@@ -40,6 +41,7 @@ namespace SkyRoof.CW
       int? breakIn = null;
       bool? tx = null;
       int? keyRaw = null;
+      long? txHz = null;
 
       foreach (string token in
         parts.Skip(2))
@@ -84,6 +86,16 @@ namespace SkyRoof.CW
                   out int raw))
               keyRaw = raw;
             break;
+
+          case "TXHZ":
+            if (long.TryParse(
+                  value,
+                  NumberStyles.None,
+                  CultureInfo.InvariantCulture,
+                  out long frequencyHz) &&
+                frequencyHz > 0)
+              txHz = frequencyHz;
+            break;
         }
       }
 
@@ -99,7 +111,8 @@ namespace SkyRoof.CW
         mode,
         breakIn.Value,
         tx.Value,
-        keyRaw.Value);
+        keyRaw.Value,
+        txHz);
     }
   }
 
@@ -110,6 +123,12 @@ namespace SkyRoof.CW
       CancellationToken cancellationToken = default);
 
     Task SendAsync(
+      string text,
+      CancellationToken cancellationToken = default);
+
+    Task SendGuardedAsync(
+      long expectedTxFrequencyHz,
+      int toleranceHz,
       string text,
       CancellationToken cancellationToken = default);
 
@@ -233,6 +252,39 @@ namespace SkyRoof.CW
           reply);
     }
 
+    public async Task SendGuardedAsync(
+      long expectedTxFrequencyHz,
+      int toleranceHz,
+      string text,
+      CancellationToken cancellationToken = default)
+    {
+      CwMessageTiming.ValidateText(text);
+
+      if (expectedTxFrequencyHz <= 0)
+        throw new ArgumentOutOfRangeException(
+          nameof(expectedTxFrequencyHz));
+      if (toleranceHz is < 0 or > 5000)
+        throw new ArgumentOutOfRangeException(
+          nameof(toleranceHz));
+
+      string reply =
+        await RequestAsync(
+          "SENDHZ " +
+          expectedTxFrequencyHz.ToString(
+            CultureInfo.InvariantCulture) +
+          " " +
+          toleranceHz.ToString(
+            CultureInfo.InvariantCulture) +
+          " " +
+          text,
+          cancellationToken);
+
+      if (reply != "OK")
+        throw CreateProtocolException(
+          "SENDHZ",
+          reply);
+    }
+
     public async Task StopAsync(
       CancellationToken cancellationToken = default)
     {
@@ -317,6 +369,11 @@ namespace SkyRoof.CW
           new InvalidOperationException(
             message +
             " (another CAT/PTT/CW client owns the transmitter lease)."),
+
+        "ERR FREQ" =>
+          new InvalidOperationException(
+            message +
+            " (the actual radio TX VFO is outside the allowed satellite uplink tolerance)."),
 
         "ERR INVALID" =>
           new ArgumentException(message),
