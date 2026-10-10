@@ -83,8 +83,8 @@ if ($settings -notmatch '(?s)\[DefaultValue\(true\)\].{0,300}public\s+bool\s+Tra
 }
 
 $iss = Get-Content (Require-File "install\SkyRoof.iss") -Raw
-if ($iss -match 'hamnoise_skyroof\.dll') {
-  throw "Benchmark-only HamNoise DLL must not be shipped by the production installer."
+if ($iss -notmatch 'hamnoise_skyroof\.dll') {
+  throw "Production installer must package the pinned HamNoise display-only backend."
 }
 if ($iss -notmatch 'Source:\s*\.\.\\licenses\\\*') {
   throw "Production installer no longer packages the licenses directory."
@@ -100,12 +100,12 @@ foreach ($runtimeFile in @(
 
 $licenseReadme = Get-Content (Require-File "licenses\README.txt") -Raw
 if (-not $licenseReadme.Contains("DeepCW model") -or
-    -not $licenseReadme.Contains("HamNoise research backend")) {
-  throw "Third-party license index is missing CW runtime/research notices."
+    -not $licenseReadme.Contains("HamNoise display backend")) {
+  throw "Third-party license index is missing CW runtime/display notices."
 }
 
 Write-Host "CW production release validation passed."
 Write-Host "DeepCW revision: $expectedRevision"
 Write-Host "CW TX capability default: enabled (explicit Arm TX still required)"
-Write-Host "HamNoise production packaging: absent"
+Write-Host "HamNoise production packaging: display-only backend present"
 Write-Host "Recorded corpus schema: v1"
