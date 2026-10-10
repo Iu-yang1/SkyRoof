@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace SkyRoof.CW
 {
   public readonly record struct CwPhysicalLaneEvidence(
@@ -17,6 +19,7 @@ namespace SkyRoof.CW
   /// </summary>
   public sealed class DeepCwWidebandFeatureWindow
   {
+    private static readonly ConcurrentDictionary<int, double[]> hannCache = new();
     private readonly DeepCwModelMetadata metadata;
     private readonly float[] magnitudes;
     private readonly int fullBins;
@@ -54,7 +57,15 @@ namespace SkyRoof.CW
     public static DeepCwWidebandFeatureWindow Create(
       ReadOnlySpan<float> audio,
       int sourceSampleRate,
-      DeepCwModelMetadata metadata)
+      DeepCwModelMetadata metadata) =>
+      Create(audio, sourceSampleRate, metadata, null, null);
+
+    internal static DeepCwWidebandFeatureWindow Create(
+      ReadOnlySpan<float> audio,
+      int sourceSampleRate,
+      DeepCwModelMetadata metadata,
+      long? endSampleIndex,
+      CwStftMagnitudeCache? frameCache)
     {
       if (sourceSampleRate < 1000)
         throw new ArgumentOutOfRangeException(nameof(sourceSampleRate));
@@ -85,28 +96,51 @@ namespace SkyRoof.CW
 
       // Match the periodic Hann used by DeepCwFeatureWindow, but sampled at
       // the wideband rate over the same physical 80 ms interval.
-      double[] hann = Enumerable.Range(0, fftSize)
-        .Select(i => 0.5 - 0.5 *
-          Math.Cos(2 * Math.PI * i / fftSize))
-        .ToArray();
+      double[] hann = hannCache.GetOrAdd(fftSize, size =>
+        Enumerable.Range(0, size)
+          .Select(i => 0.5 - 0.5 *
+            Math.Cos(2 * Math.PI * i / size))
+          .ToArray());
+      Span<float> fftInput = fft.Input;
+
+      // Cache only whole interior frames: reflected boundary samples
+      // depend on each individual six-second window and must not be reused.
+      // A null/invalid absolute time (e.g. a direct offline model call)
+      // deliberately disables cross-window reuse.
+      long absoluteOrigin = endSampleIndex.HasValue &&
+        endSampleIndex.Value >= audio.Length
+          ? endSampleIndex.Value - audio.Length : -1;
 
       for (int frame = 0; frame < frameCount; frame++)
       {
         int start = frame * hopSize - pad;
+        int dest = frame * fullBins;
+        Span<float> row = magnitude.AsSpan(dest, fullBins);
+        bool interior = start >= 0 &&
+          (long)start + fftSize <= audio.Length;
+        long absoluteStart = absoluteOrigin + start;
+        if (interior && absoluteOrigin >= 0 &&
+            frameCache != null &&
+            frameCache.TryCopy(
+              absoluteStart, sourceSampleRate, fftSize, row))
+          continue;
+
         for (int i = 0; i < fftSize; i++)
         {
           int sourceIndex = ReflectIndex(
             start + i, audio.Length);
-          fft.Input[i] = (float)(
+          fftInput[i] = (float)(
             audio[sourceIndex] * hann[i]);
         }
 
         fft.Forward();
-        int dest = frame * fullBins;
         for (int bin = 0; bin < fullBins; bin++)
-        {
-          magnitude[dest + bin] = (float)fft.Magnitude(bin);
-        }
+          row[bin] = (float)fft.Magnitude(bin);
+
+        if (interior && absoluteOrigin >= 0 &&
+            frameCache != null)
+          frameCache.Save(
+            absoluteStart, sourceSampleRate, fftSize, row);
       }
 
       return new(

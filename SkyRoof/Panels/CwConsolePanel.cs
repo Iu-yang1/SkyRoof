@@ -816,6 +816,16 @@ namespace SkyRoof
         $"skipped {status.SkippedInferenceWindows} · " +
         $"gen {status.TimelineGeneration}";
 
+      // Diagnostics on hover, not a longer status line: avoid truncation
+      // in docked and high-DPI CW Skimmer windows.
+      MacroToolTip.SetToolTip(
+        WorkerStatusLabel,
+        $"Ridge STFT cache: {status.RidgeStftCacheHits} reused / " +
+        $"{status.RidgeStftCacheMisses} computed\n" +
+        $"DeepCW STFT cache: {status.DeepCwStftCacheHits} reused / " +
+        $"{status.DeepCwStftCacheMisses} computed\n" +
+        $"Mean ONNX Run: {status.MeanOnnxInferenceMs:F1} ms");
+
       InstallModelBtn.Visible =
         status.ModelState ==
           CwReceiveModelState.NotInstalled ||

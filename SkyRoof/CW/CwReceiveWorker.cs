@@ -30,7 +30,12 @@ namespace SkyRoof.CW
     long CompletedInferenceWindows,
     long SkippedInferenceWindows,
     int TrackCount,
-    string? LastError);
+    string? LastError,
+    long RidgeStftCacheHits = 0,
+    long RidgeStftCacheMisses = 0,
+    long DeepCwStftCacheHits = 0,
+    long DeepCwStftCacheMisses = 0,
+    double MeanOnnxInferenceMs = 0);
 
   public sealed class CwTracksUpdatedEventArgs : EventArgs
   {
@@ -75,6 +80,10 @@ namespace SkyRoof.CW
     private readonly DeepCwOnnxDecoder onnx;
     private readonly CwContinuousDeepCwDecoder continuous;
 
+    internal long StftHits => continuous.Decoder.StftCacheHits;
+    internal long StftMisses => continuous.Decoder.StftCacheMisses;
+    internal double MeanOnnxInferenceMs => onnx.MeanInferenceMilliseconds;
+
     internal DeepCwInferenceSession(
       CwReceiveWorkerOptions options)
     {
@@ -104,7 +113,8 @@ namespace SkyRoof.CW
         snapshot.Samples,
         snapshot.SampleRate,
         snapshot.EndUtc,
-        tracks);
+        tracks,
+        snapshot.EndSampleIndex);
 
     public void Reset() =>
       continuous.Reset();
@@ -618,7 +628,17 @@ namespace SkyRoof.CW
           TrackCount:
             latestTracks.Count,
           LastError:
-            lastError);
+            lastError,
+          RidgeStftCacheHits:
+            ingress.FrontEnd.FrameScanner.StftCacheHits,
+          RidgeStftCacheMisses:
+            ingress.FrontEnd.FrameScanner.StftCacheMisses,
+          DeepCwStftCacheHits:
+            (session as DeepCwInferenceSession)?.StftHits ?? 0,
+          DeepCwStftCacheMisses:
+            (session as DeepCwInferenceSession)?.StftMisses ?? 0,
+          MeanOnnxInferenceMs:
+            (session as DeepCwInferenceSession)?.MeanOnnxInferenceMs ?? 0);
       }
     }
 
