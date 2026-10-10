@@ -24,8 +24,9 @@ namespace SkyRoof
 
   internal static class IcomScopeRxPassbandEstimator
   {
-    // Nominal IF bandwidths follow the IC-9700 FIL2 examples. The
-    // actual radio may be using FIL1/FIL3, a custom BW or Twin PBT.
+    // Nominal IF bandwidths follow IC-9700 examples (SSB / SSB-D / CW
+    // FIL2, FM / FM-D FIL1). Actual settings may be another FIL, custom
+    // IF BW, CW pitch, IF shift or Twin PBT.
     // SkyRoof's current Slicer.Mode only covers these seven modes;
     // don't fabricate an AM/RTTY/DV mode from its local SDR state.
     internal static bool TryEstimate(
