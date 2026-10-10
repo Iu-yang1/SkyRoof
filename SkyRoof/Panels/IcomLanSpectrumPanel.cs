@@ -42,6 +42,12 @@ namespace SkyRoof
     private readonly System.Windows.Forms.Timer UiTimer = new() { Interval = 500 };
     private readonly IcomScopeState ScopeState = new();
     private readonly IcomScopeController ScopeController;
+    private readonly IcomScopeUiFrameMailbox ScopeFrameMailbox = new();
+    private int ScopeCaptureEpoch;
+    private byte LastGeometryUiScope = byte.MaxValue;
+    private byte LastGeometryUiMode = byte.MaxValue;
+    private long LastGeometryUiA = -1;
+    private long LastGeometryUiB = -1;
     private readonly IcomScopePendingControls PendingScopeControls = new();
     private long UnconfirmedScopeControlCount;
 
@@ -1055,6 +1061,12 @@ namespace SkyRoof
       ScopeFps = 0;
       DisplayFps = 0;
       LastRenderedScopeFrameTicks = 0;
+      Interlocked.Increment(ref ScopeCaptureEpoch);
+      ScopeFrameMailbox.Clear();
+      LastGeometryUiScope = byte.MaxValue;
+      LastGeometryUiMode = byte.MaxValue;
+      LastGeometryUiA = -1;
+      LastGeometryUiB = -1;
       LastStatsUsedNativeLan = false;
       ScopeReadbackCompletedForSession = false;
       ScopeReadbackRequestedForSession = false;
@@ -1139,6 +1151,12 @@ namespace SkyRoof
       LastDiagnosticsText =
         "Spectrum diagnostics are not available while capture is stopped.";
       ScopeState.Clear();
+      Interlocked.Increment(ref ScopeCaptureEpoch);
+      ScopeFrameMailbox.Clear();
+      LastGeometryUiScope = byte.MaxValue;
+      LastGeometryUiMode = byte.MaxValue;
+      LastGeometryUiA = -1;
+      LastGeometryUiB = -1;
       LastRenderedScopeFrameTicks = 0;
 
       if (LocalHold)
@@ -1176,42 +1194,46 @@ namespace SkyRoof
     {
       if (IsDisposed || !IsHandleCreated) return;
 
-      // When a current combined LAN waveform is arriving, do not interleave a
-      // second serial-style representation of the same scope into the display.
+      // Prefer high-rate combined LAN frames whenever the native passive
+      // stream is current. Keep older SkyCAT serial frames out of the
+      // shared UI mailbox.
       DateTime? nativeLast = NativeLanAssistCapture?.LastScopeFrameUtc;
       if (nativeLast != null &&
           (DateTime.UtcNow - nativeLast.Value).TotalSeconds < 0.75)
         return;
 
-      try
-      {
-        BeginInvoke((Action)(() =>
-        {
-          if (!IsDisposed)
-            RenderScopeFrame(frame);
-        }));
-      }
-      catch (InvalidOperationException)
-      {
-        // The panel is closing.
-      }
+      QueueScopeRender(frame);
     }
 
     private void NativeLanAssist_ScopeFrameReceived(IcomScopeFrame frame)
     {
       if (IsDisposed || !IsHandleCreated) return;
+      QueueScopeRender(frame);
+    }
 
+    private void QueueScopeRender(IcomScopeFrame frame)
+    {
+      if (!ScopeFrameMailbox.Offer(frame))
+        return;
+
+      int epoch = Volatile.Read(ref ScopeCaptureEpoch);
       try
       {
         BeginInvoke((Action)(() =>
         {
-          if (!IsDisposed)
-            RenderScopeFrame(frame);
+          // Stale callbacks from a previous capture session must not paint
+          // or consume the new source's pending scope frame.
+          if (IsDisposed || epoch != ScopeCaptureEpoch)
+            return;
+
+          IcomScopeFrame? newest = ScopeFrameMailbox.Take();
+          if (newest != null && Capture != null)
+            RenderScopeFrame(newest);
         }));
       }
       catch (InvalidOperationException)
       {
-        // The panel is closing.
+        ScopeFrameMailbox.Clear();
       }
     }
 
@@ -2415,6 +2437,7 @@ namespace SkyRoof
           $"Queue pending: {queueStats?.Pending.ToString("N0") ?? "n/a"}",
           $"Queue dropped: {queueStats?.Dropped.ToString("N0") ?? "n/a"}",
           $"Queue rejected: {queueStats?.Rejected.ToString("N0") ?? "n/a"}",
+          $"Scope UI coalesced waveform frames: {ScopeFrameMailbox.ReplacedFrames:N0}",
           $"Control changes awaiting radio confirmation: {PendingScopeControls.Count}",
           $"Unconfirmed controls after timeout: {UnconfirmedScopeControlCount}",
           $"Packets: {effectiveCapture.PacketCount:N0}",
