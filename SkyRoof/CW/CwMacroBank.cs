@@ -56,11 +56,10 @@ namespace SkyRoof.CW
         Get(settings, index)
           .Trim()
           .Replace(
-            "",
+            "\r",
             " ")
           .Replace(
-            "
-",
+            "\n",
             " ");
 
       if (text.Length == 0)
