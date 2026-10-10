@@ -83,6 +83,8 @@ items:
       href: qso_scheduler_panel.md
     - name: FT4 Console
       href: ft4_console_panel.md
+    - name: CW Console
+      href: cw_console.md
     - name: Recorder
       href: recorder_panel.md
     - name: Telemetry
