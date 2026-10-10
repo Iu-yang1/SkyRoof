@@ -9,15 +9,115 @@ namespace VE3NEA.Dsp.Tests
   public sealed class CwSkimmerUiTests
   {
     [Fact]
-    public void RootLayout_IsToolbarStatusSplitAndFixedTransmitBar()
+    public void RootLayout_IsToolbarStatusSplitSelectedRxAndFixedTransmitBar()
     {
       using TableLayoutPanel root =
         CwConsolePanel.CreateSkimmerRootLayout();
 
-      root.RowCount.Should().Be(4);
-      root.RowStyles.Count.Should().Be(4);
+      root.RowCount.Should().Be(5);
+      root.RowStyles.Count.Should().Be(5);
       root.RowStyles[2].SizeType.Should().Be(SizeType.Percent);
       root.RowStyles[3].SizeType.Should().Be(SizeType.AutoSize);
+      root.RowStyles[4].SizeType.Should().Be(SizeType.AutoSize);
+    }
+
+    [Fact]
+    public void SelectedRxPanel_UsesTxStyleWithWrappedReceiveOnlyText()
+    {
+      using var view = new CwSelectedLaneView();
+
+      view.Should().BeAssignableTo<GroupBox>();
+      view.Text.Should().Contain("CW RX");
+      view.TranscriptControl.ReadOnly.Should().BeTrue();
+      view.TranscriptControl.Multiline.Should().BeTrue();
+      view.TranscriptControl.WordWrap.Should().BeTrue();
+      view.TranscriptControl.ScrollBars.Should()
+        .Be(RichTextBoxScrollBars.Vertical);
+      view.CopyButton.Enabled.Should().BeFalse();
+      view.StatusText.Should().Contain("select a Pileup lane");
+    }
+
+    [Fact]
+    public void SelectedRxPanel_FollowsStableLaneIdentityAndFullTranscript()
+    {
+      using var view = new CwSelectedLaneView();
+      CwSignalTrack a = Track(1, 123, 847);
+      CwSignalTrack b = Track(2, 456, 1452);
+      var transcriptA = Transcript(1, 123,
+        "CQ CQ DE BG5JSU BG5JSU TEST LONG MESSAGE ",
+        "PLEASE COPY AGN");
+      var transcriptB = Transcript(2, 456, "DE K1ABC", " 599");
+
+      view.UpdateLane(
+        new CwConsoleLaneSlot(2,
+          CwConsolePresentation.Identity(a), a, true),
+        transcriptA);
+
+      view.StatusText.Should().Contain("Slot 3/8");
+      view.StatusText.Should().Contain("H123");
+      view.StatusText.Should().Contain("847 Hz");
+      view.CopyText.Should().Be(transcriptA.Text);
+      view.DisplayedText.Should().Be(transcriptA.Text);
+      view.CopyButton.Enabled.Should().BeTrue();
+      // No split or truncation despite the compact bottom RX panel.
+      view.DisplayedText.Length.Should().BeGreaterThan(30);
+
+      view.UpdateLane(
+        new CwConsoleLaneSlot(5,
+          CwConsolePresentation.Identity(b), b, false),
+        transcriptB);
+      view.StatusText.Should().Contain("Slot 6/8");
+      view.StatusText.Should().Contain("H456");
+      view.StatusText.Should().Contain("Grace");
+      view.CopyText.Should().Be(transcriptB.Text);
+      view.DisplayedText.Should().NotContain("BG5JSU");
+      view.SelectedIdentity.Should().Be(
+        CwConsolePresentation.Identity(b));
+    }
+
+    [Fact]
+    public void SelectedRxPanel_RecolorsUnconfirmedSuffixWhenCommitted()
+    {
+      using var view = new CwSelectedLaneView();
+      CwSignalTrack track = Track(1, 77, 707);
+      var slot = new CwConsoleLaneSlot(0,
+        CwConsolePresentation.Identity(track), track, true);
+
+      view.UpdateLane(slot, Transcript(1, 77, "CQ ", "TEST"));
+      view.TranscriptControl.Select(3, 1);
+      view.TranscriptControl.SelectionColor.Should().Be(
+        System.Drawing.Color.FromArgb(155, 93, 32));
+
+      // Same combined characters; only their committed status changes.
+      view.UpdateLane(slot, Transcript(1, 77, "CQ TEST", ""));
+      view.TranscriptControl.Select(3, 1);
+      view.TranscriptControl.SelectionColor.Should().Be(
+        System.Drawing.SystemColors.WindowText);
+    }
+
+    [Fact]
+    public void SelectedRxPanel_ClearsStaleSelectionOnNewTimeline()
+    {
+      using var view = new CwSelectedLaneView();
+      CwSignalTrack track = Track(1, 12, 900);
+      view.UpdateLane(
+        new CwConsoleLaneSlot(0,
+          CwConsolePresentation.Identity(track), track, true),
+        Transcript(1, 12, "CQ", " DE"));
+
+      view.UpdateLane(null, null);
+      view.SelectedIdentity.Should().BeNull();
+      view.CopyText.Should().BeEmpty();
+      view.CopyButton.Enabled.Should().BeFalse();
+      view.DisplayedText.Should().NotContain("CQ");
+    }
+
+    private static CwTranscriptSnapshot Transcript(
+      int trackId, int hint, string committed, string provisional)
+    {
+      return new CwTranscriptSnapshot(
+        trackId, hint, committed, provisional,
+        Array.Empty<CwTranscriptSymbol>(), DateTime.UtcNow);
     }
 
     [Fact]
