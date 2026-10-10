@@ -235,6 +235,12 @@ namespace SkyRoof.CW
     private readonly IDeepCwTensorDecoder decoder;
     private readonly CwCarrierActivityEstimator activityEstimator;
     private readonly CwLaneExtractor laneExtractor;
+    private readonly CwStftMagnitudeCache frameCache = new();
+
+    internal long StftCacheHits => frameCache.Hits;
+    internal long StftCacheMisses => frameCache.Misses;
+    internal int StftCacheEntries => frameCache.Count;
+    internal void ResetFeatureCache() => frameCache.Clear();
 
     public int MaxLanes { get; set; } = 5;
     public double LaneBandwidthHz { get; set; } = 240;
@@ -288,7 +294,15 @@ namespace SkyRoof.CW
       ReadOnlySpan<float> audio,
       int sourceSampleRate,
       DateTime windowEndUtc,
-      IEnumerable<CwSignalTrack> tracks)
+      IEnumerable<CwSignalTrack> tracks) =>
+      Decode(audio, sourceSampleRate, windowEndUtc, tracks, null);
+
+    internal IReadOnlyList<DeepCwLaneResult> Decode(
+      ReadOnlySpan<float> audio,
+      int sourceSampleRate,
+      DateTime windowEndUtc,
+      IEnumerable<CwSignalTrack> tracks,
+      long? endSampleIndex)
     {
       ArgumentNullException.ThrowIfNull(tracks);
       if (windowEndUtc.Kind != DateTimeKind.Utc)
@@ -361,7 +375,9 @@ namespace SkyRoof.CW
           DeepCwWidebandFeatureWindow.Create(
             widebandAudio,
             widebandSampleRate,
-            metadata);
+            metadata,
+            WindowDenoiser == null ? endSampleIndex : null,
+            WindowDenoiser == null ? frameCache : null);
 
         activityByTrack =
           widebandFeatures.EstimateActivities(
