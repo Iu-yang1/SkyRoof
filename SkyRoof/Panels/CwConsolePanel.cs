@@ -16,6 +16,8 @@ namespace SkyRoof
 
     private readonly Button RxToggleBtn = new();
     private readonly ComboBox SourceBox = new();
+    private readonly ComboBox SpectrumCleanupBox = new();
+    private readonly Label SpectrumStatusLabel = new();
     private readonly Button SettingsBtn = new();
     private readonly Button InstallModelBtn = new();
 
@@ -71,6 +73,9 @@ namespace SkyRoof
     private long displayGeneration = -1;
     private CwConsoleLaneIdentity? selectedIdentity;
     private bool updatingSourceUi;
+    private HamNoiseAudioDenoiser? displayDenoiser;
+    private CwDenoiseMode displayDenoiserMode =
+      CwDenoiseMode.Bypass;
     private bool modelInstalled;
     private CancellationTokenSource? modelInstallStop;
 
@@ -242,6 +247,38 @@ namespace SkyRoof
       toolbar.Controls.Add(
         SourceBox);
 
+      toolbar.Controls.Add(
+        new Label
+        {
+          AutoSize = true,
+          Text = "Spectrum",
+          Margin = new Padding(10, 7, 2, 0)
+        });
+
+      SpectrumCleanupBox.DropDownStyle =
+        ComboBoxStyle.DropDownList;
+      SpectrumCleanupBox.Width = 150;
+      SpectrumCleanupBox.DataSource =
+        Enum.GetValues<CwDenoiseMode>();
+      SpectrumCleanupBox.FormattingEnabled = true;
+      SpectrumCleanupBox.Format +=
+        (_, e) =>
+        {
+          if (e.ListItem is not CwDenoiseMode mode)
+            return;
+          e.Value = mode switch
+          {
+            CwDenoiseMode.Bypass => "Raw",
+            CwDenoiseMode.HamNoiseClassic => "HamNoise Classic",
+            CwDenoiseMode.HamNoiseV2 => "HamNoise CW V2",
+            _ => mode.ToString()
+          };
+        };
+      SpectrumCleanupBox.SelectedIndexChanged +=
+        SpectrumCleanupBox_SelectedIndexChanged;
+      toolbar.Controls.Add(
+        SpectrumCleanupBox);
+
       SettingsBtn.Text = "Settings…";
       SettingsBtn.AutoSize = true;
       SettingsBtn.Click +=
@@ -315,6 +352,12 @@ namespace SkyRoof
         InputStatusLabel);
       statusPanel.Controls.Add(
         ModelStatusLabel);
+      SpectrumStatusLabel.AutoSize = true;
+      SpectrumStatusLabel.Margin =
+        new Padding(
+          0, 4, 18, 4);
+      statusPanel.Controls.Add(
+        SpectrumStatusLabel);
       statusPanel.Controls.Add(
         WorkerStatusLabel);
 
@@ -973,6 +1016,16 @@ namespace SkyRoof
         ModelStatusLabel.Text +=
           " · " + status.LastError;
 
+      CwDenoiseMode cleanup =
+        ctx.Settings.CwConsole.SpectrumDenoiseMode;
+      SpectrumStatusLabel.Text =
+        cleanup == CwDenoiseMode.Bypass
+          ? "Spectrum: Raw"
+          : $"Spectrum: {(
+              cleanup == CwDenoiseMode.HamNoiseV2
+                ? "HamNoise CW V2"
+                : "HamNoise Classic")} · display only";
+
       WorkerStatusLabel.Text =
         $"Worker: tracks {status.TrackCount} · " +
         $"decode {status.CompletedInferenceWindows} · " +
@@ -1220,9 +1273,12 @@ namespace SkyRoof
 
       try
       {
+        CwAudioSnapshot displaySnapshot =
+          PrepareSpectrumDisplaySnapshot(
+            snapshot);
         CwAudioSpectrumFrame frame =
           WaterfallAnalyzer.Analyze(
-            snapshot);
+            displaySnapshot);
         lastWaterfallSampleIndex =
           snapshot.EndSampleIndex;
         WaterfallView.Append(frame);
@@ -1232,6 +1288,53 @@ namespace SkyRoof
         // Source/timeline may have reset between status polling and snapshot
         // analysis. The next UI tick will retry on the new generation.
       }
+    }
+
+    private CwAudioSnapshot PrepareSpectrumDisplaySnapshot(
+      CwAudioSnapshot raw)
+    {
+      CwDenoiseMode mode =
+        ctx.Settings.CwConsole.SpectrumDenoiseMode;
+      if (mode == CwDenoiseMode.Bypass)
+        return raw;
+
+      if (displayDenoiser == null ||
+          displayDenoiserMode != mode)
+      {
+        displayDenoiser =
+          new HamNoiseAudioDenoiser(mode);
+        displayDenoiserMode = mode;
+      }
+
+      // The HamNoise bridge runs at 9.6 kHz. Resample only this immutable
+      // display copy down and back up; the receive worker, ridge scanner,
+      // tracker, DeepCW and transcript coordinator never see these samples.
+      float[] modelRate =
+        CwWindowedSincResampler.Resample(
+          raw.Samples,
+          raw.SampleRate,
+          displayDenoiser.SampleRate);
+      float[] cleaned =
+        displayDenoiser.Process(
+          modelRate,
+          displayDenoiser.SampleRate,
+          wet: 1.0);
+      float[] restored =
+        CwWindowedSincResampler.Resample(
+          cleaned,
+          displayDenoiser.SampleRate,
+          raw.SampleRate);
+
+      if (restored.Length != raw.Samples.Length)
+        Array.Resize(
+          ref restored,
+          raw.Samples.Length);
+
+      return new CwAudioSnapshot(
+        raw.SampleRate,
+        raw.EndUtc,
+        raw.EndSampleIndex,
+        restored);
     }
 
     private CwConsoleLaneIdentity?
@@ -1324,6 +1427,59 @@ namespace SkyRoof
       settings.ReceiveEnabled =
         !settings.ReceiveEnabled;
       ctx.CwAudio?.ApplySettings();
+      ctx.Settings.SaveToFile();
+      RefreshUi();
+    }
+
+    private void SpectrumCleanupBox_SelectedIndexChanged(
+      object? sender,
+      EventArgs e)
+    {
+      if (updatingSourceUi ||
+          SpectrumCleanupBox.SelectedItem is not
+            CwDenoiseMode mode)
+        return;
+
+      if (mode != CwDenoiseMode.Bypass &&
+          !HamNoiseAudioDenoiser.IsAvailable())
+      {
+        updatingSourceUi = true;
+        try
+        {
+          SpectrumCleanupBox.SelectedItem =
+            CwDenoiseMode.Bypass;
+        }
+        finally
+        {
+          updatingSourceUi = false;
+        }
+
+        ctx.Settings.CwConsole.SpectrumDenoiseMode =
+          CwDenoiseMode.Bypass;
+        displayDenoiser = null;
+        displayDenoiserMode =
+          CwDenoiseMode.Bypass;
+        ctx.Settings.SaveToFile();
+
+        MessageBox.Show(
+          this,
+          "HamNoise spectrum cleanup is not available in this build. " +
+          "The display has been returned to Raw. Decode always continues " +
+          "from untouched PCM.",
+          "CW Spectrum Cleanup",
+          MessageBoxButtons.OK,
+          MessageBoxIcon.Information);
+        RefreshUi();
+        return;
+      }
+
+      ctx.Settings.CwConsole.SpectrumDenoiseMode =
+        mode;
+      displayDenoiser = null;
+      displayDenoiserMode =
+        CwDenoiseMode.Bypass;
+      WaterfallView.Clear();
+      lastWaterfallSampleIndex = -1;
       ctx.Settings.SaveToFile();
       RefreshUi();
     }
@@ -1814,6 +1970,8 @@ namespace SkyRoof
       {
         SourceBox.SelectedItem =
           ctx.Settings.CwConsole.AudioSource;
+        SpectrumCleanupBox.SelectedItem =
+          ctx.Settings.CwConsole.SpectrumDenoiseMode;
       }
       finally
       {
