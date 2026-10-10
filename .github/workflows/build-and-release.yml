@@ -24,6 +24,10 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Validate CW release invariants
+        shell: pwsh
+        run: ./scripts/validate-cw-release.ps1
+
       # Directory.Build.props is the only place the version is maintained. MSBuild applies it
       # to the assemblies by itself, so nothing here patches SkyRoof.csproj any more.
       - name: Read version from Directory.Build.props
