@@ -318,7 +318,7 @@ namespace SkyRoof.CW
           $"{Math.Min(a, b):n0}–{Math.Max(a, b):n0} Hz.");
     }
 
-    private static void
+    internal static void
       EnsureSameOperatorContext(
         CwTransmitInterlockSnapshot baseline,
         CwTransmitInterlockSnapshot current)
