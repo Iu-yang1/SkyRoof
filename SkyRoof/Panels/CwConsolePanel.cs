@@ -964,25 +964,41 @@ namespace SkyRoof
       {
         waterfallGeneration = workerStatus.TimelineGeneration;
         lastWaterfallSampleIndex = -1;
+        lastQueuedWaterfallSampleIndex = -1;
         WaterfallView.Clear();
       }
 
       CwDenoiseMode mode =
         ctx.Settings.CwConsole.SpectrumDenoiseMode;
+      if (lastQueuedGeneration != waterfallGeneration ||
+          lastQueuedMode != mode)
+      {
+        lastQueuedGeneration = waterfallGeneration;
+        lastQueuedMode = mode;
+        lastQueuedWaterfallSampleIndex = -1;
+      }
 
       // Poll the completed task only: never run Sinc, HamNoise or FFTW on
       // the WinForms UI thread, and never enqueue a backlog of old frames.
       try
       {
-        if (DisplayFrames.TryTake(out CwDisplayFrameResult result) &&
-            result.TimelineGeneration == waterfallGeneration &&
-            result.DenoiseMode == mode &&
-            audio.Ingress.Enabled &&
-            result.Waterfall.EndSampleIndex > lastWaterfallSampleIndex)
+        if (DisplayFrames.TryTake(out CwDisplayFrameResult result))
         {
-          WaterfallView.SetSpectrum(result.Spectrum);
-          WaterfallView.Append(result.Waterfall);
-          lastWaterfallSampleIndex = result.Waterfall.EndSampleIndex;
+          if (result.TimelineGeneration == waterfallGeneration &&
+              result.DenoiseMode == mode &&
+              audio.Ingress.Enabled &&
+              result.Waterfall.EndSampleIndex > lastWaterfallSampleIndex)
+          {
+            WaterfallView.SetSpectrum(result.Spectrum);
+            WaterfallView.Append(result.Waterfall);
+            lastWaterfallSampleIndex = result.Waterfall.EndSampleIndex;
+          }
+          else
+          {
+            // A completed in-flight frame belongs to an older source,
+            // denoiser choice or audio position; do not flash stale data.
+            staleDisplayFrames++;
+          }
         }
       }
       catch (ArgumentException)
@@ -1022,16 +1038,22 @@ namespace SkyRoof
         SpectrumAnalyzer.FftSize /
           (double)SpectrumAnalyzer.SampleRate + 0.02);
 
-      if (!audio.Ingress.Enabled ||
-          DisplayFrames.Busy ||
-          !hub.TrySnapshot(seconds, out CwAudioSnapshot snapshot) ||
-          snapshot.EndSampleIndex == lastWaterfallSampleIndex)
+      if (!audio.Ingress.Enabled)
+        return;
+      if (DisplayFrames.Busy)
+      {
+        DisplayFrames.RecordBusyTick();
+        return;
+      }
+      if (!hub.TrySnapshot(seconds, out CwAudioSnapshot snapshot) ||
+          snapshot.EndSampleIndex <= lastQueuedWaterfallSampleIndex)
         return;
 
-      // Every delivered display frame carries both the waterfall column
-      // and the long-resolution spectrum. The former artificial ~5 Hz
-      // spectrum cap is removed, while the worker stays latest-only.
-      DisplayFrames.TryQueue(snapshot, waterfallGeneration, mode);
+      // Never schedule the same PCM end twice, including after a stale
+      // result was rejected. Prevents duplicate columns during audio
+      // callback gaps and avoids unnecessary background FFT work.
+      if (DisplayFrames.TryQueue(snapshot, waterfallGeneration, mode))
+        lastQueuedWaterfallSampleIndex = snapshot.EndSampleIndex;
     }
 
     private void RxToggleBtn_Click(
