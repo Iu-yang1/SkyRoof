@@ -25,11 +25,26 @@ namespace SkyRoof
   public sealed class CwAudioWaterfallView : Control
   {
     private const int ScaleHeight = 26;
+    private const int SpectrumHeight = 44;
     private const int HistoryRows = 180;
+    private const double DisplayRangeDb = 30.0;
+
+    private static readonly Color SkimmerBackground =
+      Color.FromArgb(3, 10, 6);
+    private static readonly Color SkimmerScaleBackground =
+      Color.FromArgb(14, 22, 18);
+    private static readonly Color SkimmerGrid =
+      Color.FromArgb(36, 72, 48);
+    private static readonly Color SkimmerTrace =
+      Color.FromArgb(92, 255, 126);
+    private static readonly Color SkimmerPeak =
+      Color.FromArgb(255, 231, 92);
 
     private readonly Bitmap waterfall;
     private int writeRow;
     private bool hasRows;
+    private float displayFloorDb = float.NaN;
+    private float[] latestPowerDb = Array.Empty<float>();
     private double minFrequencyHz = 100;
     private double maxFrequencyHz = 2000;
 
@@ -66,9 +81,11 @@ namespace SkyRoof
         Graphics.FromImage(
           waterfall);
       g.Clear(
-        Theme.SpectrumBackground);
+        SkimmerBackground);
       writeRow = 0;
       hasRows = false;
+      displayFloorDb = float.NaN;
+      latestPowerDb = Array.Empty<float>();
       Invalidate();
     }
 
@@ -85,17 +102,24 @@ namespace SkyRoof
         frame.MinFrequencyHz;
       maxFrequencyHz =
         frame.MaxFrequencyHz;
+      latestPowerDb =
+        (float[])frame.PowerDb.Clone();
 
-      float floor =
+      float targetFloor =
         Percentile(
           frame.PowerDb,
-          0.20);
-      float ceiling =
-        Math.Max(
-          floor + 20,
-          Percentile(
-            frame.PowerDb,
-            0.985));
+          0.35);
+      displayFloorDb =
+        float.IsFinite(displayFloorDb)
+          ? 0.90f * displayFloorDb +
+            0.10f * targetFloor
+          : targetFloor;
+
+      // Unlike the old per-frame min/max stretch, keep a stable CW-oriented
+      // dynamic range. Noise stays dark while a 6-10 dB keyed carrier is
+      // already visible; strong carriers progress toward yellow/white.
+      double floor =
+        displayFloorDb + 1.0;
 
       writeRow =
         (writeRow - 1 +
@@ -109,14 +133,14 @@ namespace SkyRoof
         double level =
           (frame.PowerDb[x] -
            floor) /
-          Math.Max(
-            ceiling - floor,
-            1e-6);
+          DisplayRangeDb;
         level =
-          Math.Clamp(
-            level,
-            0,
-            1);
+          Math.Pow(
+            Math.Clamp(
+              level,
+              0,
+              1),
+            0.78);
 
         waterfall.SetPixel(
           x,
@@ -157,7 +181,27 @@ namespace SkyRoof
           0,
           ClientSize.Width,
           ScaleHeight);
-      Rectangle body =
+      Rectangle spectrum =
+        new(
+          0,
+          ScaleHeight,
+          ClientSize.Width,
+          Math.Min(
+            SpectrumHeight,
+            Math.Max(
+              1,
+              ClientSize.Height -
+              ScaleHeight)));
+      Rectangle waterfallBody =
+        new(
+          0,
+          spectrum.Bottom,
+          ClientSize.Width,
+          Math.Max(
+            1,
+            ClientSize.Height -
+            spectrum.Bottom));
+      Rectangle plot =
         new(
           0,
           ScaleHeight,
@@ -167,30 +211,86 @@ namespace SkyRoof
             ClientSize.Height -
             ScaleHeight));
 
-      e.Graphics.FillRectangle(
-        SystemBrushes.Control,
-        scale);
+      using (var scaleBrush =
+        new SolidBrush(
+          SkimmerScaleBackground))
+        e.Graphics.FillRectangle(
+          scaleBrush,
+          scale);
       using (var background =
         new SolidBrush(
-          Theme.SpectrumBackground))
+          SkimmerBackground))
       {
         e.Graphics.FillRectangle(
           background,
-          body);
+          plot);
       }
 
       DrawScale(
         e.Graphics,
-        scale);
+        scale,
+        plot);
+      DrawSpectrumTrace(
+        e.Graphics,
+        spectrum);
 
       if (hasRows)
         DrawWaterfall(
           e.Graphics,
-          body);
+          waterfallBody);
 
       DrawTrackMarkers(
         e.Graphics,
-        body);
+        plot);
+    }
+
+    private void DrawSpectrumTrace(
+      Graphics g,
+      Rectangle body)
+    {
+      if (latestPowerDb.Length < 2 ||
+          !float.IsFinite(displayFloorDb))
+        return;
+
+      using var pen =
+        new Pen(
+          SkimmerTrace,
+          1.25f);
+      var points =
+        new PointF[latestPowerDb.Length];
+      double floor =
+        displayFloorDb + 1.0;
+
+      for (int i = 0;
+           i < latestPowerDb.Length;
+           i++)
+      {
+        double level =
+          Math.Clamp(
+            (latestPowerDb[i] - floor) /
+            DisplayRangeDb,
+            0,
+            1);
+        float x =
+          body.Left +
+          i *
+          (body.Width - 1f) /
+          Math.Max(
+            1,
+            latestPowerDb.Length - 1);
+        float y =
+          body.Bottom - 2 -
+          (float)(level *
+            Math.Max(
+              1,
+              body.Height - 5));
+        points[i] =
+          new PointF(x, y);
+      }
+
+      g.DrawLines(
+        pen,
+        points);
     }
 
     private void DrawWaterfall(
@@ -263,7 +363,8 @@ namespace SkyRoof
 
     private void DrawScale(
       Graphics g,
-      Rectangle scale)
+      Rectangle scale,
+      Rectangle plot)
     {
       const int stepHz = 250;
       int first =
@@ -274,10 +375,10 @@ namespace SkyRoof
 
       using var gridPen =
         new Pen(
-          Theme.SpectrumGrid);
+          SkimmerGrid);
       using var textBrush =
         new SolidBrush(
-          SystemColors.ControlText);
+          Color.Gainsboro);
 
       for (int hz = first;
            hz <= maxFrequencyHz;
@@ -290,7 +391,7 @@ namespace SkyRoof
           x,
           scale.Bottom - 8,
           x,
-          scale.Bottom);
+          plot.Bottom);
 
         string label =
           hz.ToString();
@@ -313,28 +414,37 @@ namespace SkyRoof
     {
       using var normalPen =
         new Pen(
-          Theme.SpectrumTrace,
-          1.5f);
+          Color.FromArgb(
+            170,
+            SkimmerTrace),
+          1.25f);
       using var selectedPen =
         new Pen(
-          Theme.SpectrumPeak,
-          2.5f);
+          SkimmerPeak,
+          2.4f);
       using var ambiguousPen =
         new Pen(
-          Theme.SpectrumPeak,
-          1.5f)
+          Color.Orange,
+          1.35f)
         {
           DashStyle =
             DashStyle.Dash
         };
       using var holdPen =
         new Pen(
-          SystemColors.GrayText,
-          1.25f)
+          Color.FromArgb(
+            145,
+            Color.LightGray),
+          1.0f)
         {
           DashStyle =
             DashStyle.Dot
         };
+
+      float[] labelRight =
+        { float.NegativeInfinity,
+          float.NegativeInfinity,
+          float.NegativeInfinity };
 
       foreach (CwSignalTrack track
         in tracks)
@@ -348,11 +458,13 @@ namespace SkyRoof
         CwConsoleLaneIdentity identity =
           CwConsolePresentation.Identity(
             track);
-
-        Pen pen =
+        bool selected =
           selectedIdentity.HasValue &&
           identity ==
-            selectedIdentity.Value
+            selectedIdentity.Value;
+
+        Pen pen =
+          selected
             ? selectedPen
             : track.Ambiguous
               ? ambiguousPen
@@ -364,20 +476,21 @@ namespace SkyRoof
           FrequencyToX(
             track.FrequencyHz);
 
-        if (track.FrequencySigmaHz > 0 &&
+        // Keep the full-height uncertainty band only for the selected lane.
+        // Drawing every ±2σ band was obscuring the actual CW spectrum.
+        if (selected &&
+            track.FrequencySigmaHz > 0 &&
             double.IsFinite(
               track.FrequencySigmaHz))
         {
-          double lowHz =
-            track.FrequencyHz -
-            2 * track.FrequencySigmaHz;
-          double highHz =
-            track.FrequencyHz +
-            2 * track.FrequencySigmaHz;
           float lowX =
-            FrequencyToX(lowHz);
+            FrequencyToX(
+              track.FrequencyHz -
+              2 * track.FrequencySigmaHz);
           float highX =
-            FrequencyToX(highHz);
+            FrequencyToX(
+              track.FrequencyHz +
+              2 * track.FrequencySigmaHz);
           float left =
             Math.Min(lowX, highX);
           float width =
@@ -385,21 +498,11 @@ namespace SkyRoof
               1,
               Math.Abs(
                 highX - lowX));
-
-          Color bandColor =
-            track.Ambiguous
-              ? Theme.SpectrumPeak
-              : pen.Color;
           using var sigmaBrush =
             new SolidBrush(
               Color.FromArgb(
-                selectedIdentity.HasValue &&
-                identity ==
-                  selectedIdentity.Value
-                  ? 54
-                  : 30,
-                bandColor));
-
+                34,
+                SkimmerPeak));
           g.FillRectangle(
             sigmaBrush,
             left,
@@ -418,25 +521,53 @@ namespace SkyRoof
         string lane =
           CwConsolePresentation.LaneLabel(
             track);
-        using var backBrush =
-          new SolidBrush(
-            Color.FromArgb(
-              180,
-              Theme.SpectrumBackground));
-        using var textBrush =
-          new SolidBrush(
-            pen.Color);
-
         SizeF size =
           g.MeasureString(
             lane,
             Font);
+
+        int labelRow = 0;
+        for (int row = 0;
+             row < labelRight.Length;
+             row++)
+        {
+          if (x > labelRight[row] + 5)
+          {
+            labelRow = row;
+            break;
+          }
+          labelRow = row;
+        }
+
+        float labelX =
+          Math.Clamp(
+            x + 3,
+            body.Left + 1,
+            Math.Max(
+              body.Left + 1,
+              body.Right -
+              size.Width - 7));
+        float labelY =
+          body.Top + 2 +
+          labelRow *
+          (size.Height + 2);
         RectangleF labelRect =
           new(
-            x + 3,
-            body.Top + 3,
-            size.Width + 4,
+            labelX,
+            labelY,
+            size.Width + 5,
             size.Height + 2);
+        labelRight[labelRow] =
+          labelRect.Right;
+
+        using var backBrush =
+          new SolidBrush(
+            Color.FromArgb(
+              220,
+              SkimmerBackground));
+        using var textBrush =
+          new SolidBrush(
+            pen.Color);
         g.FillRectangle(
           backBrush,
           labelRect);
@@ -583,16 +714,36 @@ namespace SkyRoof
           0,
           1);
 
-      if (level < 0.72)
+      Color darkGreen =
+        Color.FromArgb(0, 34, 10);
+      Color green =
+        Color.FromArgb(0, 190, 38);
+      Color yellowGreen =
+        Color.FromArgb(178, 224, 28);
+
+      if (level < 0.14)
         return Mix(
-          Theme.SpectrumBackground,
-          Theme.SpectrumTrace,
-          level / 0.72);
+          SkimmerBackground,
+          darkGreen,
+          level / 0.14);
+      if (level < 0.58)
+        return Mix(
+          darkGreen,
+          green,
+          (level - 0.14) /
+          0.44);
+      if (level < 0.84)
+        return Mix(
+          green,
+          yellowGreen,
+          (level - 0.58) /
+          0.26);
 
       return Mix(
-        Theme.SpectrumTrace,
-        Theme.SpectrumPeak,
-        (level - 0.72) / 0.28);
+        SkimmerPeak,
+        Color.White,
+        (level - 0.84) /
+        0.16);
     }
 
     private static Color Mix(
