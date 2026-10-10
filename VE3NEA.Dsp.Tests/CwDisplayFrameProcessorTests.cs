@@ -94,6 +94,29 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void CompletedFftSignalsFrameReadyExactlyOnceWithoutPolling()
+    {
+      using var ready = new ManualResetEventSlim();
+      using var processor = new CwDisplayFrameProcessor(
+        Analyzer(2048), Analyzer(8192));
+      int signals = 0;
+      processor.FrameReady += () =>
+      {
+        Interlocked.Increment(ref signals);
+        ready.Set();
+      };
+      processor.TryQueue(
+        Snapshot(9600), 1, CwDenoiseMode.Bypass)
+        .Should().BeTrue();
+
+      ready.Wait(TimeSpan.FromSeconds(5)).Should().BeTrue();
+      SpinWait.SpinUntil(
+        () => processor.TryTake(out _),
+        TimeSpan.FromSeconds(5)).Should().BeTrue();
+      Volatile.Read(ref signals).Should().Be(1);
+    }
+
+    [Fact]
     public void Dispose_WithNativeStylePendingJob_DoesNotWaitForCompletion()
     {
       using var started = new ManualResetEventSlim();
