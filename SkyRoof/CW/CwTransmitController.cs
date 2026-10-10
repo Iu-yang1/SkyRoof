@@ -9,9 +9,9 @@ namespace SkyRoof.CW
     string? LastError);
 
   /// <summary>
-  /// Application-level CW transmit gate. TransmitEnabled is persistent and
-  /// defaults false; Armed is deliberately process/UI-session-only and never
-  /// written to Settings. Every send retains one SkyCAT TCP lease until STOP.
+  /// Manual CW keying via SkyCAT Command 17. No persistent enable flag or
+  /// separate Arm action is required: sending prepares context on demand.
+  /// Every send retains one SkyCAT TCP lease until STOP or watchdog expiry.
   /// </summary>
   public sealed class CwTransmitController :
     IAsyncDisposable
@@ -125,7 +125,6 @@ namespace SkyRoof.CW
           settings;
 
         safetyBoundaryChanged =
-          !newSettings.TransmitEnabled ||
           newSettings.CwKeyerPort !=
             previous.CwKeyerPort;
 
@@ -157,10 +156,6 @@ namespace SkyRoof.CW
     public void Arm()
     {
       ThrowIfDisposed();
-
-      if (!settings.TransmitEnabled)
-        throw new InvalidOperationException(
-          "CW transmit is disabled in Settings.");
 
       CwTransmitInterlockSnapshot snapshot =
         transmitInterlock.CaptureForArm();
@@ -273,9 +268,6 @@ namespace SkyRoof.CW
       {
         lock (this)
         {
-          if (!settings.TransmitEnabled)
-            throw new InvalidOperationException(
-              "CW transmit is disabled in Settings.");
           if (activeSession != null)
             throw new InvalidOperationException(
               "CW key speed cannot be changed while a message is active.");
@@ -341,24 +333,20 @@ namespace SkyRoof.CW
 
         lock (this)
         {
-          if (!settings.TransmitEnabled)
-            throw new InvalidOperationException(
-              "CW transmit is disabled in Settings.");
-
-          if (!armed)
-            throw new InvalidOperationException(
-              "CW transmit is not armed.");
-
-          if (!armedInterlock.HasValue)
-            throw new InvalidOperationException(
-              "CW transmit interlock was not captured while arming.");
-
           if (activeSession != null)
             throw new InvalidOperationException(
               "A CW message is already active.");
 
-          armSnapshot =
-            armedInterlock.Value;
+          // A fresh explicit Send must not require a separate Arm phase.
+          // In particular a prior STOP or settings restart must not
+          // permanently disable subsequent manually requested keying.
+          if (!armed || !armedInterlock.HasValue)
+          {
+            armedInterlock = transmitInterlock.CaptureForArm();
+            armed = true;
+          }
+
+          armSnapshot = armedInterlock.Value;
         }
 
         CwTransmitInterlockSnapshot sendSnapshot =

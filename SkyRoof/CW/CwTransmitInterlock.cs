@@ -77,6 +77,37 @@ namespace SkyRoof.CW
   }
 
   /// <summary>
+  /// Explicit operator CW keying uses the radio's live TX VFO and SkyCAT's
+  /// verified Command-17 keyer, independently of SatNOGS satellite metadata,
+  /// observation elevation, transponder mode and passband records.
+  /// Keep SkyRoof's own TX CAT writes suspended while the keyer lease is
+  /// active, so tracking ticks cannot move the uplink during one message.
+  /// STOP, CW/BK-IN hardware status and SkyCAT lease checks remain mandatory.
+  /// </summary>
+  public sealed class CwOperatorTransmitInterlock : ICwTransmitInterlock
+  {
+    private int txWritesFrozen;
+
+    public bool TxWritesFrozen => Volatile.Read(ref txWritesFrozen) != 0;
+
+    public CwTransmitInterlockSnapshot CaptureForArm() =>
+      NullCwTransmitInterlock.Instance.CaptureForArm();
+
+    public CwTransmitInterlockSnapshot PrepareForSend(
+      CwTransmitInterlockSnapshot armed) => armed;
+
+    public void ValidateDuringSend(
+      CwTransmitInterlockSnapshot active) { }
+
+    public void ValidateHardware(
+      CwTransmitInterlockSnapshot active,
+      CwKeyerStatus status) { }
+
+    public void SetTxWritesFrozen(bool frozen) =>
+      Interlocked.Exchange(ref txWritesFrozen, frozen ? 1 : 0);
+  }
+
+  /// <summary>
   /// Satellite-specific local safety guard for the Command-17 keyer.
   ///
   /// The raw 48 kHz receive/tracker path is unrelated to this guard. It only

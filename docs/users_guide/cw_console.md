@@ -568,3 +568,41 @@ measurement can distinguish event delivery from rendering. A ~30 FPS
 target is not a guarantee: actual FPS also depends on Windows
 message-pump scheduling and hardware availability. No decoding or
 CW TX behavior is changed.
+
+
+### Manual CW TX: no satellite-context or Arm gate
+
+CW Console's **Send** and **Shift+F1–F8** now key the **actual TX VFO**
+through the active SkyCAT IC-9700 Command-17 session without requiring
+a selected SatNOGS CW transmitter, an uplink database passband, a valid
+above-horizon satellite pass, an RX decode, or a separate **Arm TX**
+action. The legacy `TransmitEnabled` settings field is hidden and
+ignored for manual transmit (but retained for configuration-file
+compatibility). The menu no longer reports TX enabled/disabled based
+on that obsolete flag.
+
+**The operator is responsible for verifying the intended TX VFO,
+frequency, output power, antenna and RF operating privileges.**
+SkyRoof does *not* derive or certify TX frequency from the selected
+satellite for this manual keying mode, and will not automatically
+switch the radio to CW. Confirm the actual radio is in CW/CW-R with
+BK-IN configured; these are Command-17 prerequisites, not SNR or
+software receive-quality thresholds.
+
+The following protective behavior deliberately remains:
+
+- SkyCAT endpoint must be connected and the Command-17 keyer lease idle.
+- Radio STATUS must confirm CW/CW-R, break-in enabled and not already TX;
+  otherwise Send displays the real status error without asserting TX.
+- A single CW message may occupy the keyer at a time. STOP is always
+  accessible, cancels pending requests, and tears down the lease.
+- A bounded message/valid CW syntax, IC-9700 key-speed limits, and a
+  calculated watchdog STOP follow the hardware/protocol requirements.
+- SkyRoof's own TX CAT writes are frozen **only while** the manual CW
+  keyer lease is active, preventing automatic Doppler ticks from
+  retuning during one message. They resume on STOP.
+
+This mode is intentionally **manual**, not automatic satellite
+passband assurance. Radio firmware, SkyCAT's real Command-17
+constraints, licensing and RF power/amplifier protections are not
+bypassed.

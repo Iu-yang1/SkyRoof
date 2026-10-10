@@ -135,7 +135,7 @@ namespace SkyRoof
       if (ctx.CwAudio != null)
         ctx.CwAudio.Ingress.SamplesAccepted += Ingress_SamplesAccepted;
 
-      Text = "CW Console [TX disabled]";
+      Text = "CW Console [RX / TX]";
       Name = "CwConsolePanel";
       // Keep the Console usable as a compact floating tool window. The old
       // 1040x900 / 720x720 geometry was unnecessarily tall on 1080p displays.
@@ -290,23 +290,6 @@ namespace SkyRoof
           using var dialog =
             new SettingsDialog(ctx);
           dialog.ShowDialog(this);
-
-          if (!ctx.Settings.CwConsole.TransmitEnabled &&
-              ctx.CwTransmit?.State.Armed == true)
-          {
-            try
-            {
-              ctx.CwTransmit
-                .DisarmAsync()
-                .GetAwaiter()
-                .GetResult();
-            }
-            catch
-            {
-              // Controller connection teardown still triggers SkyCAT's
-              // disconnect fail-safe; the state retains the error for UI.
-            }
-          }
 
           LoadSettingsIntoControls();
         };
@@ -1271,14 +1254,7 @@ namespace SkyRoof
     {
       CwTransmitController? tx =
         ctx.CwTransmit;
-      CwConsoleSettings settings =
-        ctx.Settings.CwConsole;
-
-      string txCapability =
-        settings.TransmitEnabled
-          ? "TX enabled"
-          : "TX disabled";
-      Text = $"CW Console [{txCapability}]";
+      Text = "CW Console [RX / TX]";
       ctx.MainForm.UpdateCwConsoleMenuText();
 
       if (tx == null)
@@ -1295,7 +1271,6 @@ namespace SkyRoof
         tx.State;
 
       SendTxBtn.Enabled =
-        settings.TransmitEnabled &&
         !state.Sending &&
         !sendRequestInProgress &&
         !string.IsNullOrWhiteSpace(
@@ -1305,11 +1280,9 @@ namespace SkyRoof
         state.Sending || sendRequestInProgress;
 
       SetKeySpeedBtn.Enabled =
-        settings.TransmitEnabled &&
         !state.Sending &&
         !statusPollInProgress;
       KeySpeedBox.Enabled =
-        settings.TransmitEnabled &&
         !state.Sending;
 
       if (state.RadioStatus is CwKeyerStatus speedStatus &&
@@ -1331,15 +1304,6 @@ namespace SkyRoof
         in MacroButtons)
         macroButton.Enabled =
           !state.Sending;
-
-      if (!settings.TransmitEnabled)
-      {
-        TxStatusLabel.Text =
-          "TX: disabled in Settings";
-        TxStatusLabel.ForeColor =
-          SystemColors.GrayText;
-        return;
-      }
 
       if (state.Sending)
       {
@@ -1441,15 +1405,11 @@ namespace SkyRoof
 
       try
       {
-        // Capture the satellite/TX interlock at the operator's explicit
-        // send action, not when the Console was opened minutes earlier.
+        // CW text is keyed only after the operator requests Send,
+        // independently of satellite/transponder selection.
         if (tx.State.Sending)
           throw new InvalidOperationException(
             "A CW message is already in progress. Press STOP first.");
-        // A previous Send may have completed via watchdog. Always capture
-        // a fresh interlock for this explicit action, never reuse an old
-        // satellite/no-Doppler context across sends.
-        tx.Arm();
         await tx.SendAsync(text, requestStop.Token);
       }
       catch (OperationCanceledException) when (requestStop.IsCancellationRequested)
@@ -1523,7 +1483,6 @@ namespace SkyRoof
         ctx.CwTransmit;
       if (tx == null ||
           statusPollInProgress ||
-          !ctx.Settings.CwConsole.TransmitEnabled ||
           !tx.State.Armed ||
           tx.State.Sending ||
           DateTime.UtcNow < nextStatusPollUtc)
