@@ -606,3 +606,44 @@ This mode is intentionally **manual**, not automatic satellite
 passband assurance. Radio firmware, SkyCAT's real Command-17
 constraints, licensing and RF power/amplifier protections are not
 bypassed.
+
+
+### Compact eight-lane Pileup and incomplete CW words
+
+The eight skimmer slots are now compact, height-adaptive **two-line
+summaries**. The old 126-pixel cards required 1008 pixels for eight
+slots before counting the header, making a normal floating window
+impossible to read at a glance. The lane overview now targets
+34–52 pixels per row, with a short frequency/SNR/status heading and
+ellipsized text preview. Select any lane to read its full wrapped,
+scrollable transcript in **CW RX — Selected Lane**; the row's Copy button
+copies the full combined text, not just the visible preview.
+
+The receiver previously displayed up to eight tracks/slots but sent
+at most **five tracks** to DeepCW ONNX by default. The worker and
+multi-lane decoder now default to eight inference lanes, preserving
+the existing active-first/SNR priority. If eight actual signals are
+simultaneously present, more ONNX work is expected than with five;
+the existing no-backlog/inference-busy protection stays enabled.
+
+In addition, the ONNX CTC output was being filtered **per character**
+at an uncalibrated pairwise-score threshold of 0.62 *before*
+overlapping windows could vote. Valid moderate-confidence letters
+were irreversibly deleted, leaving only short fragments such as
+`5NN`. Raw CTC character candidates now reach the incremental
+transcript coordinator with their original confidence scores.
+**Committed** text still requires the established two-window,
+confidence-weighted consensus; unconfirmed candidates remain
+**provisional** rather than being labeled reliable decoded CW.
+
+The old CW spectrum **FPS/GDI/PCM/FFT hover diagnostics and cadence
+meter** have been removed. Display rendering and event-driven PCM/FFT
+updates remain intact, with no FPS telemetry overhead.
+
+A legible waterfall is evidence of a signal, not proof of correct CW
+decode: frequency errors, overlapping stations, QSB and model errors
+can still produce partial texts. A CW `5NN` report is itself valid
+Morse shorthand for RST 599, so whether it is incomplete must be
+judged against the audio recording. For reproducible decoder errors,
+capture a short original 48-kHz PCM/AF recording and the corresponding
+track/frequency; screenshots alone cannot establish symbol timing.
