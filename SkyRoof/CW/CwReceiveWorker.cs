@@ -628,7 +628,17 @@ namespace SkyRoof.CW
           TrackCount:
             latestTracks.Count,
           LastError:
-            lastError);
+            lastError,
+          RidgeStftCacheHits:
+            ingress.FrontEnd.FrameScanner.StftCacheHits,
+          RidgeStftCacheMisses:
+            ingress.FrontEnd.FrameScanner.StftCacheMisses,
+          DeepCwStftCacheHits:
+            (session as DeepCwInferenceSession)?.StftHits ?? 0,
+          DeepCwStftCacheMisses:
+            (session as DeepCwInferenceSession)?.StftMisses ?? 0,
+          MeanOnnxInferenceMs:
+            (session as DeepCwInferenceSession)?.MeanOnnxInferenceMs ?? 0);
       }
     }
 
