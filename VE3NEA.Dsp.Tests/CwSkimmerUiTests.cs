@@ -91,8 +91,10 @@ namespace VE3NEA.Dsp.Tests
       // Same combined characters; only their committed status changes.
       view.UpdateLane(slot, Transcript(1, 77, "CQ TEST", ""));
       view.TranscriptControl.Select(3, 1);
-      view.TranscriptControl.SelectionColor.Should().Be(
-        System.Drawing.SystemColors.WindowText);
+      // RichEdit normalizes named system colors to their concrete RGB
+      // value (for example WindowText becomes Black on CI hosts).
+      view.TranscriptControl.SelectionColor.ToArgb().Should().Be(
+        System.Drawing.SystemColors.WindowText.ToArgb());
     }
 
     [Fact]
