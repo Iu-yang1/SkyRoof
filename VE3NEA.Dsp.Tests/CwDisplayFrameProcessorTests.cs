@@ -45,6 +45,8 @@ namespace VE3NEA.Dsp.Tests
       {
         started.Wait(TimeSpan.FromSeconds(3)).Should().BeTrue();
         processor.Busy.Should().BeTrue();
+        processor.RecordBusyTick();
+        processor.BusyTicks.Should().Be(1);
         processor.TryQueue(
           Snapshot(11000), 4, CwDenoiseMode.Bypass)
           .Should().BeFalse();
@@ -63,6 +65,9 @@ namespace VE3NEA.Dsp.Tests
       completed.DenoiseMode.Should().Be(CwDenoiseMode.HamNoiseV2);
       completed.Waterfall.EndSampleIndex.Should().Be(10000);
       completed.Spectrum.EndSampleIndex.Should().Be(10000);
+      completed.ProcessingMilliseconds.Should().BeGreaterOrEqualTo(0);
+      processor.MeanProcessingMilliseconds.Should().BeGreaterOrEqualTo(0);
+      processor.FinishedFrames.Should().Be(1);
       processor.Busy.Should().BeFalse();
     }
 
