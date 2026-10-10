@@ -43,6 +43,7 @@ namespace SkyRoof
     private readonly IcomScopeState ScopeState = new();
     private readonly IcomScopeController ScopeController;
     private readonly IcomScopePendingControls PendingScopeControls = new();
+    private long UnconfirmedScopeControlCount;
 
     private IcomLanSpectrumCapture? Capture;
     private IcomLanSpectrumCapture? NativeLanAssistCapture;
@@ -1063,6 +1064,7 @@ namespace SkyRoof
       LastScopeReadback = null;
       LastScopeReadbackUtc = null;
       PendingScopeControls.Clear();
+      UnconfirmedScopeControlCount = 0;
       LastFixedEdgeConfirmationRequestUtc = DateTime.MinValue;
       LastScopeControlBackend = null;
 
@@ -1131,6 +1133,7 @@ namespace SkyRoof
       LastScopeReadback = null;
       LastScopeReadbackUtc = null;
       PendingScopeControls.Clear();
+      UnconfirmedScopeControlCount = 0;
       LastFixedEdgeConfirmationRequestUtc = DateTime.MinValue;
       LastScopeControlBackend = null;
       LastDiagnosticsText =
@@ -2241,6 +2244,7 @@ namespace SkyRoof
         LastScopeReadbackUtc = null;
         PendingEdgeSyncScope = -1;
         PendingScopeControls.Clear();
+        UnconfirmedScopeControlCount = 0;
         LastFixedEdgeConfirmationRequestUtc = DateTime.MinValue;
         ScopeController.Reset();
         UpdateScopeControlAvailability();
@@ -2261,6 +2265,7 @@ namespace SkyRoof
         PendingScopeControls.Expire(now);
       if (unconfirmed.Length > 0)
       {
+        UnconfirmedScopeControlCount += unconfirmed.Length;
         // Do not assume the CAT queue's acceptance implies a hardware
         // write. Restore actual frame geometry and request a fresh register
         // readback after the confirmation deadline.
@@ -2401,7 +2406,11 @@ namespace SkyRoof
       StatsLabel.Text =
         $"{FormatSpectrumSource(spectrumSettings.Source)} · " +
         $"{transportSummary} · Ctrl {FormatControlPath(resolvedControlPath)}{controlHint} · " +
-        $"475 bins · {DisplayFps:0.0} fps · {health}";
+        $"475 bins · {DisplayFps:0.0} fps · {health}" +
+        (PendingScopeControls.Count > 0
+          ? $" · Ctrl pending {PendingScopeControls.Count}" : "") +
+        (UnconfirmedScopeControlCount > 0
+          ? $" · Unconfirmed {UnconfirmedScopeControlCount}" : "");
 
       LastDiagnosticsText =
         string.Join(
@@ -2415,6 +2424,7 @@ namespace SkyRoof
           $"Queue dropped: {queueStats?.Dropped.ToString("N0") ?? "n/a"}",
           $"Queue rejected: {queueStats?.Rejected.ToString("N0") ?? "n/a"}",
           $"Control changes awaiting radio confirmation: {PendingScopeControls.Count}",
+          $"Unconfirmed controls after timeout: {UnconfirmedScopeControlCount}",
           $"Packets: {effectiveCapture.PacketCount:N0}",
           $"CI-V frames: {effectiveCapture.CivFrameCount:N0}",
           $"Complete sweeps: {scopeFrames:N0}",
