@@ -22,8 +22,8 @@ namespace SkyRoof.CW
       this.capacity = capacity;
     }
 
-    internal long Hits => hits;
-    internal long Misses => misses;
+    internal long Hits => Interlocked.Read(ref hits);
+    internal long Misses => Interlocked.Read(ref misses);
     internal int Count => rows.Count;
 
     internal bool TryCopy(
@@ -37,10 +37,10 @@ namespace SkyRoof.CW
           row.Length == destination.Length)
       {
         row.AsSpan().CopyTo(destination);
-        hits++;
+        Interlocked.Increment(ref hits);
         return true;
       }
-      misses++;
+      Interlocked.Increment(ref misses);
       return false;
     }
 
@@ -63,8 +63,8 @@ namespace SkyRoof.CW
     {
       rows.Clear();
       fifo.Clear();
-      hits = 0;
-      misses = 0;
+      Interlocked.Exchange(ref hits, 0);
+      Interlocked.Exchange(ref misses, 0);
     }
   }
 }
