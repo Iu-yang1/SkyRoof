@@ -1,14 +1,14 @@
 namespace SkyRoof
 {
   /// <summary>
-  /// Collapses high-rate scope frames to a single pending WinForms UI
-  /// callback. The newest frame wins; delayed UI layouts never accumulate
-  /// an unbounded BeginInvoke queue of outdated waveform frames.
+  /// At most one pending WinForms BeginInvoke callback, retaining one
+  /// newest frame per MAIN/SUB receiver. Keeping both matters when AUTO
+  /// scope selection prefers MAIN during interleaved CI-V frame bursts.
   /// </summary>
   internal sealed class IcomScopeUiFrameMailbox
   {
     private readonly object gate = new();
-    private IcomScopeFrame? latest;
+    private readonly IcomScopeFrame?[] latest = new IcomScopeFrame?[2];
     private bool callbackScheduled;
     private long replacedFrames;
 
@@ -22,14 +22,16 @@ namespace SkyRoof
       ArgumentNullException.ThrowIfNull(frame);
       lock (gate)
       {
-        if (latest != null)
+        int receiver = frame.Scope == 1 ? 1 : 0;
+        IcomScopeFrame? previous = latest[receiver];
+        if (previous != null)
         {
-          if (frame.TimestampUtc.Ticks <= latest.TimestampUtc.Ticks)
+          if (frame.TimestampUtc.Ticks <= previous.TimestampUtc.Ticks)
             return false;
           replacedFrames++;
         }
 
-        latest = frame;
+        latest[receiver] = frame;
         if (callbackScheduled)
           return false;
 
@@ -38,12 +40,15 @@ namespace SkyRoof
       }
     }
 
-    internal IcomScopeFrame? Take()
+    internal IcomScopeFrame[] TakeAll()
     {
       lock (gate)
       {
-        IcomScopeFrame? result = latest;
-        latest = null;
+        var result = latest.Where(x => x != null)
+          .Select(x => x!).OrderBy(x => x.TimestampUtc.Ticks)
+          .ToArray();
+        latest[0] = null;
+        latest[1] = null;
         callbackScheduled = false;
         return result;
       }
@@ -53,7 +58,8 @@ namespace SkyRoof
     {
       lock (gate)
       {
-        latest = null;
+        latest[0] = null;
+        latest[1] = null;
         callbackScheduled = false;
         replacedFrames = 0;
       }
