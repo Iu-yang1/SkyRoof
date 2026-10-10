@@ -209,6 +209,13 @@ namespace VE3NEA.Dsp.Tests
       output.WriteLine(
         "STREAMING " +
         JsonSerializer.Serialize(streaming));
+      // Real ONNX streaming now exercises the exact-sample STFT cache,
+      // including the three distinct 1s/15ms hop phases.
+      decoder.StftCacheHits.Should().BeGreaterThan(100);
+      output.WriteLine(
+        $"STFT reused={decoder.StftCacheHits} " +
+        $"computed={decoder.StftCacheMisses} " +
+        $"ONNX_Run_mean_ms={onnx.MeanInferenceMilliseconds:F2}");
 
       streaming.StreamingCerA.Should()
         .BeLessThan(streaming.NaiveConcatCerA);
@@ -714,7 +721,8 @@ namespace VE3NEA.Dsp.Tests
               windowSamples),
             SampleRate,
             origin.AddSeconds(endSeconds),
-            [trackA, trackB]);
+            [trackA, trackB],
+            endSample);
 
         DeepCwLaneResult a =
           batch.LaneResults.Single(
