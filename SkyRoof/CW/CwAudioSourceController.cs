@@ -112,7 +112,14 @@ namespace SkyRoof.CW
   public sealed class CwAudioSourceController : IDisposable
   {
     private readonly Context ctx;
-    private readonly InputSoundcard<float> captureInput = new();
+    // CW waterfall targets a ~33-ms display hop. The legacy soundcard
+    // 200-ms WASAPI polling buffer yielded ~100-ms PCM delivery intervals,
+    // limiting both Raw and HamNoise to around 10 genuinely new frames/s.
+    // Opt in only this CW capture path; ordinary Soundcard users keep
+    // their established defaults.
+    private readonly InputSoundcard<float> captureInput = new(
+      captureBufferMilliseconds: 40,
+      readerBlockSizeSamples: 1600);
     private readonly LoopbackInputSoundcard loopbackInput = new();
     private bool disposed;
 
