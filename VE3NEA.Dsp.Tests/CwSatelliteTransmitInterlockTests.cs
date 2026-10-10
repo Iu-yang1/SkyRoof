@@ -8,6 +8,24 @@ namespace VE3NEA.Dsp.Tests
   public sealed class CwSatelliteTransmitInterlockTests
   {
     [Fact]
+    public void OperatorManualInterlock_HasNoSatelliteDatabaseOrHorizonGate()
+    {
+      var manual = new CwOperatorTransmitInterlock();
+      CwTransmitInterlockSnapshot snapshot = manual.CaptureForArm();
+
+      snapshot.IsSatellite.Should().BeFalse();
+      snapshot.RequiresHardwareFrequencyGuard.Should().BeFalse();
+      manual.PrepareForSend(snapshot).Should().Be(snapshot);
+      manual.ValidateDuringSend(snapshot);
+      manual.TxWritesFrozen.Should().BeFalse();
+      manual.SetTxWritesFrozen(true);
+      manual.TxWritesFrozen.Should().BeTrue();
+      manual.ValidateDuringSend(snapshot);
+      manual.SetTxWritesFrozen(false);
+      manual.TxWritesFrozen.Should().BeFalse();
+    }
+
+    [Fact]
     public void DopplerOnlyChange_DoesNotInvalidateArmedContext()
     {
       CwTransmitInterlockSnapshot armed =
