@@ -123,7 +123,7 @@ namespace SkyRoof
       Name = "CwConsolePanel";
       // Keep the Console usable as a compact floating tool window. The old
       // 1040x900 / 720x720 geometry was unnecessarily tall on 1080p displays.
-      ClientSize = new Size(900, 650);
+      ClientSize = new Size(860, 620);
       MinimumSize = new Size(700, 560);
       KeyPreview = true;
 
@@ -206,7 +206,7 @@ namespace SkyRoof
       root.RowStyles.Add(
         new RowStyle(
           SizeType.Absolute,
-          135));
+          120));
       root.RowStyles.Add(
         new RowStyle(
           SizeType.Percent,
@@ -214,11 +214,11 @@ namespace SkyRoof
       root.RowStyles.Add(
         new RowStyle(
           SizeType.Absolute,
-          150));
+          145));
       root.RowStyles.Add(
         new RowStyle(
           SizeType.Absolute,
-          165));
+          155));
 
       var toolbar =
         new FlowLayoutPanel
@@ -256,6 +256,7 @@ namespace SkyRoof
       var sourceTip = new ToolTip();
       sourceTip.SetToolTip(
         SourceBox,
+        "Choose the signal path here; choose the concrete Windows endpoint in Settings > CW Console.\r\n\r\n" +
         "IC-9700 USB AF input = Windows recording endpoint such as Microphone (USB Audio CODEC). The radio's USB AF/IF Output must be AF, not IF.\r\n" +
         "RS-BA1 playback loopback = the Windows playback/render endpoint that RS-BA1 is actually playing into.\r\n" +
         "SkyRoof SDR audio = the existing internal 48 kHz SDR/Slicer AF stream.");
@@ -296,7 +297,7 @@ namespace SkyRoof
       toolbar.Controls.Add(
         SpectrumCleanupBox);
 
-      SettingsBtn.Text = "Settings…";
+      SettingsBtn.Text = "CW Settings…";
       SettingsBtn.AutoSize = true;
       SettingsBtn.Click +=
         (_, _) =>
