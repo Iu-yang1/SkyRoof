@@ -413,3 +413,24 @@ DeepCW 解码和 CW 发射联锁均未更改。
 运行至少 10 秒后比较实测 FPS、p95 帧间隔及平均后台耗时。
 左侧谱线响应较快但 Painted FPS 偏低，往往更值得继续检查
 UI 消息循环与绘制时间，而非单纯继续替换 FFT。
+
+
+### 与 LAN 频谱共享 UI 消息线程时的帧率诊断
+
+CW Console 和 Icom LAN Spectrum 使用同一个 WinForms UI 线程。
+旧版 LAN 频谱每收到一帧 CI-V `27 00` 都独立投递
+`BeginInvoke`，还会每帧重复设置多个下拉框，这可能在
+CW 的 FFT/HamNoise 已移出 UI 线程后，仍然导致 CW 瀑布仅
+**9 FPS** 或出现短暂停顿。现在 LAN 波形只保留最新的待绘制帧，
+并避免无变化的频谱几何触发频繁控件刷新。
+
+CW 后台完成 FFT 后还会主动发出帧就绪通知：距离上一帧已经
+约 **32 ms** 时，尽快投递至 UI，而不是必须再等待一次
+33 ms WinForms Timer；定时器仍作为兜底。两个调度入口均保持
+单任务无积压策略。此修改提高响应及时性，但不保证在所有 CPU
+或 HamNoise 模式下都能实现实际 30 FPS。
+
+鼠标悬停 CW Console 顶部 **Spectrum** 状态文字，可比较
+真实 Painted FPS、帧间隔 p95/最大值、GDI 绘制时间平均/p95
+和后台 FFT/HamNoise 处理时间。如果 FFT 和 GDI 都只用几毫秒，
+但 FPS 仍低，就应继续查 UI 消息排队和音频回调周期。
