@@ -49,10 +49,15 @@ The status line shows the concrete Windows endpoint that is currently open.
 ## Compact layout
 
 The floating CW Console opens in a compact geometry suitable for a 1080p
-desktop. The spectrum, transcript and transmit areas no longer reserve the
-large fixed heights used by the first release. **Committed** and **Provisional
-/ may change** receive equal transcript space so the provisional suffix remains
-readable while the window is reduced.
+desktop. The spectrum and eight stable lane slots remain visible. The lower
+details area has two tabs: **RX transcript** and **CW transmit**, instead of
+stacking two independently constrained fixed-height panels into one window.
+On the RX tab, **Committed** and **Provisional / may change** receive equal
+text area. On the TX tab, the composer, all F1–F8 macros, Arm, Send, STOP and
+WPM controls are visible with horizontally scrollable tool rows if necessary.
+The TX tab indicates ARMED/SENDING state, and an extra red **STOP TX** button
+appears in the main toolbar during active keying so switching tabs cannot
+hide the emergency stop.
 
 ## Install the DeepCW model
 
