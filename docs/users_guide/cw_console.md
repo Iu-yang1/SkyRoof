@@ -230,7 +230,7 @@ Recommended sequence:
 
 SkyRoof also includes an offline recorded-WAV corpus runner for regression
 testing the whole receive chain. See
-[Recorded CW corpus](../../benchmarks/cw-recorded-corpus/README.md).
+[Recorded CW corpus](https://github.com/Iu-yang1/SkyRoof/tree/master/benchmarks/cw-recorded-corpus).
 
 The truth reference frequency is used only after decoding to score lane
 identity; it is not supplied to detection or tracking.
