@@ -1744,6 +1744,10 @@ namespace SkyRoof
         WaterfallTimer_Tick;
       WaterfallView.LaneClicked -=
         WaterfallView_LaneClicked;
+      // FFTW plans belong to the display analyzers, not the receiver;
+      // release their aligned native buffers when the Console closes.
+      WaterfallAnalyzer.Dispose();
+      SpectrumAnalyzer.Dispose();
 
       modelInstallStop?.Cancel();
 
