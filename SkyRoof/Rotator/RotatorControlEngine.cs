@@ -67,8 +67,8 @@ namespace SkyRoof
 
       // A position command must not race an earlier continuous M command.
       // Stop the continuous move first, then the normal cycle may issue P.
-      stopRequested =
-        continuousWasActive;
+      if (continuousWasActive)
+        stopRequested = true;
     }
 
     internal void StartContinuousMove(
@@ -86,6 +86,10 @@ namespace SkyRoof
         throw new ArgumentOutOfRangeException(
           nameof(direction));
 
+      bool absoluteWasActive =
+        RequestedBearing != null ||
+        LastWrittenBearing != null;
+
       RequestedBearing = null;
       LastWrittenBearing = null;
 
@@ -93,11 +97,13 @@ namespace SkyRoof
         Volatile.Read(
           ref appliedContinuousDirection);
 
-      // Switching axes/direction is fail-safe: queue an all-stop before the
-      // new move. Starting the same direction again is idempotent.
-      stopRequested =
-        applied != 0 &&
-        applied != value;
+      // Taking ownership from an absolute P target, or switching direction,
+      // is fail-safe: STOP must be acknowledged before the new M command.
+      // Starting the same already-active direction remains idempotent.
+      if (absoluteWasActive ||
+          (applied != 0 &&
+           applied != value))
+        stopRequested = true;
 
       Volatile.Write(
         ref requestedContinuousDirection,
@@ -127,14 +133,24 @@ namespace SkyRoof
       if (stopRequested)
       {
         stopRequested = false;
-        SendStopCommand();
+        bool stopped =
+          SendStopCommand();
         Volatile.Write(
           ref appliedContinuousDirection,
           0);
 
+        if (!stopped)
+        {
+          // Never start a new direction when STOP could not be confirmed.
+          Volatile.Write(
+            ref requestedContinuousDirection,
+            0);
+          return;
+        }
+
         // A direction switch or transition back to absolute positioning may
-        // already be queued. Continue this cycle after the stop so the motor
-        // does not sit idle for an unnecessary full polling interval.
+        // already be queued. Continue this cycle after the acknowledged stop
+        // so the motor does not sit idle for an unnecessary polling interval.
       }
 
       int requestedMove =
@@ -182,19 +198,27 @@ namespace SkyRoof
     // some rotator servers accept the stop command but never reply to it, and the read then times
     // out. Do not drop the connection when that happens, and do not send the command again until
     // the rotator settings are re-applied and this engine is re-created
-    private void SendStopCommand()
+    private bool SendStopCommand()
     {
-      if (stopNotSupported) return;
+      if (stopNotSupported)
+        return false;
 
       try
       {
-        SendWriteCommand("S");
+        if (SendWriteCommand("S"))
+          return true;
+
+        stopNotSupported = true;
+        Log.Warning(
+          "The rotator controller rejected the Stop command. Continuous manual movement is disabled until rotator settings are reapplied.");
+        return false;
       }
       catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)
       {
         stopNotSupported = true;
-        Log.Warning("The rotator controller does not reply to the Stop command. " +
-          "SkyRoof will not send this command again.");
+        Log.Warning(
+          "The rotator controller does not reply to the Stop command. Continuous manual movement is disabled until rotator settings are reapplied.");
+        return false;
       }
     }
 
