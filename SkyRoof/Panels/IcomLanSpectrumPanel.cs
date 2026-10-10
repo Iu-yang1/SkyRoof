@@ -1388,6 +1388,14 @@ namespace SkyRoof
           : $"{FormatToolbarFrequency(checked(geometry.LowerFrequencyHz + displayOffsetHz))} — " +
             $"{FormatToolbarFrequency(checked(geometry.UpperFrequencyHz + displayOffsetHz))}";
 
+      // Show the hardware-reported width separately from the operator's
+      // requested width while SkyCAT is still awaiting confirmation.
+      if (PendingScopeControls.TryGet(
+            frame.Scope, IcomScopeControlKind.Span,
+            out IcomScopeControlRequest pendingSpan))
+        GeometryLabel.Text +=
+          $" · {FormatSpanChoice(pendingSpan.SpanHz)} pending";
+
       UpdateScopeControlAvailability();
     }
 
