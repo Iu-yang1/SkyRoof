@@ -82,6 +82,16 @@ namespace SkyRoof.CW
     public bool TxCatWritesFrozen =>
       transmitInterlock.TxWritesFrozen;
 
+    public CwTransmitInterlockSnapshot? CurrentInterlock
+    {
+      get
+      {
+        lock (this)
+          return activeInterlock ??
+            armedInterlock;
+      }
+    }
+
     public CwTransmitState State
     {
       get
