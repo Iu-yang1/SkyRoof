@@ -107,6 +107,22 @@ namespace SkyRoof.CW
         255.0;
     }
 
+    public static int WpmToRawKeySpeed(
+      double wpm)
+    {
+      if (!double.IsFinite(wpm) ||
+          wpm < MinimumWpm ||
+          wpm > MaximumWpm)
+        throw new ArgumentOutOfRangeException(
+          nameof(wpm));
+
+      return (int)Math.Round(
+        (wpm - MinimumWpm) *
+        255.0 /
+        (MaximumWpm - MinimumWpm),
+        MidpointRounding.AwayFromZero);
+    }
+
     /// <summary>
     /// Estimate the actual keyed duration using standard Morse timing.
     /// Dot=1, dash=3, intra-element=1, character=3, word=7 units.
