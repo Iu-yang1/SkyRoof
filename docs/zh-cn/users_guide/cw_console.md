@@ -303,3 +303,32 @@ transverter LO、用户 no-Doppler 调谐位置和电台实际 TX VFO。
 本版本缓存 Ridge Scanner 的 Hann 窗函数，并对零多普勒速率跳过不必要的逐采样三角运算。CW 频谱仍以约 20 Hz 更新，但仅用于显示的 8192 点长 FFT 约每 4 帧刷新一次。DeepCW ONNX Runtime 使用一个会话，并限制模型内部 CPU 并行线程，避免与 120 ms 跟踪循环竞争。这些优化不改变 Decode Window、Hop、物理证据门限、跟踪协方差或卫星 TX interlock。
 
 请在相同音频、相同最大 Lane 数、相同 Spectrum 模式下，比较 CPU、已完成/跳过的推理窗口及实际抄收效果。i5-10400 与 i7-14650HX 的 Windows 进程 CPU 百分比不能直接作为每次解码 CPU 成本比值；仍需在实际机器上做性能基准。
+
+
+### 复用 FFT Plan 的实数 FFT（FFTW3f）
+
+CW 接收现统一采用前向 **R2C 实数 FFT** 内核：包含零已知 Doppler Rate 的
+Ridge Scanner、CW 多峰检测、DeepCW 模型采样率特征、共享宽带特征和频谱瀑布。
+对于实数 AF PCM，只计算并读取 `0..N/2` 个非冗余复数频点，且保持原来
+`FourierOptions.Matlab` 的**前向不归一化幅度定义**。非零 Doppler 去啁啾涉及
+真正的复数基带信号，仍使用原来的双精度复数 FFT。DeepCW 的 Hann 窗、
+频率映射、tensor 规格、门限和卫星发射联锁没有修改。
+
+优先后端为 SkyRoof **原来就附带**的 `libfftw3f-3.dll`（FFTW3f）。
+FFT 工作缓冲区通过 FFTW 自带的对齐分配器分配，使其可以使用该 DLL 实际
+编译支持的 SIMD 内核；Plan 跨解码窗口复用，避免每帧重新规划。如果 DLL
+缺失或无法加载相关 R2C 符号，则自动回退到 Math.NET 的原有实现。
+是否确实利用 AVX2/AVX-512 取决于 FFTW 二进制构建与运行机器，
+**不能仅凭 CPU 支持 AVX2 就认定 FFT 已使用 AVX2**。
+
+本次参考的是
+[kfrlib/fft-benchmark](https://github.com/kfrlib/fft-benchmark) 的
+**同一 CPU、预热、多次测量、实数/复数分开比较**的方法，而不是将该项目
+本身作为 FFT 库引入。测试框架为 MIT 许可证，实际 FFTW 代码沿用其 GPL
+许可证，本次未引入 KFR、MKL 或 IPP 二进制文件。
+
+每次 PR 的 Compile Check 会比较 256、2048、3840、4096、8192、
+11520 点 R2C 与原复数 FFT 的同机中位耗时，并上传
+`cw-fft-r2c-benchmark`（JSON Lines）。这只反映 FFT 变换成本，
+**不能直接等同于整机 DeepCW 解码 CPU 占用率**。请在相同音频和设置下，
+进一步比较 i5-10400 的总 CPU、skipped inference windows 和抄收准确率。

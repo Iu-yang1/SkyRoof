@@ -1,6 +1,3 @@
-using MathNet.Numerics.IntegralTransforms;
-using System.Numerics;
-
 namespace SkyRoof.CW
 {
   public readonly record struct CwAudioSpectrumFrame(
@@ -23,7 +20,7 @@ namespace SkyRoof.CW
   /// It is intentionally independent from the detector/tracker STFT so UI
   /// refresh cost can never alter tracking statistics or covariance.
   /// </summary>
-  public sealed class CwAudioWaterfallAnalyzer
+  public sealed class CwAudioWaterfallAnalyzer : IDisposable
   {
     private readonly int sampleRate;
     private readonly int fftSize;
@@ -31,7 +28,7 @@ namespace SkyRoof.CW
     private readonly double maxFrequencyHz;
     private readonly int outputBins;
     private readonly double[] window;
-    private readonly Complex[] fft;
+    private readonly CwRealFft fft;
 
     public CwAudioWaterfallAnalyzer(
       int sampleRate = SdrConst.AUDIO_SAMPLING_RATE,
@@ -80,7 +77,7 @@ namespace SkyRoof.CW
               2 * Math.PI * i /
               fftSize))
           .ToArray();
-      fft = new Complex[fftSize];
+      fft = new CwRealFft(fftSize);
     }
 
     public int SampleRate => sampleRate;
@@ -113,16 +110,12 @@ namespace SkyRoof.CW
            i < fftSize;
            i++)
       {
-        fft[i] =
-          new Complex(
-            snapshot.Samples[start + i] *
-            window[i],
-            0);
+        fft.Input[i] =
+          (float)(snapshot.Samples[start + i] *
+            window[i]);
       }
 
-      Fourier.Forward(
-        fft,
-        FourierOptions.Matlab);
+      fft.Forward();
 
       double binHz =
         sampleRate /
@@ -159,10 +152,8 @@ namespace SkyRoof.CW
         double mix =
           sourceBin - lower;
 
-        double p0 =
-          Power(fft[lower]);
-        double p1 =
-          Power(fft[upper]);
+        double p0 = fft.Power(lower);
+        double p1 = fft.Power(upper);
         double power =
           p0 * (1 - mix) +
           p1 * mix;
@@ -184,10 +175,6 @@ namespace SkyRoof.CW
         result);
     }
 
-    private static double Power(
-      Complex value) =>
-      value.Real * value.Real +
-      value.Imaginary *
-      value.Imaginary;
+    public void Dispose() => fft.Dispose();
   }
 }

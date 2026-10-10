@@ -1,6 +1,3 @@
-using MathNet.Numerics.IntegralTransforms;
-using System.Numerics;
-
 namespace SkyRoof.CW
 {
   public readonly record struct CwPhysicalLaneEvidence(
@@ -84,7 +81,7 @@ namespace SkyRoof.CW
       int frameCount = 1 + (paddedLength - fftSize) / hopSize;
       int fullBins = fftSize / 2 + 1;
       float[] magnitude = new float[checked(frameCount * fullBins)];
-      var fft = new Complex[fftSize];
+      using var fft = CwRealFft.Rent(fftSize);
 
       // Match the periodic Hann used by DeepCwFeatureWindow, but sampled at
       // the wideband rate over the same physical 80 ms interval.
@@ -100,18 +97,15 @@ namespace SkyRoof.CW
         {
           int sourceIndex = ReflectIndex(
             start + i, audio.Length);
-          fft[i] = new Complex(
-            audio[sourceIndex] * hann[i], 0);
+          fft.Input[i] = (float)(
+            audio[sourceIndex] * hann[i]);
         }
 
-        Fourier.Forward(fft, FourierOptions.Matlab);
+        fft.Forward();
         int dest = frame * fullBins;
         for (int bin = 0; bin < fullBins; bin++)
         {
-          Complex value = fft[bin];
-          magnitude[dest + bin] = (float)Math.Sqrt(
-            value.Real * value.Real +
-            value.Imaginary * value.Imaginary);
+          magnitude[dest + bin] = (float)fft.Magnitude(bin);
         }
       }
 

@@ -308,7 +308,13 @@ namespace SkyRoof.CW
       var frames = new List<List<FramePeak>>(frameCount);
       double[] window = windowSamples == fastWindow
         ? fastHann : precisionHann;
-      var fft = new Complex[windowSamples];
+      // Typical zero-Doppler PCM is real: transform its non-redundant
+      // half-spectrum with a pooled FFTW plan. Preserve the complex
+      // double-precision DFT for nonzero satellite de-chirp.
+      using var realFft = knownDopplerRateHzPerSecond == 0
+        ? CwRealFft.Rent(windowSamples) : null;
+      Complex[]? complexFft = knownDopplerRateHzPerSecond == 0
+        ? null : new Complex[windowSamples];
 
       double binHz =
         options.SampleRate / (double)windowSamples;
@@ -349,11 +355,9 @@ namespace SkyRoof.CW
 
         if (knownDopplerRateHzPerSecond == 0)
         {
-          // Most terrestrial CW sessions have no de-chirp. Avoid two
-          // transcendental calls per FFT input sample in this hot path.
           for (int i = 0; i < windowSamples; i++)
-            fft[i] = new Complex(
-              snapshot.Samples[offset + i] * window[i], 0);
+            realFft!.Input[i] = (float)(
+              snapshot.Samples[offset + i] * window[i]);
         }
         else
         {
@@ -368,20 +372,28 @@ namespace SkyRoof.CW
               -Math.PI * knownDopplerRateHzPerSecond * t * t;
             double value =
               snapshot.Samples[offset + i] * window[i];
-            fft[i] = new Complex(
+            complexFft![i] = new Complex(
               value * Math.Cos(phase),
               value * Math.Sin(phase));
           }
         }
 
-        Fourier.Forward(fft, FourierOptions.Matlab);
+        if (realFft != null)
+          realFft.Forward();
+        else
+          Fourier.Forward(complexFft!, FourierOptions.Matlab);
 
         for (int b = 0; b < binCount; b++)
         {
-          Complex value = fft[firstBin + b];
-          double power =
-            value.Real * value.Real +
-            value.Imaginary * value.Imaginary;
+          double power;
+          if (realFft != null)
+            power = realFft.Power(firstBin + b);
+          else
+          {
+            Complex value = complexFft![firstBin + b];
+            power = value.Real * value.Real +
+              value.Imaginary * value.Imaginary;
+          }
           powers[b] = power;
           noiseScratch[b] = power;
         }

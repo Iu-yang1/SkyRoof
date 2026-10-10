@@ -1,6 +1,3 @@
-using MathNet.Numerics.IntegralTransforms;
-using System.Numerics;
-
 namespace SkyRoof.CW
 {
   public readonly record struct DeepCwTensor(float[] Data, int[] Dimensions)
@@ -63,7 +60,7 @@ namespace SkyRoof.CW
       int frameCount = 1 + (paddedLength - n) / metadata.HopLength;
       int fullBins = n / 2 + 1;
       float[] magnitude = new float[checked(frameCount * fullBins)];
-      var fft = new Complex[n];
+      using var fft = CwRealFft.Rent(n);
       double[] hann = Enumerable.Range(0, n)
         .Select(i => 0.5 - 0.5 * Math.Cos(2 * Math.PI * i / n))
         .ToArray();
@@ -74,17 +71,14 @@ namespace SkyRoof.CW
         for (int i = 0; i < n; i++)
         {
           int sourceIndex = ReflectIndex(start + i, resampled.Length);
-          fft[i] = new Complex(resampled[sourceIndex] * hann[i], 0);
+          fft.Input[i] = (float)(resampled[sourceIndex] * hann[i]);
         }
 
-        Fourier.Forward(fft, FourierOptions.Matlab);
+        fft.Forward();
         int dest = frame * fullBins;
         for (int bin = 0; bin < fullBins; bin++)
         {
-          Complex value = fft[bin];
-          magnitude[dest + bin] =
-            (float)Math.Sqrt(value.Real * value.Real +
-                             value.Imaginary * value.Imaginary);
+          magnitude[dest + bin] = (float)fft.Magnitude(bin);
         }
       }
 

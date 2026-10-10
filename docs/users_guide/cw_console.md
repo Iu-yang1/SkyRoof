@@ -353,3 +353,38 @@ no-Doppler tuning position, and the actual radio TX VFO first.
 This version caches ridge-scanner Hann windows and skips per-sample trigonometric de-chirping when the known Doppler rate is zero. The display waterfall remains approximately 20 Hz, while its 8192-point spectrum trace refreshes every fourth display frame. The single DeepCW ONNX Runtime session uses bounded CPU intra-op parallelism to reduce contention with the 120-ms tracker loop. Decode windows, hops, physical-evidence gates, tracker covariance and satellite TX interlocks remain unchanged.
 
 For a meaningful before/after comparison, use the same PCM recording, lane count and display-cleanup mode, then compare total process CPU, completed/skipped inference windows and transcript accuracy. The Windows CPU percentages of an i5-10400 and an i7-14650HX are not directly comparable as per-inference cost metrics; real hardware benchmarks are still required.
+
+
+### Planned real FFT (FFTW3f)
+
+The CW receiver now uses a shared **forward real-to-complex (R2C)** FFT
+abstraction for the Ridge Scanner (zero known Doppler rate), candidate detector,
+model-rate DeepCW STFT, wideband shared DeepCW STFT, and live waterfall.
+Rather than constructing a full complex spectrum of real AF PCM, the new
+interface exposes only the unnormalised non-redundant bins `0..N/2`.
+DeepCW window shape, spectral magnitude calibration, model input tensor
+sizes and decoder thresholds remain unchanged. For nonzero known Doppler
+de-chirping, the Ridge Scanner keeps its original double-precision complex
+Fourier transform.
+
+The preferred backend is **FFTW3f**, already packaged as
+`libfftw3f-3.dll` by SkyRoof. FFTW owns SIMD-aligned scratch memory and the
+execution plans are reused across decoder hops (rather than regenerated every
+frame). FFTW's built-in hardware optimizations depend on the actual binary and
+CPU features: this update does **not** imply AVX2/AVX-512 support is present in
+every distributed FFTW build. If the native DLL or its R2C symbols cannot load,
+the original Math.NET transform runs instead. The fallback preserves the
+same unscaled forward convention.
+
+This route follows the **measurement methodology**, not the code, of
+[kfrlib/fft-benchmark](https://github.com/kfrlib/fft-benchmark).
+The benchmark repository is MIT licensed; the FFTW library retains its own
+GPL license. No KFR, MKL or IPP binary is added.
+
+Every pull-request Compile Check performs a same-host, warmed, median-time
+real-R2C versus previous complex-forward microbenchmark and uploads
+`cw-fft-r2c-benchmark` (JSON Lines, 256/2048/3840/4096/8192/11520 samples).
+This describes isolated per-transform compute cost, **not** total decoder CPU
+or the i5-10400 performance of a different machine. Before judging the
+change, compare recorded audio accuracy, worker skipped windows and total
+process CPU using the same audio, receiver options and display settings.
