@@ -14,9 +14,8 @@ namespace SkyRoof
   }
 
   // Compact manual-control card hosted inside the Rotator status drop-down.
-  // The directional wheel intentionally uses relative position commands rather
-  // than hamlib's continuous-move command so it works with the same broad set
-  // of rotctld backends already supported by SkyRoof.
+  // Direction sectors use Hamlib continuous move while held and STOP on
+  // release, matching hardware/cloud-satellite direction-pad semantics.
   internal sealed class RotatorControlCard : UserControl
   {
     private readonly RotatorDirectionWheel Wheel = new();
@@ -36,6 +35,7 @@ namespace SkyRoof
 
     private Context? ctx;
     private RotatorWidget? rotator;
+    private bool updatingStepUi;
 
     internal RotatorControlCard()
     {
@@ -86,8 +86,16 @@ namespace SkyRoof
 
       Wheel.Location = new Point(18, 104);
       Wheel.Size = new Size(202, 202);
-      Wheel.JogRequested += Wheel_JogRequested;
-      Wheel.StopRequested += (_, _) => rotator?.StopRotation();
+      Wheel.MoveStarted +=
+        direction =>
+          rotator?.BeginManualContinuousMove(
+            direction);
+      Wheel.MoveStopped +=
+        (_, _) =>
+          rotator?.EndManualContinuousMove();
+      Wheel.StopRequested +=
+        (_, _) =>
+          rotator?.StopRotation();
       Controls.Add(Wheel);
 
       var stepLabel = new Label
@@ -95,7 +103,7 @@ namespace SkyRoof
         AutoSize = false,
         Location = new Point(232, 112),
         Size = new Size(72, 19),
-        Text = "Step",
+        Text = "Track step",
         TextAlign = ContentAlignment.MiddleLeft
       };
       Controls.Add(stepLabel);
@@ -107,13 +115,18 @@ namespace SkyRoof
       StepSpinner.Value = 5M;
       StepSpinner.Location = new Point(232, 134);
       StepSpinner.Size = new Size(72, 23);
+      StepSpinner.ValueChanged +=
+        StepSpinner_ValueChanged;
       Controls.Add(StepSpinner);
+      UiToolTip.SetToolTip(
+        StepSpinner,
+        "Automatic satellite-tracking step size. This changes the active tracking path immediately; manual hold movement is continuous.");
 
       ManualHintLabel.AutoSize = false;
       ManualHintLabel.ForeColor = SystemColors.GrayText;
       ManualHintLabel.Location = new Point(228, 166);
       ManualHintLabel.Size = new Size(80, 76);
-      ManualHintLabel.Text = "Hold a direction\nto repeat.\n\nCenter = STOP";
+      ManualHintLabel.Text = "Hold = move\nRelease = STOP\n\nCenter = STOP";
       ManualHintLabel.TextAlign = ContentAlignment.TopLeft;
       Controls.Add(ManualHintLabel);
 
@@ -204,11 +217,19 @@ namespace SkyRoof
       rotator = widget;
 
       var sett = ctx.Settings.Rotator;
-      StepSpinner.Value =
-        Math.Clamp(
-          (decimal)sett.StepSize,
-          StepSpinner.Minimum,
-          StepSpinner.Maximum);
+      updatingStepUi = true;
+      try
+      {
+        StepSpinner.Value =
+          Math.Clamp(
+            (decimal)sett.StepSize,
+            StepSpinner.Minimum,
+            StepSpinner.Maximum);
+      }
+      finally
+      {
+        updatingStepUi = false;
+      }
 
       UpdateSpinnerLimits();
       RefreshState();
@@ -258,7 +279,9 @@ namespace SkyRoof
         !manualLocked;
 
       Wheel.Enabled = manualEnabled;
-      StepSpinner.Enabled = manualEnabled;
+      // Track step is a tracking parameter, not a manual-jog increment, so it
+      // remains adjustable while live tracking is active.
+      StepSpinner.Enabled = enabled;
       AzimuthSpinner.Enabled = manualEnabled;
       ElevationSpinner.Enabled = manualEnabled;
       GoButton.Enabled = manualEnabled;
@@ -287,7 +310,7 @@ namespace SkyRoof
           ? "LIVE TRACK\n\nManual locked.\nClear TRACK first."
           : rotator.IsTracking
             ? "PRE-POSITION\n\nManual input will\nclear TRACK first."
-            : "Hold a direction\nto repeat.\n\nCenter = STOP";
+            : "Hold = move\nRelease = STOP\n\nCenter = STOP";
 
       ManualHintLabel.ForeColor =
         manualLocked
@@ -352,29 +375,16 @@ namespace SkyRoof
       RefreshState();
     }
 
-    private void Wheel_JogRequested(
-      RotatorJogDirection direction)
+    private void StepSpinner_ValueChanged(
+      object? sender,
+      EventArgs e)
     {
-      if (rotator == null) return;
+      if (updatingStepUi ||
+          rotator == null)
+        return;
 
-      double step = (double)StepSpinner.Value;
-
-      switch (direction)
-      {
-        case RotatorJogDirection.AzimuthDown:
-          rotator.ManualJog(-step, 0);
-          break;
-        case RotatorJogDirection.AzimuthUp:
-          rotator.ManualJog(step, 0);
-          break;
-        case RotatorJogDirection.ElevationUp:
-          rotator.ManualJog(0, step);
-          break;
-        case RotatorJogDirection.ElevationDown:
-          rotator.ManualJog(0, -step);
-          break;
-      }
-
+      rotator.SetTrackingStepSize(
+        (double)StepSpinner.Value);
       RefreshState();
     }
 
@@ -440,8 +450,6 @@ namespace SkyRoof
 
   internal sealed class RotatorDirectionWheel : Control
   {
-    private readonly System.Windows.Forms.Timer RepeatTimer = new();
-
     private RotatorJogDirection HotDirection;
     private RotatorJogDirection PressedDirection;
 
@@ -449,7 +457,8 @@ namespace SkyRoof
     internal Bearing? TargetBearing;
     internal Bearing? SatelliteBearing;
 
-    internal event Action<RotatorJogDirection>? JogRequested;
+    internal event Action<RotatorJogDirection>? MoveStarted;
+    internal event EventHandler? MoveStopped;
     internal event EventHandler? StopRequested;
 
     internal RotatorDirectionWheel()
@@ -458,9 +467,6 @@ namespace SkyRoof
       Cursor = Cursors.Hand;
       TabStop = false;
       MinimumSize = new Size(150, 150);
-
-      RepeatTimer.Interval = 350;
-      RepeatTimer.Tick += RepeatTimer_Tick;
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -625,18 +631,17 @@ namespace SkyRoof
         return;
       }
 
-      JogRequested?.Invoke(
+      // Continuous-motion protocols are edge triggered: press starts the
+      // direction and the hardware keeps moving until release sends STOP.
+      MoveStarted?.Invoke(
         PressedDirection);
-
-      RepeatTimer.Interval = 350;
-      RepeatTimer.Start();
     }
 
     protected override void OnMouseUp(MouseEventArgs e)
     {
       base.OnMouseUp(e);
 
-      StopRepeat();
+      FinishPress();
     }
 
     protected override void OnMouseCaptureChanged(EventArgs e)
@@ -644,46 +649,43 @@ namespace SkyRoof
       base.OnMouseCaptureChanged(e);
 
       if (!Capture)
-        StopRepeat();
+        FinishPress();
     }
 
     protected override void Dispose(bool disposing)
     {
-      if (disposing)
+      if (disposing &&
+          PressedDirection != RotatorJogDirection.None &&
+          PressedDirection != RotatorJogDirection.Stop)
       {
-        RepeatTimer.Stop();
-        RepeatTimer.Dispose();
+        MoveStopped?.Invoke(
+          this,
+          EventArgs.Empty);
       }
 
       base.Dispose(disposing);
     }
 
-    private void RepeatTimer_Tick(
-      object? sender,
-      EventArgs e)
+    private void FinishPress()
     {
-      if (PressedDirection == RotatorJogDirection.None ||
-          PressedDirection == RotatorJogDirection.Stop)
-      {
-        RepeatTimer.Stop();
-        return;
-      }
+      RotatorJogDirection released =
+        PressedDirection;
 
-      RepeatTimer.Interval = 130;
+      PressedDirection =
+        RotatorJogDirection.None;
 
-      JogRequested?.Invoke(
-        PressedDirection);
-    }
+      if (Capture)
+        Capture = false;
 
-    private void StopRepeat()
-    {
-      RepeatTimer.Stop();
-      Capture = false;
-
-      if (PressedDirection != RotatorJogDirection.None)
-      {
-        PressedDirection = RotatorJogDirection.None;
+      if (released != RotatorJogDirection.None)
         Invalidate();
+
+      if (released != RotatorJogDirection.None &&
+          released != RotatorJogDirection.Stop)
+      {
+        MoveStopped?.Invoke(
+          this,
+          EventArgs.Empty);
       }
     }
 
