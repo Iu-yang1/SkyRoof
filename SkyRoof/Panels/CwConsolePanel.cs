@@ -164,8 +164,7 @@ namespace SkyRoof
           Dock = DockStyle.Fill,
           ColumnCount = 1,
           RowCount = 6,
-          Padding = new Padding(8),
-          MinimumSize = new Size(0, 180)
+          Padding = new Padding(8)
         };
 
       root.ColumnStyles.Add(
@@ -433,7 +432,8 @@ namespace SkyRoof
         {
           Dock = DockStyle.Fill,
           Text = "Selected RX Transcript",
-          Padding = new Padding(8)
+          Padding = new Padding(8),
+          MinimumSize = new Size(0, 180)
         };
 
       var layout =
