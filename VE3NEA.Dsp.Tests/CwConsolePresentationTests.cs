@@ -134,10 +134,10 @@ namespace VE3NEA.Dsp.Tests
           T0);
       int aSlot =
         first.Single(x =>
-          x.Identity?.Id == 101).Index;
+          x.Identity.HasValue && x.Identity.Value.Id == 101).Index;
       int bSlot =
         first.Single(x =>
-          x.Identity?.Id == 202).Index;
+          x.Identity.HasValue && x.Identity.Value.Id == 202).Index;
 
       IReadOnlyList<CwConsoleLaneSlot> crossed =
         slots.Update(
@@ -149,10 +149,10 @@ namespace VE3NEA.Dsp.Tests
           T0.AddSeconds(1));
 
       crossed.Single(x =>
-          x.Identity?.Id == 101)
+          x.Identity.HasValue && x.Identity.Value.Id == 101)
         .Index.Should().Be(aSlot);
       crossed.Single(x =>
-          x.Identity?.Id == 202)
+          x.Identity.HasValue && x.Identity.Value.Id == 202)
         .Index.Should().Be(bSlot);
     }
 
@@ -176,7 +176,7 @@ namespace VE3NEA.Dsp.Tests
             Array.Empty<CwSignalTrack>(),
             T0.AddSeconds(2))
           .Single(x =>
-            x.Identity?.Id == 101);
+            x.Identity.HasValue && x.Identity.Value.Id == 101);
       grace.Present.Should().BeFalse();
 
       IReadOnlyList<CwConsoleLaneSlot> released =
@@ -184,7 +184,7 @@ namespace VE3NEA.Dsp.Tests
           Array.Empty<CwSignalTrack>(),
           T0.AddSeconds(5));
       released.Should().NotContain(x =>
-        x.Identity?.Id == 101);
+        x.Identity.HasValue && x.Identity.Value.Id == 101);
     }
 
     [Fact]
