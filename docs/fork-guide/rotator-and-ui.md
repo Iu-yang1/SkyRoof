@@ -6,7 +6,9 @@
 
 Configure **Settings → Rotator Control** with the `rotctld` host and TCP port, normally **127.0.0.1:4533**; adjust azimuth/elevation limits, offsets and step size to the *real mechanical antenna and cable geometry*. A typical external rotator can be served by Hamlib with GS-232B-compatible hardware. The correct COM port, baud rate and protocol are configured in `rotctld`, not on SkyRoof's TCP side.
 
-The improved rotator driver retries movement sensibly, parses rotctld replies, avoids redundant **Track** actions and handles stop/disconnect transitions. A new direction-wheel popup is available from the rotator/status right-click entry for manual jog; its directional buttons and PARK action are intended for situations when automatic antenna tracking is not active.
+The improved rotator driver retries movement sensibly, parses rotctld replies, avoids redundant **Track** actions and handles stop/disconnect transitions. A direction-wheel popup is available from the rotator/status right-click entry. Its four sectors now use true continuous Hamlib movement: mouse-down sends `M direction -1` (UP=2, DOWN=4, LEFT=8, RIGHT=16) and mouse-up/capture-loss sends `S`. This matches GS-232B-style start-motion/stop semantics instead of repeatedly synthesizing absolute `P` targets.
+
+The popup **Track step** is bound to the real `RotatorSettings.StepSize`. It is saved immediately and rebuilds the current optimized pass path, so changing it affects both the tracking command threshold and the path optimizer without waiting for a new pass.
 
 **Safety:** Manual jog is locked while SkyRoof is actively tracking a satellite pass. Stopping tracking may be necessary before enabling manual controls. Always observe the antenna and stop motion if limits or offsets are wrong.
 

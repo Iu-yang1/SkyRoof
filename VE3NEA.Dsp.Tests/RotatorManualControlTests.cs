@@ -29,6 +29,24 @@ public sealed class RotatorManualControlTests
                 passIsActive));
     }
 
+    [Theory]
+    [InlineData(1.0f, 0.5)]
+    [InlineData(5.0f, 2.5)]
+    [InlineData(12.0f, 6.0)]
+    public void TrackingStepChangesCommandTriggerThreshold(
+        float stepDegrees,
+        double expectedTriggerDegrees)
+    {
+        double radians =
+            RotatorWidget.TrackingTriggerAngleRadians(
+                stepDegrees);
+
+        Assert.Equal(
+            expectedTriggerDegrees,
+            radians / VE3NEA.Geo.RinD,
+            6);
+    }
+
     [Fact]
     public void ManualPopupIsKeptInsideWorkingArea()
     {

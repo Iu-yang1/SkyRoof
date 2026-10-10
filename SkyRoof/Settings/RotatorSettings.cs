@@ -70,8 +70,8 @@ namespace SkyRoof
     [DefaultValue(0)]
     public int ElevationOffset { get; set; } = 0;
 
-    [DisplayName("Step Size")]
-    [Description("The tracking step size, in degrees")]
+    [DisplayName("Tracking Step Size")]
+    [Description("Automatic satellite-tracking step size in degrees. Manual direction-wheel hold uses continuous move/stop commands and is not stepped.")]
     [DefaultValue(5f)]
     public float StepSize { get; set; } = 5f;
 
