@@ -130,13 +130,17 @@ namespace SkyRoof
     {
       Text = "Copy",
       Dock = DockStyle.Fill,
-      AutoSize = false,
-      Margin = new Padding(0),
-      Padding = new Padding(1, 0, 1, 0),
+      AutoSize = true,
+      AutoSizeMode = AutoSizeMode.GrowAndShrink,
+      MinimumSize = new Size(70, 24),
+      Margin = new Padding(1, 0, 1, 0),
+      Padding = new Padding(4, 0, 4, 0),
       TabStop = false
     };
 
     internal event Action<CwConsoleLaneIdentity>? Selected;
+    internal string CopyText => copyText;
+    internal string PreviewText => preview.Text;
 
     internal CwPileupLaneCard(int index)
     {
@@ -156,7 +160,8 @@ namespace SkyRoof
         Padding = new Padding(0)
       };
       layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-      layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 49));
+      // Keep DPI-aware Copy sizing; fixed 49px would clip its text.
+      layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
       layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
       layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
       layout.Controls.Add(title, 0, 0);
