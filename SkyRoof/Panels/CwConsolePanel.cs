@@ -72,9 +72,6 @@ namespace SkyRoof
     private readonly System.Windows.Forms.Timer WaterfallTimer =
       new() { Interval = 100 };
     private int waterfallPumpQueued;
-    private long pcmPumpSignals;
-    private long frameReadyPumpSignals;
-    private long waterfallPumpRuns;
 
     private IReadOnlyList<CwSignalTrack> latestTracks =
       Array.Empty<CwSignalTrack>();
@@ -686,13 +683,11 @@ namespace SkyRoof
 
     private void Ingress_SamplesAccepted()
     {
-      Interlocked.Increment(ref pcmPumpSignals);
       ScheduleWaterfallPump();
     }
 
     private void DisplayFrames_FrameReady()
     {
-      Interlocked.Increment(ref frameReadyPumpSignals);
       // No 32-ms gate: when computation is ready, consume it promptly.
       // A queued-but-skipped callback previously had to wait until the
       // next WinForms timer tick, adding 1-3 missed PCM frame periods.
@@ -717,7 +712,6 @@ namespace SkyRoof
           Interlocked.Exchange(ref waterfallPumpQueued, 0);
           if (IsDisposed || Disposing)
             return;
-          Interlocked.Increment(ref waterfallPumpRuns);
           RefreshWaterfall();
         }));
       }
@@ -856,39 +850,6 @@ namespace SkyRoof
         $"decode {status.CompletedInferenceWindows} · " +
         $"skipped {status.SkippedInferenceWindows} · " +
         $"gen {status.TimelineGeneration}";
-
-      // Diagnostics on hover, not a longer status line: avoid truncation
-      // in docked and high-DPI CW Skimmer windows.
-      MacroToolTip.SetToolTip(
-        WorkerStatusLabel,
-        $"Ridge STFT cache: {status.RidgeStftCacheHits} reused / " +
-        $"{status.RidgeStftCacheMisses} computed\n" +
-        $"DeepCW STFT cache: {status.DeepCwStftCacheHits} reused / " +
-        $"{status.DeepCwStftCacheMisses} computed\n" +
-        $"Mean ONNX Run: {status.MeanOnnxInferenceMs:F1} ms");
-
-      CwDisplayCadenceSnapshot paint = WaterfallView.PaintMetrics;
-      (double paintMeanMs, double paintP95Ms) =
-        WaterfallView.PaintDurationMetrics;
-      MacroToolTip.SetToolTip(
-        SpectrumStatusLabel,
-        $"CW waterfall (new frames actually painted): " +
-        $"{paint.ActualFps:F1} FPS\n" +
-        $"Painted interval p95: {paint.P95IntervalMs:F1} ms; " +
-        $"max: {paint.MaximumIntervalMs:F1} ms\n" +
-        $"GDI paint: {paintMeanMs:F1} ms mean / " +
-        $"{paintP95Ms:F1} ms p95\n" +
-        $"Background display processing: " +
-        $"{DisplayFrames.LastProcessingMilliseconds:F1} ms last, " +
-        $"{DisplayFrames.MeanProcessingMilliseconds:F1} ms mean\n" +
-        $"Busy display ticks (no queue buildup): " +
-        $"{DisplayFrames.BusyTicks}; stale results: {staleDisplayFrames}\n" +
-        $"PCM input: {ctx.CwAudio?.Ingress.LastBlockSamples ?? 0} samples/" +
-        $"block, last delivery interval " +
-        $"{ctx.CwAudio?.Ingress.LastPcmDeliveryIntervalMs ?? 0:F1} ms\n" +
-        $"UI pump: {Interlocked.Read(ref pcmPumpSignals)} PCM signals; " +
-        $"{Interlocked.Read(ref frameReadyPumpSignals)} FFT-ready signals; " +
-        $"{Interlocked.Read(ref waterfallPumpRuns)} coalesced UI callbacks");
 
       InstallModelBtn.Visible =
         status.ModelState ==
