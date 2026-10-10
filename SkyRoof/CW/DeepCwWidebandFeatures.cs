@@ -57,9 +57,15 @@ namespace SkyRoof.CW
     public static DeepCwWidebandFeatureWindow Create(
       ReadOnlySpan<float> audio,
       int sourceSampleRate,
+      DeepCwModelMetadata metadata) =>
+      Create(audio, sourceSampleRate, metadata, null, null);
+
+    internal static DeepCwWidebandFeatureWindow Create(
+      ReadOnlySpan<float> audio,
+      int sourceSampleRate,
       DeepCwModelMetadata metadata,
-      long? endSampleIndex = null,
-      CwStftMagnitudeCache? frameCache = null)
+      long? endSampleIndex,
+      CwStftMagnitudeCache? frameCache)
     {
       if (sourceSampleRate < 1000)
         throw new ArgumentOutOfRangeException(nameof(sourceSampleRate));
