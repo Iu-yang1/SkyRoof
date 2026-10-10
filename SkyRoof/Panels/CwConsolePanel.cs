@@ -935,125 +935,84 @@ namespace SkyRoof
 
     private void RefreshWaterfall()
     {
-      CwReceiveWorker? worker =
-        ctx.CwReceiveWorker;
-      CwAudioSourceController? audio =
-        ctx.CwAudio;
-      if (worker == null ||
-          audio == null)
+      CwReceiveWorker? worker = ctx.CwReceiveWorker;
+      CwAudioSourceController? audio = ctx.CwAudio;
+      if (worker == null || audio == null)
         return;
 
-      CwReceiveWorkerStatus workerStatus =
-        worker.GetStatus();
-
-      if (workerStatus.TimelineGeneration !=
-          waterfallGeneration)
+      CwReceiveWorkerStatus workerStatus = worker.GetStatus();
+      if (workerStatus.TimelineGeneration != waterfallGeneration)
       {
-        waterfallGeneration =
-          workerStatus.TimelineGeneration;
+        waterfallGeneration = workerStatus.TimelineGeneration;
         lastWaterfallSampleIndex = -1;
-        spectrumFrameDivider = 0;
         WaterfallView.Clear();
       }
 
-      CwSignalTrack[] trackSnapshot;
-      lock (stateSync)
-        trackSnapshot =
-          CwConsolePresentation
-            .CollapseDuplicateLaneIdentities(
-              latestTracks);
+      CwDenoiseMode mode =
+        ctx.Settings.CwConsole.SpectrumDenoiseMode;
 
-      WaterfallView.SetTracks(
-        trackSnapshot,
-        selectedIdentity);
-
-      CwAudioHub hub =
-        audio.Ingress.FrontEnd.Audio;
-
-      double snapshotSeconds =
-        Math.Max(
-          0.20,
-          SpectrumAnalyzer.FftSize /
-            (double)SpectrumAnalyzer.SampleRate +
-          0.02);
-      if (!audio.Ingress.Enabled ||
-          !hub.TrySnapshot(
-            snapshotSeconds,
-            out CwAudioSnapshot snapshot) ||
-          snapshot.EndSampleIndex ==
-            lastWaterfallSampleIndex)
-        return;
-
+      // Poll the completed task only: never run Sinc, HamNoise or FFTW on
+      // the WinForms UI thread, and never enqueue a backlog of old frames.
       try
       {
-        CwAudioSnapshot displaySnapshot =
-          PrepareSpectrumDisplaySnapshot(
-            snapshot);
-        // The long 8192-point live spectrum need not be recomputed
-        // for every 2048-point waterfall time column. Keep ~20 Hz
-        // waterfall motion while budgeting the spectrum trace at ~5 Hz.
-        if (spectrumFrameDivider++ % 4 == 0)
-          WaterfallView.SetSpectrum(
-            SpectrumAnalyzer.Analyze(displaySnapshot));
-        CwAudioSpectrumFrame waterfallFrame =
-          WaterfallAnalyzer.Analyze(displaySnapshot);
-        lastWaterfallSampleIndex =
-          snapshot.EndSampleIndex;
-        WaterfallView.Append(
-          waterfallFrame);
+        if (DisplayFrames.TryTake(out CwDisplayFrameResult result) &&
+            result.TimelineGeneration == waterfallGeneration &&
+            result.DenoiseMode == mode &&
+            audio.Ingress.Enabled &&
+            result.Waterfall.EndSampleIndex > lastWaterfallSampleIndex)
+        {
+          WaterfallView.SetSpectrum(result.Spectrum);
+          WaterfallView.Append(result.Waterfall);
+          lastWaterfallSampleIndex = result.Waterfall.EndSampleIndex;
+        }
       }
       catch (ArgumentException)
       {
-        // Source/timeline may have reset between status polling and snapshot
-        // analysis. The next UI tick will retry on the new generation.
+        // A capture source/timeline can reset during background processing.
       }
-    }
-
-    private CwAudioSnapshot PrepareSpectrumDisplaySnapshot(
-      CwAudioSnapshot raw)
-    {
-      CwDenoiseMode mode =
-        ctx.Settings.CwConsole.SpectrumDenoiseMode;
-      if (mode == CwDenoiseMode.Bypass)
-        return raw;
-
-      if (displayDenoiser == null ||
-          displayDenoiserMode != mode)
+      catch (Exception ex)
       {
-        displayDenoiser =
-          new HamNoiseAudioDenoiser(mode);
-        displayDenoiserMode = mode;
+        // Native HamNoise errors are visualization-only. Disable this
+        // optional mode to avoid failing every 50 ms; the raw receiver
+        // and the neural decoder continue unaffected.
+        if (mode != CwDenoiseMode.Bypass)
+        {
+          ctx.Settings.CwConsole.SpectrumDenoiseMode =
+            CwDenoiseMode.Bypass;
+          updatingSourceUi = true;
+          try
+          {
+            SpectrumCleanupBox.SelectedItem = CwDenoiseMode.Bypass;
+          }
+          finally
+          {
+            updatingSourceUi = false;
+          }
+          WaterfallView.Clear();
+          lastWaterfallSampleIndex = -1;
+          ctx.Settings.SaveToFile();
+        }
+        SpectrumStatusLabel.Text =
+          "Spectrum: Raw fallback (" + ex.Message + ")";
+        return;
       }
 
-      // The HamNoise bridge runs at 9.6 kHz. Resample only this immutable
-      // display copy down and back up; the receive worker, ridge scanner,
-      // tracker, DeepCW and transcript coordinator never see these samples.
-      float[] modelRate =
-        CwWindowedSincResampler.Resample(
-          raw.Samples,
-          raw.SampleRate,
-          displayDenoiser.SampleRate);
-      float[] cleaned =
-        displayDenoiser.Process(
-          modelRate,
-          displayDenoiser.SampleRate,
-          wet: 1.0);
-      float[] restored =
-        CwWindowedSincResampler.Resample(
-          cleaned,
-          displayDenoiser.SampleRate,
-          raw.SampleRate);
+      CwAudioHub hub = audio.Ingress.FrontEnd.Audio;
+      double seconds = Math.Max(
+        0.20,
+        SpectrumAnalyzer.FftSize /
+          (double)SpectrumAnalyzer.SampleRate + 0.02);
 
-      if (restored.Length != raw.Samples.Length)
-        Array.Resize(
-          ref restored,
-          raw.Samples.Length);
+      if (!audio.Ingress.Enabled ||
+          DisplayFrames.Busy ||
+          !hub.TrySnapshot(seconds, out CwAudioSnapshot snapshot) ||
+          snapshot.EndSampleIndex == lastWaterfallSampleIndex)
+        return;
 
-      return new CwAudioSnapshot(
-        raw.SampleRate,
-        raw.EndUtc,
-        raw.EndSampleIndex,
-        restored);
+      // Every delivered display frame carries both the waterfall column
+      // and the long-resolution spectrum. The former artificial ~5 Hz
+      // spectrum cap is removed, while the worker stays latest-only.
+      DisplayFrames.TryQueue(snapshot, waterfallGeneration, mode);
     }
 
     private void RxToggleBtn_Click(
