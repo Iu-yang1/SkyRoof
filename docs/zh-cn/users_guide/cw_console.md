@@ -42,9 +42,9 @@ CW 接收默认关闭。确认输入源后，在面板中按 **Start**。
 
 ## CW Skimmer V1 横向工作区
 
-CW Console 按 **左侧大频谱、右侧多路 Pileup 消息、底部常驻 TX 工具条**
-重新设计。原来占据中间位置的七列表格和独立的 Selected RX Transcript 大区域
-已经从主界面移除。
+CW Console 使用 **左侧大频谱、右侧多路 Pileup 消息、底部选中 Lane 的 RX
+解码框与常驻 TX 工具条**。原七列表格已从主界面移除；新的 RX 详情框体积
+紧凑，保留 CW Skimmer 风格的选中信号抄收体验。
 
 - **顶部**：Start/Stop RX、音频源、只影响显示的 Raw/HamNoise 选项、
   CW Settings、解码器与 Worker 状态。
@@ -57,8 +57,18 @@ CW Console 按 **左侧大频谱、右侧多路 Pileup 消息、底部常驻 TX 
   完整解码文本。临时 Provisional 后缀用单独颜色表示，长报文不再截断，
   仍可用 Copy 复制全文。短暂 QSB、Hold 或载波
   交叉都不会让卡片按频率重新排序。点击消息卡或瀑布轨迹可以双向联动选中。
+- **CW TX 上方**：新增 **CW RX — Selected Lane**，复用 TX GroupBox
+  的视觉样式。点击右侧 Pileup 卡片或频谱中的 Lane，即时显示对应
+  **Slot 编号、H/T 身份、AF 频率、SNR、Active/Hold/Ambiguous/Grace 状态**。
+  完整解码消息可自动换行、选中复制、独立滚动；未确认的 Provisional 字符
+  与已经确认的 Committed 文本使用不同颜色。**Copy RX** 复制原始接收文字；
+  音频时间线重置、选中 Lane 消失后清除旧内容。
 - **底部**：Send（自动发射预检）、红色 STOP、单行 CW 编辑框、
   WPM 设置与实际回读、F1–F8 宏按钮。窗口较窄时按钮行单独横向滚动。
+
+新的 RX 解码框**只读且绝不自动发送**：选中 Lane 或复制文字不会改变 TX
+VFO、开启 CW 拍发或绕过卫星发射联锁。信息复用已有的 250 ms UI 更新，
+不另起 FFT 或 DeepCW 解码任务。
 
 **竖直 AF 导航**：使用瀑布右侧的竖直滚动条上下平移可见频率范围，
 Zoom 设置 1–8 倍显示缩放；Ctrl+滚轮调整缩放，普通滚轮沿竖直 AF 轴平移。

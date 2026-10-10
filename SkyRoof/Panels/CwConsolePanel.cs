@@ -34,6 +34,7 @@ namespace SkyRoof
     private int spectrumFrameDivider;
 
     private readonly CwPileupLaneList PileupList = new();
+    private readonly CwSelectedLaneView SelectedRxView = new();
     private readonly SplitContainer WorkSplit = new();
     private readonly VScrollBar AfPanBar = new();
     private readonly NumericUpDown AfZoomBox = new();
@@ -125,7 +126,7 @@ namespace SkyRoof
       // Keep the Console usable as a compact floating tool window. The old
       // 1040x900 / 720x720 geometry was unnecessarily tall on 1080p displays.
       ClientSize = new Size(1010, 640);
-      MinimumSize = new Size(720, 510);
+      MinimumSize = new Size(720, 560);
       KeyPreview = true;
 
       BuildUi();
@@ -358,7 +359,8 @@ namespace SkyRoof
 
       ConfigureSkimmerWorkspace();
       root.Controls.Add(WorkSplit, 0, 2);
-      root.Controls.Add(BuildTransmitPanel(), 0, 3);
+      root.Controls.Add(SelectedRxView, 0, 3);
+      root.Controls.Add(BuildTransmitPanel(), 0, 4);
 
       Controls.Add(root);
     }
@@ -368,7 +370,7 @@ namespace SkyRoof
       var root = new TableLayoutPanel
       {
         ColumnCount = 1,
-        RowCount = 4,
+        RowCount = 5,
         Dock = DockStyle.Fill,
         AutoScroll = false,
         Padding = new Padding(6)
@@ -378,6 +380,7 @@ namespace SkyRoof
       root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
       root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
       root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+      root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
       root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
       return root;
     }
@@ -845,6 +848,25 @@ namespace SkyRoof
 
       PileupList.UpdateLanes(
         slots, textByLane, selectedIdentity);
+
+      // One RX-only readout follows the selected stable H/T identity,
+      // regardless of whether it was selected from a card or waterfall.
+      // Do not route decoded text to the keyer or change any RF VFO.
+      CwConsoleLaneSlot? selectedSlot = null;
+      CwTranscriptSnapshot? selectedTranscript = null;
+      foreach (CwConsoleLaneSlot slot in slots)
+      {
+        if (!slot.Identity.HasValue ||
+            slot.Identity != selectedIdentity)
+          continue;
+
+        selectedSlot = slot;
+        textByLane.TryGetValue(
+          slot.Identity.Value, out selectedTranscript);
+        break;
+      }
+      SelectedRxView.UpdateLane(
+        selectedSlot, selectedTranscript);
     }
 
     private void PileupList_LaneSelected(
