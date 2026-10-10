@@ -96,3 +96,42 @@ CI-V 写入命令，而不是响应后台 SelectedIndex 改动。REF
 Diagnostics 会显示被合并的旧波形帧计数及待确认控制数量。
 这种调整只针对 UI 调度和状态同步，不改变 Icom LAN 原有
 475 点频谱数据和 RS-BA1 / SkyCAT / Direct LAN 传输能力。
+
+
+### 红色 RX 接收通带：模式滤波器宽度与缩放
+
+LAN 频谱中的红色阴影用于**估算 IC-9700 的接收 IF 滤波器通带**，
+此前错误地直接复用了 SkyRoof 独立 SDR 解调器 `Slicer` 的
+`GetBandwidth` / `GetModeOffset`：SSB 固定为 2.8 kHz、
+SSB-D 固定为 5 kHz、CW 500 Hz、FM 为 16 kHz，而 FM-D
+甚至可能被绘制成 48 kHz。这些值并不能代表真实 IC-9700
+当前使用的 IF 滤波器。
+
+现在根据 IC-9700 的名义滤波器带宽估算，且对 USB、LSB
+使用正确的正负边带位置：
+
+| SkyRoof 模式 | 默认估算宽度 | 相对电台显示频率的范围 |
+| --- | ---: | --- |
+| USB | 2.4 kHz | +300 ～ +2700 Hz |
+| LSB | 2.4 kHz | -2700 ～ -300 Hz |
+| USB-D | 1.2 kHz | +900 ～ +2100 Hz |
+| LSB-D | 1.2 kHz | -2100 ～ -900 Hz |
+| CW | 500 Hz | 以调谐频率为中心 |
+| FM / FM-D | 15 kHz | 以调谐频率为中心 |
+
+**这里是估算值，不是实时滤波器回读。** IC-9700 的
+FIL1/FIL2/FIL3、自定义 BW、Twin PBT、IF Shift 和 CW Pitch
+都会改变实际接收通带；CI-V `27 00` 波形并不包含完整的这些
+信息。SkyRoof 当前 `Slicer.Mode` 仅包含表中的七种模式，
+AM、RTTY、DV、DD 等尚不能通过该叠层接口识别，因此不会
+凭空假设并绘制这些模式的精确接收通带。
+
+你可以在 LAN Spectrum 的 **Settings** 中调整
+`Estimated RX ... filter width (Hz)` 四项，使红色区域宽度
+与实际电台上显示的滤波器 BW 对应。这**仅影响本地显示**，
+并不会向电台发送任何修改 IF 滤波器的 CI-V 命令。
+
+修复后的映射与频谱曲线、刻度、缩放和点击调谐共用相同的
+Span、CENTER/FIXED 几何、Zoom 与变频器频率偏移；
+超出视野的红色区域不会留下错误的单像素色块。
+测试覆盖 USB/LSB 方向、25/50/100 kHz 及多倍 Zoom。
