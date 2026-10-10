@@ -86,6 +86,110 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void NewerPartialDoesNotEraseCompletedSweepUsedByWaterfall()
+    {
+      var mailbox = new IcomScopeUiFrameMailbox();
+      IcomScopeFrame complete = Frame(10);
+      IcomScopeFrame partial = new()
+      {
+        Scope = 0,
+        Mode = (byte)IcomScopeMode.Center,
+        TimestampUtc = Frame(11).TimestampUtc,
+        FrequencyAHz = complete.FrequencyAHz,
+        FrequencyBHz = complete.FrequencyBHz,
+        SweepComplete = false,
+        DivisionCurrent = 2,
+        DivisionMaximum = 11
+      };
+      mailbox.Offer(complete).Should().BeTrue();
+      mailbox.Offer(partial).Should().BeFalse();
+      IcomScopeFrame[] frames = mailbox.TakeAll();
+      frames.Should().HaveCount(2);
+      frames[0].SweepComplete.Should().BeTrue();
+      frames[1].SweepComplete.Should().BeFalse();
+      mailbox.ReplacedCompleteSweeps.Should().Be(0);
+    }
+
+    [Fact]
+    public void NewCompletedSweepSupersedesOlderPartial()
+    {
+      var mailbox = new IcomScopeUiFrameMailbox();
+      IcomScopeFrame partial = new()
+      {
+        Scope = 0, TimestampUtc = Frame(5).TimestampUtc,
+        SweepComplete = false, DivisionMaximum = 11
+      };
+      mailbox.Offer(partial).Should().BeTrue();
+      mailbox.Offer(Frame(10)).Should().BeFalse();
+      mailbox.TakeAll().Should().ContainSingle()
+        .Which.SweepComplete.Should().BeTrue();
+    }
+
+    [Fact]
+    public void FullAndPartialFromBothReceiversArePreservedAndOrdered()
+    {
+      var mailbox = new IcomScopeUiFrameMailbox();
+      mailbox.Offer(Frame(1)).Should().BeTrue();
+      mailbox.Offer(new IcomScopeFrame {
+        Scope = 1, TimestampUtc = Frame(2).TimestampUtc,
+        SweepComplete = true
+      }).Should().BeFalse();
+      mailbox.Offer(new IcomScopeFrame {
+        Scope = 0, TimestampUtc = Frame(3).TimestampUtc,
+        SweepComplete = false
+      }).Should().BeFalse();
+      mailbox.Offer(new IcomScopeFrame {
+        Scope = 1, TimestampUtc = Frame(4).TimestampUtc,
+        SweepComplete = false
+      }).Should().BeFalse();
+      var frames = mailbox.TakeAll();
+      frames.Should().HaveCount(4);
+      frames.Select(x => x.Scope).Should().Equal(0, 1, 0, 1);
+      frames.Select(x => x.SweepComplete).Should().Equal(
+        true, true, false, false);
+    }
+
+    [Fact]
+    public void StatusPollFallbackCannotDiscardPendingCompletedSweep()
+    {
+      var mailbox = new IcomScopeUiFrameMailbox();
+      mailbox.Offer(Frame(10)).Should().BeTrue();
+      var currentPartial = new IcomScopeFrame
+      {
+        Scope = 0,
+        TimestampUtc = Frame(11).TimestampUtc,
+        SweepComplete = false,
+        DivisionCurrent = 2,
+        DivisionMaximum = 11
+      };
+      mailbox.Offer(currentPartial).Should().BeFalse();
+
+      // Status refresh observes the same latest partial while the
+      // original event callback is still queued. The fallback must not
+      // call RenderScopeFrame directly (which would advance its timestamp
+      // beyond the completed sweep); it offers it to this same mailbox.
+      mailbox.Offer(currentPartial).Should().BeFalse();
+
+      var delivered = mailbox.TakeAll();
+      delivered.Should().HaveCount(2);
+      delivered[0].SweepComplete.Should().BeTrue();
+      delivered[1].SweepComplete.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ReplacementOfCompleteSweepsIsMeasuredSeparately()
+    {
+      var mailbox = new IcomScopeUiFrameMailbox();
+      mailbox.Offer(Frame(1)).Should().BeTrue();
+      mailbox.Offer(Frame(2)).Should().BeFalse();
+      mailbox.ReplacedCompleteSweeps.Should().Be(1);
+      mailbox.TakeAll().Should().ContainSingle()
+        .Which.TimestampUtc.Should().Be(Frame(2).TimestampUtc);
+      mailbox.Clear();
+      mailbox.ReplacedCompleteSweeps.Should().Be(0);
+    }
+
+    [Fact]
     public void CaptureSessionRestartInvalidatesPendingWaveform()
     {
       var mailbox = new IcomScopeUiFrameMailbox();

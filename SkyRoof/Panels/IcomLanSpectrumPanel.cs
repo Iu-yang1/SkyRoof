@@ -58,6 +58,9 @@ namespace SkyRoof
     private DateTime LastRateTime = DateTime.UtcNow;
     private double ScopeFps;
     private double DisplayFps;
+    private double WaterfallDeliveryFps;
+    private long RenderedCompleteSweeps;
+    private long LastRenderedCompleteSweeps;
     private long LastRenderedScopeFrameTicks;
     private bool LastStatsUsedNativeLan;
     private bool LocalHold;
@@ -1061,6 +1064,9 @@ namespace SkyRoof
       LastRateTime = DateTime.UtcNow;
       ScopeFps = 0;
       DisplayFps = 0;
+      WaterfallDeliveryFps = 0;
+      RenderedCompleteSweeps = 0;
+      LastRenderedCompleteSweeps = 0;
       LastRenderedScopeFrameTicks = 0;
       Interlocked.Increment(ref ScopeCaptureEpoch);
       ScopeFrameMailbox.Clear();
@@ -1269,6 +1275,8 @@ namespace SkyRoof
       SynchronizePendingEdgeIfNeeded(
         frame);
       SpectrumView.PushFrame(frame);
+      if (frame.SweepComplete)
+        RenderedCompleteSweeps++;
       LastRenderedScopeFrameTicks = ticks;
 
       // Do not write all ComboBox selections / NumericUpDown values on
@@ -2350,12 +2358,15 @@ namespace SkyRoof
       long scopeFrames = effectiveCapture.ScopeFrameCount;
       long scopeUpdates = effectiveCapture.ScopeUpdateCount;
 
-      // Event delivery is the normal high-rate path. Pull the newest frame as a
-      // fallback if WinForms temporarily delays BeginInvoke during docking/layout.
+      // The status fallback must pass through the SAME ordered mailbox as
+      // the event stream. Rendering a newer PARTIAL frame directly here
+      // would advance LastRenderedScopeFrameTicks before the UI callback
+      // could deliver an older COMPLETE sweep, silently dropping an
+      // entire waterfall row even when no CI-V packet was lost.
       IcomScopeFrame? latestFrame = effectiveCapture.LatestScopeFrame;
       if (latestFrame != null &&
           latestFrame.TimestampUtc.Ticks > LastRenderedScopeFrameTicks)
-        RenderScopeFrame(latestFrame);
+        QueueScopeRender(latestFrame);
 
       if (nativeLanActive != LastStatsUsedNativeLan)
       {
@@ -2365,6 +2376,8 @@ namespace SkyRoof
         LastRateTime = now;
         ScopeFps = 0;
         DisplayFps = 0;
+        WaterfallDeliveryFps = 0;
+        LastRenderedCompleteSweeps = RenderedCompleteSweeps;
       }
 
       double elapsed = (now - LastRateTime).TotalSeconds;
@@ -2373,8 +2386,11 @@ namespace SkyRoof
       {
         ScopeFps = (scopeFrames - LastScopeFrames) / elapsed;
         DisplayFps = (scopeUpdates - LastScopeUpdates) / elapsed;
+        WaterfallDeliveryFps =
+          (RenderedCompleteSweeps - LastRenderedCompleteSweeps) / elapsed;
         LastScopeFrames = scopeFrames;
         LastScopeUpdates = scopeUpdates;
+        LastRenderedCompleteSweeps = RenderedCompleteSweeps;
         LastRateTime = now;
       }
 
@@ -2445,7 +2461,7 @@ namespace SkyRoof
           ? $"Bad scope {effectiveCapture.InvalidScopeFrameCount:N0}"
           : !effectiveCapture.IsSkyCatStream &&
             effectiveCapture.SequenceGapCount > 0
-            ? $"Gaps {effectiveCapture.SequenceGapCount:N0}"
+            ? $"Seq skips {effectiveCapture.SequenceGapCount:N0}"
             : "No gaps";
 
       // Radio-side controls intentionally stay disabled for a passive
@@ -2467,7 +2483,8 @@ namespace SkyRoof
       StatsLabel.Text =
         $"{FormatSpectrumSource(spectrumSettings.Source)} · " +
         $"{transportSummary} · Ctrl {FormatControlPath(resolvedControlPath)}{controlHint} · " +
-        $"475 bins · {DisplayFps:0.0} fps · {health}" +
+        $"475 bins · {DisplayFps:0.0} upd/s · " +
+        $"{WaterfallDeliveryFps:0.0} WF/s · {health}" +
         (PendingScopeControls.Count > 0
           ? $" · Ctrl pending {PendingScopeControls.Count}" : "") +
         (UnconfirmedScopeControlCount > 0
@@ -2485,15 +2502,17 @@ namespace SkyRoof
           $"Queue dropped: {queueStats?.Dropped.ToString("N0") ?? "n/a"}",
           $"Queue rejected: {queueStats?.Rejected.ToString("N0") ?? "n/a"}",
           $"Scope UI coalesced waveform frames: {ScopeFrameMailbox.ReplacedFrames:N0}",
+          $"Completed sweeps replaced in mailbox: {ScopeFrameMailbox.ReplacedCompleteSweeps:N0}",
           $"Control changes awaiting radio confirmation: {PendingScopeControls.Count}",
           $"Unconfirmed controls after timeout: {UnconfirmedScopeControlCount}",
           $"Packets: {effectiveCapture.PacketCount:N0}",
           $"CI-V frames: {effectiveCapture.CivFrameCount:N0}",
           $"Complete sweeps: {scopeFrames:N0}",
-          $"Scope rate: {ScopeFps:0.0}/s",
-          $"Display rate: {DisplayFps:0.0} fps",
+          $"Complete sweeps captured: {ScopeFps:0.0}/s",
+          $"Complete sweeps delivered to waterfall: {WaterfallDeliveryFps:0.0}/s",
+          $"Waveform update rate: {DisplayFps:0.0}/s",
           $"Invalid scope frames: {effectiveCapture.InvalidScopeFrameCount:N0}",
-          $"Sequence gaps: {effectiveCapture.SequenceGapCount:N0}",
+          $"Serial transport sequence skips (not proven lost 27 00 sweeps): {effectiveCapture.SequenceGapCount:N0}",
           $"Duplicate chunks: {effectiveCapture.DuplicateChunkCount:N0}",
           $"Sequence resets: {effectiveCapture.SequenceResetCount:N0}",
           $"LAN length overflow packets: {effectiveCapture.LanLengthOverflowPacketCount:N0}");

@@ -144,3 +144,42 @@ as the waterfall, trace and tuning marker. An estimated passband outside
 the visible view is clipped completely, rather than leaving a spurious
 one-pixel red stripe. USB/LSB polarity, 25/50/100 kHz span and zoom ratios
 are covered by regression tests.
+
+
+### Continuity of 27 00 sweeps versus waveform updates
+
+The radio may send its 475-bin scope waveform as a single complete CI-V
+frame or as several sequential divisions. The spectrum trace can refresh
+from an *incomplete division*, but a waterfall line is valid only after
+the **complete sweep** has been assembled.
+
+Previously the latest-only UI mailbox held only one frame per MAIN/SUB.
+If a complete sweep was followed by a partial division before WinForms
+serviced the pending callback, that partial could replace the complete
+sweep. The trace kept updating while the waterfall silently skipped
+history lines. An additional 500-ms status fallback could also render
+the newer partial ahead of the queued complete sweep, making the latter
+fail the timestamp gate.
+
+The bounded UI mailbox now retains **one latest complete sweep plus
+one later partial update per receiver**. At most one UI callback remains
+scheduled and at most four frames are delivered per callback. The
+status fallback uses the same ordered mailbox, never direct rendering.
+The old MAIN/SUB selection and source-generation reset semantics
+remain in force.
+
+Spectrum status reports two independent rates: `upd/s` for incoming waveform
+updates and `WF/s` for completed 475-bin rows actually delivered to the
+visible waterfall (not merely received on the wire). Diagnostics also
+reports the raw complete-sweep capture rate. Spectrum
+Diagnostics additionally reports how many older complete sweeps had to
+be coalesced because UI processing fell behind. The `Seq skips` count
+is the transport *outer serial sequence* statistic: it is **not** itself
+a count of lost 475-bin waterfall lines, nor proof of invalid pixels.
+
+A strong white/yellow trail in a waterfall can also represent a real
+past strong transmission or dynamic-range saturation. The change here
+protects complete-sweep history and does **not** arbitrarily adjust the
+radio's CI-V amplitude data or color palette. Compare the same RF
+frequency, span, receiver, and time against RS-BA1 when diagnosing
+remaining image discrepancies.
