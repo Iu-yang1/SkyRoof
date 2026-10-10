@@ -18,11 +18,12 @@ CW Console 可以和其他 SkyRoof 面板一样停靠和恢复布局。
 
 CW Console 支持三种输入：
 
-- **SDR**：直接复用 SkyRoof 现有 48 kHz Slicer 音频；
-- **Radio USB / WASAPI Capture**：打开 Windows **录音/输入**端点。新配置会
-  优先选择名称中含 **USB Audio CODEC** 或 **ICOM** 的设备；IC-9700 USB
-  直连接收时通常应选“麦克风 (USB Audio CODEC)”这一类 Capture 端点；
-- **RS-BA1 speaker loopback**：对 Windows **播放/Render** 端点做 loopback
+- **SkyRoof SDR audio**：直接复用 SkyRoof 现有 48 kHz Slicer AF 音频；
+- **IC-9700 USB AF input**：打开 Windows **录音/输入**端点。新配置会优先
+  选择名称中含 **USB Audio CODEC** 或 **ICOM** 的设备；IC-9700 USB 直连时
+  通常就是“麦克风 (USB Audio CODEC)”。但这里要求电台的 **USB AF/IF
+  Output = AF**；如果电台 USB 输出的是 IF，不应把它送给这条 CW AF 解码链；
+- **RS-BA1 playback loopback**：对 Windows **播放/Render** 端点做 loopback
   capture。这里应选择 RS-BA1 Remote Utility 实际正在播放到的扬声器/虚拟
   音频设备，而不是电台的麦克风 Capture 端点。
 
@@ -34,6 +35,17 @@ Utility 进程。若希望只接收 RS-BA1 音频，建议给 Remote Utility 使
 旧设备的 Track/Transcript 不会和新设备混在一起。
 
 CW 接收默认关闭。确认输入源后，在面板中按 **Start**。
+
+简单判断：**USB 线直接取得电台解调 AF** 时选 **IC-9700 USB AF input**；
+使用 **RS-BA1 / LAN 收音**时选 **RS-BA1 playback loopback**。状态行会显示
+当前真正打开的 Windows 设备名称。
+
+## 紧凑窗口布局
+
+CW Console 浮动窗口现在默认使用更紧凑的尺寸，适合 1080p 桌面；频谱、
+Transcript 与 TX 区域不再保留首版那样大的固定高度。**Committed** 与
+**Provisional / may change** 改为近似等高，缩小窗口后 provisional 文本框
+不会再被压成一条很窄的横线。
 
 ## 安装 DeepCW 模型
 
