@@ -238,6 +238,8 @@ namespace SkyRoof.CW
   public sealed class CwPileupFrontEnd
   {
     private long lastPrecisionSampleIndex = long.MinValue;
+    private long lastCommittedSampleIndex = long.MinValue;
+    private DateTime? lastCommittedUtc;
     private IReadOnlyList<CwSignalTrack> latestTracks =
       Array.Empty<CwSignalTrack>();
 
@@ -338,14 +340,42 @@ namespace SkyRoof.CW
 
         foreach (CwAssociatedCandidateBatch associated in committed)
         {
-          long samplesBeforeEnd =
-            snapshot.EndSampleIndex -
+          DateTime observationUtc;
+          if (lastCommittedUtc is DateTime previousUtc &&
+              lastCommittedSampleIndex != long.MinValue &&
+              associated.CenterSampleIndex >
+                lastCommittedSampleIndex)
+          {
+            // Once the first ridge observation has been anchored to wall
+            // clock, advance strictly on the PCM sample axis. Windows/WASAPI
+            // callback scheduling can jitter even when block timestamps are
+            // non-decreasing; remapping every overlapping snapshot to
+            // DateTime.UtcNow can otherwise make a later ridge appear earlier.
+            long deltaSamples =
+              associated.CenterSampleIndex -
+              lastCommittedSampleIndex;
+            observationUtc =
+              previousUtc +
+              TimeSpan.FromSeconds(
+                deltaSamples /
+                (double)snapshot.SampleRate);
+          }
+          else
+          {
+            long samplesBeforeEnd =
+              snapshot.EndSampleIndex -
+              associated.CenterSampleIndex;
+            observationUtc =
+              snapshot.EndUtc -
+              TimeSpan.FromSeconds(
+                samplesBeforeEnd /
+                (double)snapshot.SampleRate);
+          }
+
+          lastCommittedSampleIndex =
             associated.CenterSampleIndex;
-          DateTime observationUtc =
-            snapshot.EndUtc -
-            TimeSpan.FromSeconds(
-              samplesBeforeEnd /
-              (double)snapshot.SampleRate);
+          lastCommittedUtc =
+            observationUtc;
 
           latestTracks =
             Tracks.Update(
@@ -369,6 +399,8 @@ namespace SkyRoof.CW
       Associations.Reset();
       Tracks.Reset();
       lastPrecisionSampleIndex = long.MinValue;
+      lastCommittedSampleIndex = long.MinValue;
+      lastCommittedUtc = null;
       latestTracks =
         Array.Empty<CwSignalTrack>();
     }
