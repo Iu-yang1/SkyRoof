@@ -48,11 +48,17 @@ The status line shows the concrete Windows endpoint that is currently open.
 
 ## Compact layout
 
-The floating CW Console opens in a compact geometry suitable for a 1080p
-desktop. The spectrum, transcript and transmit areas no longer reserve the
-large fixed heights used by the first release. **Committed** and **Provisional
-/ may change** receive equal transcript space so the provisional suffix remains
-readable while the window is reduced.
+The floating CW Console uses a compact responsive layout suitable for a 1080p
+desktop. Only the waterfall keeps a fixed display height; the transcript and
+transmit sections size from their actual controls so Windows DPI/font scaling
+cannot squeeze text boxes or macro buttons out of view. The lane table consumes
+the remaining space and scrolls when necessary.
+
+**Committed** and **Provisional / may change** each have a guaranteed readable
+single-line field. The Command-17 composer is also a compact single-line field
+because the radio accepts at most 30 characters. F1-F8 use fixed-width buttons;
+long macro text remains available in the tooltip instead of expanding and
+breaking the row.
 
 ## Install the DeepCW model
 
