@@ -40,8 +40,8 @@ namespace SkyRoof
     [DisplayName("Enable CW Transmit")]
     [Description(
       "Permit the CW Console to use SkyCAT's fail-closed IC-9700 Command 17 keyer. Disabled by default. The Console still requires an explicit non-persistent Arm TX action before every transmitting session.")]
-    [DefaultValue(false)]
-    public bool TransmitEnabled { get; set; } = false;
+    [DefaultValue(true)]
+    public bool TransmitEnabled { get; set; } = true;
 
     [DisplayName("SkyCAT CW Keyer Port")]
     [Description(
