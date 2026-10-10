@@ -94,7 +94,7 @@ namespace VE3NEA.Dsp.Tests
         frame.Geometry, 0, band, plot, zoom, 0.5,
         out Rectangle result).Should().BeTrue();
       double expected = 2400.0 / span * zoom * (plot.Width - 1);
-      result.Width.Should().BeApproximately(expected, 1.1);
+      ((double)result.Width).Should().BeApproximately(expected, 1.1);
       result.Left.Should().BeGreaterThan(plot.Left);
       result.Right.Should().BeLessThan(plot.Right);
     }
@@ -119,7 +119,7 @@ namespace VE3NEA.Dsp.Tests
       IcomLanSpectrumView.TryGetPassbandPlotBounds(
         fixedFrame.Geometry, offset, corrected, plot, 2, 0.5,
         out Rectangle draw).Should().BeTrue();
-      draw.Width.Should().BeApproximately(48, 1);
+      ((double)draw.Width).Should().BeApproximately(48, 1);
       draw.Left.Should().BeGreaterThan(plot.Left + plot.Width / 2);
     }
 
