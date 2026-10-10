@@ -21,6 +21,13 @@ namespace SkyRoof.CW
   {
     public CwPileupFrontEnd FrontEnd { get; }
 
+    /// <summary>
+    /// Raised only after a valid PCM block has entered the audio hub.
+    /// Subscribers must post to their own UI/message loop rather than
+    /// performing signal processing on the capture callback thread.
+    /// </summary>
+    public event Action? SamplesAccepted;
+
     public bool Enabled { get; private set; }
     public CwReceiveAudioSource Source { get; private set; }
     public string? SourceIdentity { get; private set; }
@@ -115,6 +122,9 @@ namespace SkyRoof.CW
       Interlocked.Increment(ref acceptedBlocks);
       AcceptedSamples += count;
       LastAcceptedUtc = utc;
+      // The waterfall display is driven by PCM arrival, not by the
+      // quantized WinForms Timer. No FFT or WinForms work happens here.
+      SamplesAccepted?.Invoke();
       return true;
     }
 

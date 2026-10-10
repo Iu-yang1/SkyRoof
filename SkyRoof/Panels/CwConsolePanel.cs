@@ -66,11 +66,15 @@ namespace SkyRoof
 
     private readonly System.Windows.Forms.Timer UiTimer =
       new() { Interval = 250 };
-    // 33-ms target (~30.3 Hz): presentation is measured in OnPaint
-    // because the WinForms message loop may coalesce timer/paint events.
+    // PCM acceptance (not WinForms timer polling) drives the waterfall.
+    // Retain an infrequent polling fallback for missed notifications or
+    // source-switch lifecycle races. It is not the frame-rate governor.
     private readonly System.Windows.Forms.Timer WaterfallTimer =
-      new() { Interval = 33 };
-    private long lastWaterfallPresentationTicks;
+      new() { Interval = 100 };
+    private int waterfallPumpQueued;
+    private long pcmPumpSignals;
+    private long frameReadyPumpSignals;
+    private long waterfallPumpRuns;
 
     private IReadOnlyList<CwSignalTrack> latestTracks =
       Array.Empty<CwSignalTrack>();
@@ -128,6 +132,8 @@ namespace SkyRoof
       DisplayFrames = new CwDisplayFrameProcessor(
         WaterfallAnalyzer, SpectrumAnalyzer);
       DisplayFrames.FrameReady += DisplayFrames_FrameReady;
+      if (ctx.CwAudio != null)
+        ctx.CwAudio.Ingress.SamplesAccepted += Ingress_SamplesAccepted;
 
       Text = "CW Console [TX disabled]";
       Name = "CwConsolePanel";
@@ -695,29 +701,46 @@ namespace SkyRoof
       EventArgs e) =>
       RefreshWaterfall();
 
+    private void Ingress_SamplesAccepted()
+    {
+      Interlocked.Increment(ref pcmPumpSignals);
+      ScheduleWaterfallPump();
+    }
+
     private void DisplayFrames_FrameReady()
     {
-      if (IsDisposed || !IsHandleCreated)
+      Interlocked.Increment(ref frameReadyPumpSignals);
+      // No 32-ms gate: when computation is ready, consume it promptly.
+      // A queued-but-skipped callback previously had to wait until the
+      // next WinForms timer tick, adding 1-3 missed PCM frame periods.
+      ScheduleWaterfallPump();
+    }
+
+    private void ScheduleWaterfallPump()
+    {
+      if (IsDisposed || Disposing || !IsHandleCreated)
         return;
+
+      // PCM callbacks and FFT completions may arrive from separate threads.
+      // Keep at most one pending WinForms callback; all scheduling and
+      // waveform snapshots remain on the UI thread.
+      if (Interlocked.Exchange(ref waterfallPumpQueued, 1) != 0)
+        return;
+
       try
       {
         BeginInvoke((Action)(() =>
         {
-          if (IsDisposed)
+          Interlocked.Exchange(ref waterfallPumpQueued, 0);
+          if (IsDisposed || Disposing)
             return;
-          // Native FFT completion is often between two 33-ms WinForms
-          // timer ticks. Present it promptly if the target interval has
-          // elapsed; otherwise the existing timer will deliver it.
-          if (lastWaterfallPresentationTicks == 0 ||
-              Stopwatch.GetElapsedTime(
-                lastWaterfallPresentationTicks) >=
-                  TimeSpan.FromMilliseconds(32))
-            RefreshWaterfall();
+          Interlocked.Increment(ref waterfallPumpRuns);
+          RefreshWaterfall();
         }));
       }
       catch (InvalidOperationException)
       {
-        // Dock panel can close while a native FFT finishes.
+        Interlocked.Exchange(ref waterfallPumpQueued, 0);
       }
     }
 
@@ -879,7 +902,10 @@ namespace SkyRoof
         $"{DisplayFrames.BusyTicks}; stale results: {staleDisplayFrames}\n" +
         $"PCM input: {ctx.CwAudio?.Ingress.LastBlockSamples ?? 0} samples/" +
         $"block, last delivery interval " +
-        $"{ctx.CwAudio?.Ingress.LastPcmDeliveryIntervalMs ?? 0:F1} ms");
+        $"{ctx.CwAudio?.Ingress.LastPcmDeliveryIntervalMs ?? 0:F1} ms\n" +
+        $"UI pump: {Interlocked.Read(ref pcmPumpSignals)} PCM signals; " +
+        $"{Interlocked.Read(ref frameReadyPumpSignals)} FFT-ready signals; " +
+        $"{Interlocked.Read(ref waterfallPumpRuns)} coalesced UI callbacks");
 
       InstallModelBtn.Visible =
         status.ModelState ==
@@ -1028,7 +1054,6 @@ namespace SkyRoof
             WaterfallView.SetSpectrum(result.Spectrum);
             WaterfallView.Append(result.Waterfall);
             lastWaterfallSampleIndex = result.Waterfall.EndSampleIndex;
-            lastWaterfallPresentationTicks = Stopwatch.GetTimestamp();
           }
           else
           {
@@ -1784,6 +1809,8 @@ namespace SkyRoof
       WaterfallTimer.Tick -=
         WaterfallTimer_Tick;
       DisplayFrames.FrameReady -= DisplayFrames_FrameReady;
+      if (ctx.CwAudio != null)
+        ctx.CwAudio.Ingress.SamplesAccepted -= Ingress_SamplesAccepted;
       WaterfallView.LaneClicked -=
         WaterfallView_LaneClicked;
       // The background display worker may still be inside native HamNoise.
