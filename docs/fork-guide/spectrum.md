@@ -168,8 +168,10 @@ status fallback uses the same ordered mailbox, never direct rendering.
 The old MAIN/SUB selection and source-generation reset semantics
 remain in force.
 
-Spectrum status reports two independent rates: `upd/s` for waveform
-updates and `sweeps/s` for complete 475-bin waterfall rows. Spectrum
+Spectrum status reports two independent rates: `upd/s` for incoming waveform
+updates and `WF/s` for completed 475-bin rows actually delivered to the
+visible waterfall (not merely received on the wire). Diagnostics also
+reports the raw complete-sweep capture rate. Spectrum
 Diagnostics additionally reports how many older complete sweeps had to
 be coalesced because UI processing fell behind. The `Seq skips` count
 is the transport *outer serial sequence* statistic: it is **not** itself
