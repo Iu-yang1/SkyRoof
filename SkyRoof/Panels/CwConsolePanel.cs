@@ -33,6 +33,12 @@ namespace SkyRoof
     private long lastWaterfallSampleIndex = -1;
 
     private readonly DataGridView LaneGrid = new();
+    private readonly TabControl DetailsTabs = new();
+    private readonly TabPage ReceiveDetailsTab =
+      new("RX transcript");
+    private readonly TabPage TransmitDetailsTab =
+      new("CW transmit");
+    private readonly Button EmergencyStopBtn = new();
     private readonly Label SelectedLaneLabel = new();
     private readonly TextBox CommittedTextBox = new();
     private readonly TextBox ProvisionalTextBox = new();
@@ -121,9 +127,10 @@ namespace SkyRoof
 
       Text = "CW Console [TX disabled]";
       Name = "CwConsolePanel";
-      // Keep the Console usable as a compact floating tool window. The old
-      // 1040x900 / 720x720 geometry was unnecessarily tall on 1080p displays.
-      ClientSize = new Size(860, 620);
+      // A compact console must never squeeze the transcript and TX composer
+      // into the same fixed-height vertical stack. The two detail panes are
+      // switched by tabs; spectrum and lane list remain visible in both.
+      ClientSize = new Size(900, 650);
       MinimumSize = new Size(700, 560);
       KeyPreview = true;
 
@@ -185,40 +192,7 @@ namespace SkyRoof
     private void BuildUi()
     {
       var root =
-        new TableLayoutPanel
-        {
-          Dock = DockStyle.Fill,
-          ColumnCount = 1,
-          RowCount = 6,
-          Padding = new Padding(8)
-        };
-
-      root.ColumnStyles.Add(
-        new ColumnStyle(
-          SizeType.Percent,
-          100));
-      root.RowStyles.Add(
-        new RowStyle(
-          SizeType.AutoSize));
-      root.RowStyles.Add(
-        new RowStyle(
-          SizeType.AutoSize));
-      root.RowStyles.Add(
-        new RowStyle(
-          SizeType.Absolute,
-          120));
-      root.RowStyles.Add(
-        new RowStyle(
-          SizeType.Percent,
-          100));
-      root.RowStyles.Add(
-        new RowStyle(
-          SizeType.Absolute,
-          145));
-      root.RowStyles.Add(
-        new RowStyle(
-          SizeType.Absolute,
-          155));
+        CreateConsoleRootLayout();
 
       var toolbar =
         new FlowLayoutPanel
@@ -328,6 +302,17 @@ namespace SkyRoof
       toolbar.Controls.Add(
         SettingsBtn);
 
+      // Keep a direct STOP control visible above the tabs while keying.
+      // Switching back to RX must never hide the only emergency STOP.
+      EmergencyStopBtn.Text = "STOP TX";
+      EmergencyStopBtn.AutoSize = true;
+      EmergencyStopBtn.BackColor = Color.Firebrick;
+      EmergencyStopBtn.ForeColor = Color.White;
+      EmergencyStopBtn.UseVisualStyleBackColor = false;
+      EmergencyStopBtn.Visible = false;
+      EmergencyStopBtn.Click += StopTxBtn_Click;
+      toolbar.Controls.Add(EmergencyStopBtn);
+
       InstallModelBtn.Text =
         "Install DeepCW Model";
       InstallModelBtn.AutoSize = true;
@@ -402,17 +387,54 @@ namespace SkyRoof
         0,
         3);
 
+      DetailsTabs.Dock = DockStyle.Fill;
+      DetailsTabs.Margin = new Padding(0, 3, 0, 0);
+      ReceiveDetailsTab.Padding = new Padding(2);
+      TransmitDetailsTab.Padding = new Padding(2);
+      ReceiveDetailsTab.Controls.Add(
+        BuildTranscriptPanel());
+      TransmitDetailsTab.Controls.Add(
+        BuildTransmitPanel());
+      DetailsTabs.TabPages.Add(
+        ReceiveDetailsTab);
+      DetailsTabs.TabPages.Add(
+        TransmitDetailsTab);
       root.Controls.Add(
-        BuildTranscriptPanel(),
+        DetailsTabs,
         0,
         4);
 
-      root.Controls.Add(
-        BuildTransmitPanel(),
-        0,
-        5);
-
       Controls.Add(root);
+    }
+
+    // This is the same five-row shell used by the production Console.
+    // Only the lane list may consume variable height: transcript and TX
+    // never compete for separate fixed rows.
+    internal static TableLayoutPanel CreateConsoleRootLayout()
+    {
+      var root =
+        new TableLayoutPanel
+        {
+          Dock = DockStyle.Fill,
+          ColumnCount = 1,
+          RowCount = 5,
+          Padding = new Padding(8)
+        };
+      root.ColumnStyles.Add(
+        new ColumnStyle(
+          SizeType.Percent,
+          100));
+      root.RowStyles.Add(
+        new RowStyle(SizeType.AutoSize));
+      root.RowStyles.Add(
+        new RowStyle(SizeType.AutoSize));
+      root.RowStyles.Add(
+        new RowStyle(SizeType.Absolute, 130));
+      root.RowStyles.Add(
+        new RowStyle(SizeType.Percent, 100));
+      root.RowStyles.Add(
+        new RowStyle(SizeType.Absolute, 230));
+      return root;
     }
 
     private void ConfigureLaneGrid()
@@ -513,8 +535,7 @@ namespace SkyRoof
         {
           Dock = DockStyle.Fill,
           Text = "Selected RX Transcript",
-          Padding = new Padding(8),
-          MinimumSize = new Size(0, 115)
+          Padding = new Padding(8)
         };
 
       var layout =
@@ -644,8 +665,7 @@ namespace SkyRoof
           Text =
             "CW Transmit — IC-9700 / SkyCAT Command 17",
           Padding = new Padding(8),
-          Margin = new Padding(
-            0, 6, 0, 0)
+          Margin = new Padding(0)
         };
 
       var layout =
@@ -665,10 +685,12 @@ namespace SkyRoof
           100));
       layout.RowStyles.Add(
         new RowStyle(
-          SizeType.AutoSize));
+          SizeType.Absolute,
+          38));
       layout.RowStyles.Add(
         new RowStyle(
-          SizeType.AutoSize));
+          SizeType.Absolute,
+          40));
 
       TxStatusLabel.AutoSize = true;
       TxStatusLabel.Text =
@@ -705,13 +727,14 @@ namespace SkyRoof
       var macros =
         new FlowLayoutPanel
         {
-          AutoSize = true,
+          AutoSize = false,
+          AutoScroll = true,
           Dock = DockStyle.Fill,
           FlowDirection =
             FlowDirection.LeftToRight,
-          WrapContents = true,
+          WrapContents = false,
           Margin = new Padding(
-            0, 5, 0, 0)
+            0, 3, 0, 0)
         };
 
       for (int i = 0;
@@ -732,16 +755,9 @@ namespace SkyRoof
           button);
       }
 
-      macros.Controls.Add(
-        new Label
-        {
-          AutoSize = true,
-          Text =
-            "F1–F8 load · Shift+F1–F8 send",
-          Margin = new Padding(
-            8, 7, 0, 0)
-        });
-
+      // Macro shortcut instructions are available in each button tooltip.
+      // Removing the wide hint prevents a second wrapped row from covering
+      // the WPM/STOP controls on narrow or high-DPI Windows layouts.
       layout.Controls.Add(
         macros,
         0,
@@ -750,13 +766,14 @@ namespace SkyRoof
       var buttons =
         new FlowLayoutPanel
         {
-          AutoSize = true,
+          AutoSize = false,
+          AutoScroll = true,
           Dock = DockStyle.Fill,
           FlowDirection =
             FlowDirection.LeftToRight,
-          WrapContents = true,
+          WrapContents = false,
           Margin = new Padding(
-            0, 5, 0, 0)
+            0, 3, 0, 0)
         };
 
       ArmTxBtn.Text =
@@ -816,15 +833,10 @@ namespace SkyRoof
       buttons.Controls.Add(
         SetKeySpeedBtn);
 
-      buttons.Controls.Add(
-        new Label
-        {
-          AutoSize = true,
-          Text =
-            "Max 30 chars · radio must already be CW/CW-R with Semi/Full BK-IN",
-          Margin = new Padding(
-            12, 7, 0, 0)
-        });
+      MacroToolTip.SetToolTip(
+        SendTxBtn,
+        "Max 30 chars. Radio must be CW/CW-R with Semi/Full BK-IN. " +
+        "Sending requires explicit Arm and SkyCAT interlock preflight.");
 
       layout.Controls.Add(
         buttons,
@@ -1629,6 +1641,8 @@ namespace SkyRoof
 
       if (tx == null)
       {
+        TransmitDetailsTab.Text = "CW transmit (unavailable)";
+        EmergencyStopBtn.Visible = false;
         TxStatusLabel.Text =
           "TX: controller unavailable";
         ArmTxBtn.Enabled = false;
@@ -1640,6 +1654,17 @@ namespace SkyRoof
 
       CwTransmitState state =
         tx.State;
+
+      TransmitDetailsTab.Text =
+        state.Sending
+          ? "CW transmit — SENDING"
+          : state.Armed
+            ? "CW transmit — ARMED"
+            : "CW transmit";
+      EmergencyStopBtn.Visible =
+        state.Sending;
+      EmergencyStopBtn.Enabled =
+        state.Sending;
 
       ArmTxBtn.Text =
         state.Armed
