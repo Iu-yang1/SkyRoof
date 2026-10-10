@@ -43,14 +43,23 @@ namespace SkyRoof.CW
       ReadOnlySpan<float> audio,
       int sourceSampleRate,
       DateTime windowEndUtc,
-      IEnumerable<CwSignalTrack> tracks)
+      IEnumerable<CwSignalTrack> tracks) =>
+      Decode(audio, sourceSampleRate, windowEndUtc, tracks, null);
+
+    internal CwContinuousDecodeBatch Decode(
+      ReadOnlySpan<float> audio,
+      int sourceSampleRate,
+      DateTime windowEndUtc,
+      IEnumerable<CwSignalTrack> tracks,
+      long? endSampleIndex)
     {
       IReadOnlyList<DeepCwLaneResult> lanes =
         Decoder.Decode(
           audio,
           sourceSampleRate,
           windowEndUtc,
-          tracks);
+          tracks,
+          endSampleIndex);
 
       IReadOnlyList<CwTranscriptSnapshot> transcript =
         Transcripts.Push(lanes);
@@ -60,7 +69,10 @@ namespace SkyRoof.CW
         transcript);
     }
 
-    public void Reset() =>
+    public void Reset()
+    {
       Transcripts.Reset();
+      Decoder.ResetFeatureCache();
+    }
   }
 }
