@@ -92,7 +92,7 @@ if ($iss -notmatch 'Source:\s*\.\.\\licenses\\\*') {
 foreach ($runtimeFile in @(
     "Microsoft.ML.OnnxRuntime.dll",
     "System.Numerics.Tensors.dll",
-    "runtimes\\win-x64\\native\\onnxruntime")) {
+    "runtimes\win-x64\native\onnxruntime")) {
   if (-not $iss.Contains($runtimeFile)) {
     throw "Production installer is missing required DeepCW runtime payload: $runtimeFile"
   }
