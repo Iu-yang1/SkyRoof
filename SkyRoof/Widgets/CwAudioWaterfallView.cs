@@ -147,7 +147,7 @@ namespace SkyRoof
       // dynamic range. Noise stays dark while a 6-10 dB keyed carrier is
       // already visible; strong carriers progress toward yellow/white.
       double floor =
-        spectrumFloorDb + 1.0;
+        displayFloorDb + 1.0;
 
       writeRow =
         (writeRow - 1 +
@@ -287,7 +287,7 @@ namespace SkyRoof
       var points =
         new PointF[latestPowerDb.Length];
       double floor =
-        displayFloorDb + 1.0;
+        spectrumFloorDb + 1.0;
 
       for (int i = 0;
            i < latestPowerDb.Length;
