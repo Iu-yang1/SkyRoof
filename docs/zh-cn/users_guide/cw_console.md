@@ -104,6 +104,8 @@ SkyRoof 不会自动：
 - 在此 keyer 路径自动控制 PTT；
 - 根据 RX Lane 自动选择 TX 频率。
 
+CW 发射能力现在默认启用，但**不会自动发射**；每次实际发射仍必须显式点击 **Arm TX**，并通过 CW/CW-R、Semi/Full BK-IN、SkyCAT lease 与频率 interlock 检查。
+
 Arm 前请自行把电台设置成 CW 或 CW-R，并自行打开 Semi/Full BK-IN。
 
 ## SkyCAT keyer
