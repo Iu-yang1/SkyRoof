@@ -1,0 +1,23 @@
+DeepCW runtime model notice
+===========================
+
+SkyRoof's CW Console can download the DeepCW model from:
+
+  Project: https://github.com/e04/deepcw-engine
+  Pinned revision: 8e264d243bbd4467bd19f3f28292219405b47e0e
+  License: GNU Affero General Public License v3.0 only (AGPL-3.0-only)
+
+The model and metadata are downloaded at runtime on explicit user action and are
+not included in the SkyRoof installer.
+
+Pinned runtime files:
+
+  model.onnx
+  model.onnx.json
+
+SkyRoof's model downloader and real-model CI benchmarks use the immutable
+revision above. The upstream repository is the corresponding source and license
+authority for those files.
+
+DeepCW remains copyright its respective authors/contributors. This notice does
+not alter either project's license terms.
