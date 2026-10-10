@@ -47,6 +47,12 @@ namespace SkyRoof
     private readonly Bitmap waterfall;
     private int nextWriteColumn;
     private bool hasRows;
+    private long frameRevision;
+    private long lastPaintedFrameRevision;
+    private readonly CwDisplayCadenceMeter paintCadence = new();
+
+    internal CwDisplayCadenceSnapshot PaintMetrics =>
+      paintCadence.Snapshot();
     private float displayFloorDb = float.NaN;
     private float spectrumFloorDb = float.NaN;
     private float[] latestPowerDb = Array.Empty<float>();
@@ -151,6 +157,9 @@ namespace SkyRoof
         SkimmerBackground);
       nextWriteColumn = 0;
       hasRows = false;
+      frameRevision = 0;
+      lastPaintedFrameRevision = 0;
+      paintCadence.Reset();
       displayFloorDb = float.NaN;
       spectrumFloorDb = float.NaN;
       latestPowerDb = Array.Empty<float>();
@@ -245,6 +254,7 @@ namespace SkyRoof
         (nextWriteColumn + 1) % HistoryColumns;
 
       hasRows = true;
+      frameRevision++;
       Invalidate();
     }
 
@@ -307,6 +317,13 @@ namespace SkyRoof
     {
       base.OnPaint(e);
       PaintContents(e.Graphics);
+      // Count actual newly-painted waterfall columns, not timer callbacks
+      // or invalidate requests (which WinForms may merge under load).
+      if (hasRows && frameRevision != lastPaintedFrameRevision)
+      {
+        lastPaintedFrameRevision = frameRevision;
+        paintCadence.Record();
+      }
     }
 
     // Shared by the real Control paint path and raster tests, without
