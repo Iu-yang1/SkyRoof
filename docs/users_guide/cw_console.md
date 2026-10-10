@@ -448,127 +448,17 @@ of issuing redraws on each 50-ms display timer tick. If a native display
 denoiser fails, the optional display mode falls back to Raw; decoding is
 not stopped.
 
-### 30 FPS CW waterfall target and stutter diagnostics
+### CW waterfall scheduling (FPS diagnostic removed)
 
-The **Raw** CW waterfall now requests a display update every **33 ms**
-(about 30.3 opportunities/s), instead of every 50 ms (20/s).
-This is a **target**, not a guaranteed rendered frame rate: WinForms
-timers are driven by the Windows UI message loop, and background work,
-audio delivery, window painting and system scheduling can all cause jitter.
-FFT/HamNoise remain on the independent latest-only display processor.
-The 8192-point spectrum trace is computed with every completed 2048-point
-waterfall frame; there is no artificial 5-FPS cap.
-
-To see the **measured** values, hover over the **Spectrum: Raw /
-HamNoise** status text in the CW Console. The tooltip reports:
-
-- **Painted waterfall FPS**: new waterfall columns actually drawn,
-  excluding timer ticks and merged/duplicate paint invalidations.
-- **p95/max painted frame interval**: 95th-percentile and worst
-  inter-frame gap (ms) for recent samples, useful to identify brief pauses.
-- **Last/mean background processing ms**: combined optional
-  resampling/HamNoise and both FFT transforms.
-- **Busy ticks / stale frames**: display work deliberately skipped when
-  processing is already in flight, and generation/mode-invalidated results.
-
-Repeated PCM positions are not enqueued as duplicate frames when an
-audio callback pauses. Unchanged Pileup lane markers no longer trigger
-unnecessary 250-ms full-control invalidations. On a slower machine,
-HamNoise can still complete fewer than 30 frames/s: the scheduler never
-builds an old-frame backlog, keeping the remainder of SkyRoof responsive.
-The receive/DeepCW algorithms and CW transmit state machine are unchanged.
-
-For i5-10400 testing, compare Raw, HamNoise Classic and HamNoise V2
-after at least 10 seconds, noting painted FPS, interval p95 and mean
-processing time. A fast spectrum trace with low painted FPS indicates
-UI/message-loop or painting delays, rather than necessarily FFT latency.
-
-
-### Shared WinForms message-pump contention
-
-CW Console and Icom LAN Spectrum share the SkyRoof WinForms UI thread.
-Previously, the LAN pane could post a separate UI callback for every
-received CI-V spectrum frame and reassign radio-control dropdown selections
-each time, potentially delaying CW paints even when FFT/HamNoise ran on
-background threads. LAN frame callbacks are now coalesced to the newest frame,
-and unchanged radio-control geometry no longer triggers high-frequency
-ComboBox updates.
-
-CW Console also uses a **frame-ready notification** after background FFT
-completion: if at least ~32 ms have elapsed since the last presentation,
-the completed frame can be published without waiting for the next 33-ms
-WinForms timer tick. The timer remains a fallback; both paths preserve
-single-in-flight backpressure. This improves responsiveness but does not
-guarantee 30 actual paintings per second if native denoising or GDI work
-takes longer.
-
-Hover over the CW Console **Spectrum** status to compare actual painted FPS,
-frame interval p95/max, GDI painting time mean/p95, and background processing
-time. If processing and painting each take only a few milliseconds yet FPS
-is low, look for UI message-pump pressure or delayed audio callback delivery.
-
-
-### Windows USB microphone waterfall cadence (Raw and HamNoise)
-
-The IC-9700 USB AF microphone source uses the shared Windows WASAPI input
-adapter. Previously it inherited the generic **200-ms WASAPI polling
-buffer** and a **4800-sample (100-ms at 48 kHz)** read block, even though
-the waterfall requested new frames every 33 ms. If PCM only arrives
-about every 100 ms, FFT/GDI performance cannot produce 30 genuinely new
-columns per second. This explains why Raw and HamNoise could both paint
-only ~9–10 FPS while background FFT and GDI averaged just a few ms.
-
-The **CW microphone capture instance only** now requests a 40-ms WASAPI
-buffer and reads at most **1600 mono samples (33.3 ms at 48 kHz)**
-per delivery. Other SkyRoof soundcard clients retain the original 200-ms
-buffer and 4800-sample reader defaults. The receiver tracker, DeepCW,
-HamNoise, TX and RF Icom LAN capture are unchanged. The Windows audio device
-may enforce a larger shared-mode period, so 30 FPS remains a **target**,
-not a hardware guarantee.
-
-Hover over the CW **Spectrum: Raw / HamNoise** status to compare actual
-painted FPS and frame-interval p95 with the new **PCM input: samples/block,
-last delivery interval (ms)** measurement. If PCM still arrives only
-every 100–200 ms, investigate Windows endpoint/audio driver buffering before
-optimizing FFT again.
-
-The Icom LAN Spectrum red-shading explanatory tooltip has been removed
-because it obscured frequency markings; the estimated filter bandwidth
-settings remain available in Spectrum Settings and documented on that page.
-
-
-### PCM-driven waterfall presentation (follow-up to 40 ms WASAPI fix)
-
-With 1440 samples per audio block and a measured 30.3-ms PCM input
-interval, a CW Console Raw display still showed only 16.8 actual
-new-frame FPS while the Icom LAN spectrum achieved 28.8 WF/s.
-Its GDI paint p95 was only 3.9 ms and background FFT computation
-averaged 0.6 ms, ruling out slow FFT or GDI drawing as the primary
-suspect on this measurement.
-
-Previously the CW display only **scheduled new work from its 33-ms
-WinForms timer**, and the FFT-completion callback declined to publish
-a ready frame if less than 32 ms had passed since the preceding
-presentation. When that happened, the ready frame had to wait for a
-later timer event; Windows timers can be coalesced/delayed by other UI
-messages, producing irregular 50–115 ms presentation intervals despite
-timely audio delivery.
-
-CW waterfall scheduling now receives **PCM-accepted** notifications
-from the existing audio ingress and **FFT-ready** completion signals.
-Both use one coalesced BeginInvoke callback, performing no UI or FFT
-work on the audio thread and retaining a single in-flight
-FFT/HamNoise task. The completion callback no longer discards a
-notification based on an arbitrary 32-ms gate. A 100-ms WinForms
-timer remains only as a recovery poll when notifications are delayed.
-
-The Spectrum tooltip reports the cumulative PCM/FFT-ready signals
-and number of coalesced UI-pump executions so the real-device
-measurement can distinguish event delivery from rendering. A ~30 FPS
-target is not a guarantee: actual FPS also depends on Windows
-message-pump scheduling and hardware availability. No decoding or
-CW TX behavior is changed.
-
+The CW microphone capture path uses a short 40-ms WASAPI buffer and
+1600-sample maximum PCM blocks; other SkyRoof soundcards keep their
+existing defaults. Accepted PCM and completed FFT frames schedule a
+bounded WinForms UI notification, with a 100-ms recovery timer.
+FFT/HamNoise display processing is separated from DeepCW's untouched
+receive PCM path. The old dedicated FPS/paint-time hover diagnostics
+have been removed; the spectrum mode label and normal receiver/worker
+status remain available. Display frame rate is not artificially capped
+by a visible performance diagnostic.
 
 ### Manual CW TX: no satellite-context or Arm gate
 
