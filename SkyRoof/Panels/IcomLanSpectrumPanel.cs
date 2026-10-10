@@ -2206,7 +2206,9 @@ namespace SkyRoof
         GetScopeDisplayFrequencyOffsetHz(
           0),
         GetScopeDisplayFrequencyOffsetHz(
-          1));
+          1),
+        IcomScopeRxPassbandPreferences.FromSettings(
+          ctx.Settings.IcomLanSpectrum));
     }
 
     private long GetScopeDisplayFrequencyOffsetHz(
