@@ -99,8 +99,7 @@ namespace SkyRoof
       ctx.CwTransmit =
         new CwTransmitController(
           ctx.Settings.CwConsole,
-          new CwSatelliteTransmitInterlock(
-            ctx));
+          new CwOperatorTransmitInterlock());
       ApplyOutputStreamSettings();
       ApplyKissServerSettings();
       ctx.CatControl.ApplySettings();
@@ -1100,16 +1099,10 @@ namespace SkyRoof
 
     internal void UpdateCwConsoleMenuText()
     {
-      bool txEnabled =
-        ctx.Settings.CwConsole.TransmitEnabled;
-      CwConsoleMNU.Text =
-        txEnabled
-          ? "&CW Console (TX enabled)"
-          : "&CW Console (TX disabled)";
+      CwConsoleMNU.Text = "&CW Console (RX / TX)";
       CwConsoleMNU.ToolTipText =
-        txEnabled
-          ? "CW receive and IC-9700 Command-17 transmit are enabled in Settings."
-          : "CW receive is available; transmit is disabled in Settings.";
+        "Manual CW transmit is available independently of satellite " +
+        "transponder selection; SkyCAT/radio CW readiness is checked when sending.";
     }
 
     private void CwConsoleMNU_Click(
