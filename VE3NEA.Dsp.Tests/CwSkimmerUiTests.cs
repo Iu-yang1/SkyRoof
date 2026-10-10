@@ -17,8 +17,7 @@ namespace VE3NEA.Dsp.Tests
       root.RowCount.Should().Be(4);
       root.RowStyles.Count.Should().Be(4);
       root.RowStyles[2].SizeType.Should().Be(SizeType.Percent);
-      root.RowStyles[3].SizeType.Should().Be(SizeType.Absolute);
-      root.RowStyles[3].Height.Should().BeGreaterThan(125);
+      root.RowStyles[3].SizeType.Should().Be(SizeType.AutoSize);
     }
 
     [Fact]
