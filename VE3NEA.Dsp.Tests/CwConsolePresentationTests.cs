@@ -13,6 +13,26 @@ namespace VE3NEA.Dsp.Tests
         DateTimeKind.Utc);
 
     [Fact]
+    public void ConsoleLayout_KeepsReceiveAndTransmitInOneDetailsRow()
+    {
+      // A six-row stack with independently constrained RX transcript and TX
+      // composer used to crush both text boxes when the window was reduced.
+      // One tabbed details row prevents their fixed heights from competing.
+      using var root =
+        SkyRoof.CwConsolePanel.CreateConsoleRootLayout();
+
+      root.RowCount.Should().Be(5);
+      root.RowStyles.Should().HaveCount(5);
+      root.RowStyles[2].SizeType.Should().Be(
+        System.Windows.Forms.SizeType.Absolute);
+      root.RowStyles[3].SizeType.Should().Be(
+        System.Windows.Forms.SizeType.Percent);
+      root.RowStyles[4].SizeType.Should().Be(
+        System.Windows.Forms.SizeType.Absolute);
+      root.RowStyles[4].Height.Should().BeGreaterThan(200);
+    }
+
+    [Fact]
     public void AssociationHint_IsPreferredOverTransientTrackId()
     {
       CwSignalTrack track =
