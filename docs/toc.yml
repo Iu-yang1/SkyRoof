@@ -9,6 +9,8 @@ items:
       href: zh-cn/fork-guide/
     - name: User's Guide
       href: users_guide/
+    - name: CW Console 用户指南
+      href: zh-cn/users_guide/cw_console.md
     - name: Credits
       href: credits.md
     - name: Source Code
