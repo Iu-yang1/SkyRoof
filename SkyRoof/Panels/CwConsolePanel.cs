@@ -188,6 +188,7 @@ namespace SkyRoof
         new TableLayoutPanel
         {
           Dock = DockStyle.Fill,
+          AutoScroll = true,
           ColumnCount = 1,
           RowCount = 6,
           Padding = new Padding(6)
@@ -226,7 +227,7 @@ namespace SkyRoof
         {
           Dock = DockStyle.Fill,
           AutoSize = true,
-          WrapContents = false,
+          WrapContents = true,
           FlowDirection =
             FlowDirection.LeftToRight,
           Margin = new Padding(
@@ -519,7 +520,7 @@ namespace SkyRoof
           AutoSizeMode = AutoSizeMode.GrowAndShrink,
           Text = "Selected RX Transcript",
           Padding = new Padding(8),
-          MinimumSize = new Size(0, 122)
+          MinimumSize = new Size(0, 112)
         };
 
       var layout =
@@ -549,14 +550,14 @@ namespace SkyRoof
       layout.RowStyles.Add(
         new RowStyle(
           SizeType.Absolute,
-          34));
+          28));
       layout.RowStyles.Add(
         new RowStyle(
           SizeType.AutoSize));
       layout.RowStyles.Add(
         new RowStyle(
           SizeType.Absolute,
-          34));
+          28));
 
       SelectedLaneLabel.Text =
         "No lane selected";
@@ -720,7 +721,7 @@ namespace SkyRoof
           Dock = DockStyle.Fill,
           FlowDirection =
             FlowDirection.LeftToRight,
-          WrapContents = true,
+          WrapContents = false,
           Margin = new Padding(
             0, 5, 0, 0)
         };
@@ -853,12 +854,12 @@ namespace SkyRoof
       TextBox box)
     {
       box.Dock = DockStyle.Fill;
-      box.Multiline = true;
+      box.Multiline = false;
       box.MinimumSize =
-        new Size(0, 28);
+        new Size(0, 23);
       box.ReadOnly = true;
       box.ScrollBars =
-        ScrollBars.Vertical;
+        ScrollBars.None;
       box.Font =
         new Font(
           FontFamily.GenericMonospace,
