@@ -1,6 +1,3 @@
-using MathNet.Numerics.IntegralTransforms;
-using System.Numerics;
-
 namespace SkyRoof.CW
 {
   public sealed class CwDetectorOptions
@@ -59,21 +56,21 @@ namespace SkyRoof.CW
 
       var powers = new double[frameCount, binCount];
       var frameNoise = new double[frameCount];
-      var fft = new Complex[options.FftSize];
+      using var fft = CwRealFft.Rent(options.FftSize);
       var noiseScratch = new double[binCount];
 
       for (int frame = 0; frame < frameCount; frame++)
       {
         int offset = frame * options.HopSize;
         for (int i = 0; i < options.FftSize; i++)
-          fft[i] = new Complex(samples[offset + i] * window[i], 0);
+          fft.Input[i] = (float)(
+            samples[offset + i] * window[i]);
 
-        Fourier.Forward(fft, FourierOptions.Matlab);
+        fft.Forward();
 
         for (int b = 0; b < binCount; b++)
         {
-          Complex value = fft[firstBin + b];
-          double power = value.Real * value.Real + value.Imaginary * value.Imaginary;
+          double power = fft.Power(firstBin + b);
           powers[frame, b] = power;
           noiseScratch[b] = power;
         }
