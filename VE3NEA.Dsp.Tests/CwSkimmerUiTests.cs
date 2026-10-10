@@ -222,17 +222,38 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
-    public void PileupTranscript_WrapsAndScrollsLongMessages()
+    public void PileupCompactOverview_EllipsizesWithoutDiscardingFullTranscript()
     {
       using var card = new CwPileupLaneCard(0);
       var layout = card.Controls.OfType<TableLayoutPanel>().Single();
-      var transcript = layout.Controls.OfType<RichTextBox>().Single();
+      var labels = layout.Controls.OfType<Label>().ToArray();
+      labels.Should().HaveCount(2);
+      labels.Should().OnlyContain(x => x.AutoEllipsis);
+      layout.RowCount.Should().Be(2);
 
-      transcript.ReadOnly.Should().BeTrue();
-      transcript.Multiline.Should().BeTrue();
-      transcript.WordWrap.Should().BeTrue();
-      transcript.ScrollBars.Should().Be(RichTextBoxScrollBars.Vertical);
-      transcript.BorderStyle.Should().Be(BorderStyle.None);
+      CwSignalTrack track = Track(1, 77, 720);
+      var slot = new CwConsoleLaneSlot(0,
+        CwConsolePresentation.Identity(track), track, true);
+      const string message =
+        "CQ CQ DE BG5JSU BG5JSU 5NN TU 73 LONG LONG MESSAGE";
+      var text = Transcript(1, 77, message, " AGN");
+      card.UpdateLane(slot, text, CwConsolePresentation.Identity(track));
+
+      card.CopyText.Should().Be(text.Text);
+      card.PreviewText.Should().Contain("BG5JSU");
+      card.PreviewText.Should().Contain("AGN");
+      card.Controls.OfType<TableLayoutPanel>().Single()
+        .Controls.OfType<Button>().Single()
+        .Enabled.Should().BeTrue();
+
+      // The existing Selected RX pane is the single source for
+      // full multiline, scrollable transcript presentation.
+      using var detail = new CwSelectedLaneView();
+      detail.UpdateLane(slot, text);
+      detail.DisplayedText.Should().Be(text.Text);
+      detail.TranscriptControl.WordWrap.Should().BeTrue();
+      detail.TranscriptControl.ScrollBars.Should()
+        .Be(RichTextBoxScrollBars.Vertical);
     }
 
     [Fact]
