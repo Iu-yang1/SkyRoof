@@ -59,6 +59,64 @@ public sealed class RotatorControlTests
             command => command.StartsWith("P 90.0 30.0", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData(RotatorContinuousDirection.Up, "M 2 -1")]
+    [InlineData(RotatorContinuousDirection.Down, "M 4 -1")]
+    [InlineData(RotatorContinuousDirection.Left, "M 8 -1")]
+    [InlineData(RotatorContinuousDirection.Right, "M 16 -1")]
+    public async Task ContinuousMoveStartsOnceAndReleaseSendsStop(
+        RotatorContinuousDirection direction,
+        string expectedMove)
+    {
+        await using var server = new FakeRotctld((command, _) =>
+            command == "p"
+                ? "90.0\n30.0\n"
+                : "RPRT 0\n");
+        using var engine = StartEngine(server.Port);
+
+        await WaitUntilAsync(() => server.Count("p") >= 1);
+        engine.StartContinuousMove(direction);
+
+        await WaitUntilAsync(() => server.Count(expectedMove) >= 1);
+        await Task.Delay(120);
+        Assert.Equal(1, server.Count(expectedMove));
+        Assert.DoesNotContain(
+            server.Commands,
+            command => command.StartsWith("P ", StringComparison.Ordinal));
+
+        engine.StopRotation();
+        await WaitUntilAsync(() => server.Count("S") >= 1);
+        Assert.Equal(1, server.Count("S"));
+    }
+
+    [Fact]
+    public async Task ContinuousDirectionChangeStopsBeforeNewDirection()
+    {
+        await using var server = new FakeRotctld((command, _) =>
+            command == "p"
+                ? "90.0\n30.0\n"
+                : "RPRT 0\n");
+        using var engine = StartEngine(server.Port);
+
+        await WaitUntilAsync(() => server.Count("p") >= 1);
+        engine.StartContinuousMove(
+            RotatorContinuousDirection.Right);
+        await WaitUntilAsync(() =>
+            server.Count("M 16 -1") == 1);
+
+        engine.StartContinuousMove(
+            RotatorContinuousDirection.Up);
+
+        await WaitUntilAsync(() =>
+            server.Count("S") >= 1 &&
+            server.Count("M 2 -1") >= 1);
+
+        string[] commands = server.Commands.ToArray();
+        int stop = Array.IndexOf(commands, "S");
+        int up = Array.IndexOf(commands, "M 2 -1");
+        Assert.True(stop >= 0 && up > stop);
+    }
+
     [Fact]
     public async Task ReconnectResendsAcceptedMoveToRestartedController()
     {
