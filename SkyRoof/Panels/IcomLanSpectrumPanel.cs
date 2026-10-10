@@ -58,6 +58,9 @@ namespace SkyRoof
     private DateTime LastRateTime = DateTime.UtcNow;
     private double ScopeFps;
     private double DisplayFps;
+    private double WaterfallDeliveryFps;
+    private long RenderedCompleteSweeps;
+    private long LastRenderedCompleteSweeps;
     private long LastRenderedScopeFrameTicks;
     private bool LastStatsUsedNativeLan;
     private bool LocalHold;
@@ -1061,6 +1064,9 @@ namespace SkyRoof
       LastRateTime = DateTime.UtcNow;
       ScopeFps = 0;
       DisplayFps = 0;
+      WaterfallDeliveryFps = 0;
+      RenderedCompleteSweeps = 0;
+      LastRenderedCompleteSweeps = 0;
       LastRenderedScopeFrameTicks = 0;
       Interlocked.Increment(ref ScopeCaptureEpoch);
       ScopeFrameMailbox.Clear();
@@ -1269,6 +1275,8 @@ namespace SkyRoof
       SynchronizePendingEdgeIfNeeded(
         frame);
       SpectrumView.PushFrame(frame);
+      if (frame.SweepComplete)
+        RenderedCompleteSweeps++;
       LastRenderedScopeFrameTicks = ticks;
 
       // Do not write all ComboBox selections / NumericUpDown values on
@@ -2368,6 +2376,8 @@ namespace SkyRoof
         LastRateTime = now;
         ScopeFps = 0;
         DisplayFps = 0;
+        WaterfallDeliveryFps = 0;
+        LastRenderedCompleteSweeps = RenderedCompleteSweeps;
       }
 
       double elapsed = (now - LastRateTime).TotalSeconds;
@@ -2376,8 +2386,11 @@ namespace SkyRoof
       {
         ScopeFps = (scopeFrames - LastScopeFrames) / elapsed;
         DisplayFps = (scopeUpdates - LastScopeUpdates) / elapsed;
+        WaterfallDeliveryFps =
+          (RenderedCompleteSweeps - LastRenderedCompleteSweeps) / elapsed;
         LastScopeFrames = scopeFrames;
         LastScopeUpdates = scopeUpdates;
+        LastRenderedCompleteSweeps = RenderedCompleteSweeps;
         LastRateTime = now;
       }
 
@@ -2471,7 +2484,7 @@ namespace SkyRoof
         $"{FormatSpectrumSource(spectrumSettings.Source)} · " +
         $"{transportSummary} · Ctrl {FormatControlPath(resolvedControlPath)}{controlHint} · " +
         $"475 bins · {DisplayFps:0.0} upd/s · " +
-        $"{ScopeFps:0.0} sweeps/s · {health}" +
+        $"{WaterfallDeliveryFps:0.0} WF/s · {health}" +
         (PendingScopeControls.Count > 0
           ? $" · Ctrl pending {PendingScopeControls.Count}" : "") +
         (UnconfirmedScopeControlCount > 0
@@ -2495,8 +2508,9 @@ namespace SkyRoof
           $"Packets: {effectiveCapture.PacketCount:N0}",
           $"CI-V frames: {effectiveCapture.CivFrameCount:N0}",
           $"Complete sweeps: {scopeFrames:N0}",
-          $"Scope rate: {ScopeFps:0.0}/s",
-          $"Display rate: {DisplayFps:0.0} fps",
+          $"Complete sweeps captured: {ScopeFps:0.0}/s",
+          $"Complete sweeps delivered to waterfall: {WaterfallDeliveryFps:0.0}/s",
+          $"Waveform update rate: {DisplayFps:0.0}/s",
           $"Invalid scope frames: {effectiveCapture.InvalidScopeFrameCount:N0}",
           $"Serial transport sequence skips (not proven lost 27 00 sweeps): {effectiveCapture.SequenceGapCount:N0}",
           $"Duplicate chunks: {effectiveCapture.DuplicateChunkCount:N0}",
