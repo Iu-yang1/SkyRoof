@@ -371,9 +371,9 @@ namespace SkyRoof.CW
             .Where(track =>
               IsPlausibleKeyedCarrier(
                 physicalEvidence[track.Id]))
+            // Physical evidence is a reject gate, not a new resource-ranking
+            // policy. Preserve the established Active -> tracker SNR order.
             .OrderByDescending(track => track.Active)
-            .ThenByDescending(track =>
-              physicalEvidence[track.Id].LocalSnrDb)
             .ThenByDescending(track => track.SnrDb)
             .ThenBy(track => track.FrequencyHz)
             .Take(MaxLanes)
