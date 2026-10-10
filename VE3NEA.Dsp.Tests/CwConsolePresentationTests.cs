@@ -242,6 +242,19 @@ namespace VE3NEA.Dsp.Tests
         .Should().Be(expected);
     }
 
+    [Theory]
+    [InlineData(240, 34)]
+    [InlineData(320, 40)]
+    [InlineData(400, 50)]
+    [InlineData(800, 52)]
+    public void EightLaneOverview_FitsReadableCompactRows(
+      int viewportHeight, int expected)
+    {
+      CwPileupLaneList.CalculateRowHeight(viewportHeight)
+        .Should().Be(expected);
+      CwPileupLaneList.LaneCount.Should().Be(8);
+    }
+
     [Fact]
     public void GridTranscript_MarksOnlyProvisionalSuffix()
     {
