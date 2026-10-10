@@ -197,7 +197,7 @@ HamNoise Classic 和 CW V2 目前只保留为 **benchmark-only 研究后端**，
 ## 录音回归测试
 
 SkyRoof 提供离线 WAV corpus runner，可对完整接收链做版本回归。格式见
-[Recorded CW corpus](../../../benchmarks/cw-recorded-corpus/README.md)。
+[Recorded CW corpus](https://github.com/Iu-yang1/SkyRoof/tree/master/benchmarks/cw-recorded-corpus)。
 
 truth 的参考 AF 频率只在解码完成后用于评分配对，不会提供给 detector/tracker。
 
