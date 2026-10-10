@@ -84,7 +84,7 @@ jobs:
         if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
         env:
           SKYROOF_RUN_FFT_BENCHMARK: '1'
-          SKYROOF_FFT_BENCHMARK_OUTPUT: artifacts/cw-fft-benchmark.jsonl
+          SKYROOF_FFT_BENCHMARK_OUTPUT: ${{ github.workspace }}/artifacts/cw-fft-benchmark.jsonl
         run: >
           dotnet test VE3NEA.Dsp.Tests/VE3NEA.Dsp.Tests.csproj
           -c Release -p:Platform=x64 --no-restore --no-build
