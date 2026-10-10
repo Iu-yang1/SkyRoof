@@ -50,9 +50,10 @@ namespace SkyRoof
     public CwDenoiseMode SpectrumDenoiseMode { get; set; } =
       CwDenoiseMode.Bypass;
 
-    [DisplayName("Enable CW Transmit")]
-    [Description(
-      "Permit operator-initiated Send/Shift+F1-F8 through SkyCAT's fail-closed IC-9700 Command 17 keyer. The Console captures TX interlocks on demand; no separate Arm TX button is required.")]
+    // Compatibility field for older SkyRoof settings files. Manual CW
+    // transmission no longer requires or consults a separate software
+    // enable gate; the real radio/SkyCAT status is verified on Send.
+    [Browsable(false)]
     [DefaultValue(true)]
     public bool TransmitEnabled { get; set; } = true;
 
