@@ -90,6 +90,12 @@ namespace SkyRoof
   internal sealed class CwPileupLaneCard : Panel
   {
     private readonly int index;
+    private readonly ToolTip detailTip = new()
+    {
+      AutoPopDelay = 15000,
+      InitialDelay = 400,
+      ReshowDelay = 150
+    };
     private CwConsoleLaneIdentity? identity;
     private string copyText = string.Empty;
     private readonly Label title = new()
@@ -195,6 +201,9 @@ namespace SkyRoof
         provisional.Text = string.Empty;
         copyText = string.Empty;
         copy.Enabled = false;
+        detailTip.SetToolTip(title, string.Empty);
+        detailTip.SetToolTip(committed, string.Empty);
+        detailTip.SetToolTip(provisional, string.Empty);
         return;
       }
 
@@ -208,6 +217,12 @@ namespace SkyRoof
         "C  " + (transcript?.CommittedText ?? "");
       provisional.Text =
         "P  " + (transcript?.ProvisionalText ?? "");
+      detailTip.SetToolTip(title,
+        $"{title.Text} · {track.DriftHzPerSecond:+0.0;-0.0;0.0} Hz/s");
+      detailTip.SetToolTip(committed,
+        transcript?.CommittedText ?? "");
+      detailTip.SetToolTip(provisional,
+        transcript?.ProvisionalText ?? "");
       provisional.ForeColor = Color.FromArgb(120, 78, 28);
       title.ForeColor = !slot.Present
         ? SystemColors.GrayText
@@ -222,6 +237,13 @@ namespace SkyRoof
     {
       if (identity is CwConsoleLaneIdentity id)
         Selected?.Invoke(id);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+      if (disposing)
+        detailTip.Dispose();
+      base.Dispose(disposing);
     }
   }
 }
