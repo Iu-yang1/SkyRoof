@@ -91,6 +91,25 @@ WsjtxUtils.WsjtxMessages 1.0.0.69
                             https://github.com/KC3PIB/WsjtxUtils
 
 
+Optional runtime downloads
+--------------------------
+
+DeepCW model                e04/deepcw-engine, pinned revision
+                            8e264d243bbd4467bd19f3f28292219405b47e0e
+                            AGPL-3.0-only ........................... DeepCW-NOTICE.txt,
+                                                                      AGPL-3.0.txt
+                            https://github.com/e04/deepcw-engine
+                            Downloaded only when the operator explicitly installs
+                            the CW model; not included in the SkyRoof installer.
+
+HamNoise research backend   e04/HamNoise, pinned revision documented in
+                            HamNoise-NOTICE.txt
+                            AGPL-3.0 ............................... HamNoise-NOTICE.txt,
+                                                                      AGPL-3.0.txt
+                            Benchmark-only; its native DLL is not included in
+                            production SkyRoof installers.
+
+
 Signal processing libraries
 ---------------------------
 
