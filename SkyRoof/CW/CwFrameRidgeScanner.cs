@@ -93,6 +93,11 @@ namespace SkyRoof.CW
     public int MaxPeaksPerFrame { get; init; } = 16;
 
     public int MinimumPortionFrames { get; init; } = 4;
+    // Fast frames overlap heavily (80 ms window / 15 ms hop). Four adjacent
+    // frames are therefore not four independent observations. Require a
+    // portion to span beyond one FFT noise realization before it may feed the
+    // Kalman tracker.
+    public double MinimumPortionDurationSeconds { get; init; } = 0.12;
     public int MaximumPortionGapFrames { get; init; } = 1;
     public double MinimumRidgeSeedSnrDb { get; init; } = 12.0;
     public double MinimumPortionMeanSnrDb { get; init; } = 7.0;
@@ -648,6 +653,9 @@ namespace SkyRoof.CW
           (last.CenterSampleIndex -
            first.CenterSampleIndex) /
           (double)options.SampleRate;
+        if (dt <
+            options.MinimumPortionDurationSeconds)
+          continue;
         double slope = dt <= 0
           ? 0
           : (last.FrequencyHz -
@@ -1214,6 +1222,12 @@ namespace SkyRoof.CW
           value.MinimumPortionFrames > 32)
         throw new ArgumentOutOfRangeException(
           nameof(value.MinimumPortionFrames));
+      if (!double.IsFinite(
+            value.MinimumPortionDurationSeconds) ||
+          value.MinimumPortionDurationSeconds < 0.03 ||
+          value.MinimumPortionDurationSeconds > 1.0)
+        throw new ArgumentOutOfRangeException(
+          nameof(value.MinimumPortionDurationSeconds));
       if (value.MaximumPortionGapFrames is < 0 or > 8)
         throw new ArgumentOutOfRangeException(
           nameof(value.MaximumPortionGapFrames));
