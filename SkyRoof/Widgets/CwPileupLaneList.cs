@@ -3,12 +3,16 @@ using SkyRoof.CW;
 namespace SkyRoof
 {
   /// <summary>
-  /// Eight identity-stable, vertically scrollable skimmer message lanes.
-  /// Every card has an independent wrapped/scrollable decoded transcript,
-  /// without sacrificing the large left-hand frequency/time waterfall.
+  /// Compact eight-lane skimmer overview. Complete/wrapped RX messages
+  /// remain in the existing Selected Lane pane below the waterfall;
+  /// the overview must not force a 1000+ px tall window.
   /// </summary>
   internal sealed class CwPileupLaneList : UserControl
   {
+    internal const int LaneCount = 8;
+    internal const int MinimumRowHeight = 34;
+    internal const int MaximumRowHeight = 52;
+
     private readonly Panel scrolling = new()
     {
       Dock = DockStyle.Fill,
@@ -16,52 +20,69 @@ namespace SkyRoof
     };
     private readonly TableLayoutPanel laneTable = new()
     {
-      AutoSize = true,
-      AutoSizeMode = AutoSizeMode.GrowAndShrink,
       ColumnCount = 1,
-      RowCount = 8,
+      RowCount = LaneCount,
       Dock = DockStyle.Top,
-      Padding = new Padding(3)
+      AutoSize = false,
+      Margin = new Padding(0),
+      Padding = new Padding(2)
     };
     private readonly Label header = new()
     {
       Dock = DockStyle.Top,
-      Height = 26,
-      Text = "PILEUP · 8 stable lanes",
+      Height = 22,
+      Text = "PILEUP · 8 lanes",
       Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold),
-      Padding = new Padding(6, 5, 0, 0)
+      Padding = new Padding(5, 3, 0, 0)
     };
     private readonly CwPileupLaneCard[] cards =
-      Enumerable.Range(0, 8)
-        .Select(index => new CwPileupLaneCard(index))
-        .ToArray();
+      Enumerable.Range(0, LaneCount)
+        .Select(i => new CwPileupLaneCard(i)).ToArray();
 
     internal event Action<CwConsoleLaneIdentity>? LaneSelected;
 
     internal CwPileupLaneList()
     {
       Dock = DockStyle.Fill;
-      MinimumSize = new Size(230, 120);
+      MinimumSize = new Size(160, 120);
       laneTable.ColumnStyles.Add(
         new ColumnStyle(SizeType.Percent, 100));
-
-      for (int i = 0; i < cards.Length; i++)
+      foreach (var card in cards)
       {
-        var card = cards[i];
-        card.Selected += OnCardSelected;
+        card.Selected += identity => LaneSelected?.Invoke(identity);
         laneTable.RowStyles.Add(
-          new RowStyle(SizeType.Absolute, 126));
-        laneTable.Controls.Add(card, 0, i);
+          new RowStyle(SizeType.Absolute, MinimumRowHeight));
+        laneTable.Controls.Add(card, 0, card.Index);
       }
 
       scrolling.Controls.Add(laneTable);
       Controls.Add(scrolling);
       Controls.Add(header);
-      scrolling.Resize += (_, _) =>
-      {
-        laneTable.Width = Math.Max(
-          210, scrolling.ClientSize.Width - 18);
-      };
+      scrolling.Resize += (_, _) => ResizeRows();
+      ResizeRows();
+    }
+
+    /// <summary>
+    /// Fill all eight rows when possible. Scroll only if the physical pane
+    /// is shorter than eight readable rows, including at high Windows DPI.
+    /// </summary>
+    internal static int CalculateRowHeight(int viewportHeight)
+    {
+      return Math.Clamp(viewportHeight / LaneCount,
+        MinimumRowHeight, MaximumRowHeight);
+    }
+
+    private void ResizeRows()
+    {
+      int rowHeight = CalculateRowHeight(scrolling.ClientSize.Height);
+      laneTable.SuspendLayout();
+      for (int i = 0; i < LaneCount; i++)
+        laneTable.RowStyles[i].Height = rowHeight;
+      laneTable.Height = LaneCount * rowHeight + laneTable.Padding.Vertical;
+      bool needsScroll = laneTable.Height > scrolling.ClientSize.Height;
+      laneTable.Width = Math.Max(1, scrolling.ClientSize.Width -
+        (needsScroll ? SystemInformation.VerticalScrollBarWidth : 0));
+      laneTable.ResumeLayout(true);
     }
 
     internal void UpdateLanes(
@@ -77,74 +98,52 @@ namespace SkyRoof
         CwTranscriptSnapshot? transcript = null;
         if (slot.Identity is CwConsoleLaneIdentity id)
           transcripts.TryGetValue(id, out transcript);
-
-        cards[slot.Index].UpdateLane(
-          slot, transcript, selected);
+        cards[slot.Index].UpdateLane(slot, transcript, selected);
       }
     }
-
-    private void OnCardSelected(CwConsoleLaneIdentity id) =>
-      LaneSelected?.Invoke(id);
   }
 
   internal sealed class CwPileupLaneCard : Panel
   {
-    private readonly int index;
-    private readonly ToolTip detailTip = new()
-    {
-      AutoPopDelay = 15000,
-      InitialDelay = 400,
-      ReshowDelay = 150
-    };
+    internal int Index { get; }
     private CwConsoleLaneIdentity? identity;
     private string copyText = string.Empty;
+    private readonly ToolTip tip = new();
     private readonly Label title = new()
     {
       Dock = DockStyle.Fill,
       AutoEllipsis = true,
       UseMnemonic = false,
-      Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold)
+      Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold),
+      TextAlign = ContentAlignment.MiddleLeft
     };
-    private readonly Label signalStatus = new()
+    private readonly Label preview = new()
     {
       Dock = DockStyle.Fill,
       AutoEllipsis = true,
       UseMnemonic = false,
-      Font = new Font(SystemFonts.DefaultFont, FontStyle.Regular)
-    };
-    private readonly RichTextBox decodedText = new()
-    {
-      Dock = DockStyle.Fill,
-      ReadOnly = true,
-      WordWrap = true,
-      Multiline = true,
-      ScrollBars = RichTextBoxScrollBars.Vertical,
-      BorderStyle = BorderStyle.None,
-      DetectUrls = false,
-      HideSelection = false,
-      TabStop = false,
-      Font = new Font(FontFamily.GenericMonospace, 9.5f),
-      Margin = new Padding(0, 3, 0, 0)
+      TextAlign = ContentAlignment.MiddleLeft,
+      Font = new Font(FontFamily.GenericMonospace, 9.0f),
+      Padding = new Padding(3, 0, 1, 0)
     };
     private readonly Button copy = new()
     {
       Text = "Copy",
-      AutoSize = true,
-      AutoSizeMode = AutoSizeMode.GrowAndShrink,
-      MinimumSize = new Size(70, 28),
-      Padding = new Padding(7, 1, 7, 1),
-      Margin = new Padding(3, 1, 3, 1),
-      Dock = DockStyle.Fill
+      Dock = DockStyle.Fill,
+      AutoSize = false,
+      Margin = new Padding(0),
+      Padding = new Padding(1, 0, 1, 0),
+      TabStop = false
     };
 
     internal event Action<CwConsoleLaneIdentity>? Selected;
 
-    internal CwPileupLaneCard(int slot)
+    internal CwPileupLaneCard(int index)
     {
-      index = slot;
+      Index = index;
       Dock = DockStyle.Fill;
-      Margin = new Padding(2);
-      Padding = new Padding(4);
+      Margin = new Padding(1);
+      Padding = new Padding(1);
       BorderStyle = BorderStyle.FixedSingle;
       Cursor = Cursors.Hand;
 
@@ -152,47 +151,29 @@ namespace SkyRoof
       {
         Dock = DockStyle.Fill,
         ColumnCount = 2,
-        RowCount = 3,
+        RowCount = 2,
         Margin = new Padding(0),
         Padding = new Padding(0)
       };
-      layout.ColumnStyles.Add(
-        new ColumnStyle(SizeType.Percent, 100));
-      // Auto-size this column to the button's *preferred* text width at
-      // the current Windows DPI. A fixed 51px cell clipped Copy to Cop.
-      layout.ColumnStyles.Add(
-        new ColumnStyle(SizeType.AutoSize));
-      layout.RowStyles.Add(
-        new RowStyle(SizeType.Absolute, 31));
-      layout.RowStyles.Add(
-        new RowStyle(SizeType.Absolute, 20));
-      layout.RowStyles.Add(
-        new RowStyle(SizeType.Percent, 100));
-
+      layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+      layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 49));
+      layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+      layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
       layout.Controls.Add(title, 0, 0);
       layout.Controls.Add(copy, 1, 0);
-      layout.Controls.Add(signalStatus, 0, 1);
-      layout.SetColumnSpan(signalStatus, 2);
-      layout.Controls.Add(decodedText, 0, 2);
-      layout.SetColumnSpan(decodedText, 2);
+      layout.SetRowSpan(copy, 2);
+      layout.Controls.Add(preview, 0, 1);
       Controls.Add(layout);
 
       Click += (_, _) => SelectCard();
       title.Click += (_, _) => SelectCard();
-      signalStatus.Click += (_, _) => SelectCard();
-      decodedText.MouseDown += (_, e) =>
-      {
-        if (e.Button == MouseButtons.Left)
-          SelectCard();
-      };
+      preview.Click += (_, _) => SelectCard();
       copy.Click += (_, _) =>
       {
-        if (!string.IsNullOrWhiteSpace(copyText))
+        if (copyText.Length > 0)
           Clipboard.SetText(copyText);
       };
-
-      UpdateLane(
-        new CwConsoleLaneSlot(slot, null, null, false),
+      UpdateLane(new CwConsoleLaneSlot(index, null, null, false),
         null, null);
     }
 
@@ -202,71 +183,44 @@ namespace SkyRoof
       CwConsoleLaneIdentity? selected)
     {
       identity = slot.Identity;
-      bool selectedNow =
-        identity.HasValue && identity == selected;
-      BackColor = selectedNow
+      bool isSelected = identity.HasValue && identity == selected;
+      BackColor = isSelected
         ? Color.FromArgb(216, 239, 247)
         : SystemColors.Window;
       title.BackColor = BackColor;
-      signalStatus.BackColor = BackColor;
-      decodedText.BackColor = BackColor;
+      preview.BackColor = BackColor;
 
       if (slot.Track is not CwSignalTrack track)
       {
-        title.Text = $"{index + 1}  —";
-        signalStatus.Text = string.Empty;
-        if (decodedText.TextLength > 0)
-          decodedText.Clear();
+        title.Text = $"{Index + 1}  —";
+        preview.Text = string.Empty;
         copyText = string.Empty;
         copy.Enabled = false;
-        detailTip.SetToolTip(title, string.Empty);
-        detailTip.SetToolTip(signalStatus, string.Empty);
         return;
       }
 
       string state = slot.Present
-        ? CwConsolePresentation.StateText(track)
-        : "Grace";
-      title.Text =
-        $"{index + 1}  {CwConsolePresentation.LaneLabel(track)}  " +
-        $"{track.FrequencyHz:F0} Hz";
-      signalStatus.Text = $"{track.SnrDb:F1} dB · {state}" +
-        (Math.Abs(track.DriftHzPerSecond) >= 0.1
-          ? $" · {track.DriftHzPerSecond:+0.0;-0.0} Hz/s"
-          : "");
-      title.ForeColor = !slot.Present
-        ? SystemColors.GrayText
-        : track.Ambiguous ? Color.DarkOrange
-        : SystemColors.ControlText;
-      signalStatus.ForeColor = title.ForeColor;
-      detailTip.SetToolTip(title, title.Text);
-      detailTip.SetToolTip(signalStatus,
-        $"{signalStatus.Text} · {track.DriftHzPerSecond:+0.0;-0.0;0.0} Hz/s");
+        ? CwConsolePresentation.StateText(track) : "Grace";
+      title.Text = $"{Index + 1}  {CwConsolePresentation.LaneLabel(track)} " +
+        $"{track.FrequencyHz:F0} Hz · {track.SnrDb:F0}dB · {state}";
+      title.ForeColor = !slot.Present ? SystemColors.GrayText :
+        track.Ambiguous ? Color.DarkOrange : SystemColors.ControlText;
+      preview.ForeColor = title.ForeColor;
+      tip.SetToolTip(title,
+        $"{title.Text} · drift {track.DriftHzPerSecond:+0.0;-0.0;0.0} Hz/s");
 
-      // RichTextBox wraps arbitrarily long decoded messages and keeps its
-      // own vertical scrollbar. Only mutate it when the text changes, so
-      // the 250-ms UI refresh cannot reset the user's selection/scroll.
       string committed = transcript?.CommittedText ?? string.Empty;
       string provisional = transcript?.ProvisionalText ?? string.Empty;
-      string stableLine = committed.Length > 0
-        ? committed : "(waiting for committed text)";
-      string rendered = stableLine +
-        (provisional.Length > 0 ? "\n⟦" + provisional + "⟧" : "");
-      if (decodedText.Text != rendered)
-      {
-        decodedText.Text = rendered;
-        int provisionalOffset = stableLine.Length + 1;
-        if (provisional.Length > 0)
-        {
-          decodedText.Select(
-            provisionalOffset, provisional.Length + 2);
-          decodedText.SelectionColor = Color.FromArgb(155, 93, 32);
-        }
-        decodedText.Select(decodedText.TextLength, 0);
-        decodedText.ScrollToCaret();
-      }
       copyText = transcript?.Text ?? string.Empty;
-      copy.Enabled = !string.IsNullOrWhiteSpace(copyText);
+      // Single-line summary is intentionally ellipsized. Selecting a lane
+      // exposes its full scrollable transcript, including provisional text.
+      string shown = copyText.Length > 0
+        ? committed + (provisional.Length > 0 ? " ⟦" + provisional + "⟧" : "")
+        : "(listening)";
+      if (preview.Text != shown)
+        preview.Text = shown;
+      tip.SetToolTip(preview, shown);
+      copy.Enabled = copyText.Length > 0;
     }
 
     private void SelectCard()
@@ -278,7 +232,7 @@ namespace SkyRoof
     protected override void Dispose(bool disposing)
     {
       if (disposing)
-        detailTip.Dispose();
+        tip.Dispose();
       base.Dispose(disposing);
     }
   }
