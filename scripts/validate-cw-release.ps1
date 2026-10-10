@@ -89,6 +89,14 @@ if ($iss -match 'hamnoise_skyroof\.dll') {
 if ($iss -notmatch 'Source:\s*\.\.\\licenses\\\*') {
   throw "Production installer no longer packages the licenses directory."
 }
+foreach ($runtimeFile in @(
+    "Microsoft.ML.OnnxRuntime.dll",
+    "System.Numerics.Tensors.dll",
+    "runtimes\\win-x64\\native\\onnxruntime")) {
+  if (-not $iss.Contains($runtimeFile)) {
+    throw "Production installer is missing required DeepCW runtime payload: $runtimeFile"
+  }
+}
 
 $licenseReadme = Get-Content (Require-File "licenses\README.txt") -Raw
 if (-not $licenseReadme.Contains("DeepCW model") -or
