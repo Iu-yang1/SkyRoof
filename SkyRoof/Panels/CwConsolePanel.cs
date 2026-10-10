@@ -24,6 +24,7 @@ namespace SkyRoof
     private readonly Label InputStatusLabel = new();
     private readonly Label ModelStatusLabel = new();
     private readonly Label WorkerStatusLabel = new();
+    private readonly ToolTip StatusToolTip = new();
 
     private readonly CwAudioWaterfallAnalyzer WaterfallAnalyzer;
     private readonly CwAudioWaterfallAnalyzer SpectrumAnalyzer;
@@ -1002,11 +1003,13 @@ namespace SkyRoof
         CwAudioSourceController.SourceRoleHint(
           status.Value.Source);
       InputStatusLabel.Text =
-        $"Input: {CwAudioSourceController.SourceDisplayName(status.Value.Source)} · {state} · " +
-        $"{status.Value.DeviceName}" +
+        $"RX: {state} · {status.Value.DeviceName}";
+      StatusToolTip.SetToolTip(
+        InputStatusLabel,
+        $"{CwAudioSourceController.SourceDisplayName(status.Value.Source)}" +
         (string.IsNullOrEmpty(role)
           ? string.Empty
-          : $" · {role}");
+          : $"\r\n{role}"));
     }
 
     private void RefreshWorkerStatus()
@@ -1048,8 +1051,19 @@ namespace SkyRoof
 
       if (!string.IsNullOrWhiteSpace(
             status.LastError))
+      {
         ModelStatusLabel.Text +=
-          " · " + status.LastError;
+          " · error (hover)";
+        StatusToolTip.SetToolTip(
+          ModelStatusLabel,
+          status.LastError);
+      }
+      else
+      {
+        StatusToolTip.SetToolTip(
+          ModelStatusLabel,
+          string.Empty);
+      }
 
       CwDenoiseMode cleanup =
         ctx.Settings.CwConsole.SpectrumDenoiseMode;
@@ -1062,10 +1076,12 @@ namespace SkyRoof
                 : "HamNoise Classic")} · display only";
 
       WorkerStatusLabel.Text =
-        $"Worker: tracks {status.TrackCount} · " +
-        $"decode {status.CompletedInferenceWindows} · " +
-        $"skipped {status.SkippedInferenceWindows} · " +
-        $"gen {status.TimelineGeneration}";
+        $"Tracks {status.TrackCount} · " +
+        $"Decoded {status.CompletedInferenceWindows} · " +
+        $"Skipped {status.SkippedInferenceWindows}";
+      StatusToolTip.SetToolTip(
+        WorkerStatusLabel,
+        $"PCM timeline generation: {status.TimelineGeneration}");
 
       InstallModelBtn.Visible =
         status.ModelState ==
