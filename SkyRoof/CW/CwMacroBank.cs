@@ -26,6 +26,32 @@ namespace SkyRoof.CW
       } ?? string.Empty;
     }
 
+    // Used by the Console's right-click F1-F8 editor. Persisting the
+    // owning Settings object is the caller's responsibility.
+    public static void Set(
+      CwMacroSettings settings,
+      int index,
+      string text)
+    {
+      ArgumentNullException.ThrowIfNull(settings);
+      ArgumentNullException.ThrowIfNull(text);
+      if (text.Length > 0)
+        CwMessageTiming.ValidateText(text);
+
+      switch (index)
+      {
+        case 0: settings.F1 = text; break;
+        case 1: settings.F2 = text; break;
+        case 2: settings.F3 = text; break;
+        case 3: settings.F4 = text; break;
+        case 4: settings.F5 = text; break;
+        case 5: settings.F6 = text; break;
+        case 6: settings.F7 = text; break;
+        case 7: settings.F8 = text; break;
+        default: throw new ArgumentOutOfRangeException(nameof(index));
+      }
+    }
+
     public static string Prepare(
       CwMacroSettings settings,
       int index)
