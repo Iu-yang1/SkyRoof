@@ -6,56 +6,69 @@ using MathNet.Numerics.IntegralTransforms;
 namespace SkyRoof.CW
 {
   /// <summary>
-  /// Reusable, unnormalised real-to-complex FFT for CW PCM/STFT. Prefer the
-  /// FFTW3f native library already shipped with SkyRoof, not a new binary.
-  /// An unavailable native backend falls back to the previous Math.NET DFT.
+  /// Unnormalised, forward real-to-complex FFT for CW windows.
+  /// Uses the existing SkyRoof FFTW3f binary and its SIMD-aligned malloc,
+  /// with the prior Math.NET Matlab-scaled complex FFT as fallback.
+  /// Only the non-redundant DC..Nyquist N/2+1 bins are exposed.
   ///
-  /// FFTW returns N/2+1 complex bins in ordinary DC-to-Nyquist order,
-  /// preserving Math.NET FourierOptions.Matlab forward scaling. Instances
-  /// are NOT thread-safe; Rent() leases isolated working buffers/plans.
+  /// One plan owns one input/output workspace, so concurrent callers must
+  /// use different instances. Rent/Dispose pools plans across DeepCW hops.
   /// </summary>
-  internal sealed class CwRealFft : IDisposable
+  internal sealed unsafe class CwRealFft : IDisposable
   {
     private const string FftwLibrary = "libfftw3f-3.dll";
     private const uint FftwEstimate = 1u << 6;
-    private const uint FftwUnaligned = 1u << 1;
     private const int MaxPooledPerSize = 4;
 
     private static readonly object plannerSync = new();
     private static readonly ConcurrentDictionary<int, ConcurrentBag<CwRealFft>>
-      plans = new();
+      pools = new();
 
     private readonly bool pooled;
-    private readonly float[] input;
-    private readonly float[] nativeOutput;
+    private readonly float[] managedInput;
     private Complex[]? managedOutput;
-    private GCHandle inputPin;
-    private GCHandle outputPin;
+    private IntPtr nativeInput;
+    private IntPtr nativeOutput;
     private IntPtr nativePlan;
     private bool nativeEnabled;
     private bool released;
     private bool availableForRent;
 
-    [DllImport(FftwLibrary,
-      EntryPoint = "fftwf_plan_dft_r2c_1d",
+    [DllImport(FftwLibrary, EntryPoint = "fftwf_malloc",
+      CallingConvention = CallingConvention.Cdecl)]
+    private static extern IntPtr NativeMalloc(nuint bytes);
+
+    [DllImport(FftwLibrary, EntryPoint = "fftwf_free",
+      CallingConvention = CallingConvention.Cdecl)]
+    private static extern void NativeFree(IntPtr ptr);
+
+    [DllImport(FftwLibrary, EntryPoint = "fftwf_plan_dft_r2c_1d",
       CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr CreateNativePlan(
       int n, IntPtr input, IntPtr output, uint flags);
 
-    [DllImport(FftwLibrary,
-      EntryPoint = "fftwf_execute",
+    [DllImport(FftwLibrary, EntryPoint = "fftwf_execute",
       CallingConvention = CallingConvention.Cdecl)]
     private static extern void ExecuteNativePlan(IntPtr plan);
 
-    [DllImport(FftwLibrary,
-      EntryPoint = "fftwf_destroy_plan",
+    [DllImport(FftwLibrary, EntryPoint = "fftwf_destroy_plan",
       CallingConvention = CallingConvention.Cdecl)]
     private static extern void DestroyNativePlan(IntPtr plan);
 
     internal int Size { get; }
     internal int PositiveBins => Size / 2 + 1;
-    internal float[] Input => input;
     internal bool UsesNativeFftw => nativeEnabled;
+
+    internal Span<float> Input
+    {
+      get
+      {
+        ThrowIfUnavailable();
+        return nativeEnabled
+          ? new Span<float>((void*)nativeInput, Size)
+          : managedInput;
+      }
+    }
 
     internal CwRealFft(int size, bool preferNative = true)
       : this(size, preferNative, pooled: false)
@@ -67,51 +80,45 @@ namespace SkyRoof.CW
       if (size < 2 || (size & 1) != 0 || size > 1_048_576)
         throw new ArgumentOutOfRangeException(nameof(size),
           "Real FFT length must be even and between 2 and 1048576.");
-
       Size = size;
       this.pooled = pooled;
-      input = new float[size];
-      nativeOutput = new float[2 * (size / 2 + 1)];
+      managedInput = new float[size];
 
       if (preferNative && OperatingSystem.IsWindows())
       {
         try
         {
-          inputPin = GCHandle.Alloc(input, GCHandleType.Pinned);
-          outputPin = GCHandle.Alloc(nativeOutput, GCHandleType.Pinned);
-          // FFTW planning and destruction are not concurrent-thread safe.
-          // ESTIMATE avoids measurement-time modification of input; UNALIGNED
-          // permits managed pinned float buffers on any host alignment.
-          lock (plannerSync)
-            nativePlan = CreateNativePlan(
-              size,
-              inputPin.AddrOfPinnedObject(),
-              outputPin.AddrOfPinnedObject(),
-              FftwEstimate | FftwUnaligned);
-          nativeEnabled = nativePlan != IntPtr.Zero;
+          nativeInput = NativeMalloc((nuint)(sizeof(float) * size));
+          nativeOutput = NativeMalloc(
+            (nuint)(sizeof(float) * 2 * PositiveBins));
+          if (nativeInput != IntPtr.Zero &&
+              nativeOutput != IntPtr.Zero)
+          {
+            // FFTW's own allocator provides SIMD-safe alignment. Do not
+            // pass FFTW_UNALIGNED, which would restrict SIMD codelets.
+            // Planning/destruction are serialized; executing independent
+            // plans may run concurrently.
+            lock (plannerSync)
+              nativePlan = CreateNativePlan(
+                size, nativeInput, nativeOutput, FftwEstimate);
+            nativeEnabled = nativePlan != IntPtr.Zero;
+          }
         }
         catch (DllNotFoundException) { }
         catch (EntryPointNotFoundException) { }
         catch (BadImageFormatException) { }
 
         if (!nativeEnabled)
-        {
-          if (outputPin.IsAllocated) outputPin.Free();
-          if (inputPin.IsAllocated) inputPin.Free();
-        }
+          FreeNativeResources();
       }
 
       if (!nativeEnabled)
         managedOutput = new Complex[size];
     }
 
-    /// <summary>
-    /// Pool workspaces for 1-second DeepCW windows rather than re-planning
-    /// the 256/3840-point FFT and pinning buffers every decode hop.
-    /// </summary>
     internal static CwRealFft Rent(int size)
     {
-      var pool = plans.GetOrAdd(size,
+      var pool = pools.GetOrAdd(size,
         _ => new ConcurrentBag<CwRealFft>());
       if (pool.TryTake(out CwRealFft? fft))
       {
@@ -123,9 +130,7 @@ namespace SkyRoof.CW
 
     internal void Forward()
     {
-      if (released || availableForRent)
-        throw new ObjectDisposedException(nameof(CwRealFft));
-
+      ThrowIfUnavailable();
       if (nativeEnabled)
       {
         ExecuteNativePlan(nativePlan);
@@ -134,21 +139,21 @@ namespace SkyRoof.CW
 
       Complex[] output = managedOutput!;
       for (int i = 0; i < Size; i++)
-        output[i] = new Complex(input[i], 0);
+        output[i] = new Complex(managedInput[i], 0);
       Fourier.Forward(output, FourierOptions.Matlab);
     }
 
     internal double Power(int bin)
     {
+      ThrowIfUnavailable();
       if ((uint)bin >= (uint)PositiveBins)
         throw new ArgumentOutOfRangeException(nameof(bin));
-      if (released || availableForRent)
-        throw new ObjectDisposedException(nameof(CwRealFft));
 
       if (nativeEnabled)
       {
-        double re = nativeOutput[bin * 2];
-        double im = nativeOutput[bin * 2 + 1];
+        float* spectrum = (float*)nativeOutput;
+        double re = spectrum[bin * 2];
+        double im = spectrum[bin * 2 + 1];
         return re * re + im * im;
       }
       Complex value = managedOutput![bin];
@@ -158,12 +163,18 @@ namespace SkyRoof.CW
 
     internal double Magnitude(int bin) => Math.Sqrt(Power(bin));
 
+    private void ThrowIfUnavailable()
+    {
+      if (released || availableForRent)
+        throw new ObjectDisposedException(nameof(CwRealFft));
+    }
+
     public void Dispose()
     {
       if (released || availableForRent) return;
       if (pooled)
       {
-        ConcurrentBag<CwRealFft> pool = plans[Size];
+        var pool = pools[Size];
         if (pool.Count < MaxPooledPerSize)
         {
           availableForRent = true;
@@ -181,14 +192,27 @@ namespace SkyRoof.CW
     {
       if (released) return;
       released = true;
+      FreeNativeResources();
+    }
+
+    private void FreeNativeResources()
+    {
       if (nativePlan != IntPtr.Zero)
       {
         lock (plannerSync)
           DestroyNativePlan(nativePlan);
         nativePlan = IntPtr.Zero;
       }
-      if (outputPin.IsAllocated) outputPin.Free();
-      if (inputPin.IsAllocated) inputPin.Free();
+      if (nativeOutput != IntPtr.Zero)
+      {
+        NativeFree(nativeOutput);
+        nativeOutput = IntPtr.Zero;
+      }
+      if (nativeInput != IntPtr.Zero)
+      {
+        NativeFree(nativeInput);
+        nativeInput = IntPtr.Zero;
+      }
     }
   }
 }
