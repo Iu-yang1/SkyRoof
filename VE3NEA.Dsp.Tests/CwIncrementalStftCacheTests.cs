@@ -75,7 +75,9 @@ namespace VE3NEA.Dsp.Tests
             cached.SampleCalibratedMagnitude(frame, hz)
               .Should().Be(uncached.SampleCalibratedMagnitude(frame, hz));
       }
-      cache.Hits.Should().BeGreaterThan(200);
+      // +3s revisits the same 15-ms lattice, but only ~3 seconds
+      // overlap and window boundaries remain deliberately uncached.
+      cache.Hits.Should().BeGreaterThan(150);
       cache.Count.Should().BeLessOrEqualTo(1600);
     }
 
