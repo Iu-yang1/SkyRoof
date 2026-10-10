@@ -55,8 +55,11 @@ no longer part of the main window.
 
 - **Top:** Start/Stop RX, audio source, display-only Raw/HamNoise selector,
   settings and decode/worker status.
-- **Left:** live spectrum trace, high-contrast CW waterfall, AF frequency grid,
-  and H/T lane markers. Drag the splitter to change the spectrum/message ratio.
+- **Left:** a **vertical AF frequency ruler on the left**, a narrow vertical
+  live spectrum trace, and the main high-contrast waterfall. Every incoming
+  spectrum frame adds a time column at the **right**; history scrolls **right
+  to left** as in CW Skimmer. H/T lane markers are horizontal frequency lines.
+  Drag the splitter to change the spectrum/message ratio.
 - **Right:** eight stable, scrollable Pileup cards. Each shows Lane ID,
   AF Hz, SNR, state, committed text (C), and provisional text (P), along with
   a Copy button. A card stays in its numbered slot through short QSB/Hold
@@ -66,11 +69,13 @@ no longer part of the main window.
   verified WPM set/readback, and F1-F8 macro keys. Action/macro lines remain
   individually horizontally scrollable in narrower windows.
 
-**AF navigation:** use the horizontal scrollbar below the waterfall to pan
-and the Zoom control for 1-8x magnification. When the waterfall has focus,
-Ctrl+mouse-wheel zooms and mouse-wheel pans. This is **display only**: it does
-not alter frequency tuning, raw PCM, DeepCW inference, tracking, or TX safety
-interlocks. HamNoise remains optional display-only processing.
+**AF navigation:** use the **vertical scrollbar on the right of the waterfall**
+to pan the visible frequency range up/down and Zoom for 1-8x magnification.
+Ctrl+mouse-wheel zooms and ordinary mouse-wheel pans the **vertical AF axis**.
+The horizontal waterfall movement is **time history**, not radio tuning.
+All navigation is **display only** and never alters frequency tuning, raw PCM,
+DeepCW inference, tracking, or TX safety interlocks. HamNoise remains
+optional display-only processing.
 
 ## Install the DeepCW model
 
@@ -111,10 +116,11 @@ crossing even if the low-level tracker instance changes.
 ### CW Skimmer-style spectrum and stable lane slots
 
 The CW display uses a dark, high-contrast CW-Skimmer-style spectrum/waterfall:
-a live spectrum trace is drawn above the waterfall, the noise floor remains
+a slim live spectrum trace is drawn beside the vertical frequency ruler,
+new time columns scroll from right to left, and the noise floor remains
 dark instead of being stretched to full brightness every frame, and narrow CW
 carriers progress from green toward yellow/white as they become stronger.
-Frequency grid lines continue through the spectrum and waterfall.
+Horizontal frequency grid lines continue across the live trace and waterfall.
 
 Track markers are deliberately lighter than before. Only the **selected** lane
 shows a full-height ±2 sigma uncertainty band, so diagnostic overlays no longer
