@@ -22,7 +22,7 @@ namespace VE3NEA.Dsp.Tests
         SkyRoof.CwConsolePanel.CreateConsoleRootLayout();
 
       root.RowCount.Should().Be(5);
-      root.RowStyles.Should().HaveCount(5);
+      root.RowStyles.Count.Should().Be(5);
       root.RowStyles[2].SizeType.Should().Be(
         System.Windows.Forms.SizeType.Absolute);
       root.RowStyles[3].SizeType.Should().Be(
