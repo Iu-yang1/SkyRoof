@@ -382,3 +382,34 @@ HamNoise 原生推理以及升采样也在后台串行处理。后台最多存�
 瀑布图每列改用一次 GDI+ LockBits 写入，避免每次显示执行 512 次
 SetPixel；轨迹标记随状态刷新，而非每 50 ms 强制请求重绘。
 如果可选的 HamNoise 显示计算报错，会自动退回 Raw，不影响解码。
+
+### CW 实时瀑布 30 FPS 目标与偶发卡顿诊断
+
+CW 瀑布的 **Raw** 模式由原先每 **50 ms**（理论上限 20 FPS）改为
+每 **33 ms** 请求一次更新（约 30.3 次/秒）。注意，这只是刷新目标，
+**不是可保证的实际 FPS**。WinForms Timer 依赖 Windows UI 消息循环，
+同时受控件绘制、音频回调、后台任务和系统调度抖动影响。FFT 和可选的
+HamNoise 仍在无积压的独立后台显示链执行；8192 点左侧频谱线与每次
+2048 点瀑布帧一起刷新，不再人为限制为 5 FPS。
+
+鼠标悬停在 CW Console 顶部的 **Spectrum: Raw / HamNoise** 状态文字上，
+可查看以下实测指标：
+
+- **Painted waterfall FPS**：真正被 WinForms 绘制的新瀑布列的速率，
+  而不是定时器触发次数，也不会把重复重绘算成新帧。
+- **p95/max painted interval**：最近帧间隔的 95 分位及最长间隔（ms），
+  用来定位肉眼看到的短暂停顿。
+- **Last/mean background processing ms**：后台降采样、HamNoise、
+  升采样及两次 FFT 的实际总计算时间。
+- **Busy ticks / stale frames**：后台忙时跳过的轮询，以及音频时间线/
+  显示模式切换后丢弃的过期结果。
+
+音频源暂时没有提供新 PCM 时不会反复排队同一批数据；未变化的多路
+CW 轨迹也不再每 250 ms 强制整幅重绘。较慢电脑上 HamNoise 完成率
+可能仍低于 30 FPS，但不会积压旧显示帧或阻塞其他 SkyRoof 页面。
+DeepCW 解码和 CW 发射联锁均未更改。
+
+请在 i5-10400 上分别测试 Raw、HamNoise Classic、HamNoise CW V2，
+运行至少 10 秒后比较实测 FPS、p95 帧间隔及平均后台耗时。
+左侧谱线响应较快但 Painted FPS 偏低，往往更值得继续检查
+UI 消息循环与绘制时间，而非单纯继续替换 FFT。
