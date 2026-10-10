@@ -1,10 +1,13 @@
 name: Build and Release
 
 on:
-  # no tag trigger: the version comes from Directory.Build.props, so a pushed tag would be
-  # ignored and the run would rebuild whatever version the props file names - overwriting an
-  # already published release of that version. Release by running this workflow.
   workflow_dispatch:
+  # A version bump on master is the only automatic release trigger.
+  # Tag pushes are deliberately ignored to prevent overwriting an existing version.
+  push:
+    branches: [master]
+    paths:
+      - 'Directory.Build.props'
 
 permissions:
   contents: write
@@ -121,7 +124,20 @@ jobs:
         with: 
           path: 'install\Output\SkyRoofSetup.exe'
 
+      - name: Detect signing capability
+        shell: pwsh
+        env:
+          SIGNPATH_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:SIGNPATH_TOKEN)) {
+            "SIGNPATH_AVAILABLE=false" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+            Write-Host "::warning::No SignPath token configured; release will be an unsigned pre-release."
+          } else {
+            "SIGNPATH_AVAILABLE=true" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          }
+
       - name: Sign
+        if: env.SIGNPATH_AVAILABLE == 'true'
         uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
         with:
           api-token: '${{ secrets.SIGNPATH_API_TOKEN }}'
@@ -142,16 +158,29 @@ jobs:
           $version = "${{ steps.get_version.outputs.version }}"
           $versionedName = "SkyRoofSetup-v.$version"
 
-          Copy-Item install\SkyRoofSetup.exe -Destination "install\$versionedName.exe"
+          if ($env:SIGNPATH_AVAILABLE -eq 'true') {
+            $source = "install\SkyRoofSetup.exe"
+          } else {
+            $source = "install\Output\SkyRoofSetup.exe"
+          }
+          Copy-Item $source -Destination "install\$versionedName.exe" -Force
           Get-ChildItem -Path install\*.* -recurse
         shell: pwsh
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
-          name: SkyRoof v.${{ steps.get_version.outputs.version }}
+          name: SkyRoof Fork v.${{ steps.get_version.outputs.version }}
+          prerelease: ${{ env.SIGNPATH_AVAILABLE != 'true' }}
           tag_name: v.${{ steps.get_version.outputs.version }}
-          body: See [Version History](https://ve3nea.github.io/SkyRoof/download.html).
+          body: |
+            SkyRoof fork release based on VE3NEA/SkyRoof v.1.56, including CW Pileup,
+            IC-9700 LAN spectrum, satellite CAT/rotator improvements and updated documentation.
+            See [fork documentation](https://iu-yang1.github.io/SkyRoof/) and
+            [upstream version history](https://ve3nea.github.io/SkyRoof/download.html).
+
+            When this release is marked pre-release, its executable is unsigned;
+            verify the downloaded installer before running it.
           # body: This is an experimental build, please ignore.
           files:  install/SkyRoofSetup-v.${{ steps.get_version.outputs.version }}.exe
         env:
