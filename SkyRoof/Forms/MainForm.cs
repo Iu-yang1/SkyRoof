@@ -97,7 +97,9 @@ namespace SkyRoof
       ctx.CwReceiveWorker.Start();
       ctx.CwTransmit =
         new CwTransmitController(
-          ctx.Settings.CwConsole);
+          ctx.Settings.CwConsole,
+          new CwSatelliteTransmitInterlock(
+            ctx));
       ApplyOutputStreamSettings();
       ApplyKissServerSettings();
       ctx.CatControl.ApplySettings();
