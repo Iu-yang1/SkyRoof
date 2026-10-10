@@ -136,6 +136,26 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void FixedEdgeWrite_WaitsForExactPresetReadback()
+    {
+      var pending = new IcomScopePendingControls();
+      pending.Track(IcomScopeControlRequest.ForFixedEdge(
+        2, 3, 435_600_000, 435_680_000), Epoch);
+      pending.ObserveFixedEdgeReadback(new IcomFixedEdgeReadbackState
+      {
+        FrequencyRange = 2, EdgeNumber = 3,
+        LowerHz = 435_610_000, UpperHz = 435_680_000
+      });
+      pending.Count.Should().Be(1);
+      pending.ObserveFixedEdgeReadback(new IcomFixedEdgeReadbackState
+      {
+        FrequencyRange = 2, EdgeNumber = 3,
+        LowerHz = 435_600_000, UpperHz = 435_680_000
+      });
+      pending.Count.Should().Be(0);
+    }
+
+    [Fact]
     public void SwitchingTransportDiscardsPendingRadioWrites()
     {
       var pending = new IcomScopePendingControls();
