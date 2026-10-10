@@ -104,7 +104,8 @@ namespace SkyRoof.CW
         snapshot.Samples,
         snapshot.SampleRate,
         snapshot.EndUtc,
-        tracks);
+        tracks,
+        snapshot.EndSampleIndex);
 
     public void Reset() =>
       continuous.Reset();
