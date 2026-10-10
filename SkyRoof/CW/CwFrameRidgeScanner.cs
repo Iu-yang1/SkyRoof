@@ -166,14 +166,8 @@ namespace SkyRoof.CW
       }
     }
 
-    internal long StftCacheHits
-    {
-      get { lock (cacheSync) return cacheHits; }
-    }
-    internal long StftCacheMisses
-    {
-      get { lock (cacheSync) return cacheMisses; }
-    }
+    internal long StftCacheHits => Interlocked.Read(ref cacheHits);
+    internal long StftCacheMisses => Interlocked.Read(ref cacheMisses);
     internal int StftCacheEntries
     {
       get { lock (cacheSync) return fastCache.Count + precisionCache.Count; }
@@ -192,8 +186,8 @@ namespace SkyRoof.CW
       fastCacheOrder.Clear();
       precisionCacheOrder.Clear();
       lastScanEndIndex = -1;
-      cacheHits = 0;
-      cacheMisses = 0;
+      Interlocked.Exchange(ref cacheHits, 0);
+      Interlocked.Exchange(ref cacheMisses, 0);
     }
 
     private sealed class MutablePortion
@@ -435,12 +429,12 @@ namespace SkyRoof.CW
         {
           if (cache.TryGetValue(absoluteStart, out FramePeak[]? cached))
           {
-            cacheHits++;
+            Interlocked.Increment(ref cacheHits);
             frames.Add(cached.Select(peak =>
               peak with { FrameIndex = frameIndex }).ToList());
             continue;
           }
-          cacheMisses++;
+          Interlocked.Increment(ref cacheMisses);
         }
         double centerTimeFromEnd =
           (centerSample - snapshot.EndSampleIndex) /
