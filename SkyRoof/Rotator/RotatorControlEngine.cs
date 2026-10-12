@@ -119,16 +119,15 @@ namespace SkyRoof
       RequestedBearing = null;
       LastWrittenBearing = null;
 
-      int applied =
-        Volatile.Read(
-          ref appliedContinuousDirection);
+      int applied = Volatile.Read(ref appliedContinuousDirection);
+      int previouslyRequested = Volatile.Read(ref requestedContinuousDirection);
 
-      // Taking ownership from an absolute P target, or switching direction,
-      // is fail-safe: STOP must be acknowledged before the new M command.
-      // Starting the same already-active direction remains idempotent.
+      // Another UI request can arrive while the first M is awaiting its
+      // rotctld ACK. Comparing applied direction alone misses this in-flight
+      // transition and permits M(right) -> M(up) without STOP.
       if (absoluteWasActive ||
-          (applied != 0 &&
-           applied != value))
+          (previouslyRequested != 0 && previouslyRequested != value) ||
+          (applied != 0 && applied != value))
         stopRequested = true;
 
       Volatile.Write(
