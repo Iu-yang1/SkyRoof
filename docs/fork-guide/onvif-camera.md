@@ -25,3 +25,13 @@ RTSP networking, demultiplexing, SOAP and UI necessarily use some CPU. This is G
 Discover (or enter ONVIF Device Service URL) → credentials → Profiles → select profile → Play (GPU). Use Stop to end playback. Camera passwords and RTSP userinfo are not placed in mpv process command-line arguments.
 
 References: [ONVIF specifications](https://www.onvif.org/profiles/specifications/) · [mpv manual](https://mpv.io/manual/stable/).
+
+## V1 video-first layout
+
+The **Live video** window now shows only a small header (Play, Stop, Reconnect, Settings), the live camera image, and a concise status strip with stream profile and confirmed decoder. The device address, credentials, discovery, Profile selection and mpv.exe location are no longer editable on the video page.
+
+To configure a new camera, open the camera pane and choose **Open Settings**. In the new **ONVIF Camera Settings** dialog: choose **Discover**, or enter an HTTP(S) ONVIF Device Service endpoint; fill camera name, account and password; use **Get profiles** to select the default Media2 or Media1 stream; and select **mpv.exe** when it cannot be found on PATH. Click **Save** to persist preferences. The saved password is protected for the current Windows user with Windows DPAPI in Settings.json; **Cancel** leaves existing settings unchanged. The same settings can be inspected in **Tools → Settings → ONVIF Camera**.
+
+**Connect when window opens** contacts ONVIF and selects the profile, without video playback. **Start video automatically** also starts RTSP playback; turning it on implies connection. **Reconnect after playback interruption** retries failed video sessions but not explicit Stop. Incomplete or unsupported hardware decoding displays a failure rather than silently using CPU decoding.
+
+The status bar intentionally avoids showing credential-bearing RTSP URLs. For diagnostics, inspect the configured endpoint in Settings. GPU hardware validation requires a supported local Windows device; CI only tests the configuration and control flow, not physical camera compatibility.
