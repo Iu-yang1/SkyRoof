@@ -316,7 +316,10 @@ namespace SkyRoof
         Interlocked.Exchange(ref positionFaulted, 1);
         RequestedBearing = LastWrittenBearing = null;
         Volatile.Write(ref requestedContinuousDirection, 0);
-        stopRequested = true;
+        // Already on the rotctld worker thread: send STOP immediately, not
+        // after another Delay-cycle. Keep the latch even if STOP is rejected.
+        stopRequested = false;
+        SendStopCommand();
         Log.Error("Rotator feedback jump: az {Az:F1} degrees, el {El:F1} degrees. STOP requested; inspect actual position.",
           azJump, elJump);
         var fault = new RotatorPositionFaultEventArgs(previous, bearing, azJump, elJump);

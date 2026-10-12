@@ -93,10 +93,9 @@ namespace SkyRoof
             verified = true;
             break;
           }
-          // A video decoder has started without the requested GPU path.
-          if (current is "no" or "software")
-            throw new NotSupportedException(
-              "This camera stream is not using D3D11VA hardware decoding. Playback stopped.");
+          // During RTSP DESCRIBE/SETUP, hwdec-current may report "no"
+          // before the first video frame. Never accept it as a GPU decoder;
+          // allow initialization time, then fail closed at the deadline.
           await Task.Delay(250, cancel);
         }
         if (!verified)

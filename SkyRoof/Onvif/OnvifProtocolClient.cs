@@ -145,7 +145,9 @@ namespace SkyRoof
             profiles.Add(new OnvifMediaProfile(token, name, media2));
           }
         }
-        catch (HttpRequestException) when (media2 && mediaEndpoints.ContainsKey(false))
+        catch (HttpRequestException) when (
+          (media2 && mediaEndpoints.ContainsKey(false)) ||
+          (!media2 && profiles.Count > 0))
         {
           // An ONVIF device may advertise Media2 yet implement only Media1 operations.
         }
