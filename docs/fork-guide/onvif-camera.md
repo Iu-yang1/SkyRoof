@@ -35,3 +35,11 @@ To configure a new camera, open the camera pane and choose **Open Settings**. In
 **Connect when window opens** contacts ONVIF and selects the profile, without video playback. **Start video automatically** also starts RTSP playback; turning it on implies connection. **Reconnect after playback interruption** retries failed video sessions but not explicit Stop. Incomplete or unsupported hardware decoding displays a failure rather than silently using CPU decoding.
 
 The status bar intentionally avoids showing credential-bearing RTSP URLs. For diagnostics, inspect the configured endpoint in Settings. GPU hardware validation requires a supported local Windows device; CI only tests the configuration and control flow, not physical camera compatibility.
+
+## Discovery troubleshooting (Windows, multiple adapters)
+
+**Discover** now sends ONVIF-compliant WS-Discovery probes over **each active IPv4 interface** and receives the UDP unicast ProbeMatch on the same per-interface socket. It first probes for `dn:NetworkVideoTransmitter` and also sends an unfiltered compatibility probe. The Settings status reports how many adapters were probed and how many UDP replies were received; no usernames or passwords are sent in discovery requests.
+
+If ONVIF Device Manager (ODM) finds a camera but SkyRoof returns zero results, verify Windows Firewall permissions for UDP 3702 and whether local multicast works across VLANs. A manual camera address is also supported. **Do not enter `http://camera-ip:554` as the ONVIF Device Service**: port 554 is normally for RTSP video. For a Hikvision camera, an often-used HTTP Device Service address is `http://camera-ip/onvif/device_service` (typically TCP 80). Prefer the precise `XAddr` shown by ODM or the device's own configuration. Discovering a device and authenticating to its ONVIF services are two separate steps.
+
+This Windows interface-binding fix addresses a known discovery-design limitation but does not constitute a successful live test with any particular camera model.
