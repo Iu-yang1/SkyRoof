@@ -33,3 +33,13 @@
 **Connect when window opens** 仅连接 ONVIF、查询 Profile，不自动播放；**Start video automatically** 会在窗口打开时自动开始视频（隐含先连接）；**Reconnect after playback interruption** 允许断流后重新连接，但用户明确 Stop 后不会自动启动。硬件解码失败时提示错误，不回退软件解码。
 
 底部不显示可能包含账号信息的完整 RTSP URL，仅展示码流及硬件解码状态。实际摄像机互通和显卡解码能力仍需在 Windows 设备上实测；自动化 CI 不能替代硬件验收。
+
+## Windows 多网卡 ONVIF 发现排障
+
+**Discover** 现对所有处于启用状态的本地 IPv4 网卡分别发送符合规范的 WS-Discovery 组播 Probe，并通过对应网卡绑定的 UDP 套接字接收单播 ProbeMatch。先尝试限定 `dn:NetworkVideoTransmitter` 类型的探测，再尝试不限定类型的兼容探测。设置页将显示探测网卡数及收到的 UDP 数据包数；发现阶段不会发送摄像机账号密码。
+
+如果 ONVIF Device Manager（ODM）可以发现摄像机，而 SkyRoof 仍返回 0，请检查 Windows 防火墙对 UDP 3702 的访问，以及 VLAN、虚拟网卡与组播路由是否正确。也允许手工填写摄像机的 ONVIF Device Service URL。
+
+**不要将 `http://摄像机IP:554` 直接填为设备服务地址**，554 通常属于 RTSP 视频端口。海康威视摄像机常见 HTTP 服务路径为 `http://摄像机IP/onvif/device_service`（常见使用 TCP 80）；请优先使用 ODM 发现响应中的准确 `XAddr` 或设备实际配置。**发现摄像机与使用账户认证其 ONVIF 服务是两个独立步骤**。
+
+这次改动修复的是 Windows 多网卡探测设计缺陷，尚不代表完成针对某个实体摄像机型号的实时兼容性验收。

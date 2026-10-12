@@ -25,7 +25,8 @@ namespace SkyRoof
     private readonly CheckBox autoReconnect = new() { Text = "Reconnect after playback interruption", AutoSize = true };
     private readonly CheckBox media2 = new() { Text = "Prefer ONVIF Media2 (fallback Media1)", AutoSize = true };
     private readonly Label feedback = new()
-    { AutoSize = false, Dock = DockStyle.Fill, AutoEllipsis = true, Text = "Select a camera or enter its ONVIF Device Service address." };
+    { AutoSize = false, Dock = DockStyle.Fill, Height = 48, AutoEllipsis = true,
+      Text = "Select a camera or enter its ONVIF Device Service address." };
     private CancellationTokenSource? operations;
 
     internal OnvifCameraSettings Result => edited.Clone();
@@ -53,6 +54,12 @@ namespace SkyRoof
       // Previously loaded profiles must not be kept when the camera endpoint
       // changes; profile tokens are device-specific.
       endpoint.TextChanged += (_, _) => profiles.Items.Clear();
+      endpoint.Leave += (_, _) =>
+      {
+        string validation = OnvifCameraSettings.ValidateEndpoint(endpoint.Text);
+        if (validation.Length != 0 && !string.IsNullOrWhiteSpace(endpoint.Text))
+          feedback.Text = validation;
+      };
       autoPlay.CheckedChanged += (_, _) =>
       {
         if (autoPlay.Checked) autoConnect.Checked = true;
@@ -179,13 +186,17 @@ namespace SkyRoof
 
     private async Task DiscoverAsync()
     {
-      feedback.Text = "Discovering ONVIF devices...";
-      var found = await OnvifDiscovery.ProbeAsync(BeginOperation());
+      feedback.Text = "Discovering ONVIF devices on active IPv4 adapters...";
+      var found = await OnvifDiscovery.ProbeWithDiagnosticsAsync(BeginOperation());
       if (IsDisposed) return;
       devices.Items.Clear();
-      foreach (var device in found) devices.Items.Add(new DeviceOption(device));
+      foreach (var device in found.Devices) devices.Items.Add(new DeviceOption(device));
       if (devices.Items.Count > 0) devices.SelectedIndex = 0;
-      feedback.Text = $"{found.Count} ONVIF device endpoint(s) discovered.";
+      feedback.Text = found.Devices.Count > 0
+        ? $"{found.Devices.Count} ONVIF endpoint(s) on {found.InterfacesProbed} adapter(s)."
+        : $"No ONVIF replies ({found.InterfacesProbed} adapters, " +
+          $"{found.ResponsePackets} UDP packets). Check UDP 3702/firewall, " +
+          "or enter an HTTP ONVIF Device Service address (not RTSP port 554).";
     }
 
     private async Task GetProfilesAsync()

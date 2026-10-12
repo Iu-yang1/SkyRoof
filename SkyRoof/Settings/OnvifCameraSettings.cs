@@ -60,7 +60,12 @@ namespace SkyRoof
     {
       if (!Uri.TryCreate(endpoint?.Trim(), UriKind.Absolute, out Uri? uri) ||
           uri.Scheme is not ("http" or "https") || !string.IsNullOrEmpty(uri.UserInfo))
-        return "Enter an HTTP(S) ONVIF Device Service address without credentials.";
+        return "Enter an HTTP(S) ONVIF Device Service address, not an RTSP URL.";
+
+      if (uri.Port == 554 && uri.AbsolutePath == "/")
+        return "Port 554 is normally RTSP, not ONVIF. Try http://" +
+          uri.Host + "/onvif/device_service or use the XAddr discovered by ODM.";
+
       return string.Empty;
     }
 
