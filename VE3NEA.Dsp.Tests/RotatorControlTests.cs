@@ -251,8 +251,8 @@ public sealed class RotatorControlTests
     public void FeedbackJumpUsesShortestArcButRetainsExtendedMechanicalAzimuth(
         double fromAz, double toAz, double fromEl, double toEl, bool expected)
     {
-        var from = new Bearing(fromAz * Math.PI / 180, fromEl * Math.PI / 180);
-        var to = new Bearing(toAz * Math.PI / 180, toEl * Math.PI / 180);
+        var from = new SkyRoof.Bearing(fromAz * Math.PI / 180, fromEl * Math.PI / 180);
+        var to = new SkyRoof.Bearing(toAz * Math.PI / 180, toEl * Math.PI / 180);
         bool fault = RotatorControlEngine.IsSuspiciousBearingJump(
             from, to, 0.3, 30, out _, out _);
         Assert.Equal(expected, fault);
@@ -261,8 +261,8 @@ public sealed class RotatorControlTests
     [Fact]
     public void DelayedFeedbackAfterReconnectIsNotClassifiedAsMotion()
     {
-        var from = new Bearing(10 * Math.PI / 180, 0);
-        var to = new Bearing(200 * Math.PI / 180, 0);
+        var from = new SkyRoof.Bearing(10 * Math.PI / 180, 0);
+        var to = new SkyRoof.Bearing(200 * Math.PI / 180, 0);
         Assert.False(RotatorControlEngine.IsSuspiciousBearingJump(
             from, to, 3, 30, out _, out _));
     }
@@ -283,7 +283,7 @@ public sealed class RotatorControlTests
         await WaitUntilAsync(() => engine.PositionFaulted &&
             server.Count("S") >= 1);
         int movesBefore = server.Commands.Count(c => c.StartsWith("P "));
-        engine.RotateTo(new Bearing(Math.PI / 2, Math.PI / 6));
+        engine.RotateTo(new SkyRoof.Bearing(Math.PI / 2, Math.PI / 6));
         engine.StartContinuousMove(RotatorContinuousDirection.Right);
         await Task.Delay(180);
         Assert.True(engine.PositionFaulted);
