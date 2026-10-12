@@ -50,6 +50,13 @@ namespace SkyRoof
       autoPlay.Checked = edited.AutoPlay;
       autoReconnect.Checked = edited.AutoReconnect;
       media2.Checked = edited.PreferMedia2;
+      // Previously loaded profiles must not be kept when the camera endpoint
+      // changes; profile tokens are device-specific.
+      endpoint.TextChanged += (_, _) => profiles.Items.Clear();
+      autoPlay.CheckedChanged += (_, _) =>
+      {
+        if (autoPlay.Checked) autoConnect.Checked = true;
+      };
 
       var layout = new TableLayoutPanel
       {
@@ -219,6 +226,9 @@ namespace SkyRoof
       }
       edited.CameraName = string.IsNullOrWhiteSpace(cameraName.Text)
         ? "Camera 01" : cameraName.Text.Trim();
+      if (!string.Equals(edited.DeviceServiceUrl, endpoint.Text.Trim(),
+            StringComparison.OrdinalIgnoreCase))
+        edited.PreferredProfileToken = string.Empty;
       edited.DeviceServiceUrl = endpoint.Text.Trim();
       edited.Username = user.Text.Trim();
       edited.Password = password.Text;
