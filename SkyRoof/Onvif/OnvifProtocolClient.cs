@@ -222,6 +222,8 @@ namespace SkyRoof
 
       if (!mediaEndpoints.ContainsKey(false))
       {
+        try
+        {
         XDocument response = await SoapAsync(deviceEndpoint, DeviceNs,
           "GetCapabilities", new XElement(device + "GetCapabilities",
             new XElement(device + "Category", "Media")), cancel);
@@ -231,6 +233,11 @@ namespace SkyRoof
           x => x.Name.LocalName == "XAddr")?.Value;
         if (TryServiceUri(addr, out Uri? uri))
           mediaEndpoints[false] = uri!;
+        }
+        catch (HttpRequestException) when (mediaEndpoints.ContainsKey(true))
+        {
+          // Media2-only cameras can legitimately reject legacy GetCapabilities.
+        }
       }
 
       if (mediaEndpoints.Count == 0)
@@ -268,10 +275,12 @@ namespace SkyRoof
             new XElement(wsse + "Username", username),
             new XElement(wsse + "Password",
               new XAttribute("Type",
-                WssNs.Replace("wssecurity-secext", "wssecurity-username-token-profile") +
-                "#PasswordDigest"), digest),
+                "http://docs.oasis-open.org/wss/2004/01/" +
+                "oasis-200401-wss-username-token-profile-1.0#PasswordDigest"), digest),
             new XElement(wsse + "Nonce",
-              new XAttribute("EncodingType", WssNs + "#Base64Binary"),
+              new XAttribute("EncodingType",
+                "http://docs.oasis-open.org/wss/2004/01/" +
+                "oasis-200401-wss-soap-message-security-1.0#Base64Binary"),
               Convert.ToBase64String(nonce)),
             new XElement(wsu + "Created", created))));
       }

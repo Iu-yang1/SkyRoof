@@ -36,6 +36,7 @@ namespace SkyRoof
     public EarthViewPanel? EarthViewPanel;
     public FrequencyControlPanel? FrequencyControlPanel;
     public IcomLanSpectrumPanel? IcomLanSpectrumPanel;
+    internal OnvifCameraPanel? OnvifCameraPanel;
     public TransmittersPanel? TransmittersPanel;
     public WaterfallPanel? WaterfallPanel;
     public QsoEntryPanel? QsoEntryPanel;
@@ -76,6 +77,7 @@ namespace SkyRoof
       EarthViewPanel?.Close();
       FrequencyControlPanel?.Close();
       IcomLanSpectrumPanel?.Close();
+      OnvifCameraPanel?.Close();
       TransmittersPanel?.Close();
       WaterfallPanel?.Close();
       QsoEntryPanel?.Close();
