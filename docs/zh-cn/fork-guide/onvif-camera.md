@@ -20,7 +20,7 @@
 
 ## 操作
 
-Discover（或输入 ONVIF 地址）→ 账号密码 → Profiles → 选择视频 Profile → Play (GPU)；Stop 停止播放。启动 mpv 时不会把视频 URI 中的账号密码放在进程命令行上。
+在 Live video 顶部点击 **Settings**，于弹出的设置窗口执行 Discover（或手工填写 ONVIF 设备服务地址）→ 填写账号密码 → Get profiles 查询并选择视频 Profile → Save 保存。回到视频页点击 Play 播放（也可在设置中开启自动播放），Stop 停止。密码不会出现在 mpv 进程启动参数中。
 
 标准：[ONVIF 规范](https://www.onvif.org/profiles/specifications/) · [mpv 手册](https://mpv.io/manual/stable/)。
 

@@ -22,7 +22,7 @@ RTSP networking, demultiplexing, SOAP and UI necessarily use some CPU. This is G
 
 ## Usage
 
-Discover (or enter ONVIF Device Service URL) → credentials → Profiles → select profile → Play (GPU). Use Stop to end playback. Camera passwords and RTSP userinfo are not placed in mpv process command-line arguments.
+Choose **Settings** from the Live video toolbar. In the settings dialog, Discover (or enter the ONVIF Device Service URL), enter credentials, Get profiles and select a video profile, then Save. Return to Live video and choose Play (or enable automatic playback in Settings). Stop ends playback. Camera passwords and RTSP userinfo are not placed in mpv process command-line arguments.
 
 References: [ONVIF specifications](https://www.onvif.org/profiles/specifications/) · [mpv manual](https://mpv.io/manual/stable/).
 
