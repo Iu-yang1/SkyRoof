@@ -4,188 +4,319 @@ using WeifenLuo.WinFormsUI.Docking;
 
 namespace SkyRoof
 {
+  /// <summary>
+  /// A video-first ONVIF window. Connection and protocol controls live in
+  /// OnvifCameraSettingsForm; this view only owns playback state and transport.
+  /// </summary>
   internal sealed class OnvifCameraPanel : DockContent
   {
     private readonly Context ctx;
-    private readonly ComboBox devices = new() { Width = 180, DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly ComboBox profiles = new() { Width = 180, DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly TextBox endpoint = new() { Width = 310, PlaceholderText = "http://192.168.1.10/onvif/device_service" };
-    private readonly TextBox username = new() { Width = 130, PlaceholderText = "Camera user" };
-    private readonly TextBox password = new() { Width = 130, PlaceholderText = "Camera password", UseSystemPasswordChar = true };
-    private readonly TextBox mpvPath = new() { Width = 300, Text = "mpv.exe" };
-    private readonly Label status = new()
-    { Text = "ONVIF device discovery + Media1/Media2; D3D11VA hardware decoding only.",
-      Dock = DockStyle.Bottom, Height = 28, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft };
-    private readonly Panel video = new() { Dock = DockStyle.Fill, BackColor = Color.Black };
     private readonly OnvifGpuPlayer player = new();
-    private CancellationTokenSource? work;
-    private OnvifProtocolClient? protocol;
+    private readonly Panel video = new() { Dock = DockStyle.Fill, BackColor = Color.Black };
+    private readonly Panel placeholder = new()
+    { Dock = DockStyle.Fill, BackColor = Color.FromArgb(18, 20, 24) };
+    private readonly Label placeholderText = new()
+    {
+      AutoSize = true, ForeColor = Color.Gainsboro, Font = new Font("Segoe UI", 13F),
+      TextAlign = ContentAlignment.MiddleCenter
+    };
+    private readonly Button openSettings = new() { Text = "Open Settings", Width = 140, Height = 32 };
+    private readonly Label title = new()
+    {
+      Text = "Live video", Dock = DockStyle.Fill, AutoEllipsis = true,
+      TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI Semibold", 11F),
+      Padding = new Padding(13, 0, 0, 0)
+    };
+    private readonly Label status = new()
+    { Text = "Not connected", Dock = DockStyle.Fill, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft };
+    private readonly Label stream = new()
+    { Text = "", Dock = DockStyle.Fill, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleRight };
+    private readonly Button play = new() { Text = "Play", Width = 64, Height = 29 };
+    private readonly Button stop = new() { Text = "Stop", Width = 64, Height = 29 };
+    private readonly Button reconnect = new() { Text = "Reconnect", Width = 92, Height = 29 };
+    private readonly Button settings = new() { Text = "Settings", Width = 82, Height = 29 };
+    private readonly System.Windows.Forms.Timer retryTimer = new() { Interval = 5000 };
+    private CancellationTokenSource? pending;
+    private int playbackGeneration;
+    private bool connecting;
+    private bool playing;
+    private bool closing;
+    private bool stoppedByUser;
+    private OnvifMediaProfile? currentProfile;
 
     public OnvifCameraPanel(Context context)
     {
       ctx = context;
       Text = "ONVIF Camera";
       Name = "OnvifCameraPanel";
-      ClientSize = new Size(950, 560);
-      MinimumSize = new Size(650, 380);
+      AutoScaleMode = AutoScaleMode.Font;
+      ClientSize = new Size(940, 600);
+      MinimumSize = new Size(500, 320);
       ctx.OnvifCameraPanel = this;
       ctx.MainForm.OnvifCameraMNU.Checked = true;
 
-      var top = new TableLayoutPanel
+      var header = new TableLayoutPanel
       {
-        Dock = DockStyle.Top, Height = 128, ColumnCount = 1, RowCount = 3,
-        AutoSize = false
+        Dock = DockStyle.Top, Height = 48, ColumnCount = 2,
+        BackColor = SystemColors.Control, Margin = Padding.Empty
       };
-      top.RowStyles.Add(new RowStyle(SizeType.Absolute, 39));
-      top.RowStyles.Add(new RowStyle(SizeType.Absolute, 39));
-      top.RowStyles.Add(new RowStyle(SizeType.Absolute, 39));
-      top.Controls.Add(Row(
-        new Label { Text = "Device", AutoSize = true },
-        devices, Button("Discover", DiscoverAsync),
-        new Label { Text = "Endpoint", AutoSize = true },
-        endpoint, Button("Profiles", LoadProfilesAsync)), 0, 0);
-      top.Controls.Add(Row(
-        new Label { Text = "User", AutoSize = true },
-        username, new Label { Text = "Password", AutoSize = true },
-        password, new Label { Text = "Video", AutoSize = true },
-        profiles, Button("Play (GPU)", PlayAsync),
-        Button("Stop", () => { StopPlayback(); return Task.CompletedTask; })), 0, 1);
-      top.Controls.Add(Row(
-        new Label { Text = "mpv.exe", AutoSize = true },
-        mpvPath, Button("Browse", () =>
-        {
-          using var dialog = new OpenFileDialog
-          { Filter = "mpv player (mpv.exe)|mpv.exe|Applications (*.exe)|*.exe" };
-          if (dialog.ShowDialog(this) == DialogResult.OK) mpvPath.Text = dialog.FileName;
-          return Task.CompletedTask;
-        }),
-        new Label { Text = "Hardware-only: H.264/H.265 GPU support required. No software fallback.", AutoSize = true }
-      ), 0, 2);
+      header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+      header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 355));
+      header.Controls.Add(title, 0, 0);
 
-      devices.SelectedIndexChanged += (_, _) =>
+      var commands = new FlowLayoutPanel
       {
-        if (devices.SelectedItem is DeviceOption selected)
-          endpoint.Text = selected.Device.Endpoint;
+        Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft,
+        WrapContents = false, AutoScroll = false, Padding = new Padding(0, 6, 8, 0)
       };
+      commands.Controls.Add(settings);
+      commands.Controls.Add(reconnect);
+      commands.Controls.Add(stop);
+      commands.Controls.Add(play);
+      header.Controls.Add(commands, 1, 0);
 
+      var footer = new TableLayoutPanel
+      {
+        Dock = DockStyle.Bottom, Height = 29, ColumnCount = 2,
+        BackColor = SystemColors.Control, Padding = new Padding(10, 2, 10, 2)
+      };
+      footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62));
+      footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38));
+      footer.Controls.Add(status, 0, 0);
+      footer.Controls.Add(stream, 1, 0);
+
+      var placeholderLayout = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3,
+        BackColor = Color.FromArgb(18, 20, 24)
+      };
+      placeholderLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 46));
+      placeholderLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+      placeholderLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 54));
+      var prompt = new FlowLayoutPanel
+      {
+        FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true,
+        Anchor = AnchorStyles.None, BackColor = Color.Transparent
+      };
+      placeholderText.Margin = new Padding(0, 0, 0, 12);
+      openSettings.Margin = new Padding(0);
+      prompt.Controls.Add(placeholderText);
+      prompt.Controls.Add(openSettings);
+      prompt.SizeChanged += (_, _) =>
+      {
+        // Center the only configuration action under the prompt.
+        openSettings.Left = (prompt.ClientSize.Width - openSettings.Width) / 2;
+      };
+      placeholderLayout.Controls.Add(prompt, 0, 1);
+      placeholder.Controls.Add(placeholderLayout);
+
+      video.Controls.Add(placeholder);
       Controls.Add(video);
-      Controls.Add(status);
-      Controls.Add(top);
+      Controls.Add(footer);
+      Controls.Add(header);
+
+      play.Click += async (_, _) => await ExecuteAsync(true);
+      stop.Click += (_, _) => StopPlayback(byUser: true);
+      reconnect.Click += async (_, _) => await ExecuteAsync(true);
+      settings.Click += (_, _) => ShowSettings();
+      openSettings.Click += (_, _) => ShowSettings();
+      retryTimer.Tick += async (_, _) =>
+      {
+        retryTimer.Stop();
+        if (!closing && !stoppedByUser && ctx.Settings.OnvifCamera.AutoReconnect)
+          await ExecuteAsync(true);
+      };
       player.PlaybackFailed += reason =>
       {
-        if (!IsDisposed && IsHandleCreated)
-          BeginInvoke((Action)(() => SetStatus(reason)));
+        int capturedGeneration = Volatile.Read(ref playbackGeneration);
+        if (closing || IsDisposed || !IsHandleCreated) return;
+        try
+        {
+          BeginInvoke((Action)(() =>
+          {
+            if (closing || stoppedByUser ||
+                capturedGeneration != Volatile.Read(ref playbackGeneration))
+              return;
+            playing = false;
+            placeholder.Visible = true;
+            SetStatus(reason.Contains("D3D11VA", StringComparison.OrdinalIgnoreCase)
+              ? "Hardware decoder unavailable. Choose another video profile."
+              : "Video connection interrupted.");
+            UpdateControls();
+            if (!stoppedByUser && ctx.Settings.OnvifCamera.AutoReconnect &&
+                !reason.Contains("D3D11VA", StringComparison.OrdinalIgnoreCase))
+              retryTimer.Start();
+          }));
+        }
+        catch (InvalidOperationException) { }
       };
-      FormClosing += (_, _) => StopPlayback();
+      Shown += async (_, _) =>
+      {
+        UpdateControls();
+        if (!ctx.Settings.OnvifCamera.IsConfigured)
+        {
+          SetStatus("Configure an ONVIF camera to begin.");
+          return;
+        }
+        if (ctx.Settings.OnvifCamera.AutoConnect)
+          await ExecuteAsync(ctx.Settings.OnvifCamera.AutoPlay);
+      };
+      FormClosing += (_, _) =>
+      {
+        closing = true;
+        StopPlayback(byUser: true);
+      };
       FormClosed += (_, _) =>
       {
         ctx.OnvifCameraPanel = null;
         ctx.MainForm.OnvifCameraMNU.Checked = false;
-        protocol?.Dispose();
+        retryTimer.Dispose();
+        pending?.Dispose();
         player.Dispose();
       };
+      UpdateControls();
     }
 
-    private static FlowLayoutPanel Row(params Control[] controls)
+    internal static bool ShouldAutoplay(OnvifCameraSettings configuration) =>
+      configuration.IsConfigured && configuration.AutoConnect && configuration.AutoPlay;
+
+    private void ShowSettings()
     {
-      var flow = new FlowLayoutPanel
+      if (closing) return;
+      using var dialog = new OnvifCameraSettingsForm(ctx.Settings.OnvifCamera);
+      if (dialog.ShowDialog(this) != DialogResult.OK) return;
+      OnvifCameraSettings before = ctx.Settings.OnvifCamera;
+      ctx.Settings.OnvifCamera = dialog.Result;
+      try { ctx.Settings.SaveToFile(); }
+      catch (Exception)
       {
-        Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
-        WrapContents = false, AutoScroll = true, Padding = new Padding(3),
-        Margin = new Padding(0)
-      };
-      foreach (Control c in controls)
-      {
-        c.Margin = new Padding(3);
-        if (c is Label label) label.Padding = new Padding(0, 5, 0, 0);
-        flow.Controls.Add(c);
+        ctx.Settings.OnvifCamera = before;
+        MessageBox.Show(this,
+          "Camera preferences could not be saved. Check write access to the SkyRoof data folder.",
+          "ONVIF Camera", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        return;
       }
-      return flow;
+      StopPlayback(byUser: false);
+      UpdateControls();
+      if (ctx.Settings.OnvifCamera.AutoConnect)
+        _ = ExecuteAsync(ctx.Settings.OnvifCamera.AutoPlay);
+      else SetStatus("Camera settings saved. Press Play to connect.");
     }
 
-    private Button Button(string label, Func<Task> action)
+    private async Task ExecuteAsync(bool startPlayback)
     {
-      var button = new Button { Text = label, AutoSize = true, Height = 27 };
-      button.Click += async (_, _) =>
+      if (closing || connecting) return;
+      var config = ctx.Settings.OnvifCamera.Clone();
+      if (!config.IsConfigured)
       {
-        button.Enabled = false;
-        try { await action(); }
-        catch (OperationCanceledException) { SetStatus("Operation cancelled."); }
-        catch (Exception e)
+        SetStatus("No camera configured.");
+        ShowSettings();
+        return;
+      }
+      StopPlayback(byUser: false);
+      stoppedByUser = false;
+      connecting = true;
+      var operation = new CancellationTokenSource();
+      pending = operation;
+      CancellationToken token = operation.Token;
+      SetStatus("Connecting to camera...");
+      UpdateControls();
+      try
+      {
+        // Always negotiate a fresh ONVIF Profile and RTSP URI, not a stale
+        // saved streaming URL. Media1/Media2 logic remains in the SOAP client.
+        using var client = new OnvifProtocolClient(
+          config.DeviceServiceUrl, config.Username, config.Password);
+        var profiles = await client.GetProfilesAsync(token);
+        token.ThrowIfCancellationRequested();
+        currentProfile = OnvifCameraSettings.SelectProfile(
+          profiles, config.PreferredProfileToken, config.PreferMedia2);
+        if (!startPlayback)
         {
-          // Never expose credentials or RTSP userinfo in the user-visible error.
-          SetStatus(e is System.ComponentModel.Win32Exception ?
-            "mpv.exe not found. Choose an installed mpv executable using Browse." :
-            e.Message);
+          SetStatus("Camera ready.");
+          return;
         }
-        finally { if (!IsDisposed) button.Enabled = true; }
-      };
-      return button;
+
+        SetStatus("Starting hardware-decoded video...");
+        Uri uri = await client.GetStreamUriAsync(currentProfile, token);
+        token.ThrowIfCancellationRequested();
+        await player.StartAsync(config.MpvPath, video.Handle, uri,
+          config.Username, config.Password, token);
+        token.ThrowIfCancellationRequested();
+        playing = true;
+        placeholder.Visible = false;
+        SetStatus("Live · D3D11VA hardware decoding");
+      }
+      catch (OperationCanceledException) { }
+      catch (System.ComponentModel.Win32Exception)
+      {
+        SetStatus("mpv.exe was not found. Select the player in Settings.");
+      }
+      catch (NotSupportedException)
+      {
+        SetStatus("D3D11VA unavailable for this stream. Choose another profile.");
+      }
+      catch (Exception)
+      {
+        // SOAP faults and RTSP errors may include authenticated URIs; never
+        // print raw exception messages into the camera status or logs.
+        SetStatus("Unable to connect. Check ONVIF address, credentials and stream.");
+      }
+      finally
+      {
+        if (!playing) player.Stop();
+        if (ReferenceEquals(pending, operation))
+          pending = null;
+        operation.Dispose();
+        connecting = false;
+        if (!closing) UpdateControls();
+      }
     }
 
-    private CancellationToken BeginOperation()
+    private void StopPlayback(bool byUser)
     {
-      work?.Cancel();
-      work?.Dispose();
-      work = new CancellationTokenSource();
-      return work.Token;
-    }
-
-    private async Task DiscoverAsync()
-    {
-      SetStatus("Searching for ONVIF WS-Discovery ProbeMatches (4 seconds)...");
-      var list = await OnvifDiscovery.ProbeAsync(BeginOperation());
-      devices.Items.Clear();
-      foreach (OnvifCameraDevice item in list)
-        devices.Items.Add(new DeviceOption(item));
-      if (devices.Items.Count > 0) devices.SelectedIndex = 0;
-      SetStatus($"ONVIF discovery completed: {list.Count} endpoint(s).");
-    }
-
-    private async Task LoadProfilesAsync()
-    {
-      StopPlayback();
-      var uri = endpoint.Text.Trim();
-      protocol?.Dispose();
-      protocol = new OnvifProtocolClient(uri, username.Text, password.Text);
-      SetStatus("Querying ONVIF GetServices/GetCapabilities and Media profiles...");
-      var list = await protocol.GetProfilesAsync(BeginOperation());
-      profiles.Items.Clear();
-      foreach (var item in list) profiles.Items.Add(item);
-      if (profiles.Items.Count != 0) profiles.SelectedIndex = 0;
-      SetStatus($"{list.Count} ONVIF media profiles found. Select one and press Play.");
-    }
-
-    private async Task PlayAsync()
-    {
-      if (protocol == null || profiles.SelectedItem is not OnvifMediaProfile selected)
-        throw new InvalidOperationException("Query ONVIF Profiles before playing.");
-      CancellationToken token = BeginOperation();
-      SetStatus("Negotiating ONVIF GetStreamUri...");
-      Uri rtsp = await protocol.GetStreamUriAsync(selected, token);
-      SetStatus("Opening RTSP/TCP and verifying D3D11VA hardware decoder...");
-      await player.StartAsync(mpvPath.Text.Trim(), video.Handle, rtsp,
-        username.Text, password.Text, token);
-      SetStatus("Live ONVIF stream: hardware decoding verified (D3D11VA).");
-    }
-
-    private void StopPlayback()
-    {
-      work?.Cancel();
-      work?.Dispose();
-      work = null;
+      Interlocked.Increment(ref playbackGeneration);
+      stoppedByUser = byUser;
+      retryTimer.Stop();
+      pending?.Cancel();
+      // The async operation owns and disposes its cancellation source once
+      // its awaits have exited; Stop only requests cancellation here.
       player.Stop();
+      playing = false;
+      currentProfile = null;
+      placeholder.Visible = true;
+      if (!closing)
+      {
+        SetStatus(byUser ? "Stopped." : "Not connected.");
+        UpdateControls();
+      }
     }
 
-    private void SetStatus(string message) => status.Text = message;
-
-    private sealed class DeviceOption(OnvifCameraDevice device)
+    private void UpdateControls()
     {
-      internal OnvifCameraDevice Device { get; } = device;
-      public override string ToString() =>
-        Uri.TryCreate(Device.Endpoint, UriKind.Absolute, out Uri? uri)
-          ? uri.Host + ":" + uri.Port
-          : "ONVIF camera";
+      bool configured = ctx.Settings.OnvifCamera.IsConfigured;
+      title.Text = configured ? ctx.Settings.OnvifCamera.CameraName : "Live video";
+      play.Enabled = configured && !connecting && !playing;
+      stop.Enabled = playing || connecting;
+      reconnect.Enabled = configured && !connecting;
+      settings.Enabled = !connecting;
+      placeholderText.Text = !configured
+        ? "No camera configured"
+        : connecting
+          ? "Connecting..."
+          : playing
+            ? ""
+            : "Live video";
+      openSettings.Visible = !configured;
+      string profile = currentProfile?.Name ?? "No stream";
+      stream.Text = configured
+        ? $"{profile}  ·  {(playing ? "D3D11VA" : "Offline")}"
+        : "";
+    }
+
+    private void SetStatus(string message)
+    {
+      if (!closing) status.Text = message;
     }
   }
 }

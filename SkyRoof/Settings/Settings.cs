@@ -50,6 +50,10 @@ namespace SkyRoof
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public IcomLanSpectrumSettings IcomLanSpectrum { get; set; } = new();
 
+    [DisplayName("ONVIF Camera")]
+    [TypeConverter(typeof(ExpandableObjectConverter))]
+    public OnvifCameraSettings OnvifCamera { get; set; } = new();
+
     [DisplayName("Rotator Control")]
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public RotatorSettings Rotator { get; set; } = new();

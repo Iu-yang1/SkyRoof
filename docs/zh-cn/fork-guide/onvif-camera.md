@@ -20,6 +20,16 @@
 
 ## 操作
 
-Discover（或输入 ONVIF 地址）→ 账号密码 → Profiles → 选择视频 Profile → Play (GPU)；Stop 停止播放。启动 mpv 时不会把视频 URI 中的账号密码放在进程命令行上。
+在 Live video 顶部点击 **Settings**，于弹出的设置窗口执行 Discover（或手工填写 ONVIF 设备服务地址）→ 填写账号密码 → Get profiles 查询并选择视频 Profile → Save 保存。回到视频页点击 Play 播放（也可在设置中开启自动播放），Stop 停止。密码不会出现在 mpv 进程启动参数中。
 
 标准：[ONVIF 规范](https://www.onvif.org/profiles/specifications/) · [mpv 手册](https://mpv.io/manual/stable/)。
+
+## V1 以视频为中心的界面
+
+**Live video** 首页仅保留 Play、Stop、Reconnect、Settings，中央大面积视频区域，以及只读的码流 Profile / 实际解码器状态栏。Device、Discover、Endpoint、User/Password、Profiles、mpv.exe/Browse 均已移入独立的 **ONVIF Camera Settings** 窗口，避免将工程参数堆在视频首页。
+
+首次打开显示 **No camera configured / Open Settings**。在设置窗口中选择 **Discover** 或手工填写 HTTP(S) ONVIF 设备服务地址，填写摄像机名称、账户及密码；点 **Get profiles** 查询 Media2 / Media1 配置并选择默认视频码流；如自动找不到 mpv.exe，可使用 **Browse** 指定。点击 Save 保存；Cancel 不修改已有配置。设置保存在 Settings.json 中，密码由当前 Windows 用户的 **DPAPI** 加密保护。也可以从 **Tools → Settings → ONVIF Camera** 查看配置。
+
+**Connect when window opens** 仅连接 ONVIF、查询 Profile，不自动播放；**Start video automatically** 会在窗口打开时自动开始视频（隐含先连接）；**Reconnect after playback interruption** 允许断流后重新连接，但用户明确 Stop 后不会自动启动。硬件解码失败时提示错误，不回退软件解码。
+
+底部不显示可能包含账号信息的完整 RTSP URL，仅展示码流及硬件解码状态。实际摄像机互通和显卡解码能力仍需在 Windows 设备上实测；自动化 CI 不能替代硬件验收。
