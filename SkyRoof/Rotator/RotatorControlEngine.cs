@@ -54,6 +54,7 @@ namespace SkyRoof
     private int appliedContinuousDirection;
     private int positionFaulted;
     private readonly double positionJumpLimitDegrees;
+    private readonly double positionCommandResolutionDegrees;
     public bool PositionFaulted => Volatile.Read(ref positionFaulted) != 0;
     public event EventHandler<RotatorPositionFaultEventArgs>? PositionFaultDetected;
 
@@ -62,6 +63,11 @@ namespace SkyRoof
     public RotatorControlEngine(RotatorSettings settings) : base(settings.Host, settings.Port, settings)
     {
       positionJumpLimitDegrees = Math.Clamp(settings.PositionJumpLimitDegrees, 5, 180);
+      // Hamlib GS-232B rounds P targets to integer degrees before issuing W.
+      // Keep the generic default at 0.1 degree so other rotators are unaffected.
+      double resolution = settings.PositionCommandResolutionDegrees;
+      positionCommandResolutionDegrees = double.IsFinite(resolution)
+        ? Math.Clamp(resolution, 0.1, 10.0) : 0.1;
       StartThread();
     }
 
@@ -261,16 +267,48 @@ namespace SkyRoof
       }
     }
 
+    // A change in the optimizer's floating-point target does not necessarily
+    // change the physical serial command. For GS-232B, Hamlib rounds P targets
+    // to whole degrees and produces an integer Waaa eee command.
+    internal static string FormatPositionCommand(Bearing bearing, double resolutionDegrees)
+    {
+      if (!double.IsFinite(resolutionDegrees) || resolutionDegrees < 0.1)
+        resolutionDegrees = 0.1;
+      double azimuth = Math.Round(bearing.AzDeg / resolutionDegrees,
+        MidpointRounding.ToEven) * resolutionDegrees;
+      double elevation = Math.Round(bearing.ElDeg / resolutionDegrees,
+        MidpointRounding.ToEven) * resolutionDegrees;
+      return $"P {azimuth.ToString("F1", CultureInfo.InvariantCulture)} " +
+        $"{elevation.ToString("F1", CultureInfo.InvariantCulture)}";
+    }
+
     private void WriteBearing()
     {
       // Snapshot the target: a UI request may change while a TCP write is pending.
-      var requested = RequestedBearing;
+      Bearing? requested = RequestedBearing;
       if (requested == null || requested == LastWrittenBearing) return;
+
+      string nextCommand = FormatPositionCommand(requested,
+        positionCommandResolutionDegrees);
+
+      // Only suppress truly redundant *outgoing* P commands. Comparison of raw
+      // Bearing instances uses exact floating-point equality and otherwise
+      // resends the same servo target on every Track tick.
+      // A STOP or reconnect clears LastWrittenBearing, so even an unchanged
+      // position can still be resent when deliberately restarting movement.
+      Bearing? last = LastWrittenBearing;
+      if (last != null &&
+          string.Equals(nextCommand,
+            FormatPositionCommand(last, positionCommandResolutionDegrees),
+            StringComparison.Ordinal))
+      {
+        LastWrittenBearing = requested;
+        return;
+      }
 
       // A rejected command must remain pending for the next cycle. Transport
       // exceptions propagate to ControlEngine so it can reconnect.
-      if (SendWriteCommand($"P {requested.AzDeg.ToString("F1", CultureInfo.InvariantCulture)} " +
-        $"{requested.ElDeg.ToString("F1", CultureInfo.InvariantCulture)}"))
+      if (SendWriteCommand(nextCommand))
         LastWrittenBearing = requested;
     }
 
