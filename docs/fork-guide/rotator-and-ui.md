@@ -35,3 +35,8 @@ The top toolbar supports IC-9700 **RF gain through SkyCAT**, and separately sele
 - The application remains compatible with upstream SDR, telemetry, SSTV, SSDV, QSO logging/ADIF, recording and pass planning workflows unless explicitly noted. See [the original user guide](../users_guide/overview.md).
 
 See [Rotator Control](../users_guide/rotator_control.md), [Setting Up Rotator Control](../users_guide/setting_up_rotator_control.md) and [Data Folder](../users_guide/data_folder.md).
+
+
+## Feedback-angle jump safety
+
+Two fresh rotctld angle replies within two seconds that differ by more than the configurable **Position Jump Limit** (default 30° on either axis) immediately latch a safety fault and request Hamlib **S STOP** from the I/O worker. SkyRoof reports whether the STOP was actually acknowledged, blocks further automatic/manual movement and asks the user to inspect the physical antenna position and feedback wiring. 359° → 1° is treated as a circular crossing, while extended mechanical readbacks such as 450° retain their actual turn. Only reapplying Rotator Control settings after inspection unlocks movement; reconnecting does not. This detects feedback discontinuities, not slow stalls, and a rejected STOP cannot guarantee the motor is stopped.

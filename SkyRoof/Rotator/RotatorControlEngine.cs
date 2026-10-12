@@ -23,6 +23,25 @@ namespace SkyRoof
     Right = 16
   }
 
+  public sealed class RotatorPositionFaultEventArgs : EventArgs
+  {
+    public Bearing Previous { get; }
+    public Bearing Reported { get; }
+    public double AzimuthJumpDeg { get; }
+    public double ElevationJumpDeg { get; }
+    public bool StopAcknowledged { get; }
+
+    internal RotatorPositionFaultEventArgs(Bearing previous, Bearing reported,
+      double azimuthJumpDeg, double elevationJumpDeg, bool stopAcknowledged)
+    {
+      Previous = previous;
+      Reported = reported;
+      AzimuthJumpDeg = azimuthJumpDeg;
+      ElevationJumpDeg = elevationJumpDeg;
+      StopAcknowledged = stopAcknowledged;
+    }
+  }
+
   public class RotatorControlEngine : ControlEngine
   {
     public volatile Bearing? RequestedBearing, LastReadBearing, LastWrittenBearing;
@@ -33,11 +52,16 @@ namespace SkyRoof
     private volatile bool stopNotSupported = false;
     private int requestedContinuousDirection;
     private int appliedContinuousDirection;
+    private int positionFaulted;
+    private readonly double positionJumpLimitDegrees;
+    public bool PositionFaulted => Volatile.Read(ref positionFaulted) != 0;
+    public event EventHandler<RotatorPositionFaultEventArgs>? PositionFaultDetected;
 
     public event EventHandler? BearingChanged;
 
     public RotatorControlEngine(RotatorSettings settings) : base(settings.Host, settings.Port, settings)
     {
+      positionJumpLimitDegrees = Math.Clamp(settings.PositionJumpLimitDegrees, 5, 180);
       StartThread();
     }
 
@@ -47,15 +71,23 @@ namespace SkyRoof
       // and the last accepted target are no longer known; resend any pending target.
       LastReadBearing = null;
       LastWrittenBearing = null;
-      Volatile.Write(
-        ref appliedContinuousDirection,
-        0);
+      // A manual hold command must never automatically resume after a
+      // rotctld reconnect. The physical motor could have continued moving
+      // while telemetry was lost; first issue STOP on the new connection.
+      bool hadContinuousMove =
+        Volatile.Read(ref requestedContinuousDirection) != 0 ||
+        Volatile.Read(ref appliedContinuousDirection) != 0;
+      Volatile.Write(ref requestedContinuousDirection, 0);
+      Volatile.Write(ref appliedContinuousDirection, 0);
+      if (hadContinuousMove)
+        stopRequested = true;
       Interlocked.Exchange(ref LastSuccessfulBearingReadTicks, 0);
       return true;
     }
 
     public void RotateTo(Bearing bearing)
     {
+      if (PositionFaulted) return; // Latched until the operator re-applies rotator settings.
       bool continuousWasActive =
         Volatile.Read(ref requestedContinuousDirection) != 0 ||
         Volatile.Read(ref appliedContinuousDirection) != 0;
@@ -74,6 +106,7 @@ namespace SkyRoof
     internal void StartContinuousMove(
       RotatorContinuousDirection direction)
     {
+      if (PositionFaulted) return;
       if (stopNotSupported)
       {
         Log.Warning(
@@ -93,16 +126,15 @@ namespace SkyRoof
       RequestedBearing = null;
       LastWrittenBearing = null;
 
-      int applied =
-        Volatile.Read(
-          ref appliedContinuousDirection);
+      int applied = Volatile.Read(ref appliedContinuousDirection);
+      int previouslyRequested = Volatile.Read(ref requestedContinuousDirection);
 
-      // Taking ownership from an absolute P target, or switching direction,
-      // is fail-safe: STOP must be acknowledged before the new M command.
-      // Starting the same already-active direction remains idempotent.
+      // Another UI request can arrive while the first M is awaiting its
+      // rotctld ACK. Comparing applied direction alone misses this in-flight
+      // transition and permits M(right) -> M(up) without STOP.
       if (absoluteWasActive ||
-          (applied != 0 &&
-           applied != value))
+          (previouslyRequested != 0 && previouslyRequested != value) ||
+          (applied != 0 && applied != value))
         stopRequested = true;
 
       Volatile.Write(
@@ -151,6 +183,13 @@ namespace SkyRoof
         // A direction switch or transition back to absolute positioning may
         // already be queued. Continue this cycle after the acknowledged stop
         // so the motor does not sit idle for an unnecessary polling interval.
+      }
+
+      if (PositionFaulted)
+      {
+        // Keep polling to show the actual reported position, but never resume motion.
+        ReadBearing();
+        return;
       }
 
       int requestedMove =
@@ -269,13 +308,69 @@ namespace SkyRoof
         azimuth * Math.PI / 180.0,
         elevation * Math.PI / 180.0);
 
-      // Every successful 'p' reply is a fresh observation, including when
-      // the antenna is stationary. PARK uses this for two-sample arrival.
-      Interlocked.Exchange(ref LastSuccessfulBearingReadTicks, DateTime.UtcNow.Ticks);
-      if (bearing == LastReadBearing) return;
+      // Only compare consecutive fresh observations from the same connection;
+      // an initial read or a read delayed by reconnect/network loss is not
+      // evidence that the physical rotor jumped.
+      long nowTicks = DateTime.UtcNow.Ticks;
+      long previousTicks = Interlocked.Exchange(ref LastSuccessfulBearingReadTicks, nowTicks);
+      Bearing? previous = LastReadBearing;
+      if (!PositionFaulted && previous != null && previousTicks != 0 &&
+          IsSuspiciousBearingJump(previous, bearing,
+            TimeSpan.FromTicks(nowTicks - previousTicks).TotalSeconds,
+            positionJumpLimitDegrees, out double azJump, out double elJump))
+      {
+        // Latch before posting a user notification: a queued tracking/PARK
+        // request cannot race the STOP or resume motion after acknowledging UI.
+        Interlocked.Exchange(ref positionFaulted, 1);
+        RequestedBearing = LastWrittenBearing = null;
+        Volatile.Write(ref requestedContinuousDirection, 0);
+        // Already on the rotctld worker thread: send STOP immediately, not
+        // after another Delay-cycle. Keep the latch even if STOP is rejected.
+        stopRequested = false;
+        bool stopAcknowledged;
+        try { stopAcknowledged = SendStopCommand(); }
+        catch (Exception ex)
+        {
+          stopAcknowledged = false;
+          Log.Error(ex, "Unable to confirm emergency rotator STOP.");
+        }
+        Log.Error("Rotator feedback jump: az {Az:F1} degrees, el {El:F1} degrees, STOP acknowledged: {Stop}. Inspect physical position.",
+          azJump, elJump, stopAcknowledged);
+        var fault = new RotatorPositionFaultEventArgs(previous, bearing,
+          azJump, elJump, stopAcknowledged);
+        syncContext.Post(_ => PositionFaultDetected?.Invoke(this, fault), null);
+      }
 
+      if (bearing == LastReadBearing) return;
       LastReadBearing = bearing;
       OnBearingChanged();
+    }
+
+    // Azimuth is a circular measurement: 359 -> 1 must not be mistaken for a
+    // 358-degree physical jump. Elevation is not circular.
+    internal static bool IsSuspiciousBearingJump(
+      Bearing previous, Bearing reported, double elapsedSeconds,
+      double thresholdDegrees, out double azJump, out double elJump)
+    {
+      azJump = elJump = 0;
+      if (!double.IsFinite(elapsedSeconds) || elapsedSeconds <= 0 ||
+          elapsedSeconds > 2.0 || !double.IsFinite(thresholdDegrees) ||
+          thresholdDegrees <= 0)
+        return false;
+
+      double azA = ((previous.AzDeg % 360) + 360) % 360;
+      double azB = ((reported.AzDeg % 360) + 360) % 360;
+      double rawAz = Math.Abs(azA - azB);
+      // Retain mechanical-turn information if the controller reports an
+      // extended azimuth outside the normal 0..360 interval (e.g. 450°).
+      // Ordinary 359° -> 1° readings must still use the shortest arc.
+      bool multiTurn = previous.AzDeg < 0 || previous.AzDeg > 360 ||
+                       reported.AzDeg < 0 || reported.AzDeg > 360;
+      azJump = multiTurn
+        ? Math.Abs(previous.AzDeg - reported.AzDeg)
+        : Math.Min(rawAz, 360 - rawAz);
+      elJump = Math.Abs(previous.ElDeg - reported.ElDeg);
+      return azJump > thresholdDegrees || elJump > thresholdDegrees;
     }
   }
 }

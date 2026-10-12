@@ -27,11 +27,13 @@ namespace SkyRoof
       new();
     internal readonly ToolStripMenuItem CwConsoleMNU =
       new();
+    internal readonly ToolStripMenuItem OnvifCameraMNU = new();
 
     public MainForm()
     {
       InitializeComponent();
       ConfigureCwConsoleMenuItem();
+      ConfigureOnvifCameraMenu();
       ConfigureGitHubThemeMenuItems();
       AddOrbitSourceMenuItems();
 
@@ -1048,6 +1050,22 @@ namespace SkyRoof
         ctx.FrequencyControlPanel.Close();
     }
 
+    private void ConfigureOnvifCameraMenu()
+    {
+      OnvifCameraMNU.Text = "ONVIF Camera (GPU)";
+      OnvifCameraMNU.Name = "OnvifCameraMNU";
+      OnvifCameraMNU.Click += (_, _) =>
+      {
+        if (ctx.OnvifCameraPanel == null)
+          ShowFloatingPanel(new OnvifCameraPanel(ctx));
+        else
+          ctx.OnvifCameraPanel.Close();
+      };
+      GroupViewPanelMNU.DropDownItems.Insert(
+        GroupViewPanelMNU.DropDownItems.IndexOf(IcomLanSpectrumMNU) + 1,
+        OnvifCameraMNU);
+    }
+
     private void IcomLanSpectrumMNU_Click(object sender, EventArgs e)
     {
       if (ctx.IcomLanSpectrumPanel == null)
@@ -1738,6 +1756,7 @@ namespace SkyRoof
         case "SkyRoof.EarthViewPanel": return new EarthViewPanel(ctx);
         case "SkyRoof.FrequencyControlPanel": return new FrequencyControlPanel(ctx);
         case "SkyRoof.IcomLanSpectrumPanel": return new IcomLanSpectrumPanel(ctx);
+        case "SkyRoof.OnvifCameraPanel": return new OnvifCameraPanel(ctx);
         case "SkyRoof.WaterfallPanel": return new WaterfallPanel(ctx);
         case "SkyRoof.QsoEntryPanel": return new QsoEntryPanel(ctx);
         case "SkyRoof.Ft4ConsolePanel": return new Ft4ConsolePanel(ctx);

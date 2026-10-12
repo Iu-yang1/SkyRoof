@@ -183,3 +183,8 @@ protects complete-sweep history and does **not** arbitrarily adjust the
 radio's CI-V amplitude data or color palette. Compare the same RF
 frequency, span, receiver, and time against RS-BA1 when diagnosing
 remaining image discrepancies.
+
+
+## Waterfall remapping under rapid Doppler motion
+
+The prior waterfall translated its entire mapped history whenever incoming scope coordinates shifted, even when only a partial serial waveform frame had arrived. Complete sweeps now anchor historical mapping. Large retunes invalidate the prior history instead of creating rectangular horizontal smears, while the AVG accumulator is reset when the RF coordinate changes. This prioritizes frequency correctness and reduces avoidable partial-frame work; the change does not establish a measured FPS gain. Native LAN complete-sweep throughput remains device/transport-dependent.

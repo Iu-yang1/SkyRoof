@@ -35,3 +35,8 @@ Dock 布局、列宽等用户设置会保存。`Settings.json` 采用临时文�
 - 未特别说明的原有 SDR、遥测、SSTV/SSDV、ADIF、录音与过境规划等功能仍保留，参见[上游用户手册](../../users_guide/overview.md)。
 
 进一步参考：[Rotator Control](../../users_guide/rotator_control.md) · [转台设置](../../users_guide/setting_up_rotator_control.md) · [数据目录](../../users_guide/data_folder.md)。
+
+
+## 实际角度突变安全锁定
+
+当 rotctld 连续两次间隔不超过 2 秒的新鲜反馈，其方位角或俯仰角变化超过 **Position Jump Limit**（默认 30°），程序即在通信线程发送 Hamlib **S STOP**，停止后续自动/手动命令并提示核对**实际天线方向**及反馈传感器接线。弹窗明确区分 STOP 已被确认与 STOP 未确认；若没有确认必须自行确认电机已停转。359°→1° 的正常角度环绕不会误触发，但 450° 等扩展机械角度保留原始变化。检查后重新应用 Rotator Control 设置才会解除锁定；自动重连不会解锁。本功能并不替代堵转或机械限位保护。

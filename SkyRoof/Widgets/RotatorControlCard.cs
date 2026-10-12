@@ -280,12 +280,14 @@ namespace SkyRoof
       ConnectionLabel.Text =
         !enabled ? "Disabled" :
         rotator.IsManualControlLocked ? "Live Track" :
+        rotator.PositionSafetyTripped ? "POSITION FAULT" :
         connected ? "Connected" :
         "Connecting";
 
       ConnectionLabel.ForeColor =
         !enabled ? SystemColors.GrayText :
         rotator.IsManualControlLocked ? Color.Goldenrod :
+        rotator.PositionSafetyTripped ? Color.IndianRed :
         connected ? Color.LimeGreen :
         Color.IndianRed;
 
@@ -293,7 +295,8 @@ namespace SkyRoof
         rotator.IsManualControlLocked;
       bool manualEnabled =
         enabled &&
-        !manualLocked;
+        !manualLocked &&
+        !rotator.PositionSafetyTripped;
 
       Wheel.Enabled = manualEnabled;
       // Track step is a tracking parameter, not a manual-jog increment, so it

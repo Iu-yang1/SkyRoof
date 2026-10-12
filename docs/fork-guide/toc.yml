@@ -8,6 +8,8 @@ items:
     href: radio-and-ft4.md
   - name: IC-9700 spectrum
     href: spectrum.md
+  - name: ONVIF camera (GPU)
+    href: onvif-camera.md
   - name: Rotator, themes and operations
     href: rotator-and-ui.md
   - name: CW Console user guide
