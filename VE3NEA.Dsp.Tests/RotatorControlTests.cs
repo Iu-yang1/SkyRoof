@@ -314,7 +314,12 @@ public sealed class RotatorControlTests
 
         engine.RotateTo(new SkyRoof.Bearing(
             90.1 * Math.PI / 180, 30.1 * Math.PI / 180));
-        await WaitUntilAsync(() => server.Count("P 90.0 30.0") >= 1);
+        // The fake TCP server queues an incoming P before the client's
+        // SendWriteCommand has consumed its RPRT 0 acknowledgement. Wait for
+        // LastWrittenBearing too; this test verifies coalescing ACKNOWLEDGED
+        // targets, not the timing of an in-flight socket write.
+        await WaitUntilAsync(() => server.Count("P 90.0 30.0") >= 1 &&
+            engine.LastWrittenBearing != null);
 
         // SkyRoof optimiser values change continuously, but both commands
         // map to the SAME W090 030 serial target in Hamlib GS-232B.
