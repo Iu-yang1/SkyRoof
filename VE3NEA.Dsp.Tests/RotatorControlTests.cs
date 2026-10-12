@@ -291,7 +291,64 @@ public sealed class RotatorControlTests
         Assert.DoesNotContain(server.Commands, c => c.StartsWith("M "));
     }
 
-    private static RotatorControlEngine StartEngine(ushort port)
+    [Theory]
+    [InlineData(90.12, 30.12, 0.1, "P 90.1 30.1")]
+    [InlineData(90.14, 30.14, 0.1, "P 90.1 30.1")]
+    [InlineData(90.40, 30.40, 1.0, "P 90.0 30.0")]
+    [InlineData(91.40, 30.40, 1.0, "P 91.0 30.0")]
+    public void PositionCommandFormatsAtEffectiveBackendResolution(
+        double azimuth, double elevation, double resolution, string expected)
+    {
+        var bearing = new SkyRoof.Bearing(
+            azimuth * Math.PI / 180.0, elevation * Math.PI / 180.0);
+        Assert.Equal(expected,
+            RotatorControlEngine.FormatPositionCommand(bearing, resolution));
+    }
+
+    [Fact]
+    public async Task Gs232bResolutionCoalescesTrackUpdatesButStopPermitsResend()
+    {
+        await using var server = new FakeRotctld((command, _) =>
+            command == "p" ? "90.0\n30.0\n" : "RPRT 0\n");
+        using var engine = StartEngine(server.Port, 1.0);
+
+        engine.RotateTo(new SkyRoof.Bearing(
+            90.1 * Math.PI / 180, 30.1 * Math.PI / 180));
+        await WaitUntilAsync(() => server.Count("P 90.0 30.0") >= 1);
+
+        // SkyRoof optimiser values change continuously, but both commands
+        // map to the SAME W090 030 serial target in Hamlib GS-232B.
+        engine.RotateTo(new SkyRoof.Bearing(
+            90.4 * Math.PI / 180, 30.4 * Math.PI / 180));
+        await Task.Delay(180);
+        Assert.Equal(1, server.Count("P 90.0 30.0"));
+
+        engine.RotateTo(new SkyRoof.Bearing(
+            91.2 * Math.PI / 180, 30.4 * Math.PI / 180));
+        await WaitUntilAsync(() => server.Count("P 91.0 30.0") == 1);
+
+        engine.StopRotation();
+        await WaitUntilAsync(() => server.Count("S") == 1);
+        engine.RotateTo(new SkyRoof.Bearing(
+            91.2 * Math.PI / 180, 30.4 * Math.PI / 180));
+        await WaitUntilAsync(() => server.Count("P 91.0 30.0") == 2);
+    }
+
+    [Fact]
+    public async Task DefaultFractionalResolutionDoesNotSuppressDistinctCommands()
+    {
+        await using var server = new FakeRotctld((command, _) =>
+            command == "p" ? "90.0\n30.0\n" : "RPRT 0\n");
+        using var engine = StartEngine(server.Port);
+        engine.RotateTo(new SkyRoof.Bearing(
+            90.1 * Math.PI / 180, 30.1 * Math.PI / 180));
+        await WaitUntilAsync(() => server.Count("P 90.1 30.1") == 1);
+        engine.RotateTo(new SkyRoof.Bearing(
+            90.2 * Math.PI / 180, 30.2 * Math.PI / 180));
+        await WaitUntilAsync(() => server.Count("P 90.2 30.2") == 1);
+    }
+
+    private static RotatorControlEngine StartEngine(ushort port, double resolution = 0.1)
     {
         var previous = SynchronizationContext.Current;
         SynchronizationContext.SetSynchronizationContext(new SynchronizationContext());
@@ -302,6 +359,7 @@ public sealed class RotatorControlTests
                 Host = "127.0.0.1",
                 Port = port,
                 Delay = 25,
+                PositionCommandResolutionDegrees = resolution,
                 SendTimeout = 500,
                 ReceiveTimeout = 500,
                 ReconnectDelay = 75

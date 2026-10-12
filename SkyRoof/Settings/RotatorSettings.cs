@@ -75,6 +75,11 @@ namespace SkyRoof
     [DefaultValue(5f)]
     public float StepSize { get; set; } = 5f;
 
+    [DisplayName("Position Command Resolution (deg)")]
+    [Description("Effective backend positioning resolution in degrees. Use 1.0 for Hamlib GS-232B (integer-degree W commands); default 0.1 preserves other models. Duplicate positions at the selected resolution are not sent again.")]
+    [DefaultValue(0.1)]
+    public double PositionCommandResolutionDegrees { get; set; } = 0.1;
+
     [DisplayName("Position Jump Limit")]
     [Description("Stop and latch a safety warning if consecutive fresh rotator position readings differ by more than this many degrees. Reapply rotator settings after checking the antenna.")]
     [DefaultValue(30)]
