@@ -71,9 +71,16 @@ namespace SkyRoof
       // and the last accepted target are no longer known; resend any pending target.
       LastReadBearing = null;
       LastWrittenBearing = null;
-      Volatile.Write(
-        ref appliedContinuousDirection,
-        0);
+      // A manual hold command must never automatically resume after a
+      // rotctld reconnect. The physical motor could have continued moving
+      // while telemetry was lost; first issue STOP on the new connection.
+      bool hadContinuousMove =
+        Volatile.Read(ref requestedContinuousDirection) != 0 ||
+        Volatile.Read(ref appliedContinuousDirection) != 0;
+      Volatile.Write(ref requestedContinuousDirection, 0);
+      Volatile.Write(ref appliedContinuousDirection, 0);
+      if (hadContinuousMove)
+        stopRequested = true;
       Interlocked.Exchange(ref LastSuccessfulBearingReadTicks, 0);
       return true;
     }
