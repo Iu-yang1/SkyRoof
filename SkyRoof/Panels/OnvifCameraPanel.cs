@@ -37,6 +37,7 @@ namespace SkyRoof
     private readonly Button settings = new() { Text = "Settings", Width = 82, Height = 29 };
     private readonly System.Windows.Forms.Timer retryTimer = new() { Interval = 5000 };
     private CancellationTokenSource? pending;
+    private int playbackGeneration;
     private bool connecting;
     private bool playing;
     private bool closing;
@@ -127,12 +128,15 @@ namespace SkyRoof
       };
       player.PlaybackFailed += reason =>
       {
+        int capturedGeneration = Volatile.Read(ref playbackGeneration);
         if (closing || IsDisposed || !IsHandleCreated) return;
         try
         {
           BeginInvoke((Action)(() =>
           {
-            if (closing) return;
+            if (closing || stoppedByUser ||
+                capturedGeneration != Volatile.Read(ref playbackGeneration))
+              return;
             playing = false;
             placeholder.Visible = true;
             SetStatus(reason.Contains("D3D11VA", StringComparison.OrdinalIgnoreCase)
@@ -212,8 +216,9 @@ namespace SkyRoof
       StopPlayback(byUser: false);
       stoppedByUser = false;
       connecting = true;
-      pending = new CancellationTokenSource();
-      CancellationToken token = pending.Token;
+      var operation = new CancellationTokenSource();
+      pending = operation;
+      CancellationToken token = operation.Token;
       SetStatus("Connecting to camera...");
       UpdateControls();
       try
@@ -260,6 +265,9 @@ namespace SkyRoof
       finally
       {
         if (!playing) player.Stop();
+        if (ReferenceEquals(pending, operation))
+          pending = null;
+        operation.Dispose();
         connecting = false;
         if (!closing) UpdateControls();
       }
@@ -267,11 +275,12 @@ namespace SkyRoof
 
     private void StopPlayback(bool byUser)
     {
+      Interlocked.Increment(ref playbackGeneration);
       stoppedByUser = byUser;
       retryTimer.Stop();
       pending?.Cancel();
-      // Do not dispose a CancellationTokenSource while an async operation is
-      // still in-flight; it will be released after its token is no longer used.
+      // The async operation owns and disposes its cancellation source once
+      // its awaits have exited; Stop only requests cancellation here.
       player.Stop();
       playing = false;
       currentProfile = null;
