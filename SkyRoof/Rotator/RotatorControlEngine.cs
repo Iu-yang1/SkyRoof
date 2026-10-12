@@ -348,8 +348,7 @@ namespace SkyRoof
       double rawAz = Math.Abs(azA - azB);
       azJump = Math.Min(rawAz, 360 - rawAz);
       elJump = Math.Abs(previous.ElDeg - reported.ElDeg);
-      return azJump > thresholdDegrees || elJump > thresholdDegrees; 
-    }
+      return azJump > thresholdDegrees || elJump > thresholdDegrees;
     }
   }
 }
