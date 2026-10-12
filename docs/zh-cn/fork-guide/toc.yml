@@ -8,6 +8,8 @@ items:
     href: radio-and-ft4.md
   - name: IC-9700 频谱
     href: spectrum.md
+  - name: ONVIF 摄像机（GPU）
+    href: onvif-camera.md
   - name: 转台、主题与操作
     href: rotator-and-ui.md
   - name: CW Console 用户指南
