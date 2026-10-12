@@ -31,26 +31,7 @@ namespace SkyRoof
 
       string pipeName = "skyroof-onvif-" + Guid.NewGuid().ToString("N");
       uint windowHandle = unchecked((uint)hwnd.ToInt64());
-      var args = new[]
-      {
-        "--no-config",
-        "--idle=yes",
-        "--force-window=yes",
-        "--vo=gpu",
-        "--gpu-context=d3d11",
-        "--d3d11-warp=no",
-        "--hwdec=d3d11va",
-        "--hwdec-software-fallback=no",
-        "--hwdec-codecs=all",
-        "--rtsp-transport=tcp",
-        "--audio=no",
-        "--osc=no",
-        "--osd-level=0",
-        "--input-terminal=no",
-        "--terminal=no",
-        "--wid=" + windowHandle,
-        @"--input-ipc-server=\\.\pipe\" + pipeName
-      };
+      var args = BuildHardwareOnlyArguments(windowHandle, pipeName);
 
       var info = new ProcessStartInfo(string.IsNullOrWhiteSpace(executable) ? "mpv.exe" : executable)
       {
@@ -110,6 +91,30 @@ namespace SkyRoof
         Stop();
         throw;
       }
+    }
+
+    internal static string[] BuildHardwareOnlyArguments(uint windowHandle, string pipeName)
+    {
+      return new[]
+      {
+        "--no-config",
+        "--idle=yes",
+        "--force-window=yes",
+        "--vo=gpu",
+        "--gpu-context=d3d11",
+        "--d3d11-warp=no",
+        "--hwdec=d3d11va",
+        "--hwdec-software-fallback=no",
+        "--hwdec-codecs=all",
+        "--rtsp-transport=tcp",
+        "--audio=no",
+        "--osc=no",
+        "--osd-level=0",
+        "--input-terminal=no",
+        "--terminal=no",
+        "--wid=" + windowHandle,
+        @"--input-ipc-server=\\.\pipe\" + pipeName
+      };
     }
 
     private async Task MonitorAsync(CancellationToken cancel)
