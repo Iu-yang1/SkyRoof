@@ -29,14 +29,16 @@ namespace SkyRoof
     public Bearing Reported { get; }
     public double AzimuthJumpDeg { get; }
     public double ElevationJumpDeg { get; }
+    public bool StopAcknowledged { get; }
 
     internal RotatorPositionFaultEventArgs(Bearing previous, Bearing reported,
-      double azimuthJumpDeg, double elevationJumpDeg)
+      double azimuthJumpDeg, double elevationJumpDeg, bool stopAcknowledged)
     {
       Previous = previous;
       Reported = reported;
       AzimuthJumpDeg = azimuthJumpDeg;
       ElevationJumpDeg = elevationJumpDeg;
+      StopAcknowledged = stopAcknowledged;
     }
   }
 
@@ -319,10 +321,17 @@ namespace SkyRoof
         // Already on the rotctld worker thread: send STOP immediately, not
         // after another Delay-cycle. Keep the latch even if STOP is rejected.
         stopRequested = false;
-        SendStopCommand();
-        Log.Error("Rotator feedback jump: az {Az:F1} degrees, el {El:F1} degrees. STOP requested; inspect actual position.",
-          azJump, elJump);
-        var fault = new RotatorPositionFaultEventArgs(previous, bearing, azJump, elJump);
+        bool stopAcknowledged;
+        try { stopAcknowledged = SendStopCommand(); }
+        catch (Exception ex)
+        {
+          stopAcknowledged = false;
+          Log.Error(ex, "Unable to confirm emergency rotator STOP.");
+        }
+        Log.Error("Rotator feedback jump: az {Az:F1} degrees, el {El:F1} degrees, STOP acknowledged: {Stop}. Inspect physical position.",
+          azJump, elJump, stopAcknowledged);
+        var fault = new RotatorPositionFaultEventArgs(previous, bearing,
+          azJump, elJump, stopAcknowledged);
         syncContext.Post(_ => PositionFaultDetected?.Invoke(this, fault), null);
       }
 

@@ -640,7 +640,9 @@ namespace SkyRoof
       MessageBox.Show(ctx.MainForm,
         $"Rotator reported an unexpected angle jump (Az {e.AzimuthJumpDeg:F1}°, El {e.ElevationJumpDeg:F1}°).\n\n" +
         $"Previous: {e.Previous}\nReported: {e.Reported}\n\n" +
-        "Rotation has been stopped and motion commands are locked. " +
+        (e.StopAcknowledged
+          ? "Rotctld acknowledged STOP. Motion commands are now locked. "
+          : "WARNING: rotctld did NOT confirm STOP. Verify that the motor is stopped and disconnect drive power if necessary. ") +
         "Check the ACTUAL antenna direction, sensor wiring and rotor controller. " +
         "After correcting the problem, reapply Rotator Control settings to unlock.",
         "Rotator position safety stop", MessageBoxButtons.OK, MessageBoxIcon.Warning);
