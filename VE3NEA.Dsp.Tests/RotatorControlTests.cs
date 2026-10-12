@@ -242,6 +242,55 @@ public sealed class RotatorControlTests
             command.StartsWith("P ", StringComparison.Ordinal)));
     }
 
+    [Theory]
+    [InlineData(359, 1, 0, 0, false)]
+    [InlineData(1, 359, 0, 0, false)]
+    [InlineData(20, 90, 0, 0, true)]
+    [InlineData(20, 20, 5, 48, true)]
+    [InlineData(450, 90, 0, 0, true)]
+    public void FeedbackJumpUsesShortestArcButRetainsExtendedMechanicalAzimuth(
+        double fromAz, double toAz, double fromEl, double toEl, bool expected)
+    {
+        var from = new Bearing(fromAz * Math.PI / 180, fromEl * Math.PI / 180);
+        var to = new Bearing(toAz * Math.PI / 180, toEl * Math.PI / 180);
+        bool fault = RotatorControlEngine.IsSuspiciousBearingJump(
+            from, to, 0.3, 30, out _, out _);
+        Assert.Equal(expected, fault);
+    }
+
+    [Fact]
+    public void DelayedFeedbackAfterReconnectIsNotClassifiedAsMotion()
+    {
+        var from = new Bearing(10 * Math.PI / 180, 0);
+        var to = new Bearing(200 * Math.PI / 180, 0);
+        Assert.False(RotatorControlEngine.IsSuspiciousBearingJump(
+            from, to, 3, 30, out _, out _));
+    }
+
+    [Fact]
+    public async Task PositionFeedbackFaultLatchesStopAndBlocksNewMotion()
+    {
+        int positionReads = 0;
+        await using var server = new FakeRotctld((command, _) =>
+        {
+            if (command == "p")
+                return Interlocked.Increment(ref positionReads) == 1
+                    ? "20.0\n10.0\n"
+                    : "145.0\n10.0\n";
+            return "RPRT 0\n";
+        });
+        using var engine = StartEngine(server.Port);
+        await WaitUntilAsync(() => engine.PositionFaulted &&
+            server.Count("S") >= 1);
+        int movesBefore = server.Commands.Count(c => c.StartsWith("P "));
+        engine.RotateTo(new Bearing(Math.PI / 2, Math.PI / 6));
+        engine.StartContinuousMove(RotatorContinuousDirection.Right);
+        await Task.Delay(180);
+        Assert.True(engine.PositionFaulted);
+        Assert.Equal(movesBefore, server.Commands.Count(c => c.StartsWith("P ")));
+        Assert.DoesNotContain(server.Commands, c => c.StartsWith("M "));
+    }
+
     private static RotatorControlEngine StartEngine(ushort port)
     {
         var previous = SynchronizationContext.Current;

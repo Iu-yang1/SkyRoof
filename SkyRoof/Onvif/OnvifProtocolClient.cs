@@ -168,24 +168,7 @@ namespace SkyRoof
       string ns = profile.Media2 ? Media2Ns : Media1Ns;
       XNamespace svc = ns;
       XNamespace tt = TypesNs;
-      XElement request;
-      if (profile.Media2)
-      {
-        // ONVIF Media2: Protocol=RTSP means RTP interleaved over RTSP/TCP.
-        request = new XElement(svc + "GetStreamUri",
-          new XElement(svc + "Protocol", "RTSP"),
-          new XElement(svc + "ProfileToken", profile.Token));
-      }
-      else
-      {
-        // ONVIF Media1: StreamSetup is mandatory; there is no Protocol field.
-        request = new XElement(svc + "GetStreamUri",
-          new XElement(svc + "StreamSetup",
-            new XElement(tt + "Stream", "RTP-Unicast"),
-            new XElement(tt + "Transport",
-              new XElement(tt + "Protocol", "RTSP"))),
-          new XElement(svc + "ProfileToken", profile.Token));
-      }
+      XElement request = BuildStreamUriRequest(profile);
 
       XDocument response = await SoapAsync(endpoint!, ns, "GetStreamUri", request, cancel);
       string? text = response.Descendants().FirstOrDefault(
@@ -194,6 +177,27 @@ namespace SkyRoof
           uri.Scheme is not ("rtsp" or "rtsps"))
         throw new InvalidOperationException("Camera did not return a valid RTSP stream URI.");
       return uri;
+    }
+
+    /// <summary>
+    /// Media1 and Media2 GetStreamUri have different wire schemas. Kept as
+    /// a separate deterministic builder to make protocol regressions testable.
+    /// </summary>
+    internal static XElement BuildStreamUriRequest(OnvifMediaProfile profile)
+    {
+      XNamespace svc = profile.Media2 ? Media2Ns : Media1Ns;
+      XNamespace tt = TypesNs;
+      if (profile.Media2)
+        return new XElement(svc + "GetStreamUri",
+          new XElement(svc + "Protocol", "RTSP"),
+          new XElement(svc + "ProfileToken", profile.Token));
+
+      return new XElement(svc + "GetStreamUri",
+        new XElement(svc + "StreamSetup",
+          new XElement(tt + "Stream", "RTP-Unicast"),
+          new XElement(tt + "Transport",
+            new XElement(tt + "Protocol", "RTSP"))),
+        new XElement(svc + "ProfileToken", profile.Token));
     }
 
     private async Task ResolveServicesAsync(CancellationToken cancel)

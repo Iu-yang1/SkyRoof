@@ -346,7 +346,14 @@ namespace SkyRoof
       double azA = ((previous.AzDeg % 360) + 360) % 360;
       double azB = ((reported.AzDeg % 360) + 360) % 360;
       double rawAz = Math.Abs(azA - azB);
-      azJump = Math.Min(rawAz, 360 - rawAz);
+      // Retain mechanical-turn information if the controller reports an
+      // extended azimuth outside the normal 0..360 interval (e.g. 450°).
+      // Ordinary 359° -> 1° readings must still use the shortest arc.
+      bool multiTurn = previous.AzDeg < 0 || previous.AzDeg > 360 ||
+                       reported.AzDeg < 0 || reported.AzDeg > 360;
+      azJump = multiTurn
+        ? Math.Abs(previous.AzDeg - reported.AzDeg)
+        : Math.Min(rawAz, 360 - rawAz);
       elJump = Math.Abs(previous.ElDeg - reported.ElDeg);
       return azJump > thresholdDegrees || elJump > thresholdDegrees;
     }
