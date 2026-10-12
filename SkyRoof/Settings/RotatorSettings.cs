@@ -75,6 +75,11 @@ namespace SkyRoof
     [DefaultValue(5f)]
     public float StepSize { get; set; } = 5f;
 
+    [DisplayName("Position Jump Limit")]
+    [Description("Stop and latch a safety warning if consecutive fresh rotator position readings differ by more than this many degrees. Reapply rotator settings after checking the antenna.")]
+    [DefaultValue(30)]
+    public int PositionJumpLimitDegrees { get; set; } = 30;
+
     [DisplayName("Parking Azimuth")]
     [Description("Azimuth of the parking position")]
     [DefaultValue(0f)]

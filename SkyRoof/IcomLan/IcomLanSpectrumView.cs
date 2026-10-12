@@ -40,6 +40,7 @@ namespace SkyRoof
     private int AverageSweepCount = 1;
     private int SmoothingBins = 1;
     private IcomScopeFrame? LatestFrame;
+    private IcomScopeFrame? WaterfallAnchorFrame;
 
     private byte[][] WaterfallRows = Array.Empty<byte[]>();
     private int WaterfallHead = -1;
@@ -342,40 +343,44 @@ namespace SkyRoof
             zoomReset = true;
           }
         }
-        else if (previousFrame != null)
+        // Partial CI-V divisions can carry a new tuning frequency before
+        // the 475-bin sweep is complete. Never repeatedly translate all
+        // history rows for incomplete data. The waterfall has its own
+        // complete-sweep coordinate anchor.
+        if (frame.SweepComplete)
         {
-          IcomScopeGeometry previousGeometry =
-            previousFrame.Geometry;
-          IcomScopeGeometry currentGeometry =
-            frame.Geometry;
-
-          if (previousGeometry.IsValid &&
-              currentGeometry.IsValid &&
-              frame.Mode is
-                (byte)IcomScopeMode.Center or
-                (byte)IcomScopeMode.ScrollCenter &&
-              previousGeometry.SpanHz ==
-                currentGeometry.SpanHz)
+          IcomScopeFrame? anchor = WaterfallAnchorFrame;
+          if (anchor != null && !RequiresHistoryReset(anchor, frame))
           {
-            int shiftBins =
-              CalculateHistoryShiftBins(
-                previousGeometry,
-                currentGeometry,
-                HistoryShiftResidualBins,
-                out double residualBins);
+            IcomScopeGeometry before = anchor.Geometry;
+            IcomScopeGeometry after = frame.Geometry;
+            if (before.IsValid && after.IsValid &&
+                frame.Mode is (byte)IcomScopeMode.Center or
+                  (byte)IcomScopeMode.ScrollCenter &&
+                before.SpanHz == after.SpanHz)
+            {
+              int delta = CalculateHistoryShiftBins(before, after,
+                HistoryShiftResidualBins, out double residual);
 
-            HistoryShiftResidualBins =
-              residualBins;
+              // A large Doppler/tuning jump invalidates the visual continuity:
+              // translating a large area fills the waterfall with rectangular
+              // streaks. Clear instead of manufacturing phantom signals.
+              if (Math.Abs(delta) > ScopePoints / 10)
+                ClearMappedHistoryLocked();
+              else
+              {
+                HistoryShiftResidualBins = residual;
+                if (delta != 0)
+                  ShiftMappedHistoryLocked(delta);
+              }
 
-            if (shiftBins != 0)
-              ShiftMappedHistoryLocked(
-                shiftBins);
+              // AVG sweeps have different RF coordinates after frequency
+              // movement. Discard the stale sum even for sub-bin changes.
+              if (before.LowerFrequencyHz != after.LowerFrequencyHz)
+                ResetAveragingLocked();
+            }
           }
-          else if (!previousGeometry.IsValid ||
-                   !currentGeometry.IsValid)
-          {
-            HistoryShiftResidualBins = 0;
-          }
+          WaterfallAnchorFrame = frame;
         }
 
         LatestFrame = frame;
@@ -488,6 +493,7 @@ namespace SkyRoof
         Array.Clear(row);
 
       WaterfallHead = -1;
+      WaterfallAnchorFrame = null;
       Array.Clear(PeakSamples);
       PeakValid = false;
       HistoryShiftResidualBins = 0;
@@ -2686,6 +2692,7 @@ namespace SkyRoof
             new byte[ScopePoints];
 
         WaterfallHead = -1;
+        WaterfallAnchorFrame = null;
         HistoryShiftResidualBins = 0;
         WaterfallDirty = true;
 

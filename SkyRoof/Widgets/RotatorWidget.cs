@@ -23,6 +23,7 @@ namespace SkyRoof
     private bool settingTrack;
     public Bearing? AntBearing { get => engine?.LastReadBearing; }
     public Bearing? SatelliteBearing => SatBearing;
+    public bool PositionSafetyTripped => engine?.PositionFaulted == true;
 
     // PathOptimizerForm instance is created once and reused
     private PathOptimizerForm dialog = new();
@@ -57,6 +58,7 @@ namespace SkyRoof
         engine = new RotatorControlEngine(ctx.Settings.Rotator);
         engine.StatusChanged += Engine_StatusChanged;
         engine.BearingChanged += Engine_BearingChanged;
+        engine.PositionFaultDetected += Engine_PositionFaultDetected;
       }
 
       ResetUi();
@@ -489,6 +491,7 @@ namespace SkyRoof
     public string? GetStatusString()
     {
       if (!ctx.Settings.Rotator.Enabled) return "Rotator control disabled";
+      if (PositionSafetyTripped) return "Position feedback fault: STOP requested; inspect actual rotor angle";
       else if (!IsRunning()) return "No connection";
       else if (!TrackCheckbox.Checked) return "Connected, tracking disabled";
       else return "Connected and tracking";
@@ -627,6 +630,20 @@ namespace SkyRoof
         AntennaAzimuthLabel.Text = "---";
         AntennaElevationLabel.Text = "---";
       }
+    }
+
+    private void Engine_PositionFaultDetected(object? sender, RotatorPositionFaultEventArgs e)
+    {
+      if (!ReferenceEquals(sender, engine) || IsDisposed) return;
+      StopRotation();
+      ctx.MainForm.ShowRotatorStatus();
+      MessageBox.Show(ctx.MainForm,
+        $"Rotator reported an unexpected angle jump (Az {e.AzimuthJumpDeg:F1}°, El {e.ElevationJumpDeg:F1}°).\n\n" +
+        $"Previous: {e.Previous}\nReported: {e.Reported}\n\n" +
+        "Rotation has been stopped and motion commands are locked. " +
+        "Check the ACTUAL antenna direction, sensor wiring and rotor controller. " +
+        "After correcting the problem, reapply Rotator Control settings to unlock.",
+        "Rotator position safety stop", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
     private void Engine_StatusChanged(object? sender, EventArgs e)
