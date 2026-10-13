@@ -73,7 +73,10 @@ namespace SkyRoof
       {
         for (int i = snapshots.Count - 1; i >= 0; i--)
           if (!snapshots[i].Control.IsDisposed)
-            snapshots[i].Control.ResumeLayout(false);
+            // Perform the final dock/table layout now that every child has
+            // its immutable-baseline geometry. ResumeLayout(false) left
+            // Dock.Fill video/scope canvases at their old client sizes.
+            snapshots[i].Control.ResumeLayout(true);
       }
       design.Invalidate(true);
     }
