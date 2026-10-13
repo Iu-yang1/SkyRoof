@@ -145,6 +145,8 @@ namespace SkyRoof
         Dock = DockStyle.Fill,
         ColumnCount = 1,
         RowCount = 4,
+        AutoSize = false,
+        AutoScroll = false,
         Padding = new Padding(8)
       };
       root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
