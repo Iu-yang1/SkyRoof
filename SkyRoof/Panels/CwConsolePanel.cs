@@ -356,27 +356,7 @@ namespace SkyRoof
       root.Controls.Add(SelectedRxView, 0, 3);
       root.Controls.Add(BuildTransmitPanel(), 0, 4);
 
-      // CW has several stacked controls (status, spectrum/pileup, TX, macros).
-      // DockPanelSuite can allocate less space than MinimumSize in a tab.
-      // Preserve the decoder/spectrum viewport at a readable minimum and
-      // scroll the containing viewport rather than hiding the TX macro row.
-      var viewport = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
-      root.Dock = DockStyle.None;
-      root.MinimumSize = new Size(720, 560);
-      viewport.Controls.Add(root);
-      viewport.Resize += (_, _) =>
-      {
-        var needed = new Size(
-          Math.Max(720, viewport.ClientSize.Width -
-            (viewport.VerticalScroll.Visible ? SystemInformation.VerticalScrollBarWidth : 0)),
-          Math.Max(560, viewport.ClientSize.Height -
-            (viewport.HorizontalScroll.Visible ? SystemInformation.HorizontalScrollBarHeight : 0)));
-        if (root.Size != needed) root.Size = needed;
-      };
-      Controls.Add(viewport);
-      root.Size = new Size(
-        Math.Max(720, viewport.ClientSize.Width),
-        Math.Max(560, viewport.ClientSize.Height));
+      Controls.Add(root);
     }
 
     internal static TableLayoutPanel CreateSkimmerRootLayout()

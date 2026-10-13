@@ -9,6 +9,9 @@ namespace SkyRoof
   {
     private Context? ctx;
     private readonly FrequencyEntryForm FrequencyDialog = new();
+    private UniformZoomLayout? zoomLayout;
+    private Panel? zoomViewport;
+    private static readonly Size ZoomDesignSize = new(760, 550);
 
     private readonly Label SelectionLabel = new();
     private readonly GroupBox DownlinkGroup = new();
@@ -52,37 +55,23 @@ namespace SkyRoof
     {
       Text = "Frequency Control";
       Name = "FrequencyControlPanel";
-      ClientSize = new Size(760, 505);
-      MinimumSize = new Size(380, 260);
-      AutoScaleMode = AutoScaleMode.Font;
+      ClientSize = ZoomDesignSize;
+      MinimumSize = new Size(260, 190);
+      AutoScaleMode = AutoScaleMode.None;
       FormClosing += FrequencyControlPanel_FormClosing;
 
-      // A dock tab may become smaller than the combined preferred height of
-      // its groups. Keep the base buttons and tuning readouts at usable heights,
-      // then scroll instead of compressing percent-sized rows into each other.
-      var viewport = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
       var root = new TableLayoutPanel
       {
-        Dock = DockStyle.Top,
-        AutoSize = true,
-        AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        Dock = DockStyle.None,
+        Size = ZoomDesignSize,
         Padding = new Padding(10),
         ColumnCount = 1,
-        RowCount = 3,
-        MinimumSize = new Size(690, 0)
+        RowCount = 3
       };
       root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
       root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-      root.RowStyles.Add(new RowStyle(SizeType.Absolute, 206));
-      root.RowStyles.Add(new RowStyle(SizeType.Absolute, 234));
-      viewport.Resize += (_, _) =>
-      {
-        int available = viewport.ClientSize.Width -
-          (viewport.VerticalScroll.Visible ?
-            SystemInformation.VerticalScrollBarWidth : 0);
-        int width = Math.Max(690, available);
-        if (root.Width != width) root.Width = width;
-      };
+      root.RowStyles.Add(new RowStyle(SizeType.Percent, 48));
+      root.RowStyles.Add(new RowStyle(SizeType.Percent, 52));
 
       SelectionLabel.Dock = DockStyle.Fill;
       SelectionLabel.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
@@ -124,9 +113,31 @@ namespace SkyRoof
       ConfigureTuningGroup();
       root.Controls.Add(TuningGroup, 0, 2);
 
+      // No reflow, wrapping or scrollbars. The original two-column
+      // Frequency Control design is scaled as a single surface: geometry,
+      // fonts, controls and click targets share the same uniform factor.
+      var viewport = new Panel { Dock = DockStyle.Fill, AutoScroll = false };
       viewport.Controls.Add(root);
       Controls.Add(viewport);
-      root.Width = Math.Max(690, viewport.ClientSize.Width);
+      zoomViewport = viewport;
+      root.PerformLayout();
+      zoomLayout = new UniformZoomLayout(root, ZoomDesignSize);
+      viewport.SizeChanged += (_, _) => FitZoomSurface();
+      Shown += (_, _) => FitZoomSurface();
+      Disposed += (_, _) => zoomLayout?.Dispose();
+      FitZoomSurface();
+    }
+
+    private void FitZoomSurface()
+    {
+      if (zoomLayout == null || zoomViewport == null || zoomViewport.IsDisposed)
+        return;
+      zoomLayout.Fit(zoomViewport.ClientSize);
+      if (zoomViewport.Controls.Count == 0) return;
+      Control surface = zoomViewport.Controls[0];
+      surface.Location = new Point(
+        Math.Max(0, (zoomViewport.ClientSize.Width - surface.Width) / 2),
+        Math.Max(0, (zoomViewport.ClientSize.Height - surface.Height) / 2));
     }
 
     private static void ConfigureBaseGroup(
@@ -186,7 +197,7 @@ namespace SkyRoof
         Dock = DockStyle.Fill,
         AutoSize = true,
         FlowDirection = FlowDirection.LeftToRight,
-        WrapContents = true,
+        WrapContents = false,
         Margin = new Padding(0, 7, 0, 0)
       };
       editBtn.Text = "Edit Base...";

@@ -147,7 +147,7 @@ namespace SkyRoof
         Padding = new Padding(8)
       };
       root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-      root.RowStyles.Add(new RowStyle(SizeType.Absolute, 47));
+      root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
       root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
       root.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
       root.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
@@ -155,10 +155,9 @@ namespace SkyRoof
       var toolbar = new FlowLayoutPanel
       {
         Dock = DockStyle.Fill,
-        AutoSize = false,
-        AutoScroll = true,
+        AutoSize = true,
         FlowDirection = FlowDirection.LeftToRight,
-        WrapContents = false,
+        WrapContents = true,
         Margin = new Padding(0, 0, 0, 6)
       };
 

@@ -45,14 +45,11 @@ This guide documents **[Iu-yang1/SkyRoof](https://github.com/Iu-yang1/SkyRoof)**
 **Feature-status convention:** A capability described as **experimental** is present in source code but should not be treated as production-ready. Pages describe the current repository implementation, not a promise that every radio/firmware supports every command.
 
 
-## Resizable docking panes and DPI
+## Uniform window zoom (no reflow or scrollbars)
 
-The main toolbar now keeps **PTT and clock** in dedicated right-side areas; other fixed-width radio widgets scroll horizontally rather than overlap the time display when the window is narrowed. Use the toolbar's horizontal scrollbar to access off-screen controls.
+The experimental wrapping/scrolling dock layout of PR #84 was reverted. The main radio toolbar and Frequency Control now use **uniform proportional zoom**, resizing controls, their click targets, horizontal and vertical spacing, and fonts by the *same scale factor*, measured from an immutable design-size baseline to avoid cumulative rounding errors.
 
-**Frequency Control** has a scrollable content surface with minimum readable heights for Base reference/correction buttons and the Tuning section. When a narrow dock tab cannot fit both columns, horizontal scrolling preserves the complete frequency and reset controls rather than truncating them.
-
-**Icom LAN Spectrum** retains room for the spectrum by placing the oversized settings toolbar on a single horizontally scrolling row. **ONVIF Live video** shortens command captions in narrow tabs; the main video surface stays dominant. **QSO Entry** enables wrapping and vertical scrolling when docked narrowly.
-
-DPI: controls use WinForms font scaling and layout containers; text remains legible instead of being proportionally shrunk. Live Windows checks at 100%, 125% and 150% scaling are still recommended, especially for restored layouts created by older builds.
-
-**CW Console:** the complete spectrum, Pileup list, transmit controls and F1–F8 macro row now remain accessible via panel scrolling if DockPanelSuite allocates a pane smaller than the Console's readable minimum. The decoding/painting pipeline is unchanged.
+- **Main toolbar**: the satellite selector, photo, RX/TX frequency controls, gain, rotator, PTT and clock keep their original order and remain visible; the complete strip shrinks as the main window narrows.
+- **Frequency Control**: the two Base groups and Tuning group keep their original two-column arrangement and relative positions; the entire surface scales to fit the available dock area without overflow scrolling.
+- Font size also reduces when the pane becomes narrow. This is intentional and may be small at extreme window sizes. Increase the docked pane size to restore legibility.
+- Other existing dock contents retain their pre-PR#84 layouts for safety; GPU video, scope drawing and CW decoder paths have not been modified by this zoom pass. Interactive Windows/DPI checks are required before extending the transform to other panels.
