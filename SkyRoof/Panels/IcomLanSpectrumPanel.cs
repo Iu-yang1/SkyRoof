@@ -101,8 +101,7 @@ namespace SkyRoof
       Text = "Icom LAN Spectrum";
       Name = "IcomLanSpectrumPanel";
       ClientSize = new Size(940, 620);
-      MinimumSize = new Size(220, 150);
-      AutoScaleMode = AutoScaleMode.None;
+      MinimumSize = new Size(560, 360);
 
       ctx.IcomLanSpectrumPanel = this;
       ctx.MainForm.IcomLanSpectrumMNU.Checked = true;
@@ -145,8 +144,6 @@ namespace SkyRoof
         Dock = DockStyle.Fill,
         ColumnCount = 1,
         RowCount = 4,
-        AutoSize = false,
-        AutoScroll = false,
         Padding = new Padding(8)
       };
       root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -822,15 +819,7 @@ namespace SkyRoof
       StatsLabel.Text = "Packets 0 · CI-V 0 · Scope 0 · 0.0 fps";
       root.Controls.Add(StatsLabel, 0, 3);
 
-      // Preserve the toolbar's current multi-row composition as fixed design
-      // coordinates. The old FlowLayoutPanel must never wrap on resize.
-      var fixedToolbar = DockUniformZoom.FreezeToolbar(toolbar, 924);
-      root.Controls.Remove(toolbar);
-      toolbar.Dispose();
-      root.RowStyles[0].SizeType = SizeType.Absolute;
-      root.RowStyles[0].Height = fixedToolbar.Height + 6;
-      root.Controls.Add(fixedToolbar, 0, 0);
-      DockUniformZoom.Attach(this, root, new Size(940, 620));
+      Controls.Add(root);
     }
 
     private void LoadSettingsToUi()

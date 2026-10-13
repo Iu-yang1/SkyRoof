@@ -15,11 +15,6 @@ namespace SkyRoof
   {
     internal Context ctx = new();
     private RotatorControlCard? RotatorControlCard;
-    private UniformZoomLayout? toolbarZoom;
-    private Panel? toolbarSurface;
-    private int toolbarDesignWidth;
-    private bool fittingToolbar;
-    private const int ToolbarDesignHeight = 78;
     private ToolStripControlHost? RotatorControlHost;
     private ToolStripDropDown? RotatorControlPopup;
     private MouseButtons LastRotatorStatusMouseButton;
@@ -57,7 +52,6 @@ namespace SkyRoof
       SatelliteSelecionWidget.ctx = ctx;
       FrequencyWidget.ctx = ctx;
       FrequencyWidget.AttachTransmitButton(PttHostPanel);
-      ConfigureUniformToolbarZoom();
       GainWidget.ctx = ctx;
       Clock.ctx = ctx;
       ctx.Announcer.ctx = ctx;
@@ -255,7 +249,7 @@ namespace SkyRoof
 
     private void Toolbar_Resize(object sender, EventArgs e)
     {
-      FitUniformToolbarZoom();
+      UpdateSatellitePhotoVisibility();
     }
 
 
@@ -1647,14 +1641,6 @@ namespace SkyRoof
           RotatorControlCard == null)
         return;
 
-      // Scale the whole popover to the active monitor DPI rather than
-      // enlarging text alone (which clips AZ/EL and wheel hit targets).
-      using (Graphics screenGraphics = CreateGraphics())
-        RotatorControlCard.SetDisplayScale(screenGraphics.DpiX / 96f);
-      if (RotatorControlHost != null)
-        RotatorControlHost.Size = RotatorControlCard.Size;
-      RotatorControlPopup.Size = new Size(
-        RotatorControlCard.Width + 2, RotatorControlCard.Height + 2);
       RotatorControlCard.RefreshState();
 
       Point location =
@@ -1716,90 +1702,28 @@ namespace SkyRoof
     //----------------------------------------------------------------------------------------------
     //                                     toolbar
     //----------------------------------------------------------------------------------------------
-    private void ConfigureUniformToolbarZoom()
-    {
-      // Preserve the original widget order and *all* widgets, including the
-      // satellite photo, TX and clock. Reparent only the containing controls;
-      // all WinForms event handlers and control instances remain intact.
-      var widgets = new System.Windows.Forms.Control[]
-      {
-        panel2, SatelliteSelecionWidget, SatellitePhotoSeparator,
-        SatellitePhotoWidget, panel1, FrequencyWidget, panel3,
-        GainWidget, panel7, RotatorWidget, PttHostPanel, ClockPanel, panel5
-      };
-      // Never use a scrollable top strip. Every widget remains on one
-      // immutable design surface and both its geometry and font are scaled.
-      Toolbar.AutoScroll = false;
-      Toolbar.AutoSize = false;
-      var surface = new Panel
-      {
-        Location = Point.Empty,
-        Height = ToolbarDesignHeight,
-        AutoScroll = false,
-        AutoSize = false,
-        Margin = Padding.Empty,
-        Padding = Padding.Empty
-      };
-      int left = 0;
-      Toolbar.SuspendLayout();
-      try
-      {
-        foreach (System.Windows.Forms.Control widget in widgets)
-        {
-          Toolbar.Controls.Remove(widget);
-          widget.Dock = DockStyle.None;
-          widget.Anchor = AnchorStyles.Top | AnchorStyles.Left;
-          if (widget is ContainerControl container)
-            container.AutoScaleMode = AutoScaleMode.None;
-          widget.Bounds = new Rectangle(left, 0, widget.Width, ToolbarDesignHeight);
-          surface.Controls.Add(widget);
-          left += widget.Width;
-        }
-        surface.Width = left;
-        Toolbar.Controls.Add(surface);
-      }
-      finally { Toolbar.ResumeLayout(false); }
-
-      toolbarSurface = surface;
-      toolbarDesignWidth = left;
-      toolbarZoom = new UniformZoomLayout(
-        surface, new Size(toolbarDesignWidth, ToolbarDesignHeight));
-      Toolbar.SizeChanged += (_, _) => FitUniformToolbarZoom();
-      Disposed += (_, _) => toolbarZoom?.Dispose();
-      FitUniformToolbarZoom();
-    }
-
-    private void FitUniformToolbarZoom()
-    {
-      if (fittingToolbar || toolbarZoom == null || toolbarSurface == null)
-        return;
-      if (Toolbar.ClientSize.Width <= 0) return;
-      fittingToolbar = true;
-      try
-      {
-        // The toolstrip height changes by the *same factor* as width/fonts.
-        // No hidden buttons, wrapped controls, or scrollable strip.
-        float factor = Math.Max(0.001f,
-          (float)Toolbar.ClientSize.Width / toolbarDesignWidth);
-        int scaledHeight = Math.Max(1,
-          (int)Math.Round(ToolbarDesignHeight * factor));
-        toolbarZoom.Fit(
-          new Size(Toolbar.ClientSize.Width, scaledHeight));
-        Toolbar.Height = scaledHeight;
-        toolbarSurface.Left =
-          Math.Max(0, Toolbar.ClientSize.Width - toolbarSurface.Width);
-        toolbarSurface.Top = 0;
-      }
-      finally { fittingToolbar = false; }
-    }
-
     private void UpdateSatellitePhotoVisibility()
     {
-      // Formerly hidden at narrow widths; uniform zoom now keeps it visible.
       if (SatellitePhotoWidget == null) return;
-      SatellitePhotoWidget.Visible = true;
-      SatellitePhotoSeparator.Visible = true;
-      FitUniformToolbarZoom();
+
+      // show photo only if the toolbar can fit every widget; include the photo's own width
+      // unconditionally so the test answers "would it fit if shown", not "does it fit hidden"
+      int required =
+        panel2.Width +
+        SatellitePhotoWidget.Width +
+        SatelliteSelecionWidget.Width +
+        panel1.Width +
+        FrequencyWidget.Width +
+        panel3.Width +
+        GainWidget.Width +
+        panel7.Width +
+        RotatorWidget.Width +
+        PttHostPanel.Width +
+        panel5.Width +
+        ClockPanel.Width;
+
+      SatellitePhotoWidget.Visible = Toolbar.ClientSize.Width >= required + 10;
+      SatellitePhotoSeparator.Visible = SatellitePhotoWidget.Visible;
     }
 
 

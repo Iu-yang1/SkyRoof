@@ -36,19 +36,17 @@ namespace SkyRoof
     private Context? ctx;
     private RotatorWidget? rotator;
     private bool updatingStepUi;
-    private UniformZoomLayout? zoomLayout;
-    private static readonly Size DesignSize = new(318, 386);
 
     internal RotatorControlCard()
     {
-      AutoScaleMode = AutoScaleMode.None;
+      AutoScaleMode = AutoScaleMode.Font;
       BackColor = SystemColors.Control;
       ForeColor = SystemColors.ControlText;
       Margin = Padding.Empty;
       Padding = new Padding(10);
-      Size = DesignSize;
-      MinimumSize = Size.Empty;
-      MaximumSize = Size.Empty;
+      Size = new Size(318, 386);
+      MinimumSize = Size;
+      MaximumSize = Size;
 
       var title = new Label
       {
@@ -211,18 +209,6 @@ namespace SkyRoof
       RefreshTimer.Interval = 250;
       RefreshTimer.Tick += (_, _) => RefreshState();
       RefreshTimer.Start();
-      zoomLayout = new UniformZoomLayout(this, DesignSize);
-    }
-
-    // The card lives in a ToolStripControlHost rather than DockContent.
-    // Fit its *entire* manual wheel and input geometry to the monitor DPI.
-    // Mouse sectors use the wheel's scaled ClientSize, not absolute pixels.
-    internal void SetDisplayScale(float factor)
-    {
-      if (!float.IsFinite(factor) || factor <= 0) return;
-      zoomLayout?.Fit(new Size(
-        Math.Max(1, (int)Math.Round(DesignSize.Width * factor)),
-        Math.Max(1, (int)Math.Round(DesignSize.Height * factor))));
     }
 
     internal void Attach(Context context, RotatorWidget widget)
@@ -374,7 +360,6 @@ namespace SkyRoof
         RefreshTimer.Stop();
         RefreshTimer.Dispose();
         UiToolTip.Dispose();
-        zoomLayout?.Dispose();
         Wheel.Dispose();
       }
 

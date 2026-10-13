@@ -43,29 +43,3 @@ This guide documents **[Iu-yang1/SkyRoof](https://github.com/Iu-yang1/SkyRoof)**
 [Satellite data and tuning](satellite-data-and-tuning.md) · [CAT, FT4 and remote](radio-and-ft4.md) · [IC-9700 spectrum](spectrum.md) · [Rotator and interface](rotator-and-ui.md) · [Troubleshooting and PR history](troubleshooting-and-history.md).
 
 **Feature-status convention:** A capability described as **experimental** is present in source code but should not be treated as production-ready. Pages describe the current repository implementation, not a promise that every radio/firmware supports every command.
-
-
-### Toolbar and clock regression fix
-
-- The top radio strip is explicitly non-scrollable; child controls are mounted on one fixed baseline and the shared zoom engine now applies even at exact 100% and on one-pixel viewport changes.
-- Icom LAN Scope measures each toolbar control at its design size, packs it into immutable rows **once**, disables per-control AutoSize, and then scales the complete scope. Dock resizing cannot create horizontal tool scrolling.
-- The UTC/Local clock has fixed compact labels and invariant `yyyy-MM-dd UTC` / `yyyy-MM-dd LT` dates. Clicking **UTC** always selects UTC and clicking **Local** always selects computer local time (the selected mode remains persisted). The main numeric time correctly follows the selected mode; it is not always UTC.
-- Existing SkyRoof 1.57 installations are not automatically replaced when a PR or CI passes. To verify the changed behaviour, install the **newly built Windows unsigned test installer** from the corresponding Compile Check workflow, and first close the previous running executable. Tests verify both 100%/125%/150% design ratios; physical Windows DPI screenshots and mpv/rotator hardware still require acceptance.
-
-## Uniform window zoom (no reflow or scrollbars)
-
-The experimental wrapping/scrolling dock layout of PR #84 was reverted. The main radio toolbar and Frequency Control now use **uniform proportional zoom**, resizing controls, their click targets, horizontal and vertical spacing, and fonts by the *same scale factor*, measured from an immutable design-size baseline to avoid cumulative rounding errors.
-
-- **Main toolbar**: the satellite selector, photo, RX/TX frequency controls, gain, rotator, PTT and clock keep their original order and remain visible; the complete strip shrinks as the main window narrows.
-- **Frequency Control**: the two Base groups and Tuning group keep their original two-column arrangement and relative positions; the entire surface scales to fit the available dock area without overflow scrolling.
-- Font size also reduces when the pane becomes narrow. This is intentional and may be small at extreme window sizes. Increase the docked pane size to restore legibility.
-- A follow-up implementation extends the fixed baseline viewport to **CW Console, Icom LAN Spectrum, ONVIF Camera and QSO Entry**, and DPI-proportional sizing to the Rotator Control popover. The scope/waterfall custom controls and mpv's native video host keep using their scaled WinForms client rectangles; no FFT, decoder, CAT or rotator commands are changed by the zoom code.
-- The Icom scope toolbar is laid out at a fixed design width **once**, then frozen. CW toolbars no longer scroll and the QSO cards retain fixed grid locations instead of flowing at runtime. Avoid docking extremely small panes: proportional text can become unreadably small.
-
-### Windows and hardware acceptance checklist (not CI-certified)
-- At **100%, 125% and 150% display scaling**, reopen and resize all five views repeatedly, floating and docked; verify complete status text, TX macros, frequency readout, QSO cards, video chrome and cursor targets. Confirm no new scrollbars, wrapping, clipped content or cumulative geometry drift.
-- With CW receive active, check waterfall click-to-select, AF pan and spectrum frequency picks after resize. With Icom scope active, verify mouse-wheel zoom, tuning clicks, waterfall history and 475-bin frame alignment; compare displayed RF readback with RS-BA1.
-- With ONVIF video active, confirm the native mpv child window follows the scaled black video host (not only its background) and hardware decode remains D3D11VA. Check mouse interactions and disconnect/reconnect.
-- **Rotator safety:** use a simulator first, then a physical GS-232B with a separate hardware E-stop. Inject an impossible feedback jump; verify latched STOP, independent STOP acknowledgement and no unintended Track/PARK restart. Measure rotctld CPU before/after 1-degree coalescing with Track enabled.
-- **ONVIF discovery:** test a physical camera on each active network adapter, probe responses, Device Service HTTP port versus RTSP 554, Media1/2 profile negotiation, and player reconnect behavior.
-- Headless xUnit checks cover structural geometry, zoom factors, CW/QSO fixed layouts and direction wheel hit-testing. They **cannot** certify interactive desktop DPI, live camera GPU rendering, radio signals or physical safety.
