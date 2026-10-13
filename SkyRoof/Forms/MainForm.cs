@@ -1714,17 +1714,17 @@ namespace SkyRoof
       // Keep the PTT command and UTC clock visible at all times. The other
       // fixed-width widgets scroll horizontally instead of overlapping the
       // clock when the main window is narrower than their combined widths.
-      var scrollable = Toolbar.Controls.Cast<Control>()
+      var scrollable = Toolbar.Controls.Cast<System.Windows.Forms.Control>()
         .Where(c => c != PttHostPanel && c != ClockPanel && c != panel5)
         .ToArray();
-      foreach (Control control in scrollable)
+      foreach (System.Windows.Forms.Control control in scrollable)
         Toolbar.Controls.Remove(control);
       Toolbar.Controls.Remove(PttHostPanel);
       Toolbar.Controls.Remove(ClockPanel);
       Toolbar.Controls.Remove(panel5);
 
       var strip = new Panel { Height = toolbarNominalHeight };
-      foreach (Control control in scrollable)
+      foreach (System.Windows.Forms.Control control in scrollable)
         strip.Controls.Add(control);
 
       var viewport = new Panel
@@ -1752,7 +1752,7 @@ namespace SkyRoof
       if (responsiveToolbarViewport == null || responsiveToolbarStrip == null)
         return;
 
-      int occupied = responsiveToolbarStrip.Controls.Cast<Control>()
+      int occupied = responsiveToolbarStrip.Controls.Cast<System.Windows.Forms.Control>()
         .Where(c => c.Visible)
         .Sum(c => c.Width + c.Margin.Horizontal);
       // Account for the fixed right-side PTT, clock and separators.
