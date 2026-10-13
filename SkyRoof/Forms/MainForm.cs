@@ -1757,9 +1757,8 @@ namespace SkyRoof
       {
         // The toolstrip height changes by the *same factor* as width/fonts.
         // No hidden buttons, wrapped controls, or scrollable strip.
-        float factor = UniformZoomLayout.GetScale(
-          new Size(toolbarDesignWidth, ToolbarDesignHeight),
-          new Size(Toolbar.ClientSize.Width, ToolbarDesignHeight));
+        float factor = Math.Max(0.10f,
+          (float)Toolbar.ClientSize.Width / toolbarDesignWidth);
         int scaledHeight = Math.Max(1,
           (int)Math.Round(ToolbarDesignHeight * factor));
         toolbarZoom.Fit(
