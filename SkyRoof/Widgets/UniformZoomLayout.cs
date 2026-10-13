@@ -141,7 +141,7 @@ namespace SkyRoof
         }
 
         var font = new Font(originalFont.FontFamily,
-          Math.Max(4f, originalFont.SizeInPoints * factor),
+          Math.Max(1f, originalFont.SizeInPoints * factor),
           originalFont.Style, GraphicsUnit.Point);
         Font? old = activeFont;
         activeFont = font;
