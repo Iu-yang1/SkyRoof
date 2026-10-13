@@ -43,16 +43,3 @@ This guide documents **[Iu-yang1/SkyRoof](https://github.com/Iu-yang1/SkyRoof)**
 [Satellite data and tuning](satellite-data-and-tuning.md) · [CAT, FT4 and remote](radio-and-ft4.md) · [IC-9700 spectrum](spectrum.md) · [Rotator and interface](rotator-and-ui.md) · [Troubleshooting and PR history](troubleshooting-and-history.md).
 
 **Feature-status convention:** A capability described as **experimental** is present in source code but should not be treated as production-ready. Pages describe the current repository implementation, not a promise that every radio/firmware supports every command.
-
-
-## Resizable docking panes and DPI
-
-The main toolbar now keeps **PTT and clock** in dedicated right-side areas; other fixed-width radio widgets scroll horizontally rather than overlap the time display when the window is narrowed. Use the toolbar's horizontal scrollbar to access off-screen controls.
-
-**Frequency Control** has a scrollable content surface with minimum readable heights for Base reference/correction buttons and the Tuning section. When a narrow dock tab cannot fit both columns, horizontal scrolling preserves the complete frequency and reset controls rather than truncating them.
-
-**Icom LAN Spectrum** retains room for the spectrum by placing the oversized settings toolbar on a single horizontally scrolling row. **ONVIF Live video** shortens command captions in narrow tabs; the main video surface stays dominant. **QSO Entry** enables wrapping and vertical scrolling when docked narrowly.
-
-DPI: controls use WinForms font scaling and layout containers; text remains legible instead of being proportionally shrunk. Live Windows checks at 100%, 125% and 150% scaling are still recommended, especially for restored layouts created by older builds.
-
-**CW Console:** the complete spectrum, Pileup list, transmit controls and F1–F8 macro row now remain accessible via panel scrolling if DockPanelSuite allocates a pane smaller than the Console's readable minimum. The decoding/painting pipeline is unchanged.

@@ -15,9 +15,6 @@ namespace SkyRoof
   {
     internal Context ctx = new();
     private RotatorControlCard? RotatorControlCard;
-    private Panel? responsiveToolbarViewport;
-    private Panel? responsiveToolbarStrip;
-    private int toolbarNominalHeight;
     private ToolStripControlHost? RotatorControlHost;
     private ToolStripDropDown? RotatorControlPopup;
     private MouseButtons LastRotatorStatusMouseButton;
@@ -55,7 +52,6 @@ namespace SkyRoof
       SatelliteSelecionWidget.ctx = ctx;
       FrequencyWidget.ctx = ctx;
       FrequencyWidget.AttachTransmitButton(PttHostPanel);
-      ConfigureResponsiveToolbar();
       GainWidget.ctx = ctx;
       Clock.ctx = ctx;
       ctx.Announcer.ctx = ctx;
@@ -254,7 +250,6 @@ namespace SkyRoof
     private void Toolbar_Resize(object sender, EventArgs e)
     {
       UpdateSatellitePhotoVisibility();
-      UpdateResponsiveToolbarBounds();
     }
 
 
@@ -1707,68 +1702,6 @@ namespace SkyRoof
     //----------------------------------------------------------------------------------------------
     //                                     toolbar
     //----------------------------------------------------------------------------------------------
-    private void ConfigureResponsiveToolbar()
-    {
-      toolbarNominalHeight = Toolbar.Height;
-
-      // Keep the PTT command and UTC clock visible at all times. The other
-      // fixed-width widgets scroll horizontally instead of overlapping the
-      // clock when the main window is narrower than their combined widths.
-      var scrollable = Toolbar.Controls.Cast<System.Windows.Forms.Control>()
-        .Where(c => c != PttHostPanel && c != ClockPanel && c != panel5)
-        .ToArray();
-      foreach (System.Windows.Forms.Control control in scrollable)
-        Toolbar.Controls.Remove(control);
-      Toolbar.Controls.Remove(PttHostPanel);
-      Toolbar.Controls.Remove(ClockPanel);
-      Toolbar.Controls.Remove(panel5);
-
-      var strip = new Panel { Height = toolbarNominalHeight };
-      foreach (System.Windows.Forms.Control control in scrollable)
-        strip.Controls.Add(control);
-
-      var viewport = new Panel
-      {
-        Dock = DockStyle.Fill,
-        AutoScroll = true,
-        TabStop = false
-      };
-      viewport.Controls.Add(strip);
-      responsiveToolbarViewport = viewport;
-      responsiveToolbarStrip = strip;
-
-      PttHostPanel.Dock = DockStyle.Right;
-      ClockPanel.Dock = DockStyle.Right;
-      Toolbar.Controls.Add(viewport);
-      Toolbar.Controls.Add(PttHostPanel);
-      Toolbar.Controls.Add(ClockPanel);
-      Toolbar.Controls.Add(panel5);
-      viewport.Resize += (_, _) => UpdateResponsiveToolbarBounds();
-      UpdateResponsiveToolbarBounds();
-    }
-
-    private void UpdateResponsiveToolbarBounds()
-    {
-      if (responsiveToolbarViewport == null || responsiveToolbarStrip == null)
-        return;
-
-      int occupied = responsiveToolbarStrip.Controls.Cast<System.Windows.Forms.Control>()
-        .Where(c => c.Visible)
-        .Sum(c => c.Width + c.Margin.Horizontal);
-      // Account for the fixed right-side PTT, clock and separators.
-      // Always preserve scrolling access to every left-side widget.
-      int required = Math.Max(occupied, responsiveToolbarViewport.ClientSize.Width);
-      if (responsiveToolbarStrip.Width != required)
-        responsiveToolbarStrip.Width = required;
-      responsiveToolbarViewport.AutoScrollMinSize =
-        new Size(occupied, 0);
-      int nextHeight = toolbarNominalHeight +
-        (occupied > responsiveToolbarViewport.ClientSize.Width
-          ? SystemInformation.HorizontalScrollBarHeight : 0);
-      if (Toolbar.Height != nextHeight)
-        Toolbar.Height = nextHeight;
-    }
-
     private void UpdateSatellitePhotoVisibility()
     {
       if (SatellitePhotoWidget == null) return;
@@ -1791,7 +1724,6 @@ namespace SkyRoof
 
       SatellitePhotoWidget.Visible = Toolbar.ClientSize.Width >= required + 10;
       SatellitePhotoSeparator.Visible = SatellitePhotoWidget.Visible;
-      UpdateResponsiveToolbarBounds();
     }
 
 
