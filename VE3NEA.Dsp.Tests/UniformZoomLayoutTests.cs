@@ -76,8 +76,17 @@ public sealed class UniformZoomLayoutTests
         Assert.Equal(3, design.RowCount);
         panel.Size = new Size(380, 275);
         viewport.PerformLayout();
-        Assert.InRange(design.Width, 375, 385);
-        Assert.InRange(design.Height, 270, 280);
+        // DockContent.Size includes tab caption / non-client border, so its
+        // actual viewport ClientSize is smaller than the assigned outer Size.
+        // Assert the geometry against the real available client rectangle.
+        float factor = UniformZoomLayout.GetScale(
+            new Size(760, 550), viewport.ClientSize);
+        Assert.InRange(design.Width,
+            (int)Math.Round(760 * factor) - 1,
+            (int)Math.Round(760 * factor) + 1);
+        Assert.InRange(design.Height,
+            (int)Math.Round(550 * factor) - 1,
+            (int)Math.Round(550 * factor) + 1);
         Assert.False(viewport.AutoScroll);
     }
 }
