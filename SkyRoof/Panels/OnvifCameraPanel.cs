@@ -49,9 +49,9 @@ namespace SkyRoof
       ctx = context;
       Text = "ONVIF Camera";
       Name = "OnvifCameraPanel";
-      AutoScaleMode = AutoScaleMode.Font;
+      AutoScaleMode = AutoScaleMode.None;
       ClientSize = new Size(940, 600);
-      MinimumSize = new Size(500, 320);
+      MinimumSize = new Size(220, 150);
       ctx.OnvifCameraPanel = this;
       ctx.MainForm.OnvifCameraMNU.Checked = true;
 
@@ -111,9 +111,14 @@ namespace SkyRoof
       placeholder.Controls.Add(placeholderLayout);
 
       video.Controls.Add(placeholder);
-      Controls.Add(video);
-      Controls.Add(footer);
-      Controls.Add(header);
+      // Keep the native mpv --wid host attached to the same video Panel;
+      // only its WinForms ancestor changes. The video client rectangle and
+      // mouse coordinates then track the uniform design-surface scale.
+      var design = new Panel { Size = new Size(940, 600) };
+      design.Controls.Add(video);
+      design.Controls.Add(footer);
+      design.Controls.Add(header);
+      DockUniformZoom.Attach(this, design, design.Size);
 
       play.Click += async (_, _) => await ExecuteAsync(true);
       stop.Click += (_, _) => StopPlayback(byUser: true);
