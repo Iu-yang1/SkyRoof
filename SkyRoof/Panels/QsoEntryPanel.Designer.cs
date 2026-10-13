@@ -29,7 +29,7 @@
     private void InitializeComponent()
     {
       components = new System.ComponentModel.Container();
-      flowLayoutPanel1 = new Panel();
+      flowLayoutPanel1 = new FlowLayoutPanel();
       panel1 = new Panel();
       UtcFrame = new Panel();
       UtcPicker = new VE3NEA.DateTimePickerEx();
@@ -106,7 +106,7 @@
       // 
       // flowLayoutPanel1
       // 
-      // Fixed designer card coordinates: do not reflow visible fields.
+      flowLayoutPanel1.AutoSize = true;
       flowLayoutPanel1.Controls.Add(panel1);
       flowLayoutPanel1.Controls.Add(panel2);
       flowLayoutPanel1.Controls.Add(panel3);
@@ -598,7 +598,7 @@
       // 
       AcceptButton = SaveBtn;
       AutoScaleDimensions = new SizeF(7F, 15F);
-      AutoScaleMode = AutoScaleMode.None;
+      AutoScaleMode = AutoScaleMode.Font;
       ClientSize = new Size(734, 128);
       Controls.Add(flowLayoutPanel1);
       Name = "QsoEntryPanel";
@@ -651,7 +651,7 @@
 
     #endregion
 
-    private Panel flowLayoutPanel1;
+    private FlowLayoutPanel flowLayoutPanel1;
     private Panel panel1;
     private Label UtcLabel;
     private VE3NEA.TextBoxEx SentEdit;

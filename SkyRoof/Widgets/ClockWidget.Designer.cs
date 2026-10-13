@@ -36,30 +36,30 @@
       // 
       // timeLabel
       // 
-      timeLabel.AutoSize = false;
-      timeLabel.Font = new Font("Consolas", 14F, FontStyle.Regular, GraphicsUnit.Point, 0);
+      timeLabel.AutoSize = true;
+      timeLabel.Font = new Font("Microsoft Sans Serif", 16F, FontStyle.Regular, GraphicsUnit.Point, 0);
       timeLabel.ForeColor = Color.Aqua;
-      timeLabel.Location = new Point(3, 3);
+      timeLabel.Location = new Point(9, 3);
       timeLabel.Margin = new Padding(2, 0, 2, 0);
       timeLabel.Name = "timeLabel";
       timeLabel.RightToLeft = RightToLeft.No;
-      timeLabel.Size = new Size(101, 26);
+      timeLabel.Size = new Size(96, 26);
       timeLabel.TabIndex = 0;
       timeLabel.Text = "00:00:00";
-      timeLabel.TextAlign = ContentAlignment.MiddleCenter;
-      timeLabel.Click += timeLabel_Click;
+      timeLabel.TextAlign = ContentAlignment.MiddleLeft;
+      timeLabel.Click += this.utcLabel_Click;
       // 
       // dateLabel
       // 
-      dateLabel.Font = new Font("Segoe UI", 7.5F, FontStyle.Regular, GraphicsUnit.Point, 0);
+      dateLabel.Font = new Font("Microsoft Sans Serif", 8.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
       dateLabel.ForeColor = Color.Aqua;
-      dateLabel.Location = new Point(2, 30);
+      dateLabel.Location = new Point(13, 30);
       dateLabel.Margin = new Padding(2, 0, 2, 0);
       dateLabel.Name = "dateLabel";
       dateLabel.RightToLeft = RightToLeft.No;
-      dateLabel.Size = new Size(103, 17);
+      dateLabel.Size = new Size(87, 13);
       dateLabel.TabIndex = 1;
-      dateLabel.Text = "2026-10-13 UTC";
+      dateLabel.Text = "Dec 31, 2025";
       dateLabel.TextAlign = ContentAlignment.MiddleCenter;
       dateLabel.Click += dateLabel_Click;
       // 
@@ -69,11 +69,11 @@
       utcLabel.ForeColor = Color.Black; // fixed: the aqua and teal backgrounds are fixed too
       utcLabel.Cursor = Cursors.Hand;
       utcLabel.Font = new Font("Microsoft Sans Serif", 6F, FontStyle.Bold, GraphicsUnit.Point, 0);
-      utcLabel.Location = new Point(57, 49);
+      utcLabel.Location = new Point(65, 51);
       utcLabel.Margin = new Padding(2, 0, 2, 0);
       utcLabel.Name = "utcLabel";
       utcLabel.RightToLeft = RightToLeft.No;
-      utcLabel.Size = new Size(45, 15);
+      utcLabel.Size = new Size(28, 12);
       utcLabel.TabIndex = 2;
       utcLabel.Text = "UTC";
       utcLabel.TextAlign = ContentAlignment.MiddleCenter;
@@ -85,20 +85,20 @@
       localLabel.ForeColor = Color.Black; // fixed: the aqua and teal backgrounds are fixed too
       localLabel.Cursor = Cursors.Hand;
       localLabel.Font = new Font("Microsoft Sans Serif", 6F, FontStyle.Bold, GraphicsUnit.Point, 0);
-      localLabel.Location = new Point(6, 49);
+      localLabel.Location = new Point(17, 51);
       localLabel.Margin = new Padding(2, 0, 2, 0);
       localLabel.Name = "localLabel";
       localLabel.RightToLeft = RightToLeft.No;
-      localLabel.Size = new Size(45, 15);
+      localLabel.Size = new Size(35, 12);
       localLabel.TabIndex = 3;
       localLabel.Text = "Local";
       localLabel.TextAlign = ContentAlignment.MiddleCenter;
-      localLabel.Click += localLabel_Click;
+      localLabel.Click += utcLabel_Click;
       // 
       // Clock
       // 
       AutoScaleDimensions = new SizeF(7F, 15F);
-      AutoScaleMode = AutoScaleMode.None;
+      AutoScaleMode = AutoScaleMode.Font;
       BackColor = Color.DarkBlue;
       BorderStyle = BorderStyle.FixedSingle;
       Controls.Add(localLabel);
