@@ -13,7 +13,7 @@ namespace SkyRoof
     private readonly Control design;
     private readonly Size designSize;
     private readonly List<Snapshot> snapshots = new();
-    private float zoom = 1f;
+    private float zoom = float.NaN;
     private bool disposed;
 
     internal UniformZoomLayout(Control design, Size designSize)
@@ -28,7 +28,7 @@ namespace SkyRoof
       if (design.Width <= 0 || design.Height <= 0 ||
           available.Width <= 0 || available.Height <= 0)
         return 1f;
-      return Math.Max(0.10f,
+      return Math.Max(0.001f,
         Math.Min((float)available.Width / design.Width,
                  (float)available.Height / design.Height));
     }
@@ -46,7 +46,9 @@ namespace SkyRoof
     {
       if (disposed || design.IsDisposed) return;
       float next = GetScale(designSize, available);
-      if (Math.Abs(zoom - next) < 0.002f) return;
+      // Recompute even for small viewport changes; a 1 px dock adjustment
+      // must not leave stale drawing/hit-test geometry behind.
+      if (Math.Abs(zoom - next) < 0.000001f) return;
       zoom = next;
       Apply(next);
     }
