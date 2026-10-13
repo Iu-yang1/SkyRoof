@@ -58,6 +58,7 @@ namespace SkyRoof
       ClientSize = ZoomDesignSize;
       MinimumSize = new Size(260, 190);
       AutoScaleMode = AutoScaleMode.None;
+      AutoScroll = false;
       FormClosing += FrequencyControlPanel_FormClosing;
 
       var root = new TableLayoutPanel
