@@ -36,7 +36,8 @@ public sealed class DockUniformZoomTests
         window.Controls.Add(design);
 
         using var zoom = DockUniformZoom.Attach(window, design, new Size(800, 500));
-        zoom.Viewport.Size = new Size(width, height);
+        window.ClientSize = new Size(width, height);
+        window.PerformLayout();
         zoom.Viewport.PerformLayout();
         Assert.Equal(expectedScale, zoom.Scale, 2);
         Assert.Equal(width, design.Width);
@@ -65,7 +66,8 @@ public sealed class DockUniformZoomTests
 
         foreach (int width in new[] { 400, 1000, 600, 1200, 800, 320, 800 })
         {
-            zoom.Viewport.Size = new Size(width, (int)Math.Round(width * 500.0 / 800.0));
+            window.ClientSize = new Size(width, (int)Math.Round(width * 500.0 / 800.0));
+            window.PerformLayout();
             zoom.Viewport.PerformLayout();
         }
         Assert.Equal(new Rectangle(200, 100, 120, 40), button.Bounds);
