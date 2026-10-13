@@ -61,38 +61,62 @@ namespace SkyRoof
     }
 
     /// <summary>
-    /// Capture the FlowLayoutPanel's original wrapped rows once at design
-    /// width, then replace them with fixed pixel positions. Runtime resize
-    /// must not let FlowLayoutPanel wrap a toolbar differently.
+    /// Transfer an existing flow toolbar to absolute baseline coordinates.
+    /// Measure each child once at its design font and pack rows ONLY here.
+    /// Subsequent dock resizing cannot create flow rewrap or scrollbars,
+    /// including when a button's AutoSize would otherwise fight font zoom.
     /// </summary>
     internal static Panel FreezeToolbar(FlowLayoutPanel flow, int designWidth)
     {
+      if (designWidth <= 0) throw new ArgumentOutOfRangeException(nameof(designWidth));
       flow.Dock = DockStyle.None;
       flow.AutoSize = false;
       flow.AutoScroll = false;
-      flow.WrapContents = true; // one-time layout capture only
+      flow.WrapContents = false;
       flow.Size = new Size(designWidth, 600);
       flow.PerformLayout();
 
       Control[] children = flow.Controls.Cast<Control>().ToArray();
-      Rectangle[] positions = children.Select(child => child.Bounds).ToArray();
-      int bottom = positions.Length == 0 ? 1 : positions.Max(r => r.Bottom);
       var fixedToolbar = new Panel
       {
         Dock = DockStyle.Fill,
+        AutoSize = false,
         AutoScroll = false,
         Margin = flow.Margin,
-        Padding = flow.Padding,
-        Height = bottom + flow.Padding.Bottom
+        Padding = flow.Padding
       };
 
-      for (int i = 0; i < children.Length; i++)
+      int x = flow.Padding.Left;
+      int y = flow.Padding.Top;
+      int rowHeight = 0;
+      int contentRight = designWidth - flow.Padding.Right;
+
+      foreach (Control child in children)
       {
-        Control child = children[i];
+        // Preserve the design-size AutoSize measurement before disabling it.
+        // Otherwise buttons regrow after UniformZoomLayout scales their font.
+        Size size = child.Size;
+        int requiredWidth = child.Margin.Left + size.Width + child.Margin.Right;
+        int requiredHeight = child.Margin.Top + size.Height + child.Margin.Bottom;
+        if (x > flow.Padding.Left && x + requiredWidth > contentRight)
+        {
+          x = flow.Padding.Left;
+          y += rowHeight;
+          rowHeight = 0;
+        }
+
         flow.Controls.Remove(child);
+        child.AutoSize = false;
+        child.Dock = DockStyle.None;
+        child.Location = new Point(x + child.Margin.Left, y + child.Margin.Top);
+        child.Size = size;
         fixedToolbar.Controls.Add(child);
-        child.Location = positions[i].Location;
+
+        x += requiredWidth;
+        rowHeight = Math.Max(rowHeight, requiredHeight);
       }
+
+      fixedToolbar.Height = Math.Max(1, y + rowHeight + flow.Padding.Bottom);
       return fixedToolbar;
     }
 
