@@ -45,6 +45,13 @@ This guide documents **[Iu-yang1/SkyRoof](https://github.com/Iu-yang1/SkyRoof)**
 **Feature-status convention:** A capability described as **experimental** is present in source code but should not be treated as production-ready. Pages describe the current repository implementation, not a promise that every radio/firmware supports every command.
 
 
+### Toolbar and clock regression fix
+
+- The top radio strip is explicitly non-scrollable; child controls are mounted on one fixed baseline and the shared zoom engine now applies even at exact 100% and on one-pixel viewport changes.
+- Icom LAN Scope measures each toolbar control at its design size, packs it into immutable rows **once**, disables per-control AutoSize, and then scales the complete scope. Dock resizing cannot create horizontal tool scrolling.
+- The UTC/Local clock has fixed compact labels and invariant `yyyy-MM-dd UTC` / `yyyy-MM-dd LT` dates. Clicking **UTC** always selects UTC and clicking **Local** always selects computer local time (the selected mode remains persisted). The main numeric time correctly follows the selected mode; it is not always UTC.
+- Existing SkyRoof 1.57 installations are not automatically replaced when a PR or CI passes. To verify the changed behaviour, install the **newly built Windows unsigned test installer** from the corresponding Compile Check workflow, and first close the previous running executable. Tests verify both 100%/125%/150% design ratios; physical Windows DPI screenshots and mpv/rotator hardware still require acceptance.
+
 ## Uniform window zoom (no reflow or scrollbars)
 
 The experimental wrapping/scrolling dock layout of PR #84 was reverted. The main radio toolbar and Frequency Control now use **uniform proportional zoom**, resizing controls, their click targets, horizontal and vertical spacing, and fonts by the *same scale factor*, measured from an immutable design-size baseline to avoid cumulative rounding errors.
