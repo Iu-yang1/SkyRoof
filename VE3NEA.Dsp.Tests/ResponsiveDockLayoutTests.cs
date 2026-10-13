@@ -75,4 +75,34 @@ public sealed class ResponsiveDockLayoutTests
         Assert.True(flow.WrapContents);
         Assert.False(flow.AutoSize);
     }
+    [Fact]
+    public void ToolbarReservesRightSideForClockAndPttBeforeLeftOverflow()
+    {
+        using var toolbar = new Panel { Size = new Size(440, 95) };
+        using var scrollable = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+        using var transmit = new Panel { Dock = DockStyle.Right, Width = 112 };
+        using var clock = new Panel { Dock = DockStyle.Right, Width = 117 };
+        using var endSpacer = new Panel { Dock = DockStyle.Right, Width = 4 };
+        toolbar.Controls.Add(scrollable);
+        toolbar.Controls.Add(transmit);
+        toolbar.Controls.Add(clock);
+        toolbar.Controls.Add(endSpacer);
+        toolbar.PerformLayout();
+
+        Assert.True(scrollable.Right <= transmit.Left,
+            "The scrolling strip must not paint under PTT");
+        Assert.True(transmit.Right <= clock.Left,
+            "PTT must not overlap the UTC clock");
+        Assert.True(clock.Right <= endSpacer.Left,
+            "Clock remains at the visible right edge");
+    }
+
+    [Fact]
+    public void SkimmerRootUsesScrollableToolbarsAndFiveRows()
+    {
+        using var root = CwConsolePanel.CreateSkimmerRootLayout();
+        Assert.Equal(5, root.RowCount);
+        Assert.Equal(1, root.ColumnCount);
+    }
+
 }
