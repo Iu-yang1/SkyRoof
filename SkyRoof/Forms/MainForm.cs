@@ -1727,7 +1727,19 @@ namespace SkyRoof
         SatellitePhotoWidget, panel1, FrequencyWidget, panel3,
         GainWidget, panel7, RotatorWidget, PttHostPanel, ClockPanel, panel5
       };
-      var surface = new Panel { Location = Point.Empty, Height = ToolbarDesignHeight };
+      // Never use a scrollable top strip. Every widget remains on one
+      // immutable design surface and both its geometry and font are scaled.
+      Toolbar.AutoScroll = false;
+      Toolbar.AutoSize = false;
+      var surface = new Panel
+      {
+        Location = Point.Empty,
+        Height = ToolbarDesignHeight,
+        AutoScroll = false,
+        AutoSize = false,
+        Margin = Padding.Empty,
+        Padding = Padding.Empty
+      };
       int left = 0;
       Toolbar.SuspendLayout();
       try
@@ -1737,6 +1749,8 @@ namespace SkyRoof
           Toolbar.Controls.Remove(widget);
           widget.Dock = DockStyle.None;
           widget.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+          if (widget is ContainerControl container)
+            container.AutoScaleMode = AutoScaleMode.None;
           widget.Bounds = new Rectangle(left, 0, widget.Width, ToolbarDesignHeight);
           surface.Controls.Add(widget);
           left += widget.Width;
@@ -1765,7 +1779,7 @@ namespace SkyRoof
       {
         // The toolstrip height changes by the *same factor* as width/fonts.
         // No hidden buttons, wrapped controls, or scrollable strip.
-        float factor = Math.Max(0.10f,
+        float factor = Math.Max(0.001f,
           (float)Toolbar.ClientSize.Width / toolbarDesignWidth);
         int scaledHeight = Math.Max(1,
           (int)Math.Round(ToolbarDesignHeight * factor));
