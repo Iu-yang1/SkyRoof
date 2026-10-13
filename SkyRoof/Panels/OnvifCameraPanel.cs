@@ -61,19 +61,33 @@ namespace SkyRoof
         BackColor = SystemColors.Control, Margin = Padding.Empty
       };
       header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-      header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 355));
+      header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
       header.Controls.Add(title, 0, 0);
 
       var commands = new FlowLayoutPanel
       {
         Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft,
-        WrapContents = false, AutoScroll = false, Padding = new Padding(0, 6, 8, 0)
+        WrapContents = false, AutoScroll = false, AutoSize = true,
+        Padding = new Padding(0, 6, 8, 0)
       };
       commands.Controls.Add(settings);
       commands.Controls.Add(reconnect);
       commands.Controls.Add(stop);
       commands.Controls.Add(play);
       header.Controls.Add(commands, 1, 0);
+      // Keep the font instances stable during continuous window resizing.
+      Font normalTitleFont = title.Font;
+      Font compactTitleFont = new Font("Segoe UI Semibold", 9F);
+      header.SizeChanged += (_, _) =>
+      {
+        bool narrow = header.ClientSize.Width < 465;
+        reconnect.Text = narrow ? "Retry" : "Reconnect";
+        reconnect.Width = narrow ? 61 : 92;
+        settings.Text = narrow ? "Setup" : "Settings";
+        settings.Width = narrow ? 64 : 82;
+        title.Font = narrow ? compactTitleFont : normalTitleFont;
+      };
+      Disposed += (_, _) => compactTitleFont.Dispose();
 
       var footer = new TableLayoutPanel
       {

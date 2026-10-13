@@ -43,3 +43,16 @@
 [卫星数据与频率](satellite-data-and-tuning.md) · [CAT、FT4 与远控](radio-and-ft4.md) · [IC-9700 频谱](spectrum.md) · [转台与主题](rotator-and-ui.md) · [排障与 PR 历史](troubleshooting-and-history.md)。
 
 **功能状态说明：** “实验性”指相关代码已经存在，但尚不应视为稳定生产方案；具体 CI-V 能力还取决于电台机型及固件。
+
+
+## 停靠窗口缩放与高 DPI 适配
+
+主工具栏将 **PTT 按钮及时间显示** 固定于右侧独立区域，其余有固定宽度的电台操作控件可横向滚动，避免窗口变窄后覆盖时钟。空间不足时使用顶部的水平滚动条访问更多控件。
+
+**Frequency Control** 改为可滚动内容页，为 Base 参考频率、修正按钮及 Tuning 区域保留可用高度。窄停靠栏下提供水平滚动，避免把 Edit Base、Reset to Database 等按钮截断。
+
+**Icom LAN Spectrum** 将较长的频谱设置工具栏放入可横向滚动的单行区域，保证频谱与瀑布图仍获得空间。**ONVIF Live video** 在小窗口下精简按钮文字，保留视频为主的布局；**QSO Entry** 对窄布局启用换行与滚动。
+
+优先使用 WinForms 自适应布局和字体 DPI 缩放，不会单纯缩小文字。建议在 Windows 100%、125%、150% 显示缩放下验证，特别是旧版本保存的 DockPanelSuite 窗口布局。
+
+**CW Console：** 当 DockPanelSuite 分配的窗口小于原有最小可用尺寸时，频谱、Pileup 列表、CW TX 控件和 F1–F8 宏区域通过滚动仍可访问，不会因停靠缩放被裁切；解码及频谱绘制链路未修改。

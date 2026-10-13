@@ -106,7 +106,9 @@
       // 
       // flowLayoutPanel1
       // 
-      flowLayoutPanel1.AutoSize = true;
+      flowLayoutPanel1.AutoSize = false;
+      flowLayoutPanel1.AutoScroll = true;
+      flowLayoutPanel1.WrapContents = true;
       flowLayoutPanel1.Controls.Add(panel1);
       flowLayoutPanel1.Controls.Add(panel2);
       flowLayoutPanel1.Controls.Add(panel3);
