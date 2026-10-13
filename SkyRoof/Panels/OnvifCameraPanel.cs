@@ -75,6 +75,9 @@ namespace SkyRoof
       commands.Controls.Add(stop);
       commands.Controls.Add(play);
       header.Controls.Add(commands, 1, 0);
+      // Keep the font instances stable during continuous window resizing.
+      Font normalTitleFont = title.Font;
+      Font compactTitleFont = new Font("Segoe UI Semibold", 9F);
       header.SizeChanged += (_, _) =>
       {
         bool narrow = header.ClientSize.Width < 465;
@@ -82,8 +85,9 @@ namespace SkyRoof
         reconnect.Width = narrow ? 61 : 92;
         settings.Text = narrow ? "Setup" : "Settings";
         settings.Width = narrow ? 64 : 82;
-        title.Font = new Font("Segoe UI Semibold", narrow ? 9F : 11F);
+        title.Font = narrow ? compactTitleFont : normalTitleFont;
       };
+      Disposed += (_, _) => compactTitleFont.Dispose();
 
       var footer = new TableLayoutPanel
       {
