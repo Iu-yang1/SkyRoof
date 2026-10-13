@@ -43,3 +43,13 @@ This guide documents **[Iu-yang1/SkyRoof](https://github.com/Iu-yang1/SkyRoof)**
 [Satellite data and tuning](satellite-data-and-tuning.md) · [CAT, FT4 and remote](radio-and-ft4.md) · [IC-9700 spectrum](spectrum.md) · [Rotator and interface](rotator-and-ui.md) · [Troubleshooting and PR history](troubleshooting-and-history.md).
 
 **Feature-status convention:** A capability described as **experimental** is present in source code but should not be treated as production-ready. Pages describe the current repository implementation, not a promise that every radio/firmware supports every command.
+
+
+## Uniform window zoom (no reflow or scrollbars)
+
+The experimental wrapping/scrolling dock layout of PR #84 was reverted. The main radio toolbar and Frequency Control now use **uniform proportional zoom**, resizing controls, their click targets, horizontal and vertical spacing, and fonts by the *same scale factor*, measured from an immutable design-size baseline to avoid cumulative rounding errors.
+
+- **Main toolbar**: the satellite selector, photo, RX/TX frequency controls, gain, rotator, PTT and clock keep their original order and remain visible; the complete strip shrinks as the main window narrows.
+- **Frequency Control**: the two Base groups and Tuning group keep their original two-column arrangement and relative positions; the entire surface scales to fit the available dock area without overflow scrolling.
+- Font size also reduces when the pane becomes narrow. This is intentional and may be small at extreme window sizes. Increase the docked pane size to restore legibility.
+- Other existing dock contents retain their pre-PR#84 layouts for safety; GPU video, scope drawing and CW decoder paths have not been modified by this zoom pass. Interactive Windows/DPI checks are required before extending the transform to other panels.
