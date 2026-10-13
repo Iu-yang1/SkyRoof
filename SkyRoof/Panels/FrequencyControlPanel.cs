@@ -58,6 +58,7 @@ namespace SkyRoof
       ClientSize = ZoomDesignSize;
       MinimumSize = new Size(260, 190);
       AutoScaleMode = AutoScaleMode.None;
+      AutoScroll = false;
       FormClosing += FrequencyControlPanel_FormClosing;
 
       var root = new TableLayoutPanel
@@ -66,7 +67,9 @@ namespace SkyRoof
         Size = ZoomDesignSize,
         Padding = new Padding(10),
         ColumnCount = 1,
-        RowCount = 3
+        RowCount = 3,
+        AutoSize = false,
+        AutoScroll = false
       };
       root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
       root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
@@ -116,7 +119,14 @@ namespace SkyRoof
       // No reflow, wrapping or scrollbars. The original two-column
       // Frequency Control design is scaled as a single surface: geometry,
       // fonts, controls and click targets share the same uniform factor.
-      var viewport = new Panel { Dock = DockStyle.Fill, AutoScroll = false };
+      var viewport = new Panel
+      {
+        Dock = DockStyle.Fill,
+        AutoSize = false,
+        AutoScroll = false,
+        Margin = Padding.Empty,
+        Padding = Padding.Empty
+      };
       viewport.Controls.Add(root);
       Controls.Add(viewport);
       zoomViewport = viewport;

@@ -30,6 +30,16 @@ namespace VE3NEA.Clock
 
     private void utcLabel_Click(object sender, EventArgs e)
     {
+      SetUtcMode(true);
+    }
+
+    private void localLabel_Click(object sender, EventArgs e)
+    {
+      SetUtcMode(false);
+    }
+
+    private void timeLabel_Click(object sender, EventArgs e)
+    {
       SetUtcMode(!utcMode);
     }
 
@@ -38,6 +48,10 @@ namespace VE3NEA.Clock
       utcMode = value;
       utcLabel.BackColor = utcMode ? Color.Aqua : Color.Teal;
       localLabel.BackColor = utcMode ? Color.Teal : Color.Aqua;
+      utcLabel.ForeColor = utcMode ? Color.Black : Color.White;
+      localLabel.ForeColor = utcMode ? Color.White : Color.Black;
+      utcLabel.BorderStyle = utcMode ? BorderStyle.FixedSingle : BorderStyle.None;
+      localLabel.BorderStyle = utcMode ? BorderStyle.None : BorderStyle.FixedSingle;
       ShowTime();
 
       // the designer assigns UtcMode before MainForm hands the widget its context
@@ -47,14 +61,24 @@ namespace VE3NEA.Clock
     public void ShowTime()
     {
       DateTime now = Now;
-      timeLabel.Text = now.ToString("HH:mm:ss");
-      dateLabel.Text = now.ToString("MMMM dd, yyyy");
+      timeLabel.Text = FormatTime(now);
+      dateLabel.Text = FormatDate(now, utcMode);
+      AccessibleDescription = utcMode
+        ? "Current UTC time. Use Local to switch to computer local time."
+        : "Computer local time. Use UTC to switch to coordinated universal time.";
     }
 
     private void dateLabel_Click(object sender, EventArgs e)
     {
-
+      SetUtcMode(!utcMode);
     }
+
+    internal static string FormatTime(DateTime instant) =>
+      instant.ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
+
+    internal static string FormatDate(DateTime instant, bool utc) =>
+      instant.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
+      + (utc ? " UTC" : " LT");
 
 
 
