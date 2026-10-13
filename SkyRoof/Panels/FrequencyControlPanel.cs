@@ -52,21 +52,37 @@ namespace SkyRoof
     {
       Text = "Frequency Control";
       Name = "FrequencyControlPanel";
-      ClientSize = new Size(760, 430);
-      MinimumSize = new Size(580, 380);
+      ClientSize = new Size(760, 505);
+      MinimumSize = new Size(380, 260);
+      AutoScaleMode = AutoScaleMode.Font;
       FormClosing += FrequencyControlPanel_FormClosing;
 
+      // A dock tab may become smaller than the combined preferred height of
+      // its groups. Keep the base buttons and tuning readouts at usable heights,
+      // then scroll instead of compressing percent-sized rows into each other.
+      var viewport = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
       var root = new TableLayoutPanel
       {
-        Dock = DockStyle.Fill,
+        Dock = DockStyle.Top,
+        AutoSize = true,
+        AutoSizeMode = AutoSizeMode.GrowAndShrink,
         Padding = new Padding(10),
         ColumnCount = 1,
-        RowCount = 3
+        RowCount = 3,
+        MinimumSize = new Size(690, 0)
       };
       root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
       root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-      root.RowStyles.Add(new RowStyle(SizeType.Percent, 48));
-      root.RowStyles.Add(new RowStyle(SizeType.Percent, 52));
+      root.RowStyles.Add(new RowStyle(SizeType.Absolute, 206));
+      root.RowStyles.Add(new RowStyle(SizeType.Absolute, 234));
+      viewport.Resize += (_, _) =>
+      {
+        int available = viewport.ClientSize.Width -
+          (viewport.VerticalScroll.Visible ?
+            SystemInformation.VerticalScrollBarWidth : 0);
+        int width = Math.Max(690, available);
+        if (root.Width != width) root.Width = width;
+      };
 
       SelectionLabel.Dock = DockStyle.Fill;
       SelectionLabel.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
@@ -108,7 +124,9 @@ namespace SkyRoof
       ConfigureTuningGroup();
       root.Controls.Add(TuningGroup, 0, 2);
 
-      Controls.Add(root);
+      viewport.Controls.Add(root);
+      Controls.Add(viewport);
+      root.Width = Math.Max(690, viewport.ClientSize.Width);
     }
 
     private static void ConfigureBaseGroup(
@@ -168,7 +186,7 @@ namespace SkyRoof
         Dock = DockStyle.Fill,
         AutoSize = true,
         FlowDirection = FlowDirection.LeftToRight,
-        WrapContents = false,
+        WrapContents = true,
         Margin = new Padding(0, 7, 0, 0)
       };
       editBtn.Text = "Edit Base...";
