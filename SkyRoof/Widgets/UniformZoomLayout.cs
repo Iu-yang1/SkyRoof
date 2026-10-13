@@ -98,6 +98,7 @@ namespace SkyRoof
       private Font? activeFont;
       private readonly (RowStyle style, float height)[] rows;
       private readonly (ColumnStyle style, float width)[] columns;
+      private readonly int splitterWidth;
 
       internal Snapshot(Control control)
       {
@@ -106,6 +107,7 @@ namespace SkyRoof
         margin = control.Margin;
         padding = control.Padding;
         minSize = control.MinimumSize;
+        splitterWidth = control is SplitContainer split ? split.SplitterWidth : 0;
         originalFont = (Font)control.Font.Clone();
         ownsOriginalFont = true;
 
@@ -149,6 +151,23 @@ namespace SkyRoof
         old?.Dispose();
 
         Control.MinimumSize = Multiply(minSize, factor);
+
+        // Dock.Top / Bottom maintain their unscaled Height in WinForms.
+        // Scale their thickness explicitly; Dock.Fill continues to follow the
+        // parent design surface. This is essential for ONVIF video viewports.
+        if (Control.Dock is DockStyle.Top or DockStyle.Bottom)
+          Control.Height = Math.Max(1, (int)Math.Round(bounds.Height * factor));
+        else if (Control.Dock is DockStyle.Left or DockStyle.Right)
+          Control.Width = Math.Max(1, (int)Math.Round(bounds.Width * factor));
+
+        // The splitter belongs to the custom-rendered CW workspace and must
+        // shrink together with its neighbouring control hit areas.
+        if (Control is SplitContainer split)
+        {
+          int width = Math.Max(1, (int)Math.Round(splitterWidth * factor));
+          if (split.SplitterWidth != width)
+            split.SplitterWidth = width;
+        }
 
         // TableLayoutPanel and docking must keep ownership of their cell
         // positions; overriding those bounds fights WinForms layout.
