@@ -18,6 +18,7 @@ namespace SkyRoof
     public QsoEntryPanel()
     {
       InitializeComponent();
+      DockUniformZoom.Attach(this, flowLayoutPanel1, new Size(734, 128));
     }
 
     public QsoEntryPanel(Context ctx)
@@ -25,6 +26,7 @@ namespace SkyRoof
       this.ctx = ctx;
       Log.Information("Creating QsoEntryPanel");
       InitializeComponent();
+      DockUniformZoom.Attach(this, flowLayoutPanel1, new Size(734, 128));
 
       ApplySettings();
 
