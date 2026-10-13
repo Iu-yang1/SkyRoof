@@ -19,6 +19,7 @@ namespace SkyRoof
     private DockUniformZoom(DockContent owner, Control design, Size designSize)
     {
       owner.AutoScaleMode = AutoScaleMode.None;
+      owner.AutoScroll = false; // DockContent must not add an overflow scrollbar.
       owner.Controls.Remove(design);
       design.Dock = DockStyle.None;
       design.AutoSize = false;
