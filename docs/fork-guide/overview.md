@@ -54,3 +54,5 @@ The main toolbar now keeps **PTT and clock** in dedicated right-side areas; othe
 **Icom LAN Spectrum** retains room for the spectrum by placing the oversized settings toolbar on a single horizontally scrolling row. **ONVIF Live video** shortens command captions in narrow tabs; the main video surface stays dominant. **QSO Entry** enables wrapping and vertical scrolling when docked narrowly.
 
 DPI: controls use WinForms font scaling and layout containers; text remains legible instead of being proportionally shrunk. Live Windows checks at 100%, 125% and 150% scaling are still recommended, especially for restored layouts created by older builds.
+
+**CW Console:** the complete spectrum, Pileup list, transmit controls and F1–F8 macro row now remain accessible via panel scrolling if DockPanelSuite allocates a pane smaller than the Console's readable minimum. The decoding/painting pipeline is unchanged.
