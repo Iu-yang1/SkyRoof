@@ -13,6 +13,7 @@ namespace SkyRoof
   public sealed class CwConsolePanel : DockContent
   {
     private readonly Context ctx;
+    private DockUniformZoom? dockZoom;
     private readonly object stateSync = new();
 
     private readonly Button RxToggleBtn = new();
@@ -137,7 +138,8 @@ namespace SkyRoof
       // Keep the Console usable as a compact floating tool window. The old
       // 1040x900 / 720x720 geometry was unnecessarily tall on 1080p displays.
       ClientSize = new Size(1010, 640);
-      MinimumSize = new Size(720, 560);
+      MinimumSize = new Size(220, 160);
+      AutoScaleMode = AutoScaleMode.None;
       KeyPreview = true;
 
       BuildUi();
@@ -205,7 +207,7 @@ namespace SkyRoof
         {
           Dock = DockStyle.Fill,
           AutoSize = false,
-          AutoScroll = true,
+          AutoScroll = false,
           Height = 36,
           WrapContents = false,
           FlowDirection =
@@ -311,7 +313,7 @@ namespace SkyRoof
         {
           Dock = DockStyle.Fill,
           AutoSize = false,
-          AutoScroll = true,
+          AutoScroll = false,
           Height = 27,
           WrapContents = false,
           FlowDirection =
@@ -356,7 +358,7 @@ namespace SkyRoof
       root.Controls.Add(SelectedRxView, 0, 3);
       root.Controls.Add(BuildTransmitPanel(), 0, 4);
 
-      Controls.Add(root);
+      dockZoom = DockUniformZoom.Attach(this, root, new Size(1010, 640));
     }
 
     internal static TableLayoutPanel CreateSkimmerRootLayout()
@@ -371,11 +373,12 @@ namespace SkyRoof
       };
       root.ColumnStyles.Add(
         new ColumnStyle(SizeType.Percent, 100));
-      root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-      root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+      // Fixed baseline row heights: do not reflow CW tools when docked.
+      root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+      root.RowStyles.Add(new RowStyle(SizeType.Absolute, 29));
       root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-      root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-      root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+      root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+      root.RowStyles.Add(new RowStyle(SizeType.Absolute, 169));
       return root;
     }
 
@@ -434,7 +437,7 @@ namespace SkyRoof
         Dock = DockStyle.Fill,
         FlowDirection = FlowDirection.LeftToRight,
         WrapContents = false,
-        AutoScroll = true,
+        AutoScroll = false,
         Margin = new Padding(0)
       };
       AfWindowLabel.Text = "AF ↑  ·  Time ←";
@@ -500,8 +503,7 @@ namespace SkyRoof
       var group = new GroupBox
       {
         Dock = DockStyle.Fill,
-        AutoSize = true,
-        AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        AutoSize = false,
         MinimumSize = new Size(0, 145),
         Text = "CW TX — IC-9700 / SkyCAT",
         Margin = new Padding(0, 2, 0, 0),
@@ -510,8 +512,7 @@ namespace SkyRoof
       var layout = new TableLayoutPanel
       {
         Dock = DockStyle.Fill,
-        AutoSize = true,
-        AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        AutoSize = false,
         ColumnCount = 1,
         RowCount = 4,
         Margin = new Padding(0)
@@ -544,7 +545,7 @@ namespace SkyRoof
       var actions = new FlowLayoutPanel
       {
         Dock = DockStyle.Fill,
-        AutoScroll = true,
+        AutoScroll = false,
         WrapContents = false,
         Margin = new Padding(0, 2, 0, 0)
       };
@@ -586,7 +587,7 @@ namespace SkyRoof
       var macros = new FlowLayoutPanel
       {
         Dock = DockStyle.Fill,
-        AutoScroll = true,
+        AutoScroll = false,
         WrapContents = false,
         Margin = new Padding(0)
       };
