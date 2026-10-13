@@ -54,3 +54,5 @@
 **Icom LAN Spectrum** 将较长的频谱设置工具栏放入可横向滚动的单行区域，保证频谱与瀑布图仍获得空间。**ONVIF Live video** 在小窗口下精简按钮文字，保留视频为主的布局；**QSO Entry** 对窄布局启用换行与滚动。
 
 优先使用 WinForms 自适应布局和字体 DPI 缩放，不会单纯缩小文字。建议在 Windows 100%、125%、150% 显示缩放下验证，特别是旧版本保存的 DockPanelSuite 窗口布局。
+
+**CW Console：** 当 DockPanelSuite 分配的窗口小于原有最小可用尺寸时，频谱、Pileup 列表、CW TX 控件和 F1–F8 宏区域通过滚动仍可访问，不会因停靠缩放被裁切；解码及频谱绘制链路未修改。
