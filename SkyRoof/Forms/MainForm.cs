@@ -1647,6 +1647,14 @@ namespace SkyRoof
           RotatorControlCard == null)
         return;
 
+      // Scale the whole popover to the active monitor DPI rather than
+      // enlarging text alone (which clips AZ/EL and wheel hit targets).
+      using (Graphics screenGraphics = CreateGraphics())
+        RotatorControlCard.SetDisplayScale(screenGraphics.DpiX / 96f);
+      if (RotatorControlHost != null)
+        RotatorControlHost.Size = RotatorControlCard.Size;
+      RotatorControlPopup.Size = new Size(
+        RotatorControlCard.Width + 2, RotatorControlCard.Height + 2);
       RotatorControlCard.RefreshState();
 
       Point location =
