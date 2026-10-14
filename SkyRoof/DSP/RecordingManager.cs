@@ -377,8 +377,29 @@ namespace SkyRoof
     {
       if (saveAsMp3) SaveRecordingAsMp3(fileName);
       else SaveRecordingAsWav(fileName);
-
       SaveRecordingEvents(fileName);
+    }
+
+    public Task SaveRecordingAsync(string fileName, bool saveAsMp3)
+    {
+      // Capture immutable array and metadata references before starting any
+      // background task. A new pass may begin recording before export ends.
+      RecordingManager snapshot = new(ctx);
+      lock (recordingLock)
+      {
+        if (IsRecording)
+          throw new InvalidOperationException("Stop the recording before saving.");
+        snapshot.audioBuffer = audioBuffer;
+        snapshot.iqBuffer = iqBuffer;
+        snapshot.samplesInBuffer = samplesInBuffer;
+        snapshot.recordingStartTime = recordingStartTime;
+        snapshot.recordingEvents = new RecordingEvents
+        {
+          StartUtc = recordingEvents.StartUtc,
+          Events = recordingEvents.Events.ToList()
+        };
+      }
+      return Task.Run(() => snapshot.SaveRecording(fileName, saveAsMp3));
     }
 
     public bool RememberRecordingEvents()
