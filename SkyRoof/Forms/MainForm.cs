@@ -350,11 +350,13 @@ namespace SkyRoof
 
     private void Slicer_IqDataAvailable(object? sender, DataEventArgs<Complex32> e)
     {
+      // Headless pass recorder must continue receiving live IQ while the
+      // user plays back an unrelated manual recording.
+      ctx.AutoSelector.AddIqSamples(e);
       if (ctx.RecorderPanel?.isPlayingBack == true) return;
 
       ApplyIqOutputStreamGainAndRoute(e.Data, e.Count);
       ctx.RecorderPanel?.AddIqSamples(e);
-      ctx.AutoSelector.AddIqSamples(e);
       ctx.TelemetryPanel?.ProcessSamples(e);
     }
 
@@ -363,35 +365,40 @@ namespace SkyRoof
       ctx.Ft4ConsolePanel?.AddSamplesFromSdr(e);
       ctx.CwAudio?.AddSamplesFromSdr(e);
 
+      // Always deliver *raw* Slicer PCM to headless recording, independent
+      // of the playback transport and output stream volume settings.
+      ctx.AutoSelector.AddAudioSamples(e);
       if (ctx.RecorderPanel?.isPlayingBack == true) return;
 
       ctx.SpeakerSoundcard.AddSamples(e.Data, 0, e.Count);
-
-      ApplyAudioOutputStreamGainAndRoute(e.Data, e.Count);
       ctx.RecorderPanel?.AddAudioSamples(e);
-      ctx.AutoSelector.AddAudioSamples(e);
+      ApplyAudioOutputStreamGainAndRoute(e.Data, e.Count);
     }
 
     private void ApplyAudioOutputStreamGainAndRoute(float[] data, int count)
     {
+      if (!ctx.Settings.OutputStream.Enabled || count <= 0) return;
       float gain = Dsp.FromDb2(ctx.Settings.OutputStream.Gain);
-      for (int i = 0; i < count; i++) data[i] *= gain;
+      var streamData = new float[count];
+      for (int i = 0; i < count; i++) streamData[i] = data[i] * gain;
 
       if (ctx.Settings.OutputStream.Type == DataStreamType.AudioToVac)
-        ctx.AudioVacSoundcard.AddSamples(data, 0, count);
+        ctx.AudioVacSoundcard.AddSamples(streamData, 0, count);
       else if (ctx.Settings.OutputStream.Type == DataStreamType.AudioToUdp)
-        ctx.UdpStreamSender.Send(data, count);
+        ctx.UdpStreamSender.Send(streamData, count);
     }
 
     private void ApplyIqOutputStreamGainAndRoute(Complex32[] data, int count)
     {
+      if (!ctx.Settings.OutputStream.Enabled || count <= 0) return;
       float gain = Dsp.FromDb2(ctx.Settings.OutputStream.Gain);
-      for (int i = 0; i < count; i++) data[i] *= gain;
+      var streamData = new Complex32[count];
+      for (int i = 0; i < count; i++) streamData[i] = data[i] * gain;
 
       if (ctx.Settings.OutputStream.Type == DataStreamType.IqToVac)
-        ctx.IqVacSoundcard.AddSamples(data, 0, count);
+        ctx.IqVacSoundcard.AddSamples(streamData, 0, count);
       else if (ctx.Settings.OutputStream.Type == DataStreamType.IqToUdp)
-        ctx.UdpStreamSender.Send(data, count);
+        ctx.UdpStreamSender.Send(streamData, count);
     }
 
     internal void RoutePlaybackAudio(float[] data, int offset, int count)
@@ -400,6 +407,7 @@ namespace SkyRoof
 
       ctx.SpeakerSoundcard.AddSamples(data, offset, count);
 
+      // Routing applies its own gain to a detached stream buffer.
       float[] streamData = new float[count];
       Array.Copy(data, offset, streamData, 0, count);
       ApplyAudioOutputStreamGainAndRoute(streamData, count);
