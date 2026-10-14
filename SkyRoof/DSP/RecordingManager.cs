@@ -7,7 +7,7 @@ using VE3NEA;
 
 namespace SkyRoof
 {
-  public class RecordingManager
+  public class RecordingManager : IDisposable
   {
     private readonly Context ctx;
     public event EventHandler? Changed;
@@ -17,6 +17,15 @@ namespace SkyRoof
     private const int PLAYBACK_PREBUFFER_CHUNKS = 10;
     private const int PLAYBACK_TIMER_INTERVAL_MS = 20;
     private const int PLAYBACK_SAMPLES_PER_TICK = SdrConst.AUDIO_SAMPLING_RATE * PLAYBACK_TIMER_INTERVAL_MS / 1000;
+
+    private const int INITIAL_BUFFER_SECONDS = 5;
+    private readonly object recordingLock = new();
+    private InputSoundcard<float>? captureInput;
+    private LoopbackInputSoundcard? loopbackInput;
+    private RecordingAudioSource activeAudioSource = RecordingAudioSource.Sdr;
+    private string recordingSourceStatus = "Not recording";
+    private DateTime lastNonSilentAudioUtc;
+    private long nonSilentAudioSamples;
 
     private float[]? audioBuffer;
     private Complex32[]? iqBuffer;
@@ -34,53 +43,235 @@ namespace SkyRoof
 
     public float[]? AudioBuffer => audioBuffer;
     public Complex32[]? IqBuffer => iqBuffer;
-    public int SamplesInBuffer => samplesInBuffer;
+    public int SamplesInBuffer => System.Threading.Volatile.Read(ref samplesInBuffer);
     public int PlaybackPosition => playbackPosition;
     public bool IsRecording { get; private set; }
     public bool IsPlayingBack { get; private set; }
     public bool IsRecordingAudio => iqBuffer == null;
     public RecordingEvents RecordingEvents => recordingEvents;
     public DateTime RecordingStartTime => recordingStartTime;
-    public bool HasData => samplesInBuffer > 0;
+    public bool HasData => SamplesInBuffer > 0;
+    public int AcceptedAudioSamples => SamplesInBuffer;
+    public RecordingAudioSource ActiveAudioSource => activeAudioSource;
+    public string RecordingSourceStatus => recordingSourceStatus;
+    public long NonSilentAudioSamples => System.Threading.Interlocked.Read(ref nonSilentAudioSamples);
+    public bool IsAudioSilent => IsRecording && IsRecordingAudio &&
+      (DateTime.UtcNow - recordingStartTime).TotalSeconds >= 3 &&
+      (DateTime.UtcNow - lastNonSilentAudioUtc).TotalSeconds >= 3;
+
+    private RecordingAudioSource ResolveSource()
+    {
+      var settings = ctx.Settings.Audio;
+      if (settings.RecorderSource != RecordingAudioSource.Auto)
+        return settings.RecorderSource;
+
+      return ctx.Sdr?.IsRunning() == true
+        ? RecordingAudioSource.Sdr
+        : RecordingAudioSource.RsBa1Loopback;
+    }
+
+    private string? ResolveCaptureDevice() =>
+      ctx.Settings.Audio.RecorderCaptureDeviceId ??
+      ctx.Settings.CwConsole.CaptureDeviceId;
+
+    private string? ResolveLoopbackDevice() =>
+      ctx.Settings.Audio.RecorderLoopbackDeviceId ??
+      ctx.Settings.CwConsole.RsBa1LoopbackDeviceId ??
+      ctx.Settings.Audio.RsBa1PlaybackDeviceId ??
+      ctx.Settings.Audio.SpeakerSoundcard;
+
+    private void StartExternalAudioInput()
+    {
+      if (activeAudioSource == RecordingAudioSource.Sdr)
+      {
+        recordingSourceStatus = "SDR demodulator";
+        return;
+      }
+
+      if (activeAudioSource == RecordingAudioSource.WasapiCapture)
+      {
+        var id = ResolveCaptureDevice();
+        if (string.IsNullOrWhiteSpace(id))
+        {
+          recordingSourceStatus = "USB AF capture device not configured";
+          Log.Warning("Recorder: USB AF capture device is not configured");
+          return;
+        }
+
+        captureInput = new InputSoundcard<float>(
+          id, SdrConst.AUDIO_SAMPLING_RATE,
+          captureBufferMilliseconds: 40, readerBlockSizeSamples: 1600);
+        captureInput.SamplesAvailable += ExternalAudioSamplesAvailable;
+        captureInput.Enabled = true;
+        recordingSourceStatus = captureInput.IsRunning
+          ? "USB AF capture: " + captureInput.GetDisplayName()
+          : "USB AF capture failed to start: " + captureInput.GetDisplayName();
+        return;
+      }
+
+      var loopbackId = ResolveLoopbackDevice();
+      if (string.IsNullOrWhiteSpace(loopbackId))
+      {
+        recordingSourceStatus = "RS-BA1 playback endpoint not configured";
+        Log.Warning("Recorder: RS-BA1 loopback playback endpoint is not configured");
+        return;
+      }
+
+      loopbackInput = new LoopbackInputSoundcard(loopbackId, SdrConst.AUDIO_SAMPLING_RATE);
+      loopbackInput.SamplesAvailable += ExternalAudioSamplesAvailable;
+      loopbackInput.Enabled = true;
+      recordingSourceStatus = loopbackInput.IsRunning
+        ? "RS-BA1 loopback: " + loopbackInput.GetDisplayName()
+        : "RS-BA1 loopback failed to start: " + loopbackInput.GetDisplayName();
+    }
+
+    private void ExternalAudioSamplesAvailable(object? sender, DataEventArgs<float> args)
+    {
+      // Only the selected external source is fed to this recorder. Do not
+      // route it through Slicer or Output Stream Gain.
+      AddAudioSamples(args, external: true);
+    }
+
+    private void StopExternalAudioInput()
+    {
+      var capture = captureInput;
+      captureInput = null;
+      if (capture != null)
+      {
+        capture.SamplesAvailable -= ExternalAudioSamplesAvailable;
+        capture.Dispose();
+      }
+
+      var loopback = loopbackInput;
+      loopbackInput = null;
+      if (loopback != null)
+      {
+        loopback.SamplesAvailable -= ExternalAudioSamplesAvailable;
+        loopback.Dispose();
+      }
+    }
 
     public void StartRecording(bool isAudio)
     {
-      if (isAudio)
+      if (IsRecording) StopRecording();
+
+      lock (recordingLock)
       {
-        audioBuffer = new float[BUFFER_SIZE];
-        iqBuffer = null;
-        Log.Information("Starting audio recording");
-      }
-      else
-      {
-        iqBuffer = new Complex32[BUFFER_SIZE];
-        audioBuffer = null;
-        Log.Information("Starting I/Q recording");
+        // Five seconds initially; grow only when samples actually arrive.
+        // 30 minutes is a cap, not an up-front 345/691 MB allocation.
+        if (isAudio)
+        {
+          audioBuffer = new float[SdrConst.AUDIO_SAMPLING_RATE * INITIAL_BUFFER_SECONDS];
+          iqBuffer = null;
+        }
+        else
+        {
+          iqBuffer = new Complex32[SdrConst.AUDIO_SAMPLING_RATE * INITIAL_BUFFER_SECONDS];
+          audioBuffer = null;
+        }
+
+        activeAudioSource = isAudio ? ResolveSource() : RecordingAudioSource.Sdr;
+        samplesInBuffer = 0;
+        playbackPosition = 0;
+        recordingStartTime = DateTime.UtcNow;
+        lastNonSilentAudioUtc = DateTime.MinValue;
+        System.Threading.Interlocked.Exchange(ref nonSilentAudioSamples, 0);
+        recordingEvents.Start(ctx);
+        recordingEvents.StartUtc = recordingStartTime;
+        IsRecording = true;
+        recordingSourceStatus = isAudio ? activeAudioSource.ToString() : "SDR I/Q";
       }
 
-      samplesInBuffer = 0;
-      playbackPosition = 0;
-      recordingStartTime = DateTime.UtcNow;
-      recordingEvents.Start(ctx);
-      IsRecording = true;
+      Log.Information("Starting {Mode} recording from {Source}",
+        isAudio ? "audio" : "I/Q", activeAudioSource);
+      if (isAudio) StartExternalAudioInput();
     }
 
     public TimeSpan StopRecording()
     {
-      IsRecording = false;
+      lock (recordingLock) IsRecording = false;
+      StopExternalAudioInput();
       return DateTime.UtcNow - recordingStartTime;
     }
 
     public bool AddIqSamples(DataEventArgs<Complex32> e)
     {
-      if (!IsRecording || iqBuffer == null || IsRecordingAudio) return false;
-      return AddSamples(e.Data, iqBuffer);
+      ArgumentNullException.ThrowIfNull(e);
+      lock (recordingLock)
+      {
+        if (!IsRecording || iqBuffer == null) return false;
+        return AddSamples(e.Data, e.Count, ref iqBuffer);
+      }
     }
 
-    public bool AddAudioSamples(DataEventArgs<float> e)
+    public bool AddAudioSamples(DataEventArgs<float> e) =>
+      AddAudioSamples(e, external: false);
+
+    private bool AddAudioSamples(DataEventArgs<float> e, bool external)
     {
-      if (!IsRecording || audioBuffer == null || !IsRecordingAudio) return false;
-      return AddSamples(e.Data, audioBuffer);
+      ArgumentNullException.ThrowIfNull(e);
+      lock (recordingLock)
+      {
+        if (!IsRecording || audioBuffer == null ||
+            (activeAudioSource == RecordingAudioSource.Sdr) == external)
+          return false;
+        int oldCount = samplesInBuffer;
+        bool full = AddSamples(e.Data, e.Count, ref audioBuffer);
+        int added = samplesInBuffer - oldCount;
+        // Inspect only the effective PCM, never unused pooled-array space.
+        // This distinguishes a running capture endpoint streaming zeros
+        // from an endpoint that has stopped delivering audio altogether.
+        long signalSamples = 0;
+        for (int i = 0; i < added; i++)
+          if (float.IsFinite(e.Data[i]) && Math.Abs(e.Data[i]) > 0.001f)
+            signalSamples++;
+        if (signalSamples > 0)
+        {
+          lastNonSilentAudioUtc = DateTime.UtcNow;
+          System.Threading.Interlocked.Add(ref nonSilentAudioSamples, signalSamples);
+        }
+        return full;
+      }
+    }
+
+    private bool AddSamples<T>(T[] source, int validCount, ref T[]? buffer)
+    {
+      int written = AppendValidSamples(source, validCount, ref buffer,
+        samplesInBuffer, BUFFER_SIZE);
+      if (written == 0) return false;
+      samplesInBuffer += written;
+      return samplesInBuffer >= BUFFER_SIZE;
+    }
+
+    internal static int AppendValidSamples<T>(T[] source, int validCount,
+      ref T[]? buffer, int alreadyWritten, int maximum)
+    {
+      ArgumentNullException.ThrowIfNull(source);
+      if (validCount < 0 || validCount > source.Length)
+        throw new ArgumentOutOfRangeException(nameof(validCount),
+          "Valid sample count is outside the source buffer.");
+      if (buffer == null || validCount == 0) return 0;
+      if (alreadyWritten < 0 || maximum < 0 || alreadyWritten > maximum)
+        throw new ArgumentOutOfRangeException(nameof(alreadyWritten));
+
+      int toWrite = Math.Min(validCount, maximum - alreadyWritten);
+      if (toWrite <= 0) return 0;
+      int required = alreadyWritten + toWrite;
+      if (required > buffer.Length)
+      {
+        int capacity = (int)Math.Min(maximum,
+          Math.Max((long)required, Math.Max(1L, (long)buffer.Length * 2)));
+        Array.Resize(ref buffer, capacity);
+      }
+
+      Array.Copy(source, 0, buffer, alreadyWritten, toWrite);
+      return toWrite;
+    }
+
+    public void Dispose()
+    {
+      StopRecording();
+      GC.SuppressFinalize(this);
     }
 
     public bool StartPlayback()
@@ -200,6 +391,7 @@ namespace SkyRoof
 
       playbackPosition = 0;
       LoadRecordingEvents(filename);
+      recordingStartTime = recordingEvents.StartUtc;
       Changed?.Invoke(this, EventArgs.Empty);
       return HasData;
     }
@@ -208,8 +400,29 @@ namespace SkyRoof
     {
       if (saveAsMp3) SaveRecordingAsMp3(fileName);
       else SaveRecordingAsWav(fileName);
-
       SaveRecordingEvents(fileName);
+    }
+
+    public Task SaveRecordingAsync(string fileName, bool saveAsMp3)
+    {
+      // Capture immutable array and metadata references before starting any
+      // background task. A new pass may begin recording before export ends.
+      RecordingManager snapshot = new(ctx);
+      lock (recordingLock)
+      {
+        if (IsRecording)
+          throw new InvalidOperationException("Stop the recording before saving.");
+        snapshot.audioBuffer = audioBuffer;
+        snapshot.iqBuffer = iqBuffer;
+        snapshot.samplesInBuffer = samplesInBuffer;
+        snapshot.recordingStartTime = recordingStartTime;
+        snapshot.recordingEvents = new RecordingEvents
+        {
+          StartUtc = recordingEvents.StartUtc,
+          Events = recordingEvents.Events.ToList()
+        };
+      }
+      return Task.Run(() => snapshot.SaveRecording(fileName, saveAsMp3));
     }
 
     public bool RememberRecordingEvents()
@@ -228,7 +441,7 @@ namespace SkyRoof
 
     public double GetVisibleDurationSeconds()
     {
-      int sampleCount = samplesInBuffer == 0 || IsRecording ? BUFFER_SIZE : samplesInBuffer;
+      int sampleCount = SamplesInBuffer == 0 || IsRecording ? BUFFER_SIZE : SamplesInBuffer;
       return sampleCount / (double)SdrConst.AUDIO_SAMPLING_RATE;
     }
 
@@ -245,16 +458,6 @@ namespace SkyRoof
       if (!string.IsNullOrWhiteSpace(satelliteName)) fileName += "_" + Utils.SanitizeFileNamePart(satelliteName);
 
       return isIqWav ? fileName + ".iq.wav" : fileName + "." + ext;
-    }
-
-    private bool AddSamples<T>(T[] source, T[] buffer)
-    {
-      int samplesToWrite = Math.Min(source.Length, buffer.Length - samplesInBuffer);
-      if (samplesToWrite <= 0) return false;
-
-      Array.Copy(source, 0, buffer, samplesInBuffer, samplesToWrite);
-      samplesInBuffer += samplesToWrite;
-      return samplesInBuffer >= buffer.Length;
     }
 
     private void PreparePlaybackOutputs()
@@ -278,7 +481,7 @@ namespace SkyRoof
     private float[] ReadAudioSamples(ISampleProvider reader)
     {
       int channels = reader.WaveFormat.Channels;
-      float[] samples = new float[BUFFER_SIZE];
+      float[] samples = new float[SdrConst.AUDIO_SAMPLING_RATE * INITIAL_BUFFER_SECONDS];
       float[] buffer = new float[4096 * channels];
       samplesInBuffer = 0;
 
@@ -287,6 +490,9 @@ namespace SkyRoof
       {
         int framesRead = samplesRead / channels;
         int framesToCopy = Math.Min(framesRead, BUFFER_SIZE - samplesInBuffer);
+        if (samplesInBuffer + framesToCopy > samples.Length)
+          Array.Resize(ref samples, Math.Min(BUFFER_SIZE,
+            Math.Max(samplesInBuffer + framesToCopy, samples.Length * 2)));
 
         if (channels == 1) Array.Copy(buffer, 0, samples, samplesInBuffer, framesToCopy);
         else
@@ -307,7 +513,7 @@ namespace SkyRoof
 
     private Complex32[] ReadIqSamples(ISampleProvider reader)
     {
-      Complex32[] samples = new Complex32[BUFFER_SIZE];
+      Complex32[] samples = new Complex32[SdrConst.AUDIO_SAMPLING_RATE * INITIAL_BUFFER_SECONDS];
       float[] buffer = new float[4096 * 2];
       samplesInBuffer = 0;
 
@@ -316,6 +522,9 @@ namespace SkyRoof
       {
         int framesRead = samplesRead / 2;
         int framesToCopy = Math.Min(framesRead, BUFFER_SIZE - samplesInBuffer);
+        if (samplesInBuffer + framesToCopy > samples.Length)
+          Array.Resize(ref samples, Math.Min(BUFFER_SIZE,
+            Math.Max(samplesInBuffer + framesToCopy, samples.Length * 2)));
 
         for (int i = 0; i < framesToCopy; i++)
           samples[samplesInBuffer + i] = new Complex32(buffer[2 * i], buffer[2 * i + 1]);
@@ -336,67 +545,108 @@ namespace SkyRoof
       recordingEvents = RecordingEvents.Load(GetRecordingEventsFileName(recordingFileName));
     }
 
+    // Stream to the encoder in small blocks. The old exporter allocated a
+    // second 345/691 MB buffer for WAV (and more for MP3), causing long
+    // recording saves to stall the UI or run out of managed heap.
     private void SaveRecordingAsWav(string fileName)
     {
-      if (audioBuffer != null)
+      float[]? audio;
+      Complex32[]? iq;
+      int count;
+      lock (recordingLock)
       {
-        WriteWav(fileName, audioBuffer, 1, samplesInBuffer);
-        return;
+        audio = audioBuffer;
+        iq = iqBuffer;
+        count = samplesInBuffer;
+      }
+      if (count <= 0 || (audio == null && iq == null))
+        throw new InvalidOperationException("No recorded samples to save");
+
+      const int chunkFrames = 4096;
+      int channels = audio != null ? 1 : 2;
+      WaveFormat format = WaveFormat.CreateIeeeFloatWaveFormat(
+        SdrConst.AUDIO_SAMPLING_RATE, channels);
+      using var writer = new WaveFileWriter(fileName, format);
+      var bytes = new byte[chunkFrames * channels * sizeof(float)];
+      float[] iqInterleaved = iq == null ? Array.Empty<float>() :
+        new float[chunkFrames * 2];
+
+      for (int pos = 0; pos < count; pos += chunkFrames)
+      {
+        int frames = Math.Min(chunkFrames, count - pos);
+        if (audio != null)
+          Buffer.BlockCopy(audio, pos * sizeof(float),
+            bytes, 0, frames * sizeof(float));
+        else
+        {
+          for (int i = 0; i < frames; i++)
+          {
+            iqInterleaved[2 * i] = iq![pos + i].Real;
+            iqInterleaved[2 * i + 1] = iq[pos + i].Imaginary;
+          }
+          Buffer.BlockCopy(iqInterleaved, 0,
+            bytes, 0, frames * 2 * sizeof(float));
+        }
+        writer.Write(bytes, 0, frames * channels * sizeof(float));
+      }
+    }
+
+    internal sealed class RecordingPcm16WaveProvider : IWaveProvider
+    {
+      private readonly float[] samples;
+      private readonly int sampleCount;
+      private int position;
+
+      public WaveFormat WaveFormat { get; } =
+        new WaveFormat(SdrConst.AUDIO_SAMPLING_RATE, 16, 1);
+
+      public RecordingPcm16WaveProvider(float[] samples, int sampleCount)
+      {
+        this.samples = samples;
+        this.sampleCount = sampleCount;
       }
 
-      if (iqBuffer == null)
-        throw new InvalidOperationException("No recording to save");
-
-      float[] interleaved = new float[samplesInBuffer * 2];
-      for (int i = 0; i < samplesInBuffer; i++)
+      public int Read(byte[] buffer, int offset, int count)
       {
-        interleaved[2 * i] = iqBuffer[i].Real;
-        interleaved[2 * i + 1] = iqBuffer[i].Imaginary;
+        int frames = Math.Min(count / sizeof(short), sampleCount - position);
+        for (int i = 0; i < frames; i++)
+        {
+          float sample = Math.Clamp(samples[position + i], -1f, 1f);
+          short pcm = (short)(sample * short.MaxValue);
+          int index = offset + i * sizeof(short);
+          buffer[index] = (byte)pcm;
+          buffer[index + 1] = (byte)(pcm >> 8);
+        }
+        position += frames;
+        return frames * sizeof(short);
       }
-
-      WriteWav(fileName, interleaved, 2, samplesInBuffer);
     }
 
     private void SaveRecordingAsMp3(string filename)
     {
-      if (audioBuffer == null)
-        throw new InvalidOperationException("No audio data available for MP3 export");
+      float[]? audio;
+      int count;
+      lock (recordingLock)
+      {
+        audio = audioBuffer;
+        count = samplesInBuffer;
+      }
+
+      if (audio == null || count <= 0)
+        throw new InvalidOperationException("No audio samples for MP3 export");
 
       const int targetSampleRate = 16000;
       const int targetBitrate = 24000;
 
-      short[] pcm = new short[samplesInBuffer];
-      for (int i = 0; i < samplesInBuffer; i++)
-        pcm[i] = (short)(Math.Clamp(audioBuffer[i], -1f, 1f) * short.MaxValue);
-
-      byte[] inputBytes = new byte[pcm.Length * sizeof(short)];
-      Buffer.BlockCopy(pcm, 0, inputBytes, 0, inputBytes.Length);
-
-      var inputFormat = new WaveFormat(SdrConst.AUDIO_SAMPLING_RATE, 16, 1);
-
-      using var inputStream = new MemoryStream(inputBytes, writable: false);
-      using var rawSource = new RawSourceWaveStream(inputStream, inputFormat);
-      using var resampled = new MediaFoundationResampler(rawSource, targetSampleRate)
+      // Convert float samples into PCM16 incrementally, then resample and
+      // encode through Media Foundation without materializing the whole file.
+      var input = new RecordingPcm16WaveProvider(audio, count);
+      using var resampled = new MediaFoundationResampler(input, targetSampleRate)
       {
         ResamplerQuality = 60
       };
-
       MediaFoundationEncoder.EncodeToMp3(resampled, filename, targetBitrate);
     }
 
-    private void WriteWav(string fileName, float[] samples, int channels, int framesCount)
-    {
-      if (framesCount <= 0) return;
-
-      int floatsToWrite = framesCount * channels;
-      int bytesToWrite = floatsToWrite * sizeof(float);
-
-      byte[] buffer = new byte[bytesToWrite];
-      Buffer.BlockCopy(samples, 0, buffer, 0, bytesToWrite);
-
-      WaveFormat format = WaveFormat.CreateIeeeFloatWaveFormat(SdrConst.AUDIO_SAMPLING_RATE, channels);
-      using var writer = new WaveFileWriter(fileName, format);
-      writer.Write(buffer, 0, buffer.Length);
-    }
   }
 }

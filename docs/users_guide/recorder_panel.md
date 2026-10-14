@@ -1,7 +1,7 @@
 # Recorder Panel
 
 The Recorder panel records the received audio or I/Q signal and plays it back later.
-Up to 30 minutes of data can be stored in the recording buffer.
+Up to 30 minutes of data can be stored in the recording buffer. Buffer allocation grows with recorded samples instead of allocating all 30 minutes immediately, and WAV/MP3 exporters stream samples in small blocks.
 
 ![Recorder panel](../images/recorder_panel.png)
 
@@ -11,8 +11,28 @@ Click **Record** to start recording audio. To choose what to record, click the *
 
 ![Record menu](../images/recorder_record_menu.png)
 
-- **Record Audio** — records the demodulated audio signal (mono);
-- **Record I/Q** — records the complex baseband I/Q signal (stereo).
+- **Record Audio** — records the selected audio source as 48 kHz mono PCM;
+- **Record I/Q** — records the SDR complex baseband I/Q signal (stereo).
+
+The same drop-down now contains **Audio Source**. Choose **Auto** (the default:
+use SkyRoof SDR when running, otherwise capture the configured playback
+endpoint), **SkyRoof SDR**, **IC-9700 USB AF**, or **RS-BA1 playback loopback**.
+You can set the exact input or playback device in **Tools → Settings → Audio**:
+
+- **Recorder USB AF Capture Device**: choose the recording/capture endpoint,
+  normally `Microphone (USB Audio CODEC)`; the radio USB AF/IF output must
+  be set to **AF**.
+- **Recorder RS-BA1 Playback Device**: choose the Windows **render/playback**
+  device RS-BA1 is actually using. It must not be the USB microphone input.
+  Loopback records the entire Windows endpoint mix, not just one process.
+- For a remote IC-9700 controlled via RS-BA1/SkyCAT without a local SDR,
+  select **RS-BA1 playback loopback** and its endpoint.
+
+The Recorder audio source is independent of the **CW Console** source.
+If recording starts but no valid PCM samples arrive after a few seconds,
+Recorder displays a warning with the selected input. Setting a radio's
+frequency or opening the Icom LAN spectrum alone does **not** provide
+Recorder audio.
 
 The button turns red and the status bar shows the recording type and elapsed time while recording is active.
 Click **Record** again to stop.
