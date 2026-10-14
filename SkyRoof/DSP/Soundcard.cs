@@ -453,24 +453,28 @@ namespace VE3NEA
 
     protected override void DoStart()
     {
-      int channelCount = typeof(T) == typeof(Complex32) ? 2 : 1;
-      WaveFormat format = WaveFormat.CreateIeeeFloatWaveFormat(SamplingRate, channelCount);
-
-      soundIn = new WasapiCapture(
-        mmDevice!, false, captureBufferMilliseconds)
+      // Shared WASAPI capture must use the endpoint's actual mix format.
+      // Forcing 48-kHz mono on a stereo/44.1-kHz USB Audio CODEC may
+      // fail initialization, resulting in a silent recorder.
+      soundIn = new WasapiCapture(mmDevice!, false, captureBufferMilliseconds)
       {
-        ShareMode = AudioClientShareMode.Shared,
-        WaveFormat = format
+        ShareMode = AudioClientShareMode.Shared
       };
 
-      captureBuffer = new BufferedWaveProvider(format)
+      WaveFormat nativeFormat = soundIn.WaveFormat;
+      captureBuffer = new BufferedWaveProvider(nativeFormat)
       {
         BufferDuration = TimeSpan.FromSeconds(2),
         DiscardOnBufferOverflow = true,
         ReadFully = false
       };
 
-      SampleSource = captureBuffer.ToSampleProvider();
+      ISampleProvider source = captureBuffer.ToSampleProvider();
+      if (typeof(T) == typeof(float) && source.WaveFormat.Channels != 1)
+        source = new MonoMixSampleProvider(source);
+      if (source.WaveFormat.SampleRate != SamplingRate)
+        source = new WdlResamplingSampleProvider(source, SamplingRate);
+      SampleSource = source;
 
       soundIn.DataAvailable += SoundIn_DataAvailable;
       soundIn.RecordingStopped += Soundcard_Stopped;
