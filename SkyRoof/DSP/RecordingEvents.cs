@@ -53,6 +53,9 @@ namespace SkyRoof
     }
 
     public List<RecordingEvent> Events { get; set; } = [];
+    // Exact recording timeline origin; previously marker positions used the
+    // first satellite event and shifted when selection was initially empty.
+    public DateTime StartUtc { get; set; }
 
     private string? lastSatelliteValue;
     private string? lastTransmitterValue;
@@ -67,6 +70,7 @@ namespace SkyRoof
       lastModeValue = GetDownlinkModeValue(ctx);
 
       var utc = DateTime.UtcNow;
+      StartUtc = utc;
       if (!string.IsNullOrWhiteSpace(lastSatelliteValue))
         Add(utc, "satellite", lastSatelliteValue, GetSelectedNoradId(ctx), lastTransmitterValue ?? string.Empty, GetSelectedTransmitterId(ctx), lastModeValue ?? string.Empty, string.Empty);
     }
@@ -170,6 +174,10 @@ namespace SkyRoof
         RecordingEvents? recordingEvents = JsonSerializer.Deserialize<RecordingEvents>(json);
         if (recordingEvents == null) return new();
 
+        if (recordingEvents.StartUtc == default && recordingEvents.Events.Count > 0)
+          recordingEvents.StartUtc = recordingEvents.Events.Min(e => e.Utc);
+        if (recordingEvents.StartUtc != default)
+          recordingEvents.StartUtc = DateTime.SpecifyKind(recordingEvents.StartUtc, DateTimeKind.Utc);
         foreach (var recordingEvent in recordingEvents.Events)
           if (recordingEvent.Utc.Kind == DateTimeKind.Unspecified)
             recordingEvent.Utc = DateTime.SpecifyKind(recordingEvent.Utc, DateTimeKind.Utc);
