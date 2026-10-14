@@ -2,6 +2,7 @@
 using MathNet.Numerics;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
+using NAudio.Wave.SampleProviders;
 using Serilog;
 
 namespace VE3NEA
