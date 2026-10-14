@@ -213,26 +213,36 @@ namespace SkyRoof
 
     private bool AddSamples<T>(T[] source, int validCount, ref T[]? buffer)
     {
+      int written = AppendValidSamples(source, validCount, ref buffer,
+        samplesInBuffer, BUFFER_SIZE);
+      if (written == 0) return false;
+      samplesInBuffer += written;
+      return samplesInBuffer >= BUFFER_SIZE;
+    }
+
+    internal static int AppendValidSamples<T>(T[] source, int validCount,
+      ref T[]? buffer, int alreadyWritten, int maximum)
+    {
       ArgumentNullException.ThrowIfNull(source);
-      if (buffer == null || validCount <= 0) return false;
-      if (validCount > source.Length)
+      if (validCount < 0 || validCount > source.Length)
         throw new ArgumentOutOfRangeException(nameof(validCount),
-          "The event's valid sample count exceeds its array capacity.");
+          "Valid sample count is outside the source buffer.");
+      if (buffer == null || validCount == 0) return 0;
+      if (alreadyWritten < 0 || maximum < 0 || alreadyWritten > maximum)
+        throw new ArgumentOutOfRangeException(nameof(alreadyWritten));
 
-      int toWrite = Math.Min(validCount, BUFFER_SIZE - samplesInBuffer);
-      if (toWrite <= 0) return false;
-
-      long required = (long)samplesInBuffer + toWrite;
+      int toWrite = Math.Min(validCount, maximum - alreadyWritten);
+      if (toWrite <= 0) return 0;
+      int required = alreadyWritten + toWrite;
       if (required > buffer.Length)
       {
-        int capacity = (int)Math.Min(BUFFER_SIZE,
-          Math.Max(required, (long)buffer.Length * 2));
+        int capacity = (int)Math.Min(maximum,
+          Math.Max((long)required, Math.Max(1L, (long)buffer.Length * 2)));
         Array.Resize(ref buffer, capacity);
       }
 
-      Array.Copy(source, 0, buffer, samplesInBuffer, toWrite);
-      samplesInBuffer += toWrite;
-      return samplesInBuffer >= BUFFER_SIZE;
+      Array.Copy(source, 0, buffer, alreadyWritten, toWrite);
+      return toWrite;
     }
 
     public void Dispose()
@@ -537,7 +547,7 @@ namespace SkyRoof
       }
     }
 
-    private sealed class RecordingPcm16WaveProvider : IWaveProvider
+    internal sealed class RecordingPcm16WaveProvider : IWaveProvider
     {
       private readonly float[] samples;
       private readonly int sampleCount;
