@@ -195,7 +195,10 @@ namespace SkyRoof
       int recordedSamples = Math.Max(RecordingManager.SamplesInBuffer, 0);
       if (recordedSamples == 0) return;
 
-      int visibleSamples = RecordingManager.IsRecording ? RecordingManager.AudioBuffer?.Length ?? RecordingManager.IqBuffer?.Length ?? 0 : recordedSamples;
+      // Recorded samples are kept in a grow-on-demand buffer; the recording
+      // timeline still spans a fixed 30 minutes while actively capturing.
+      int visibleSamples = RecordingManager.IsRecording
+        ? SdrConst.AUDIO_SAMPLING_RATE * 60 * 30 : recordedSamples;
       if (visibleSamples <= 0) return;
 
       float halfHeight = Math.Max(1, (waveformRect.Height - 2) / 2f);
@@ -241,7 +244,8 @@ namespace SkyRoof
 
       foreach (var recordingEvent in RecordingManager.RecordingEvents.Events.OrderBy(e => e.Utc))
       {
-        double eventSeconds = RecordingManager.RecordingEvents.GetRelativeSeconds(recordingEvent);
+        double eventSeconds = (recordingEvent.Utc - RecordingManager.RecordingStartTime).TotalSeconds;
+        if (eventSeconds < 0) continue;
         if (eventSeconds < 0 || eventSeconds > totalSeconds) continue;
 
         int x = waveformRect.Left + (int)Math.Round((waveformRect.Width - 1) * eventSeconds / totalSeconds);
