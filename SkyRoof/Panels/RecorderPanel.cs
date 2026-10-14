@@ -19,6 +19,7 @@ namespace SkyRoof
     private MultimediaTimer.Timer? playbackTimer;
     private RecordingManager recordingManager = null!;
     private DateTime RecordingStart;
+    private readonly ToolStripMenuItem audioSourceMenu = new("Audio Source");
 
     public RecordingEvents RecordingEvents => recordingManager.RecordingEvents;
     internal bool isPlayingBack => recordingManager?.IsPlayingBack == true;
@@ -59,7 +60,44 @@ namespace SkyRoof
       playbackTimer.Resolution = TimeSpan.FromMilliseconds(1);
       playbackTimer.Elapsed += PlaybackTimer_Elapsed;
 
+      InitAudioSourceMenu();
       ApplySettings();
+    }
+
+    private void InitAudioSourceMenu()
+    {
+      // The CW Console input is independent of Recorder. Users must be able
+      // to choose the *actual* audio endpoint being recorded.
+      foreach (RecordingAudioSource source in Enum.GetValues<RecordingAudioSource>())
+      {
+        var item = new ToolStripMenuItem(source switch
+        {
+          RecordingAudioSource.Auto => "Auto (SDR if running, else RS-BA1 playback)",
+          RecordingAudioSource.Sdr => "SkyRoof SDR",
+          RecordingAudioSource.WasapiCapture => "IC-9700 USB AF (Windows input)",
+          RecordingAudioSource.RsBa1Loopback => "RS-BA1 playback (WASAPI loopback)",
+          _ => source.ToString()
+        }) { Tag = source };
+
+        item.Click += (_, _) =>
+        {
+          ctx.Settings.Audio.RecorderSource = source;
+          ctx.Settings.SaveToFile();
+          UpdateAudioSourceMenu();
+        };
+        audioSourceMenu.DropDownItems.Add(item);
+      }
+
+      RecordMenu.Items.Add(new ToolStripSeparator());
+      RecordMenu.Items.Add(audioSourceMenu);
+      UpdateAudioSourceMenu();
+    }
+
+    private void UpdateAudioSourceMenu()
+    {
+      foreach (ToolStripMenuItem item in audioSourceMenu.DropDownItems.OfType<ToolStripMenuItem>())
+        item.Checked = item.Tag is RecordingAudioSource source &&
+                       source == ctx.Settings.Audio.RecorderSource;
     }
 
     private void RecorderPanel_Shown(object sender, EventArgs e)
@@ -88,6 +126,7 @@ namespace SkyRoof
         playbackTimer = null;
       }
 
+      recordingManager.Dispose();
       ctx.RecorderPanel = null;
       ctx.MainForm.RecorderMNU.Checked = false;
 
@@ -118,6 +157,7 @@ namespace SkyRoof
 
     private void RecordMenuBtn_Click(object sender, EventArgs e)
     {
+      UpdateAudioSourceMenu();
       RecordMenu.Show(RecordMenuBtn, new Point(0, RecordMenuBtn.Height));
     }
 
@@ -192,6 +232,8 @@ namespace SkyRoof
       StatusLabel.Text = recordingManager.GetRecordingStatus();
       recordingTimer?.Start();
       RecordingStart = DateTime.Now;
+      if (isAudio)
+        Log.Information("Recorder input selected: {Source}", recordingManager.RecordingSourceStatus);
 
       // Disable controls during recording
       RecordMenuBtn.Enabled = false;
@@ -210,7 +252,9 @@ namespace SkyRoof
       RecordBtn.BackColor = Color.Transparent;
       recordingTimer?.Stop();
 
-      StatusLabel.Text = $"Recording stopped - Duration: {duration:mm\\:ss}";
+      StatusLabel.Text = recordingManager.HasData
+        ? $"Recording stopped - Duration: {duration:mm\\:ss} ({recordingManager.SamplesInBuffer} samples)"
+        : $"No audio/IQ samples recorded - input: {recordingManager.RecordingSourceStatus}";
       Log.Information($"Recording stopped - {recordingManager.SamplesInBuffer} samples recorded");
 
       // Enable Save button if we have data
@@ -425,7 +469,10 @@ namespace SkyRoof
       if (!recordingManager.IsRecording) return;
 
       RememberRecordingEvents();
-      StatusLabel.Text = recordingManager.GetRecordingStatus();
+      StatusLabel.Text = recordingManager.SamplesInBuffer == 0 &&
+                         (DateTime.UtcNow - recordingManager.RecordingStartTime).TotalSeconds > 3
+        ? $"No samples from {recordingManager.RecordingSourceStatus} - check Recorder audio source/device"
+        : recordingManager.GetRecordingStatus();
       WaveformWidget.Invalidate();
     }
 
