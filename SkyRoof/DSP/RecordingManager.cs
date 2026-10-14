@@ -7,7 +7,7 @@ using VE3NEA;
 
 namespace SkyRoof
 {
-  public class RecordingManager
+  public class RecordingManager : IDisposable
   {
     private readonly Context ctx;
     public event EventHandler? Changed;
@@ -17,6 +17,13 @@ namespace SkyRoof
     private const int PLAYBACK_PREBUFFER_CHUNKS = 10;
     private const int PLAYBACK_TIMER_INTERVAL_MS = 20;
     private const int PLAYBACK_SAMPLES_PER_TICK = SdrConst.AUDIO_SAMPLING_RATE * PLAYBACK_TIMER_INTERVAL_MS / 1000;
+
+    private const int INITIAL_BUFFER_SECONDS = 5;
+    private readonly object recordingLock = new();
+    private InputSoundcard<float>? captureInput;
+    private LoopbackInputSoundcard? loopbackInput;
+    private RecordingAudioSource activeAudioSource = RecordingAudioSource.Sdr;
+    private string recordingSourceStatus = "Not recording";
 
     private float[]? audioBuffer;
     private Complex32[]? iqBuffer;
@@ -34,53 +41,204 @@ namespace SkyRoof
 
     public float[]? AudioBuffer => audioBuffer;
     public Complex32[]? IqBuffer => iqBuffer;
-    public int SamplesInBuffer => samplesInBuffer;
+    public int SamplesInBuffer => System.Threading.Volatile.Read(ref samplesInBuffer);
     public int PlaybackPosition => playbackPosition;
     public bool IsRecording { get; private set; }
     public bool IsPlayingBack { get; private set; }
     public bool IsRecordingAudio => iqBuffer == null;
     public RecordingEvents RecordingEvents => recordingEvents;
     public DateTime RecordingStartTime => recordingStartTime;
-    public bool HasData => samplesInBuffer > 0;
+    public bool HasData => SamplesInBuffer > 0;
+    public int AcceptedAudioSamples => SamplesInBuffer;
+    public RecordingAudioSource ActiveAudioSource => activeAudioSource;
+    public string RecordingSourceStatus => recordingSourceStatus;
+
+    private RecordingAudioSource ResolveSource()
+    {
+      var settings = ctx.Settings.Audio;
+      if (settings.RecorderSource != RecordingAudioSource.Auto)
+        return settings.RecorderSource;
+
+      return ctx.Sdr?.Enabled == true
+        ? RecordingAudioSource.Sdr
+        : RecordingAudioSource.RsBa1Loopback;
+    }
+
+    private string? ResolveCaptureDevice() =>
+      ctx.Settings.Audio.RecorderCaptureDeviceId ??
+      ctx.Settings.CwConsole.CaptureDeviceId;
+
+    private string? ResolveLoopbackDevice() =>
+      ctx.Settings.Audio.RecorderLoopbackDeviceId ??
+      ctx.Settings.CwConsole.RsBa1LoopbackDeviceId ??
+      ctx.Settings.Audio.RsBa1PlaybackDeviceId ??
+      ctx.Settings.Audio.SpeakerSoundcard;
+
+    private void StartExternalAudioInput()
+    {
+      if (activeAudioSource == RecordingAudioSource.Sdr)
+      {
+        recordingSourceStatus = "SDR demodulator";
+        return;
+      }
+
+      if (activeAudioSource == RecordingAudioSource.WasapiCapture)
+      {
+        var id = ResolveCaptureDevice();
+        if (string.IsNullOrWhiteSpace(id))
+        {
+          recordingSourceStatus = "USB AF capture device not configured";
+          Log.Warning("Recorder: USB AF capture device is not configured");
+          return;
+        }
+
+        captureInput = new InputSoundcard<float>(
+          id, SdrConst.AUDIO_SAMPLING_RATE,
+          captureBufferMilliseconds: 40, readerBlockSizeSamples: 1600);
+        captureInput.SamplesAvailable += ExternalAudioSamplesAvailable;
+        captureInput.Enabled = true;
+        recordingSourceStatus = captureInput.IsRunning
+          ? "USB AF capture: " + captureInput.GetDisplayName()
+          : "USB AF capture failed to start: " + captureInput.GetDisplayName();
+        return;
+      }
+
+      var loopbackId = ResolveLoopbackDevice();
+      if (string.IsNullOrWhiteSpace(loopbackId))
+      {
+        recordingSourceStatus = "RS-BA1 playback endpoint not configured";
+        Log.Warning("Recorder: RS-BA1 loopback playback endpoint is not configured");
+        return;
+      }
+
+      loopbackInput = new LoopbackInputSoundcard(loopbackId, SdrConst.AUDIO_SAMPLING_RATE);
+      loopbackInput.SamplesAvailable += ExternalAudioSamplesAvailable;
+      loopbackInput.Enabled = true;
+      recordingSourceStatus = loopbackInput.IsRunning
+        ? "RS-BA1 loopback: " + loopbackInput.GetDisplayName()
+        : "RS-BA1 loopback failed to start: " + loopbackInput.GetDisplayName();
+    }
+
+    private void ExternalAudioSamplesAvailable(object? sender, DataEventArgs<float> args)
+    {
+      // Only the selected external source is fed to this recorder. Do not
+      // route it through Slicer or Output Stream Gain.
+      AddAudioSamples(args, external: true);
+    }
+
+    private void StopExternalAudioInput()
+    {
+      var capture = captureInput;
+      captureInput = null;
+      if (capture != null)
+      {
+        capture.SamplesAvailable -= ExternalAudioSamplesAvailable;
+        capture.Dispose();
+      }
+
+      var loopback = loopbackInput;
+      loopbackInput = null;
+      if (loopback != null)
+      {
+        loopback.SamplesAvailable -= ExternalAudioSamplesAvailable;
+        loopback.Dispose();
+      }
+    }
 
     public void StartRecording(bool isAudio)
     {
-      if (isAudio)
+      if (IsRecording) StopRecording();
+
+      lock (recordingLock)
       {
-        audioBuffer = new float[BUFFER_SIZE];
-        iqBuffer = null;
-        Log.Information("Starting audio recording");
-      }
-      else
-      {
-        iqBuffer = new Complex32[BUFFER_SIZE];
-        audioBuffer = null;
-        Log.Information("Starting I/Q recording");
+        // Five seconds initially; grow only when samples actually arrive.
+        // 30 minutes is a cap, not an up-front 345/691 MB allocation.
+        if (isAudio)
+        {
+          audioBuffer = new float[SdrConst.AUDIO_SAMPLING_RATE * INITIAL_BUFFER_SECONDS];
+          iqBuffer = null;
+        }
+        else
+        {
+          iqBuffer = new Complex32[SdrConst.AUDIO_SAMPLING_RATE * INITIAL_BUFFER_SECONDS];
+          audioBuffer = null;
+        }
+
+        activeAudioSource = isAudio ? ResolveSource() : RecordingAudioSource.Sdr;
+        samplesInBuffer = 0;
+        playbackPosition = 0;
+        recordingStartTime = DateTime.UtcNow;
+        recordingEvents.Start(ctx);
+        recordingEvents.StartUtc = recordingStartTime;
+        IsRecording = true;
+        recordingSourceStatus = isAudio ? activeAudioSource.ToString() : "SDR I/Q";
       }
 
-      samplesInBuffer = 0;
-      playbackPosition = 0;
-      recordingStartTime = DateTime.UtcNow;
-      recordingEvents.Start(ctx);
-      IsRecording = true;
+      Log.Information("Starting {Mode} recording from {Source}",
+        isAudio ? "audio" : "I/Q", activeAudioSource);
+      if (isAudio) StartExternalAudioInput();
     }
 
     public TimeSpan StopRecording()
     {
-      IsRecording = false;
+      lock (recordingLock) IsRecording = false;
+      StopExternalAudioInput();
       return DateTime.UtcNow - recordingStartTime;
     }
 
     public bool AddIqSamples(DataEventArgs<Complex32> e)
     {
-      if (!IsRecording || iqBuffer == null || IsRecordingAudio) return false;
-      return AddSamples(e.Data, iqBuffer);
+      ArgumentNullException.ThrowIfNull(e);
+      lock (recordingLock)
+      {
+        if (!IsRecording || iqBuffer == null) return false;
+        return AddSamples(e.Data, e.Count, ref iqBuffer);
+      }
     }
 
-    public bool AddAudioSamples(DataEventArgs<float> e)
+    public bool AddAudioSamples(DataEventArgs<float> e) =>
+      AddAudioSamples(e, external: false);
+
+    private bool AddAudioSamples(DataEventArgs<float> e, bool external)
     {
-      if (!IsRecording || audioBuffer == null || !IsRecordingAudio) return false;
-      return AddSamples(e.Data, audioBuffer);
+      ArgumentNullException.ThrowIfNull(e);
+      lock (recordingLock)
+      {
+        if (!IsRecording || audioBuffer == null ||
+            (activeAudioSource == RecordingAudioSource.Sdr) == external)
+          return false;
+        return AddSamples(e.Data, e.Count, ref audioBuffer);
+      }
+    }
+
+    private bool AddSamples<T>(T[] source, int validCount, ref T[]? buffer)
+    {
+      ArgumentNullException.ThrowIfNull(source);
+      if (buffer == null || validCount <= 0) return false;
+      if (validCount > source.Length)
+        throw new ArgumentOutOfRangeException(nameof(validCount),
+          "The event's valid sample count exceeds its array capacity.");
+
+      int toWrite = Math.Min(validCount, BUFFER_SIZE - samplesInBuffer);
+      if (toWrite <= 0) return false;
+
+      long required = (long)samplesInBuffer + toWrite;
+      if (required > buffer.Length)
+      {
+        int capacity = (int)Math.Min(BUFFER_SIZE,
+          Math.Max(required, (long)buffer.Length * 2));
+        Array.Resize(ref buffer, capacity);
+      }
+
+      Array.Copy(source, 0, buffer, samplesInBuffer, toWrite);
+      samplesInBuffer += toWrite;
+      return samplesInBuffer >= BUFFER_SIZE;
+    }
+
+    public void Dispose()
+    {
+      StopRecording();
+      GC.SuppressFinalize(this);
     }
 
     public bool StartPlayback()
@@ -200,6 +358,7 @@ namespace SkyRoof
 
       playbackPosition = 0;
       LoadRecordingEvents(filename);
+      recordingStartTime = recordingEvents.StartUtc;
       Changed?.Invoke(this, EventArgs.Empty);
       return HasData;
     }
@@ -228,7 +387,7 @@ namespace SkyRoof
 
     public double GetVisibleDurationSeconds()
     {
-      int sampleCount = samplesInBuffer == 0 || IsRecording ? BUFFER_SIZE : samplesInBuffer;
+      int sampleCount = SamplesInBuffer == 0 || IsRecording ? BUFFER_SIZE : SamplesInBuffer;
       return sampleCount / (double)SdrConst.AUDIO_SAMPLING_RATE;
     }
 
@@ -245,16 +404,6 @@ namespace SkyRoof
       if (!string.IsNullOrWhiteSpace(satelliteName)) fileName += "_" + Utils.SanitizeFileNamePart(satelliteName);
 
       return isIqWav ? fileName + ".iq.wav" : fileName + "." + ext;
-    }
-
-    private bool AddSamples<T>(T[] source, T[] buffer)
-    {
-      int samplesToWrite = Math.Min(source.Length, buffer.Length - samplesInBuffer);
-      if (samplesToWrite <= 0) return false;
-
-      Array.Copy(source, 0, buffer, samplesInBuffer, samplesToWrite);
-      samplesInBuffer += samplesToWrite;
-      return samplesInBuffer >= buffer.Length;
     }
 
     private void PreparePlaybackOutputs()
