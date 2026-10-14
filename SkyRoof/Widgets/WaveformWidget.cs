@@ -192,7 +192,14 @@ namespace SkyRoof
     {
       if (RecordingManager == null) return;
 
+      // A recorder may expand its sample array on the capture thread.
+      // Snapshot the array reference once per paint pass and never index
+      // beyond its capacity even if the writer swaps arrays mid-frame.
+      float[]? audioSnapshot = RecordingManager.AudioBuffer;
+      Complex32[]? iqSnapshot = RecordingManager.IqBuffer;
       int recordedSamples = Math.Max(RecordingManager.SamplesInBuffer, 0);
+      recordedSamples = Math.Min(recordedSamples,
+        audioSnapshot?.Length ?? iqSnapshot?.Length ?? 0);
       if (recordedSamples == 0) return;
 
       // Recorded samples are kept in a grow-on-demand buffer; the recording
@@ -216,12 +223,12 @@ namespace SkyRoof
         if (end > recordedSamples) end = recordedSamples;
 
         float maxMagnitude = 0;
-        if (RecordingManager.AudioBuffer != null)
+        if (audioSnapshot != null)
           for (int i = start; i < end; i++)
-            maxMagnitude = Math.Max(maxMagnitude, Math.Abs(RecordingManager.AudioBuffer[i]));
-        else if (RecordingManager.IqBuffer != null)
+            maxMagnitude = Math.Max(maxMagnitude, Math.Abs(audioSnapshot[i]));
+        else if (iqSnapshot != null)
           for (int i = start; i < end; i++)
-            maxMagnitude = Math.Max(maxMagnitude, RecordingManager.IqBuffer[i].Magnitude);
+            maxMagnitude = Math.Max(maxMagnitude, iqSnapshot[i].Magnitude);
 
         int amplitude = Math.Min((int)Math.Round(maxMagnitude * gain * halfHeight), (int)halfHeight);
         if (amplitude <= 0) continue;
