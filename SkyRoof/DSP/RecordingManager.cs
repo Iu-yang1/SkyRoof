@@ -24,6 +24,8 @@ namespace SkyRoof
     private LoopbackInputSoundcard? loopbackInput;
     private RecordingAudioSource activeAudioSource = RecordingAudioSource.Sdr;
     private string recordingSourceStatus = "Not recording";
+    private DateTime lastNonSilentAudioUtc;
+    private long nonSilentAudioSamples;
 
     private float[]? audioBuffer;
     private Complex32[]? iqBuffer;
@@ -52,6 +54,10 @@ namespace SkyRoof
     public int AcceptedAudioSamples => SamplesInBuffer;
     public RecordingAudioSource ActiveAudioSource => activeAudioSource;
     public string RecordingSourceStatus => recordingSourceStatus;
+    public long NonSilentAudioSamples => System.Threading.Interlocked.Read(ref nonSilentAudioSamples);
+    public bool IsAudioSilent => IsRecording && IsRecordingAudio &&
+      (DateTime.UtcNow - recordingStartTime).TotalSeconds >= 3 &&
+      (DateTime.UtcNow - lastNonSilentAudioUtc).TotalSeconds >= 3;
 
     private RecordingAudioSource ResolveSource()
     {
@@ -168,6 +174,8 @@ namespace SkyRoof
         samplesInBuffer = 0;
         playbackPosition = 0;
         recordingStartTime = DateTime.UtcNow;
+        lastNonSilentAudioUtc = DateTime.MinValue;
+        System.Threading.Interlocked.Exchange(ref nonSilentAudioSamples, 0);
         recordingEvents.Start(ctx);
         recordingEvents.StartUtc = recordingStartTime;
         IsRecording = true;
@@ -207,7 +215,22 @@ namespace SkyRoof
         if (!IsRecording || audioBuffer == null ||
             (activeAudioSource == RecordingAudioSource.Sdr) == external)
           return false;
-        return AddSamples(e.Data, e.Count, ref audioBuffer);
+        int oldCount = samplesInBuffer;
+        bool full = AddSamples(e.Data, e.Count, ref audioBuffer);
+        int added = samplesInBuffer - oldCount;
+        // Inspect only the effective PCM, never unused pooled-array space.
+        // This distinguishes a running capture endpoint streaming zeros
+        // from an endpoint that has stopped delivering audio altogether.
+        long signalSamples = 0;
+        for (int i = 0; i < added; i++)
+          if (float.IsFinite(e.Data[i]) && Math.Abs(e.Data[i]) > 0.001f)
+            signalSamples++;
+        if (signalSamples > 0)
+        {
+          lastNonSilentAudioUtc = DateTime.UtcNow;
+          System.Threading.Interlocked.Add(ref nonSilentAudioSamples, signalSamples);
+        }
+        return full;
       }
     }
 
