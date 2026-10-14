@@ -252,9 +252,11 @@ namespace SkyRoof
       RecordBtn.BackColor = Color.Transparent;
       recordingTimer?.Stop();
 
-      StatusLabel.Text = recordingManager.HasData
-        ? $"Recording stopped - Duration: {duration:mm\\:ss} ({recordingManager.SamplesInBuffer} samples)"
-        : $"No audio/IQ samples recorded - input: {recordingManager.RecordingSourceStatus}";
+      StatusLabel.Text = !recordingManager.HasData
+        ? $"No audio/IQ samples recorded - input: {recordingManager.RecordingSourceStatus}"
+        : recordingManager.IsRecordingAudio && recordingManager.NonSilentAudioSamples == 0
+          ? $"Recording contains silence - verify {recordingManager.RecordingSourceStatus}"
+          : $"Recording stopped - Duration: {duration:mm\\:ss} ({recordingManager.SamplesInBuffer} samples)";
       Log.Information($"Recording stopped - {recordingManager.SamplesInBuffer} samples recorded");
 
       // Enable Save button if we have data
@@ -483,7 +485,9 @@ namespace SkyRoof
       StatusLabel.Text = recordingManager.SamplesInBuffer == 0 &&
                          (DateTime.UtcNow - recordingManager.RecordingStartTime).TotalSeconds > 3
         ? $"No samples from {recordingManager.RecordingSourceStatus} - check Recorder audio source/device"
-        : recordingManager.GetRecordingStatus();
+        : recordingManager.IsAudioSilent
+          ? $"Input is silent/quiet: {recordingManager.RecordingSourceStatus} - check radio AF, squelch and audio endpoint"
+          : recordingManager.GetRecordingStatus();
       WaveformWidget.Invalidate();
     }
 
