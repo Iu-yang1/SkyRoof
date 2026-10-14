@@ -59,7 +59,7 @@ namespace SkyRoof
       if (settings.RecorderSource != RecordingAudioSource.Auto)
         return settings.RecorderSource;
 
-      return ctx.Sdr?.Enabled == true
+      return ctx.Sdr?.IsRunning() == true
         ? RecordingAudioSource.Sdr
         : RecordingAudioSource.RsBa1Loopback;
     }
