@@ -396,7 +396,7 @@ namespace SkyRoof
       WaveformWidget.Invalidate();
     }
 
-    private void SaveRecordingWithDialog(string ext)
+    private async void SaveRecordingWithDialog(string ext)
     {
       bool isMp3 = ext == "mp3";
       bool isIqWav = ext == "wav" && !recordingManager.IsRecordingAudio;
@@ -415,16 +415,27 @@ namespace SkyRoof
 
       string fileName = isIqWav ? EnsureIqWavExtension(dialog.FileName) : dialog.FileName;
 
+      SetSaveButtonsEnabled(false);
       try
       {
-        recordingManager.SaveRecording(fileName, isMp3);
-        StatusLabel.Text = $"Saved to {Path.GetFileName(fileName)}";
-        Log.Information($"Recording saved to {fileName}");
+        StatusLabel.Text = $"Saving {Path.GetFileName(fileName)}...";
+        await recordingManager.SaveRecordingAsync(fileName, isMp3);
+        if (!IsDisposed)
+          StatusLabel.Text = $"Saved to {Path.GetFileName(fileName)}";
+        Log.Information("Recording saved to {File}", fileName);
       }
       catch (Exception ex)
       {
-        MessageBox.Show($"Error saving file: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        if (!IsDisposed)
+          MessageBox.Show($"Error saving file: {ex.Message}", "Error",
+            MessageBoxButtons.OK, MessageBoxIcon.Error);
         Log.Error(ex, "Error saving recording");
+      }
+      finally
+      {
+        if (!IsDisposed)
+          SetSaveButtonsEnabled(recordingManager.HasData &&
+            !recordingManager.IsRecording && !recordingManager.IsPlayingBack);
       }
     }
 
