@@ -57,6 +57,8 @@ namespace SkyRoof
     // the engine's own headless recorder, separate from the manual RecorderPanel (plan §2.5); a segment
     // runs from selection to deselection/LOS and is saved as one file per contiguous segment
     private RecordingManager recorder = null!;
+    private readonly object pendingSaveLock = new();
+    private readonly List<Task> pendingSaves = new();
     private RecordMode segmentMode;
     private DateTime segmentStartLocal;
     private string? segmentSatName;
@@ -117,6 +119,20 @@ namespace SkyRoof
     {
       closing = true;
       SetEnabled(false);
+      // Automatic recordings must be flushed before the application exits.
+      // The normal satellite transition is asynchronous, but shutdown waits
+      // for all submitted MP3/WAV exports to finish.
+      Task[] saves;
+      lock (pendingSaveLock) saves = pendingSaves.ToArray();
+      try
+      {
+        if (!Task.WaitAll(saves, TimeSpan.FromSeconds(120)))
+          Log.Error("Timed out waiting for {Count} automatic recording exports during shutdown", saves.Length);
+      }
+      catch (AggregateException ex)
+      {
+        Log.Error(ex, "One or more automatic recordings could not finish saving");
+      }
     }
 
     // Settings.WasEnabled mirrors Enabled here rather than being written once as the program closes, so a
@@ -491,12 +507,22 @@ namespace SkyRoof
 
       try
       {
-        recorder.SaveRecording(path, isAudio);
-        Log.Information("Auto-selection saved recording {Path}", path);
+        // Snapshot now (before BeginSegment starts the next pass) and encode
+        // on a worker thread, not the WinForms/UI scheduler.
+        Task save = recorder.SaveRecordingAsync(path, isAudio);
+        lock (pendingSaveLock) pendingSaves.Add(save);
+        _ = save.ContinueWith(completed =>
+        {
+          if (completed.IsFaulted)
+            Log.Error(completed.Exception, "Auto-selection failed to save recording {Path}", path);
+          else
+            Log.Information("Auto-selection saved recording {Path}", path);
+          lock (pendingSaveLock) pendingSaves.Remove(save);
+        }, TaskScheduler.Default);
       }
       catch (Exception ex)
       {
-        Log.Error(ex, "Auto-selection failed to save recording {Path}", path);
+        Log.Error(ex, "Auto-selection could not begin saving recording {Path}", path);
       }
     }
 
