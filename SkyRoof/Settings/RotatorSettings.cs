@@ -30,6 +30,22 @@ namespace SkyRoof
     [DefaultValue(9600)]
     public int NativeBaudRate { get; set; } = 9600;
 
+    [DisplayName("Serial Data Bits")]
+    [DefaultValue(8)]
+    public int NativeDataBits { get; set; } = 8;
+
+    [DisplayName("Serial Parity")]
+    [DefaultValue(System.IO.Ports.Parity.None)]
+    public System.IO.Ports.Parity NativeParity { get; set; } = System.IO.Ports.Parity.None;
+
+    [DisplayName("Serial Stop Bits")]
+    [DefaultValue(System.IO.Ports.StopBits.One)]
+    public System.IO.Ports.StopBits NativeStopBits { get; set; } = System.IO.Ports.StopBits.One;
+
+    [DisplayName("Serial Handshake")]
+    [DefaultValue(System.IO.Ports.Handshake.None)]
+    public System.IO.Ports.Handshake NativeHandshake { get; set; } = System.IO.Ports.Handshake.None;
+
     [DisplayName("Native Poll Interval (ms)")]
     [DefaultValue(1000)]
     public int NativePollMs { get; set; } = 1000;
