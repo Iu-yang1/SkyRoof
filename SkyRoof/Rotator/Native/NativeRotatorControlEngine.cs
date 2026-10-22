@@ -170,6 +170,11 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
     throw new TimeoutException("Native rotator position reply timed out");
   }
 
+  private bool HasFreshPositionLockedThreadSafe()
+  {
+    lock(sync) return HasFreshPositionLocked();
+  }
+
   private bool HasFreshPositionLocked() =>
     connected && lastReadUtc != DateTime.MinValue &&
     (DateTime.UtcNow-lastReadUtc).TotalMilliseconds <=
@@ -353,8 +358,9 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
               RotatorDirection direction=jog.Value switch
               {2=>RotatorDirection.Up,4=>RotatorDirection.Down,8=>RotatorDirection.Left,16=>RotatorDirection.Right,
                 _=>throw new InvalidDataException("Invalid motor direction")};
-              if(stopRequested || Interlocked.Read(ref commandVersion)!=selectedVersion)
-                continue; // button released or switched while preparing jog
+              if(stopRequested || Interlocked.Read(ref commandVersion)!=selectedVersion ||
+                !settings.NativeAllowOpenLoopMotion && !HasFreshPositionLockedThreadSafe())
+                continue; // released, switched or feedback went stale
               // A failed serial write may still have transmitted enough
               // bytes to start a motor. Latch possible motion BEFORE I/O.
               lock(sync)requiresStopAfterReconnect=true;
@@ -384,8 +390,9 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
             lock(sync){same=lastWire!=null&&lastWire.SequenceEqual(frame);}
             if(!same)
             {
-              if(stopRequested || Interlocked.Read(ref commandVersion)!=selectedVersion)
-                continue; // STOP/Track-off superseded this pending target
+              if(stopRequested || Interlocked.Read(ref commandVersion)!=selectedVersion ||
+                !settings.NativeAllowOpenLoopMotion && !HasFreshPositionLockedThreadSafe())
+                continue; // STOP superseded target or live feedback expired
               lock(sync)requiresStopAfterReconnect=true;
               device.Write(frame);
               if(settings.NativeProtocol==RotatorProtocolKind.Rotctld)
