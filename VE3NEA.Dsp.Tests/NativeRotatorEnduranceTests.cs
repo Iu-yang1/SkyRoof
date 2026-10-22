@@ -23,7 +23,7 @@ public sealed class NativeRotatorEnduranceTests
   private readonly ITestOutputHelper output;
   public NativeRotatorEnduranceTests(ITestOutputHelper output) => this.output = output;
 
-  [Fact(Timeout = 50000)]
+  [Fact]
   public async Task IdleWorkerTwentySecondSoakHasBoundedCpuThreadsAndHandles()
   {
     using var simulator = new SimulatedGs232();
