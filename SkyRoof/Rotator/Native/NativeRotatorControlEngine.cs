@@ -44,6 +44,7 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
   private int? manualDirection,appliedDirection;
   private byte[]? lastWire;
   private string? error;
+  private long commandVersion;
   private readonly Queue<byte> replyBacklog = new();
   private int spidAzResolution = 0, spidElResolution = 0;
   public event EventHandler? StatusChanged;
@@ -89,6 +90,7 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
          !settings.NativeAllowOpenLoopMotion)return;
       if(appliedDirection.HasValue||manualDirection.HasValue)stopRequested=true;
       requested=bearing;manualDirection=null;
+      commandVersion++;
     }
     wake.Set();
   }
@@ -104,6 +106,7 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
       if(appliedDirection.HasValue && appliedDirection!=value || lastWire!=null ||
           manualDirection.HasValue && manualDirection!=value)stopRequested=true;
       requested=lastWritten=null;manualDirection=value;lastWire=null;
+      commandVersion++;
     }
     wake.Set();
   }
@@ -116,6 +119,7 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
       lastWire=null;
       stopCompleted.Reset();
       stopRequested=true;
+      commandVersion++;
     }
     wake.Set();
   }
@@ -317,11 +321,12 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
         {
           try
           {
-          bool stopNow;int? jog;Bearing? target;
+          bool stopNow;int? jog;Bearing? target;long selectedVersion;
           lock(sync)
           {
             stopNow=stopRequested;stopRequested=false;
             jog=manualDirection;target=requested;
+            selectedVersion=commandVersion;
           }
           if(stopNow)
           {
@@ -338,6 +343,8 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
               RotatorDirection direction=jog.Value switch
               {2=>RotatorDirection.Up,4=>RotatorDirection.Down,8=>RotatorDirection.Left,16=>RotatorDirection.Right,
                 _=>throw new InvalidDataException("Invalid motor direction")};
+              if(stopRequested || Interlocked.Read(ref commandVersion)!=selectedVersion)
+                continue; // button released or switched while preparing jog
               device.Write(NativeRotatorCodec.Jog(direction));
               lock(sync)appliedDirection=jog;
             }
@@ -364,6 +371,8 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
             lock(sync){same=lastWire!=null&&lastWire.SequenceEqual(frame);}
             if(!same)
             {
+              if(stopRequested || Interlocked.Read(ref commandVersion)!=selectedVersion)
+                continue; // STOP/Track-off superseded this pending target
               device.Write(frame);
               if(settings.NativeProtocol==RotatorProtocolKind.Rotctld)
               {
