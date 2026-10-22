@@ -9,6 +9,53 @@ namespace SkyRoof
 {
   public class RotatorSettings : IControlEngineSettings
   {
+    [DisplayName("Controller Driver")]
+    [Description("Native: directly control serial/TCP/UDP rotators without a Hamlib daemon. Legacy: connect to an existing rotctld server.")]
+    [DefaultValue(true)]
+    public bool UseNativeDriver { get; set; } = true;
+
+    [DisplayName("Native Protocol")]
+    [DefaultValue(SkyRoof.NativeRotator.RotatorProtocolKind.Gs232)]
+    public SkyRoof.NativeRotator.RotatorProtocolKind NativeProtocol { get; set; } = SkyRoof.NativeRotator.RotatorProtocolKind.Gs232;
+
+    [DisplayName("Native Transport")]
+    [DefaultValue(SkyRoof.NativeRotator.RotatorTransportKind.Serial)]
+    public SkyRoof.NativeRotator.RotatorTransportKind NativeTransport { get; set; } = SkyRoof.NativeRotator.RotatorTransportKind.Serial;
+
+    [DisplayName("Serial Port")]
+    [DefaultValue("COM9")]
+    public string NativeSerialPort { get; set; } = "COM9";
+
+    [DisplayName("Baud Rate")]
+    [DefaultValue(9600)]
+    public int NativeBaudRate { get; set; } = 9600;
+
+    [DisplayName("Native Poll Interval (ms)")]
+    [DefaultValue(1000)]
+    public int NativePollMs { get; set; } = 1000;
+
+    [DisplayName("Native Response Timeout (ms)")]
+    [DefaultValue(600)]
+    public int NativeReadTimeout { get; set; } = 600;
+
+    [DisplayName("Allow Open Loop Motion")]
+    [Description("Explicit opt-in for protocols with no feedback or STOP. Never enable without checking real mechanical safety.")]
+    [DefaultValue(false)]
+    public bool NativeAllowOpenLoopMotion { get; set; } = false;
+
+    [DisplayName("Custom Point Command")]
+    [DefaultValue("P $AZ $EL\\n")]
+    public string NativePointTemplate { get; set; } = "P $AZ $EL\\n";
+    [DisplayName("Custom STOP Command")]
+    [DefaultValue("")]
+    public string NativeStopTemplate { get; set; } = "";
+    [DisplayName("Custom Query Command")]
+    [DefaultValue("")]
+    public string NativeQueryTemplate { get; set; } = "";
+    [DisplayName("Custom Response Format")]
+    [DefaultValue("")]
+    public string NativeResponseTemplate { get; set; } = "";
+
     [DefaultValue(300)]
     [Description("Delay between the command cycles, ms")]
     public int Delay { get; set; } = 300;
