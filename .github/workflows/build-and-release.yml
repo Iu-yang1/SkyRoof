@@ -118,6 +118,11 @@ jobs:
         run: '"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "install\SkyRoof.iss"'
         shell: cmd
 
+      # Catch missing .NET runtime NuGet DLLs in the INSTALLED payload.
+      - name: Verify installed runtime dependencies
+        shell: pwsh
+        run: ./scripts/test-installer-payload.ps1
+
       - name: Upload Unsigned Artifact
         id: upload-unsigned-artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
