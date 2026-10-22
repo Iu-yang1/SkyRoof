@@ -48,10 +48,51 @@ foreach ($name in $mandatory) {
   }
 }
 
-$ports = Join-Path $target 'System.IO.Ports.dll'
-$version = [System.Reflection.AssemblyName]::GetAssemblyName($ports).Version
-if ($version.Major -ne 10) {
-  throw "Installed System.IO.Ports.dll major version is $($version.Major), expected 10."
+# The .NET host resolves RID-specific NuGet runtimeTargets by relative
+# paths in SkyRoof.deps.json. Verifying only {app}\System.IO.Ports.dll
+# previously produced a false positive and a real startup crash.
+$depsPath = Join-Path $target 'SkyRoof.deps.json'
+$deps = Get-Content -LiteralPath $depsPath -Raw | ConvertFrom-Json -AsHashtable
+$windowsAssets = @()
+foreach ($framework in $deps.targets.Values) {
+  foreach ($package in $framework.Values) {
+    if (-not $package.Contains('runtimeTargets')) { continue }
+    foreach ($asset in $package.runtimeTargets.GetEnumerator()) {
+      if ($asset.Value.rid -notin @('win','win-x64')) { continue }
+      # NuGet assets can include link-time .lib and .pdb symbols that are
+      # not runtime-loadable files and are not part of the installer.
+      if ($asset.Key -notmatch '\.dll$') { continue }
+      $assetName = $asset.Key.Replace('/', [IO.Path]::DirectorySeparatorChar)
+      if (Test-Path -LiteralPath (Join-Path $build $assetName)) {
+        $windowsAssets += $assetName
+      }
+    }
+  }
 }
-Write-Host ("Installer payload OK: {0} DLLs, System.IO.Ports assembly {1}" -f
-  $expectedDlls.Count, $version)
+foreach ($asset in $windowsAssets | Select-Object -Unique) {
+  if (-not (Test-Path -LiteralPath (Join-Path $target $asset))) {
+    throw "Installer omitted .deps.json Windows runtime asset: $asset"
+  }
+}
+
+$ports = Join-Path $target 'runtimes\win\lib\net10.0\System.IO.Ports.dll'
+if (-not (Test-Path -LiteralPath $ports)) {
+  throw 'Installer missing RID-specific System.IO.Ports.dll. Root DLL alone is insufficient.'
+}
+$version = [System.Reflection.AssemblyName]::GetAssemblyName($ports).Version
+if ($version.ToString() -ne '10.0.0.0') {
+  throw "Installed Windows System.IO.Ports.dll version is $version, expected 10.0.0.0."
+}
+# Check what .NET will actually resolve from the installed deps manifest.
+$resolver = [System.Runtime.Loader.AssemblyDependencyResolver]::new(
+  (Join-Path $target 'SkyRoof.dll'))
+$requested = [System.Reflection.AssemblyName]::new(
+  'System.IO.Ports, Version=10.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51')
+$resolved = $resolver.ResolveAssemblyToPath($requested)
+if ([string]::IsNullOrWhiteSpace($resolved) -or
+    -not (Test-Path -LiteralPath $resolved)) {
+  throw 'Installed .NET dependency resolver cannot locate System.IO.Ports 10.0.0.0.'
+}
+Write-Host "Actual assembly resolution: $resolved"
+Write-Host ("Installer payload OK: {0} root DLLs, {1} RID runtime assets, System.IO.Ports {2}" -f
+  $expectedDlls.Count, @($windowsAssets | Select-Object -Unique).Count, $version)

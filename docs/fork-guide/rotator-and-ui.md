@@ -4,7 +4,7 @@
 
 ## Native C# rotator protocol implementation (experimental)
 
-SkyRoof can use an **in-process driver** in **Settings → Rotator Control** by explicitly enabling **UseNativeDriver**. This defaults to **off for existing installations**, so updating SkyRoof never silently takes ownership of a COM port or changes the user's previously configured hardware controller. It does not start or depend on rotctld.exe for GS-232, EasyComm, SPID or the other native protocols. The existing Hamlib TCP client remains available by disabling UseNativeDriver.
+SkyRoof offers **Controller Driver: Auto / Native / LegacyRotctld** in **Settings → Rotator Control**. **Auto is the default**: the normal local GS-232B configuration (COM9, 9600 8N1 and unchanged localhost:4533 settings) automatically uses the in-process native serial driver; an existing nondefault remote rotctld TCP host/port remains in legacy mode. Explicit **Native** or **LegacyRotctld** overrides automatic selection. The old **UseNativeDriver** setting is hidden for compatibility with existing settings files. Only enabling **Rotator Control** opens a device; selecting Auto alone never starts a motor or changes the Track checkbox. Native control does not need a running `rotctld.exe` process.
 
 | Protocol | Native serial | Native TCP bridge | UDP | Feedback | STOP |
 |---|---|---|---|---|---|

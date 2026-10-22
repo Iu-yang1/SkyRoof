@@ -7,12 +7,40 @@ using System.Threading.Tasks;
 
 namespace SkyRoof
 {
+  public enum RotatorDriverMode { Auto, Native, LegacyRotctld }
+
+  // Mirror the serial port enum values while keeping Settings itself free
+  // of System.IO.Ports types. An absent optional driver DLL must not crash
+  // SkyRoof's constructor before the user can even open Settings.
+  public enum RotatorSerialParity { None = 0, Odd = 1, Even = 2, Mark = 3, Space = 4 }
+  public enum RotatorSerialStopBits { None = 0, One = 1, Two = 2, OnePointFive = 3 }
+  public enum RotatorSerialHandshake { None = 0, XOnXOff = 1, RequestToSend = 2, RequestToSendXOnXOff = 3 }
+
   public class RotatorSettings : IControlEngineSettings
   {
     [DisplayName("Controller Driver")]
-    [Description("Native: directly control serial/TCP/UDP rotators without a Hamlib daemon. Legacy: connect to an existing rotctld server.")]
-    [DefaultValue(false)]
+    [Description("Auto uses native control for default GS-232 serial settings and preserves nondefault legacy TCP endpoints. Native and Legacy can be selected explicitly.")]
+    [DefaultValue(RotatorDriverMode.Auto)]
+    public RotatorDriverMode DriverMode { get; set; } = RotatorDriverMode.Auto;
+
+    [Browsable(false)]
+    [Description("Old settings-file field. Use DriverMode to select a rotator driver.")]
     public bool UseNativeDriver { get; set; } = false;
+
+    public bool ResolveUseNativeDriver()
+    {
+      if (DriverMode == RotatorDriverMode.Native) return true;
+      if (DriverMode == RotatorDriverMode.LegacyRotctld) return false;
+
+      // An existing user may have a nondefault remote rotctld server;
+      // silently reinterpreting its TCP address as a native serial port is
+      // undesirable. Default localhost:4533 migrates automatically to
+      // native COM control. Explicit old Native=true is preserved.
+      if (UseNativeDriver || NativeTransport != NativeRotator.RotatorTransportKind.Serial)
+        return true;
+      bool local = Host is "127.0.0.1" or "localhost" or "::1";
+      return local && Port == 4533;
+    }
 
     [DisplayName("Native Protocol")]
     [DefaultValue(SkyRoof.NativeRotator.RotatorProtocolKind.Gs232)]
@@ -35,16 +63,16 @@ namespace SkyRoof
     public int NativeDataBits { get; set; } = 8;
 
     [DisplayName("Serial Parity")]
-    [DefaultValue(System.IO.Ports.Parity.None)]
-    public System.IO.Ports.Parity NativeParity { get; set; } = System.IO.Ports.Parity.None;
+    [DefaultValue(RotatorSerialParity.None)]
+    public RotatorSerialParity NativeParity { get; set; } = RotatorSerialParity.None;
 
     [DisplayName("Serial Stop Bits")]
-    [DefaultValue(System.IO.Ports.StopBits.One)]
-    public System.IO.Ports.StopBits NativeStopBits { get; set; } = System.IO.Ports.StopBits.One;
+    [DefaultValue(RotatorSerialStopBits.One)]
+    public RotatorSerialStopBits NativeStopBits { get; set; } = RotatorSerialStopBits.One;
 
     [DisplayName("Serial Handshake")]
-    [DefaultValue(System.IO.Ports.Handshake.None)]
-    public System.IO.Ports.Handshake NativeHandshake { get; set; } = System.IO.Ports.Handshake.None;
+    [DefaultValue(RotatorSerialHandshake.None)]
+    public RotatorSerialHandshake NativeHandshake { get; set; } = RotatorSerialHandshake.None;
 
     [DisplayName("Serial DTR Enabled")]
     [DefaultValue(false)]
