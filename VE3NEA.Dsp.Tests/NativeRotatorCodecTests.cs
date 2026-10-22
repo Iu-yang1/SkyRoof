@@ -44,10 +44,23 @@ public sealed class NativeRotatorCodecTests
     Assert.Equal(0x20,command[12]);
     Assert.Equal(0x1f,NativeRotatorCodec.Query(RotatorProtocolKind.SpidRot2Prog)![11]);
     Assert.Equal(0x0f,NativeRotatorCodec.Stop(RotatorProtocolKind.SpidRot2Prog)![11]);
-    byte[] reply={0x57,0x30,0x35,0x30,0x35,0x01,0x30,0x34,0x30,0x35,0x01,0x20};
+    byte[] reply={0x57,0x05,0x00,0x05,0x00,0x01,0x04,0x00,0x05,0x00,0x01,0x20};
     Assert.True(NativeRotatorCodec.TryParseSpid(reply,out var p,out _,out _));
     Assert.Equal(145,p.Azimuth);
     Assert.Equal(45,p.Elevation);
+    // The last two fields report resolution, not the reply's position scale.
+    byte[] differentRes=(byte[])reply.Clone();
+    differentRes[5]=2;
+    differentRes[10]=4;
+    Assert.True(NativeRotatorCodec.TryParseSpid(differentRes,out var samePosition,out int azRes,out int elRes));
+    Assert.Equal(145,samePosition.Azimuth);
+    Assert.Equal(45,samePosition.Elevation);
+    Assert.Equal(2,azRes);
+    Assert.Equal(4,elRes);
+    // ASCII digit frames are command frames; don't accept them as feedback.
+    byte[] ascii=(byte[])reply.Clone();
+    ascii[1]=0x35;
+    Assert.False(NativeRotatorCodec.TryParseSpid(ascii,out _,out _,out _));
   }
   [Fact] public void EasyCommParsesEachAxisIndependently()
   {
