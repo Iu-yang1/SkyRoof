@@ -355,12 +355,11 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
                 _=>throw new InvalidDataException("Invalid motor direction")};
               if(stopRequested || Interlocked.Read(ref commandVersion)!=selectedVersion)
                 continue; // button released or switched while preparing jog
+              // A failed serial write may still have transmitted enough
+              // bytes to start a motor. Latch possible motion BEFORE I/O.
+              lock(sync)requiresStopAfterReconnect=true;
               device.Write(NativeRotatorCodec.Jog(direction));
-              lock(sync)
-              {
-                appliedDirection=jog;
-                requiresStopAfterReconnect=true;
-              }
+              lock(sync)appliedDirection=jog;
             }
           }
           else if(target!=null && !PositionFaulted)
@@ -387,8 +386,8 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
             {
               if(stopRequested || Interlocked.Read(ref commandVersion)!=selectedVersion)
                 continue; // STOP/Track-off superseded this pending target
-              device.Write(frame);
               lock(sync)requiresStopAfterReconnect=true;
+              device.Write(frame);
               if(settings.NativeProtocol==RotatorProtocolKind.Rotctld)
               {
                 var ack=ReadReply(b=>Regex.IsMatch(Encoding.ASCII.GetString(b),@"RPRT\s+-?\d+"),
