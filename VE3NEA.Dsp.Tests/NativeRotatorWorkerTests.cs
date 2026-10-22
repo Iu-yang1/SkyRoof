@@ -36,7 +36,7 @@ public sealed class NativeRotatorWorkerTests
     await using var server=new FakeGs232Bridge();
     using var engine=new NativeRotatorControlEngine(CreateSettings(server.Port));
     await UntilAsync(()=>engine.LastReadBearing!=null);
-    engine.RotateTo(new Bearing(Math.PI/2,Math.PI/6));
+    engine.RotateTo(new SkyRoof.Bearing(Math.PI/2,Math.PI/6));
     await UntilAsync(()=>server.Count("W090 030")>0);
     engine.StopRotation();
     await UntilAsync(()=>server.Count("S")>0);
@@ -51,7 +51,7 @@ public sealed class NativeRotatorWorkerTests
     var settings=CreateSettings(server.Port);
     using var engine=new NativeRotatorControlEngine(settings);
     await UntilAsync(()=>engine.LastReadBearing!=null);
-    engine.RotateTo(new Bearing(Math.PI/2,Math.PI/6));
+    engine.RotateTo(new SkyRoof.Bearing(Math.PI/2,Math.PI/6));
     await UntilAsync(()=>server.Count("W090 030")>0);
     await Task.Delay(1250);
     Assert.Equal(1,server.Count("W090 030"));
@@ -64,7 +64,7 @@ public sealed class NativeRotatorWorkerTests
     NativeProtocol=RotatorProtocolKind.Gs232,
     NativeTransport=RotatorTransportKind.Tcp,
     Host="127.0.0.1",
-    Port=port,
+    Port=(ushort)port,
     NativePollMs=500,
     NativeReadTimeout=350,
     ReceiveTimeout=500,
