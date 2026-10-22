@@ -75,19 +75,28 @@ namespace SkyRoof
 
     private void RefreshConditionalSettingsWhenModeChanges(string? name)
     {
-      if (name is not ("SkyRoof.RotatorSettings.DriverMode" or
-          "SkyRoof.RotatorSettings.NativeTransport" or
-          "SkyRoof.RotatorSettings.NativeProtocol")) return;
+      bool rotator = name is
+        "SkyRoof.RotatorSettings.DriverMode" or
+        "SkyRoof.RotatorSettings.NativeTransport" or
+        "SkyRoof.RotatorSettings.NativeProtocol";
 
-      // A PropertyGrid caches nested descriptors while an editor dropdown
-      // is open. Refresh after the edit is committed, so hidden fields and
-      // the network endpoint become visible immediately without reopening
-      // Settings or disturbing the rest of the form.
+      bool spectrum = name is
+        "SkyRoof.IcomLanSpectrumSettings.Source" or
+        "SkyRoof.IcomLanSpectrumSettings.ControlPath";
+
+      if (!rotator && !spectrum) return;
+
+      // PropertyGrid caches nested descriptors while a dropdown is open.
+      // Rebuild the affected subsection after its edit is committed, without
+      // losing values that are now hidden by the other mode.
       BeginInvoke(new Action(() =>
       {
         if (IsDisposed || grid.IsDisposed) return;
         if (grid.SelectedObject is Settings settings)
-          TypeDescriptor.Refresh(settings.Rotator);
+        {
+          if (rotator) TypeDescriptor.Refresh(settings.Rotator);
+          if (spectrum) TypeDescriptor.Refresh(settings.IcomLanSpectrum);
+        }
         grid.Refresh();
       }));
     }
