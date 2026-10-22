@@ -9,6 +9,78 @@ namespace SkyRoof
 {
   public class RotatorSettings : IControlEngineSettings
   {
+    [DisplayName("Controller Driver")]
+    [Description("Native: directly control serial/TCP/UDP rotators without a Hamlib daemon. Legacy: connect to an existing rotctld server.")]
+    [DefaultValue(false)]
+    public bool UseNativeDriver { get; set; } = false;
+
+    [DisplayName("Native Protocol")]
+    [DefaultValue(SkyRoof.NativeRotator.RotatorProtocolKind.Gs232)]
+    public SkyRoof.NativeRotator.RotatorProtocolKind NativeProtocol { get; set; } = SkyRoof.NativeRotator.RotatorProtocolKind.Gs232;
+
+    [DisplayName("Native Transport")]
+    [DefaultValue(SkyRoof.NativeRotator.RotatorTransportKind.Serial)]
+    public SkyRoof.NativeRotator.RotatorTransportKind NativeTransport { get; set; } = SkyRoof.NativeRotator.RotatorTransportKind.Serial;
+
+    [DisplayName("Serial Port")]
+    [DefaultValue("COM9")]
+    public string NativeSerialPort { get; set; } = "COM9";
+
+    [DisplayName("Baud Rate")]
+    [DefaultValue(9600)]
+    public int NativeBaudRate { get; set; } = 9600;
+
+    [DisplayName("Serial Data Bits")]
+    [DefaultValue(8)]
+    public int NativeDataBits { get; set; } = 8;
+
+    [DisplayName("Serial Parity")]
+    [DefaultValue(System.IO.Ports.Parity.None)]
+    public System.IO.Ports.Parity NativeParity { get; set; } = System.IO.Ports.Parity.None;
+
+    [DisplayName("Serial Stop Bits")]
+    [DefaultValue(System.IO.Ports.StopBits.One)]
+    public System.IO.Ports.StopBits NativeStopBits { get; set; } = System.IO.Ports.StopBits.One;
+
+    [DisplayName("Serial Handshake")]
+    [DefaultValue(System.IO.Ports.Handshake.None)]
+    public System.IO.Ports.Handshake NativeHandshake { get; set; } = System.IO.Ports.Handshake.None;
+
+    [DisplayName("Serial DTR Enabled")]
+    [DefaultValue(false)]
+    public bool NativeDtrEnable { get; set; } = false;
+
+    [DisplayName("Serial RTS Enabled")]
+    [Description("Only used when the handshake is not RequestToSend.")]
+    [DefaultValue(false)]
+    public bool NativeRtsEnable { get; set; } = false;
+
+    [DisplayName("Native Poll Interval (ms)")]
+    [DefaultValue(1000)]
+    public int NativePollMs { get; set; } = 1000;
+
+    [DisplayName("Native Response Timeout (ms)")]
+    [DefaultValue(600)]
+    public int NativeReadTimeout { get; set; } = 600;
+
+    [DisplayName("Allow Open Loop Motion")]
+    [Description("Explicit opt-in for protocols with no feedback or STOP. Never enable without checking real mechanical safety.")]
+    [DefaultValue(false)]
+    public bool NativeAllowOpenLoopMotion { get; set; } = false;
+
+    [DisplayName("Custom Point Command")]
+    [DefaultValue("P $AZ $EL\\n")]
+    public string NativePointTemplate { get; set; } = "P $AZ $EL\\n";
+    [DisplayName("Custom STOP Command")]
+    [DefaultValue("")]
+    public string NativeStopTemplate { get; set; } = "";
+    [DisplayName("Custom Query Command")]
+    [DefaultValue("")]
+    public string NativeQueryTemplate { get; set; } = "";
+    [DisplayName("Custom Response Format")]
+    [DefaultValue("")]
+    public string NativeResponseTemplate { get; set; } = "";
+
     [DefaultValue(300)]
     [Description("Delay between the command cycles, ms")]
     public int Delay { get; set; } = 300;
@@ -36,12 +108,13 @@ namespace SkyRoof
     [DefaultValue(false)]
     public bool Enabled { get; set; } = false;
 
-    [Description("rotctld host")]
+    [DisplayName("Rotator Network Host")]
+    [Description("Host/IP for native TCP or UDP controller, or legacy rotctld TCP server.")]
     [DefaultValue("127.0.0.1")]
     public string Host { get; set; } = "127.0.0.1";
 
-    [DisplayName("TCP Port")]
-    [Description("rotctld port")]
+    [DisplayName("Rotator Network Port")]
+    [Description("Remote native TCP/UDP controller port, or legacy rotctld port.")]
     [DefaultValue((ushort)4533)]
     public ushort Port { get; set; } = 4533;
 
