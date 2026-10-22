@@ -80,8 +80,8 @@ public sealed class IcomLanSpectrumSettingsPropertyGridTests
       Assert.Contains(name, fields);
     Assert.DoesNotContain(nameof(IcomLanSpectrumSettings.AutoStart), fields);
     Assert.DoesNotContain(nameof(IcomLanSpectrumSettings.SkyCatScopePort), fields);
-    Assert.True(fields.IndexOf(nameof(IcomLanSpectrumSettings.DirectLanControlPort)) <
-      fields.IndexOf(nameof(IcomLanSpectrumSettings.ScopeBand)));
+    Assert.True(fields.ToList().IndexOf(nameof(IcomLanSpectrumSettings.DirectLanControlPort)) <
+      fields.ToList().IndexOf(nameof(IcomLanSpectrumSettings.ScopeBand)));
   }
 
   [Theory]
