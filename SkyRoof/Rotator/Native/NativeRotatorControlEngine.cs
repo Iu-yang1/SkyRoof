@@ -78,7 +78,13 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
     lock(sync)
     {
       if(stopping || safetyLatched)return;
-      if(!NativeRotatorCodec.CanQuery(settings.NativeProtocol) && !settings.NativeAllowOpenLoopMotion)return;
+      if(!CanFeedback && !settings.NativeAllowOpenLoopMotion)return;
+      // PSTRotator feedback is passive UDP. Never assume a healthy antenna
+      // without a recent packet when open-loop movement is not authorized.
+      if(settings.NativeProtocol==RotatorProtocolKind.PstRotator &&
+         !settings.NativeAllowOpenLoopMotion &&
+         (DateTime.UtcNow-lastReadUtc).TotalMilliseconds>
+           Math.Max(3000,3*Math.Clamp(settings.NativePollMs,200,30000)))return;
       if(!NativeRotatorCodec.CanStop(settings.NativeProtocol,settings.NativeStopTemplate) &&
          !settings.NativeAllowOpenLoopMotion)return;
       if(appliedDirection.HasValue||manualDirection.HasValue)stopRequested=true;
@@ -146,7 +152,8 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
   private bool CanFeedback => settings.NativeProtocol==RotatorProtocolKind.CustomTemplate
     ? !string.IsNullOrWhiteSpace(settings.NativeResponseTemplate) &&
       (!string.IsNullOrWhiteSpace(settings.NativeQueryTemplate)||settings.NativeTransport==RotatorTransportKind.Udp)
-    : NativeRotatorCodec.CanQuery(settings.NativeProtocol);
+    : settings.NativeProtocol==RotatorProtocolKind.PstRotator ||
+      NativeRotatorCodec.CanQuery(settings.NativeProtocol);
   private void SendStop()
   {
     byte[]? frame=NativeRotatorCodec.Stop(settings.NativeProtocol,settings.NativeStopTemplate);
