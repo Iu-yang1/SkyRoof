@@ -80,6 +80,45 @@ public sealed class NativeRotatorCodecTests
     Assert.True(NativeRotatorCodec.CanStop(RotatorProtocolKind.CustomTemplate,"S\r"));
     Assert.False(NativeRotatorCodec.CanJog(RotatorProtocolKind.EasyCommIII));
   }
+  [Fact]
+  public void RejectsMalformedAndOutOfRangePositionReplies()
+  {
+    Assert.False(NativeRotatorCodec.TryParse(
+      RotatorProtocolKind.Gs232, "AZ=NaN EL=0\\r"u8,out _));
+    Assert.False(NativeRotatorCodec.TryParse(
+      RotatorProtocolKind.Gs232, "AZ=600 EL=30\\r"u8,out _));
+    Assert.False(NativeRotatorCodec.TryParse(
+      RotatorProtocolKind.Rotctld, "RPRT -1\\n"u8,out _));
+    Assert.False(NativeRotatorCodec.TryParse(
+      RotatorProtocolKind.SpidRot2Prog,
+      new byte[] {0x57,0x35,0x30,0x35,0x30,0x01,0x30,0x34,0x30,0x35,0x01,0x20},out _));
+  }
+
+  [Fact]
+  public void CustomTemplateSupportsBothAxisOrders()
+  {
+    const string frame="EL=45.25 AZ=145.75\\r";
+    Assert.True(NativeRotatorCodec.TryParse(
+      RotatorProtocolKind.CustomTemplate,Encoding.ASCII.GetBytes("EL=45.25 AZ=145.75\r"),
+      out var p,"EL=$EL AZ=$AZ\\r"));
+    Assert.Equal(145.75,p.Azimuth);
+    Assert.Equal(45.25,p.Elevation);
+    Assert.Equal("P 145.75 45.25\r",
+      Text(NativeRotatorCodec.Point(RotatorProtocolKind.CustomTemplate,new(145.75,45.25),"P $AZ $EL\\r")));
+  }
+
+  [Fact]
+  public void ProtocolStopAndMovementCapabilitiesAreWellDefined()
+  {
+    Assert.Equal("SA SE \n",Text(NativeRotatorCodec.Stop(RotatorProtocolKind.EasyCommII)));
+    Assert.Equal("<PST><STOP>1</STOP></PST>",
+      Text(NativeRotatorCodec.Stop(RotatorProtocolKind.PstRotator)));
+    Assert.Equal("S\n",Text(NativeRotatorCodec.Stop(RotatorProtocolKind.Rotctld)));
+    Assert.Null(NativeRotatorCodec.Stop(RotatorProtocolKind.Oz9AarUrc));
+    Assert.Null(NativeRotatorCodec.Stop(RotatorProtocolKind.SaebrTrack));
+    Assert.Equal("AZ\n",Text(NativeRotatorCodec.Query(RotatorProtocolKind.EasyCommIII)));
+  }
+
   [Theory]
   [InlineData(RotatorProtocolKind.EasyCommII,"AZ123.4 EL45.5\r",123.4,45.5)]
   [InlineData(RotatorProtocolKind.Rotctld,"123.4\n45.5\n",123.4,45.5)]
