@@ -55,7 +55,7 @@ namespace SkyRoof
 
       if (ctx.Settings.Rotator.Enabled)
       {
-        engine = ctx.Settings.Rotator.UseNativeDriver
+        engine = ctx.Settings.Rotator.ResolveUseNativeDriver()
           ? new NativeRotatorControlEngine(ctx.Settings.Rotator)
           : new RotatorControlEngine(ctx.Settings.Rotator);
         engine.StatusChanged += Engine_StatusChanged;
