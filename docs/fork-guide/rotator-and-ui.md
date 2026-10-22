@@ -4,7 +4,7 @@
 
 ## Native C# rotator protocol implementation (experimental)
 
-SkyRoof can use an **in-process driver** in **Settings → Rotator Control** by selecting **UseNativeDriver**. It does not start or depend on rotctld.exe for GS-232, EasyComm, SPID or the other native protocols. The existing Hamlib TCP client remains available by disabling UseNativeDriver.
+SkyRoof can use an **in-process driver** in **Settings → Rotator Control** by explicitly enabling **UseNativeDriver**. This defaults to **off for existing installations**, so updating SkyRoof never silently takes ownership of a COM port or changes the user's previously configured hardware controller. It does not start or depend on rotctld.exe for GS-232, EasyComm, SPID or the other native protocols. The existing Hamlib TCP client remains available by disabling UseNativeDriver.
 
 | Protocol | Native serial | Native TCP bridge | UDP | Feedback | STOP |
 |---|---|---|---|---|---|
@@ -18,11 +18,14 @@ SkyRoof can use an **in-process driver** in **Settings → Rotator Control** by 
 | PSTRotator | — | — | yes | passive | STOP |
 | Custom Template | yes | yes | yes | configurable | configurable |
 
-Use **NativeProtocol**, **NativeTransport**, and the device fields to select the actual controller. Initial GS-232B serial values are **COM9, 9600 baud, 8N1, no flow control**; change COM9 to the port detected in Windows Device Manager. Other controllers can set **NativeDataBits**, **NativeParity**, **NativeStopBits** and **NativeHandshake** in Settings. A separate rotctld instance must **not** simultaneously hold the same COM port.
+Use **NativeProtocol**, **NativeTransport**, and the device fields to select the actual controller. Initial GS-232B serial values are **COM9, 9600 baud, 8N1, no flow control**; change COM9 to the port detected in Windows Device Manager. Other controllers can set **NativeDataBits**, **NativeParity**, **NativeStopBits**, **NativeHandshake**, **NativeDtrEnable** and **NativeRtsEnable** in Settings. A separate rotctld instance must **not** simultaneously hold the same COM port.
 
 The native **NativeRotatorIO** worker serializes STOP/manual positioning/telemetry off the WinForms UI thread, sends only distinct target frames, and latches motion upon invalid feedback or loss during movement. It does not permit new closed-loop positioning before the first fresh position report, discards superseded commands, caches SPID resolution per connection, and preserves unused serial/TCP receive bytes across response boundaries. Position reads remain possible when Track is off, at an independently configurable polling interval (1000 ms by default). Serial command writes do **not** constitute a motor STOP acknowledgment; ensure the controller has an independent physical emergency stop.
 
 Protocols without feedback or STOP require an explicit **NativeAllowOpenLoopMotion** opt-in for positioning. Continuous-direction wheel commands are supported only for GS-232. The existing Track/PARK/angle limits and UI are preserved.
+
+
+The automated acceptance suite includes synthetic TCP-serial controller responses and a **20-second idle endurance check** of command rate, process CPU time, thread count and handle count. This is not a replacement for a real COM9 motor safety test or a continuous 2/8-hour powered hardware soak. Always keep a physical emergency stop available.
 
 **Status:** integration is experimental until physical COM9 direction, limits, STOP-on-release, unplug/reconnect, 0°/360°/450° crossings and an extended CPU/handle soak are verified. Do not test unattended.
 
