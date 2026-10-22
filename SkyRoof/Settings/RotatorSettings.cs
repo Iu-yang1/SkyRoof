@@ -99,12 +99,13 @@ namespace SkyRoof
     [DefaultValue(false)]
     public bool Enabled { get; set; } = false;
 
-    [Description("rotctld host")]
+    [DisplayName("Rotator Network Host")]
+    [Description("Host/IP for native TCP or UDP controller, or legacy rotctld TCP server.")]
     [DefaultValue("127.0.0.1")]
     public string Host { get; set; } = "127.0.0.1";
 
-    [DisplayName("TCP Port")]
-    [Description("rotctld port")]
+    [DisplayName("Rotator Network Port")]
+    [Description("Remote native TCP/UDP controller port, or legacy rotctld port.")]
     [DefaultValue((ushort)4533)]
     public ushort Port { get; set; } = 4533;
 
