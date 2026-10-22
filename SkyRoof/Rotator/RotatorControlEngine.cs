@@ -48,6 +48,7 @@ namespace SkyRoof
     Bearing? IRotatorEngine.RequestedBearing => RequestedBearing;
     Bearing? IRotatorEngine.LastReadBearing => LastReadBearing;
     Bearing? IRotatorEngine.LastWrittenBearing => LastWrittenBearing;
+    void IRotatorEngine.StartContinuousMove(RotatorContinuousDirection d) => StartContinuousMove(d);
     private long LastSuccessfulBearingReadTicks;
     public DateTime LastSuccessfulBearingReadUtc =>
       new DateTime(Interlocked.Read(ref LastSuccessfulBearingReadTicks), DateTimeKind.Utc);
