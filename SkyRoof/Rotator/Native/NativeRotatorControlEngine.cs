@@ -34,11 +34,13 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
   private readonly object sync = new();
   private readonly AutoResetEvent wake = new(false);
   private readonly ManualResetEvent stop = new(false);
+  private readonly ManualResetEventSlim stopCompleted = new(false);
   private readonly Thread worker;
   private IRotatorTransport? transport;
   private Bearing? requested,lastRead,lastWritten;
   private DateTime lastReadUtc = DateTime.MinValue;
-  private bool stopping,connected,stopRequested,safetyLatched,requiresStopAfterReconnect;
+  private volatile bool stopping,stopRequested;
+  private bool connected,safetyLatched,requiresStopAfterReconnect;
   private int? manualDirection,appliedDirection;
   private byte[]? lastWire;
   private string? error;
@@ -105,6 +107,7 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
       requested=lastWritten=null;
       manualDirection=null;
       lastWire=null;
+      stopCompleted.Reset();
       stopRequested=true;
     }
     wake.Set();
@@ -147,10 +150,11 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
     if(frame==null)
     {
       lock(sync){safetyLatched=true;error="STOP not supported by rotator protocol";}
-      StateChanged();return;
+      stopCompleted.Set();StateChanged();return;
     }
     transport!.Write(frame);
     lock(sync){appliedDirection=null;lastWire=null;lastWritten=null;requiresStopAfterReconnect=false;}
+    stopCompleted.Set();
     // Serial/TCP bridge writes do NOT guarantee a physical motor STOP ACK.
   }
   private RotatorPosition Query()
@@ -293,7 +297,11 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
           if(CanFeedback && now>=nextQuery && !stopRequested)
           {
             nextQuery=now+Math.Clamp(settings.NativePollMs,200,30000);
-            PublishPosition(Query());
+            try { PublishPosition(Query()); }
+            catch(OperationCanceledException) when(stopRequested){continue;}
+            catch(TimeoutException) when(settings.NativeProtocol==RotatorProtocolKind.PstRotator ||
+              settings.NativeProtocol==RotatorProtocolKind.CustomTemplate &&
+              settings.NativeTransport==RotatorTransportKind.Udp){continue;}
           }
           int remaining=(int)Math.Clamp(nextQuery-Environment.TickCount64,20,1000);
           if(!CanFeedback)remaining=200;
@@ -333,12 +341,12 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
     if(stopping)return;
     StopRotation();
     // The background I/O thread handles STOP; waiting is bounded by active read.
-    wake.Set();stop.WaitOne(Math.Clamp(settings.NativeReadTimeout+100,200,1000));
+    wake.Set();stopCompleted.Wait(Math.Clamp(settings.NativeReadTimeout+100,200,1000));
     stopping=true;stop.Set();
     try{transport?.Abort();}catch{}
     wake.Set();
     if(Thread.CurrentThread!=worker && !worker.Join(2500))
       Log.Warning("Native rotator worker shutdown timed out; inspect COM driver");
-    wake.Dispose();stop.Dispose();
+    wake.Dispose();stop.Dispose();stopCompleted.Dispose();
   }
 }
