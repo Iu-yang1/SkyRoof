@@ -2,6 +2,31 @@
 
 **Language:** English | [简体中文](../zh-cn/fork-guide/rotator-and-ui.md)
 
+## Native C# rotator protocol implementation (experimental)
+
+SkyRoof can use an **in-process driver** in **Settings → Rotator Control** by selecting **UseNativeDriver**. It does not start or depend on rotctld.exe for GS-232, EasyComm, SPID or the other native protocols. The existing Hamlib TCP client remains available by disabling UseNativeDriver.
+
+| Protocol | Native serial | Native TCP bridge | UDP | Feedback | STOP |
+|---|---|---|---|---|---|
+| GS-232 | yes | yes | — | C2 | S |
+| EasyComm I | yes | yes | — | unsupported | SA SE |
+| EasyComm II/III | yes | yes | — | AZ/EL | SA SE |
+| SPID ROT2PROG | yes | yes | — | binary | binary |
+| SAEBRTrack | yes | yes | — | unsupported | unsupported |
+| rotctld protocol | — | yes | — | p | S |
+| OZ9AAR URC | — | yes | — | POLL | unsupported |
+| PSTRotator | — | — | yes | passive | STOP |
+| Custom Template | yes | yes | yes | configurable | configurable |
+
+Use **NativeProtocol**, **NativeTransport**, and the device fields to select the actual controller. Initial GS-232B serial values are **COM9, 9600 baud, 8N1, no flow control**; change COM9 to the port detected in Windows Device Manager. A separate rotctld instance must **not** simultaneously hold the same COM port.
+
+The native command worker serializes STOP/manual positioning/telemetry, sends only distinct target frames, and latches motion upon invalid feedback or loss during movement. Position reads remain possible when Track is off, at an independently configurable polling interval (1000 ms by default). Serial command writes do **not** constitute a motor STOP acknowledgment; ensure the controller has an independent physical emergency stop.
+
+Protocols without feedback or STOP require an explicit **NativeAllowOpenLoopMotion** opt-in for positioning. Continuous-direction wheel commands are supported only for GS-232. The existing Track/PARK/angle limits and UI are preserved.
+
+**Status:** integration is experimental until physical COM9 direction, limits, STOP-on-release, unplug/reconnect, 0°/360°/450° crossings and an extended CPU/handle soak are verified. Do not test unattended.
+
+
 ## Hamlib rotctld rotator (PRs #22–23 and #25–28, #34)
 
 Configure **Settings → Rotator Control** with the `rotctld` host and TCP port, normally **127.0.0.1:4533**; adjust azimuth/elevation limits, offsets and step size to the *real mechanical antenna and cable geometry*. A typical external rotator can be served by Hamlib with GS-232B-compatible hardware. The correct COM port, baud rate and protocol are configured in `rotctld`, not on SkyRoof's TCP side.
