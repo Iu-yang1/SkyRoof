@@ -71,7 +71,11 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
     worker.Start();
   }
   private void Post(Action action)=>ui.Post(_=>{if(!stopping) action();},null);
-  private void StateChanged()=>Post(()=>StatusChanged?.Invoke(this,EventArgs.Empty));
+  private void StateChanged()
+  {
+    if(StatusChanged!=null)
+      Post(()=>StatusChanged?.Invoke(this,EventArgs.Empty));
+  }
   public void Retry()=>wake.Set();
   public void RotateTo(Bearing bearing)
   {
@@ -268,7 +272,12 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
       }
       lastRead=current;lastReadUtc=DateTime.UtcNow;
     }
-    Post(()=>BearingChanged?.Invoke(this,EventArgs.Empty));
+    // Unlike the legacy engine, the first native implementation posted an
+    // event after EVERY position poll, even when the bearings were identical
+    // and no listener existed. Avoid flooding WinForms/xUnit contexts with
+    // thousands of redundant marshaled callbacks during idle tracking.
+    if((previous==null || previous!=current) && BearingChanged!=null)
+      Post(()=>BearingChanged?.Invoke(this,EventArgs.Empty));
     if(fault && previous!=null)
     {
       // We're already on the dedicated I/O thread: attempt STOP before
