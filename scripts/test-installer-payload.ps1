@@ -80,5 +80,17 @@ $version = [System.Reflection.AssemblyName]::GetAssemblyName($ports).Version
 if ($version.ToString() -ne '10.0.0.0') {
   throw "Installed Windows System.IO.Ports.dll version is $version, expected 10.0.0.0."
 }
+# .NET's actual dependency resolver must locate the exact assembly from the
+# installed SkyRoof.deps.json, not just find a similarly named file.
+$resolver = [System.Runtime.Loader.AssemblyDependencyResolver]::new(
+  (Join-Path $target 'SkyRoof.dll'))
+$requested = [System.Reflection.AssemblyName]::new(
+  'System.IO.Ports, Version=10.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51')
+$resolved = $resolver.ResolveAssemblyToPath($requested)
+if ([string]::IsNullOrWhiteSpace($resolved) -or
+    -not (Test-Path -LiteralPath $resolved)) {
+  throw "Installed .NET dependency resolver cannot locate System.IO.Ports 10.0.0.0."
+}
+Write-Host "Actual assembly resolution: $resolved"
 Write-Host ("Installer payload OK: {0} root DLLs, {1} RID runtime assets, System.IO.Ports {2}" -f
   $expectedDlls.Count, @($windowsAssets | Select-Object -Unique).Count, $version)
