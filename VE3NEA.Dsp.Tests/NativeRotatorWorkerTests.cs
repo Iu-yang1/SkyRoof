@@ -1,0 +1,141 @@
+using System;
+using System.Collections.Concurrent;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using SkyRoof;
+using SkyRoof.NativeRotator;
+using Xunit;
+
+namespace VE3NEA.Dsp.Tests;
+
+public sealed class NativeRotatorWorkerTests
+{
+  [Fact]
+  public async Task TrackDisabledPollsAtBoundedRateWithoutMotionOrBusyLoop()
+  {
+    await using var server=new FakeGs232Bridge();
+    var settings=CreateSettings(server.Port);
+    using var engine=new NativeRotatorControlEngine(settings);
+    await UntilAsync(()=>engine.IsRunning && server.Count("C2")>0);
+    await Task.Delay(1300);
+    int count=server.Count("C2");
+    Assert.InRange(count,1,7);
+    Assert.Equal(0,server.Commands.Count(x=>x.StartsWith("W",StringComparison.Ordinal)));
+    Assert.NotNull(engine.LastReadBearing);
+    Assert.Equal(90,engine.LastReadBearing!.AzDeg,2);
+  }
+
+  [Fact]
+  public async Task StopIsQueuedOnBackgroundIoWorkerAfterMove()
+  {
+    await using var server=new FakeGs232Bridge();
+    using var engine=new NativeRotatorControlEngine(CreateSettings(server.Port));
+    await UntilAsync(()=>engine.LastReadBearing!=null);
+    engine.RotateTo(new Bearing(Math.PI/2,Math.PI/6));
+    await UntilAsync(()=>server.Count("W090 030")>0);
+    engine.StopRotation();
+    await UntilAsync(()=>server.Count("S")>0);
+    Assert.True(server.Commands.ToArray().ToList().FindIndex(x=>x=="S")>
+      server.Commands.ToArray().ToList().FindIndex(x=>x=="W090 030"));
+  }
+
+  [Fact]
+  public async Task TrackOffDoesNotRepeatAcceptedTargetDuringFeedbackPolling()
+  {
+    await using var server=new FakeGs232Bridge();
+    var settings=CreateSettings(server.Port);
+    using var engine=new NativeRotatorControlEngine(settings);
+    await UntilAsync(()=>engine.LastReadBearing!=null);
+    engine.RotateTo(new Bearing(Math.PI/2,Math.PI/6));
+    await UntilAsync(()=>server.Count("W090 030")>0);
+    await Task.Delay(1250);
+    Assert.Equal(1,server.Count("W090 030"));
+  }
+
+  private static RotatorSettings CreateSettings(int port)=>new()
+  {
+    Enabled=true,
+    UseNativeDriver=true,
+    NativeProtocol=RotatorProtocolKind.Gs232,
+    NativeTransport=RotatorTransportKind.Tcp,
+    Host="127.0.0.1",
+    Port=port,
+    NativePollMs=500,
+    NativeReadTimeout=350,
+    ReceiveTimeout=500,
+    SendTimeout=500,
+    ReconnectDelay=200
+  };
+  private static async Task UntilAsync(Func<bool> predicate)
+  {
+    for(int i=0;i<60;i++)
+    {
+      if(predicate())return;
+      await Task.Delay(50);
+    }
+    Assert.True(predicate(),"Native rotator worker timed out");
+  }
+
+  private sealed class FakeGs232Bridge : IAsyncDisposable
+  {
+    private readonly TcpListener listener=new(IPAddress.Loopback,0);
+    private readonly CancellationTokenSource cancel=new();
+    private readonly Task worker;
+    internal ConcurrentQueue<string> Commands {get;}=new();
+    internal int Port {get;}
+    internal FakeGs232Bridge()
+    {
+      listener.Start();
+      Port=((IPEndPoint)listener.LocalEndpoint).Port;
+      worker=Task.Run(RunAsync);
+    }
+    internal int Count(string text)=>Commands.Count(x=>x==text);
+    private async Task RunAsync()
+    {
+      try
+      {
+        while(!cancel.IsCancellationRequested)
+        {
+          using var client=await listener.AcceptTcpClientAsync(cancel.Token);
+          var stream=client.GetStream();
+          var data=new byte[256];
+          var command=new StringBuilder();
+          while(!cancel.IsCancellationRequested)
+          {
+            int n=await stream.ReadAsync(data,cancel.Token);
+            if(n==0)break;
+            for(int i=0;i<n;i++)
+            {
+              char c=(char)data[i];
+              if(c is '\r' or '\n')
+              {
+                if(command.Length==0)continue;
+                string line=command.ToString();command.Clear();
+                Commands.Enqueue(line);
+                if(line=="C2")
+                {
+                  var reply=Encoding.ASCII.GetBytes("AZ=90 EL=30\r");
+                  await stream.WriteAsync(reply,cancel.Token);
+                }
+              }
+              else command.Append(c);
+            }
+          }
+        }
+      }
+      catch(Exception e) when (e is OperationCanceledException or ObjectDisposedException or IOException or SocketException){}
+    }
+    public async ValueTask DisposeAsync()
+    {
+      cancel.Cancel();
+      listener.Stop();
+      try{await worker.WaitAsync(TimeSpan.FromSeconds(3));}catch(OperationCanceledException){}
+      cancel.Dispose();
+    }
+  }
+}
