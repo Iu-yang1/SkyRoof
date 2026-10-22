@@ -125,6 +125,9 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
     var deadline=Environment.TickCount64+timeoutMs;
     while(!stopping && Environment.TickCount64<deadline)
     {
+      // Explicit STOP must preempt noisy/fragmented replies as well as
+      // idle reads; otherwise a busy serial endpoint delays motor halt.
+      if(stopRequested)throw new OperationCanceledException("STOP pending");
       int length;
       try{length=transport!.Read(buffer);}
       catch(TimeoutException){length=0;}
@@ -153,9 +156,25 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
       stopCompleted.Set();StateChanged();return;
     }
     transport!.Write(frame);
+    if(settings.NativeProtocol==RotatorProtocolKind.Rotctld)
+    {
+      // Hamlib STOP is the only wire protocol here with an actual ACK.
+      // Always consume it before the next p/P command.
+      var ack=ReadStopAck(settings.NativeReadTimeout);
+      if(!Regex.IsMatch(Encoding.ASCII.GetString(ack),@"(?m)^RPRT 0\s*$"))
+        throw new IOException("rotctld rejected STOP");
+    }
     lock(sync){appliedDirection=null;lastWire=null;lastWritten=null;requiresStopAfterReconnect=false;}
     stopCompleted.Set();
     // Serial/TCP bridge writes do NOT guarantee a physical motor STOP ACK.
+  }
+  private byte[] ReadStopAck(int timeout)
+  {
+    // Stop is already sent. Consume one full line without considering the
+    // pending STOP flag, which is cleared by the scheduler before SendStop.
+    return ReadReply(bytes=>bytes.Length>0 &&
+      bytes[^1]==(byte)'\n' &&
+      Regex.IsMatch(Encoding.ASCII.GetString(bytes),@"RPRT\s+-?\d+"),timeout);
   }
   private RotatorPosition Query()
   {
