@@ -18,6 +18,24 @@ fork 新增可停靠的 **Icom LAN Spectrum** 面板，与原来的 SDR 宽带�
 
 **RS-BA1 与 SkyRoof 并行时推荐：** `Source = RsBa1`，`Control path = SkyCat`（前提是 SkyCAT 已连接且支持对应 CI-V scope 指令）。没有可用控制通道就维持只读。**不要仅为了提高帧率启动实验性 Direct LAN 争用会话**。
 
+## 按频谱来源动态显示设置项
+
+**Icom LAN Spectrum** 设置页会根据 **Scope source** 和
+**Scope control path** 立即更新可见的参数：
+
+- **SkyCat：** 显示 SkyCAT 频谱 TCP 端口及原生 LAN 辅助捕获可选的
+  电台 IPv4 过滤地址；隐藏 RS-BA1 CI-V 端口和 Direct LAN 登录信息。
+- **RsBa1：** 显示被动捕获的 CI-V UDP 端口和可选电台 IPv4 地址；
+  隐藏 SkyCAT 频谱流端口及 Direct LAN 登录信息。
+- **DirectLan：** 显示电台 IPv4、CI-V UDP 端口、控制端口、
+  用户名、密码和客户端名称。由于 Direct LAN 实验模式必须手动启动，
+  不显示 Auto start。
+- 当 **Scope control path = DirectLan** 被单独选中时，即使
+  波形来源不是 DirectLan，也仍显示其连接参数；控制链和波形源是独立设置。
+
+此改动只影响 PropertyGrid 的呈现，不会删除或重置当前隐藏的配置。
+频谱接收机选择、通带估算、瀑布、平均和平滑等通用选项始终保留。
+
 ## 频谱控制和显示
 
 新版面板提供本地瀑布与曲线分割比例、缩放、hold/peak hold 与清除，及：
