@@ -137,9 +137,10 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
     throw new TimeoutException("Native rotator position reply timed out");
   }
   private byte[]? CommandBytes() => NativeRotatorCodec.Query(settings.NativeProtocol,settings.NativeQueryTemplate);
-  private bool CanFeedback => NativeRotatorCodec.CanQuery(settings.NativeProtocol) ||
-    settings.NativeProtocol==RotatorProtocolKind.CustomTemplate &&
-    (!string.IsNullOrWhiteSpace(settings.NativeQueryTemplate)||settings.NativeTransport==RotatorTransportKind.Udp);
+  private bool CanFeedback => settings.NativeProtocol==RotatorProtocolKind.CustomTemplate
+    ? !string.IsNullOrWhiteSpace(settings.NativeResponseTemplate) &&
+      (!string.IsNullOrWhiteSpace(settings.NativeQueryTemplate)||settings.NativeTransport==RotatorTransportKind.Udp)
+    : NativeRotatorCodec.CanQuery(settings.NativeProtocol);
   private void SendStop()
   {
     byte[]? frame=NativeRotatorCodec.Stop(settings.NativeProtocol,settings.NativeStopTemplate);
@@ -167,7 +168,12 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
     }
     byte[]? query=CommandBytes();
     if(query!=null)transport!.Write(query);
-    var b=ReadReply(bytes=>NativeRotatorCodec.TryParse(protocol,bytes,out _,settings.NativeResponseTemplate),
+    var b=ReadReply(bytes=>
+      (protocol==RotatorProtocolKind.SpidRot2Prog ||
+       settings.NativeTransport==RotatorTransportKind.Udp ||
+       protocol==RotatorProtocolKind.Oz9AarUrc && bytes.Length>0 && bytes[^1]==(byte)'}' ||
+       bytes.Length>0 && (bytes[^1]==(byte)'\n'||bytes[^1]==(byte)'\r')) &&
+      NativeRotatorCodec.TryParse(protocol,bytes,out _,settings.NativeResponseTemplate),
       settings.NativeReadTimeout);
     if(!NativeRotatorCodec.TryParse(protocol,b,out var position,settings.NativeResponseTemplate))
       throw new InvalidDataException("Invalid rotator position");
