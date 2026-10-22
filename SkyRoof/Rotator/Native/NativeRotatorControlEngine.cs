@@ -315,6 +315,8 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
         long nextQuery=0;
         while(!stopping && device.Connected)
         {
+          try
+          {
           bool stopNow;int? jog;Bearing? target;
           lock(sync)
           {
@@ -386,6 +388,14 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
           int remaining=(int)Math.Clamp(nextQuery-Environment.TickCount64,20,1000);
           if(!CanFeedback)remaining=200;
           wake.WaitOne(remaining);
+          }
+          catch(OperationCanceledException) when(stopRequested && !stopping)
+          {
+            // A new emergency STOP interrupted an in-progress SPID query or
+            // rotctld ACK. Stay on this connection and service STOP next.
+            // Disconnecting here could leave a continuous motor moving.
+            continue;
+          }
         }
       }
       catch(Exception ex)
