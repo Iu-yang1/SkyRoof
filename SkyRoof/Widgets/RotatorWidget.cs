@@ -7,7 +7,7 @@ namespace SkyRoof
   public partial class RotatorWidget : UserControl
   {
     public Context ctx;
-    private RotatorControlEngine? engine;
+    private IRotatorEngine? engine;
     private AzElEntryDialog Dialog = new();
     private OptimizedRotationPath? Path;
     private Bearing? SatBearing;
@@ -55,7 +55,9 @@ namespace SkyRoof
 
       if (ctx.Settings.Rotator.Enabled)
       {
-        engine = new RotatorControlEngine(ctx.Settings.Rotator);
+        engine = ctx.Settings.Rotator.UseNativeDriver
+          ? new NativeRotatorControlEngine(ctx.Settings.Rotator)
+          : new RotatorControlEngine(ctx.Settings.Rotator);
         engine.StatusChanged += Engine_StatusChanged;
         engine.BearingChanged += Engine_BearingChanged;
         engine.PositionFaultDetected += Engine_PositionFaultDetected;
@@ -641,8 +643,8 @@ namespace SkyRoof
         $"Rotator reported an unexpected angle jump (Az {e.AzimuthJumpDeg:F1}°, El {e.ElevationJumpDeg:F1}°).\n\n" +
         $"Previous: {e.Previous}\nReported: {e.Reported}\n\n" +
         (e.StopAcknowledged
-          ? "Rotctld acknowledged STOP. Motion commands are now locked. "
-          : "WARNING: rotctld did NOT confirm STOP. Verify that the motor is stopped and disconnect drive power if necessary. ") +
+          ? "STOP status was acknowledged by the protocol server; verify physical standstill. "
+          : "WARNING: STOP was sent/unconfirmed. Verify that the motor is stopped and disconnect drive power if necessary. ") +
         "Check the ACTUAL antenna direction, sensor wiring and rotor controller. " +
         "After correcting the problem, reapply Rotator Control settings to unlock.",
         "Rotator position safety stop", MessageBoxButtons.OK, MessageBoxIcon.Warning);
