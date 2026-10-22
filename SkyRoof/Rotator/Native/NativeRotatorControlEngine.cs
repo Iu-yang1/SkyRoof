@@ -311,8 +311,18 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
         {
           lock(sync)
           {
+            // Do not lock the controls merely because an idle position
+            // query timed out. Fail-closed only if a motion command could
+            // still be active on the physical controller.
+            bool potentiallyMoving=requiresStopAfterReconnect ||
+              appliedDirection.HasValue || lastWire!=null;
             requested=lastWritten=null;manualDirection=null;appliedDirection=null;lastWire=null;
-            safetyLatched=true;stopRequested=true;requiresStopAfterReconnect=true;
+            if(potentiallyMoving)
+            {
+              safetyLatched=true;
+              stopRequested=true;
+              requiresStopAfterReconnect=true;
+            }
           }
         }
         hadConnection=true;reconnect=Math.Clamp(settings.ReconnectDelay,200,30000);
@@ -346,7 +356,11 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
               if(stopRequested || Interlocked.Read(ref commandVersion)!=selectedVersion)
                 continue; // button released or switched while preparing jog
               device.Write(NativeRotatorCodec.Jog(direction));
-              lock(sync)appliedDirection=jog;
+              lock(sync)
+              {
+                appliedDirection=jog;
+                requiresStopAfterReconnect=true;
+              }
             }
           }
           else if(target!=null && !PositionFaulted)
@@ -374,6 +388,7 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
               if(stopRequested || Interlocked.Read(ref commandVersion)!=selectedVersion)
                 continue; // STOP/Track-off superseded this pending target
               device.Write(frame);
+              lock(sync)requiresStopAfterReconnect=true;
               if(settings.NativeProtocol==RotatorProtocolKind.Rotctld)
               {
                 var ack=ReadReply(b=>Regex.IsMatch(Encoding.ASCII.GetString(b),@"RPRT\s+-?\d+"),
@@ -415,8 +430,11 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
           lock(sync)
           {
             error=ex.Message;
-            if(appliedDirection.HasValue||lastWire!=null)
+            if(requiresStopAfterReconnect || appliedDirection.HasValue || lastWire!=null)
+            {
               safetyLatched=true;
+              stopRequested=true;
+            }
             requested=lastWritten=null;manualDirection=null;appliedDirection=null;lastWire=null;
           }
         }
