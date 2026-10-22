@@ -97,7 +97,6 @@ public sealed class NativeRotatorCodecTests
   [Fact]
   public void CustomTemplateSupportsBothAxisOrders()
   {
-    const string frame="EL=45.25 AZ=145.75\\r";
     Assert.True(NativeRotatorCodec.TryParse(
       RotatorProtocolKind.CustomTemplate,Encoding.ASCII.GetBytes("EL=45.25 AZ=145.75\r"),
       out var p,"EL=$EL AZ=$AZ\\r"));
