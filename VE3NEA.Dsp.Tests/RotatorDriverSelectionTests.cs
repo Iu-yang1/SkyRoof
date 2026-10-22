@@ -13,7 +13,7 @@ public sealed class RotatorDriverSelectionTests
   public void DefaultLocalGs232AutomaticallySelectsNativeDriver()
   {
     var settings=new RotatorSettings();
-    Assert.Equal(RotatorDriverMode.Auto,settings.DriverMode);
+    Assert.Equal(RotatorDriverMode.Native,settings.DriverMode);
     Assert.True(settings.ResolveUseNativeDriver());
     Assert.Equal(RotatorTransportKind.Serial,settings.NativeTransport);
     Assert.Equal(RotatorProtocolKind.Gs232,settings.NativeProtocol);
@@ -23,7 +23,11 @@ public sealed class RotatorDriverSelectionTests
   [Fact]
   public void LegacyCustomServerIsPreservedUntilUserSelectsNative()
   {
-    var settings=new RotatorSettings{Host="192.168.1.55",Port=4533};
+    var settings=new RotatorSettings{
+      DriverMode=RotatorDriverMode.Auto,Host="192.168.1.55",Port=4533
+    };
+    settings.MigrateDriverMode();
+    Assert.Equal(RotatorDriverMode.LegacyRotctld,settings.DriverMode);
     Assert.False(settings.ResolveUseNativeDriver());
 
     settings.DriverMode=RotatorDriverMode.Native;
@@ -47,11 +51,11 @@ public sealed class RotatorDriverSelectionTests
   }
 
   [Fact]
-  public void OldSavedJsonDefaultFalseMigratesToAutoWithoutUiSteps()
+  public void OldSavedJsonDefaultFalseMigratesToNativeWithoutUiSteps()
   {
     const string old=@"{""UseNativeDriver"":false,""Host"":""127.0.0.1"",""Port"":4533,""Enabled"":true}";
     var settings=JsonConvert.DeserializeObject<RotatorSettings>(old)!;
-    Assert.Equal(RotatorDriverMode.Auto,settings.DriverMode);
+    Assert.Equal(RotatorDriverMode.Native,settings.DriverMode);
     Assert.True(settings.ResolveUseNativeDriver());
     Assert.True(settings.Enabled);
   }
