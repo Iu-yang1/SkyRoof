@@ -57,6 +57,45 @@ public sealed class NativeRotatorWorkerTests
     Assert.Equal(1,server.Count("W090 030"));
   }
 
+  [Fact]
+  public async Task RefusesMotionBeforeFirstValidPositionFeedback()
+  {
+    int enabled=0;
+    await using var server=new FakeGs232Bridge(_=>
+      Volatile.Read(ref enabled)==0 ? Array.Empty<byte>() :
+      Encoding.ASCII.GetBytes("AZ=90 EL=30\r"));
+    using var engine=new NativeRotatorControlEngine(CreateSettings(server.Port));
+    await UntilAsync(()=>server.Count("C2")>=1);
+    engine.RotateTo(new SkyRoof.Bearing(Math.PI/2,Math.PI/6));
+    await Task.Delay(250);
+    Assert.Equal(0,server.Count("W090 030"));
+
+    Volatile.Write(ref enabled,1);
+    await UntilAsync(()=>engine.LastReadBearing!=null);
+    engine.RotateTo(new SkyRoof.Bearing(Math.PI/2,Math.PI/6));
+    await UntilAsync(()=>server.Count("W090 030")>0);
+  }
+
+  [Fact]
+  public async Task SuddenPositionJumpLatchesFaultAndTransmitsStop()
+  {
+    int reads=0;
+    await using var server=new FakeGs232Bridge(_=>
+      Encoding.ASCII.GetBytes(Interlocked.Increment(ref reads)==1
+        ? "AZ=90 EL=30\r" : "AZ=150 EL=30\r"));
+    var settings=CreateSettings(server.Port);
+    settings.PositionJumpLimitDegrees=30;
+    using var engine=new NativeRotatorControlEngine(settings);
+
+    await UntilAsync(()=>engine.LastReadBearing!=null);
+    await UntilAsync(()=>engine.PositionFaulted);
+    await UntilAsync(()=>server.Count("S")>0);
+    int before=server.Commands.Count(x=>x.StartsWith("W",StringComparison.Ordinal));
+    engine.RotateTo(new SkyRoof.Bearing(Math.PI/3,Math.PI/6));
+    await Task.Delay(250);
+    Assert.Equal(before,server.Commands.Count(x=>x.StartsWith("W",StringComparison.Ordinal)));
+  }
+
   private static RotatorSettings CreateSettings(int port)=>new()
   {
     Enabled=true,
@@ -87,9 +126,11 @@ public sealed class NativeRotatorWorkerTests
     private readonly CancellationTokenSource cancel=new();
     private readonly Task worker;
     internal ConcurrentQueue<string> Commands {get;}=new();
+    private readonly Func<string,byte[]>? response;
     internal int Port {get;}
-    internal FakeGs232Bridge()
+    internal FakeGs232Bridge(Func<string,byte[]>? response=null)
     {
+      this.response=response;
       listener.Start();
       Port=((IPEndPoint)listener.LocalEndpoint).Port;
       worker=Task.Run(RunAsync);
@@ -119,8 +160,10 @@ public sealed class NativeRotatorWorkerTests
                 Commands.Enqueue(line);
                 if(line=="C2")
                 {
-                  var reply=Encoding.ASCII.GetBytes("AZ=90 EL=30\r");
-                  await stream.WriteAsync(reply,cancel.Token);
+                  var reply=response?.Invoke(line) ??
+                    Encoding.ASCII.GetBytes("AZ=90 EL=30\r");
+                  if(reply.Length>0)
+                    await stream.WriteAsync(reply,cancel.Token);
                 }
               }
               else command.Append(c);
