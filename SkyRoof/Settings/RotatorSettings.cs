@@ -11,8 +11,8 @@ namespace SkyRoof
   {
     [DisplayName("Controller Driver")]
     [Description("Native: directly control serial/TCP/UDP rotators without a Hamlib daemon. Legacy: connect to an existing rotctld server.")]
-    [DefaultValue(true)]
-    public bool UseNativeDriver { get; set; } = true;
+    [DefaultValue(false)]
+    public bool UseNativeDriver { get; set; } = false;
 
     [DisplayName("Native Protocol")]
     [DefaultValue(SkyRoof.NativeRotator.RotatorProtocolKind.Gs232)]
@@ -45,6 +45,15 @@ namespace SkyRoof
     [DisplayName("Serial Handshake")]
     [DefaultValue(System.IO.Ports.Handshake.None)]
     public System.IO.Ports.Handshake NativeHandshake { get; set; } = System.IO.Ports.Handshake.None;
+
+    [DisplayName("Serial DTR Enabled")]
+    [DefaultValue(false)]
+    public bool NativeDtrEnable { get; set; } = false;
+
+    [DisplayName("Serial RTS Enabled")]
+    [Description("Only used when the handshake is not RequestToSend.")]
+    [DefaultValue(false)]
+    public bool NativeRtsEnable { get; set; } = false;
 
     [DisplayName("Native Poll Interval (ms)")]
     [DefaultValue(1000)]
