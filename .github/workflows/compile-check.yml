@@ -70,7 +70,12 @@ jobs:
           Write-Host "WinDivert driver: $($sys.FullName)"
 
       - name: Restore NuGet packages
-        run: nuget restore SkyRoof.sln -LockedMode
+        shell: pwsh
+        run: |
+          nuget restore SkyRoof.sln -ForceEvaluate
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Host ("LOCKFILE_SKYROOF=" + [Convert]::ToBase64String([IO.File]::ReadAllBytes("SkyRoof/packages.lock.json")))
+          Write-Host ("LOCKFILE_TESTS=" + [Convert]::ToBase64String([IO.File]::ReadAllBytes("VE3NEA.Dsp.Tests/packages.lock.json")))
 
       - name: Build solution
         run: msbuild SkyRoof.sln /m /p:Configuration=Release /p:Platform=x64
