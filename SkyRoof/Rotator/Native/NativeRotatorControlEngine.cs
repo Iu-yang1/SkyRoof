@@ -163,10 +163,14 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
     if(protocol is RotatorProtocolKind.EasyCommII or RotatorProtocolKind.EasyCommIII)
     {
       transport!.Write(Encoding.ASCII.GetBytes("AZ\n"));
-      var a=ReadReply(bytes=>NativeRotatorCodec.TryParseAxis(bytes,"AZ",out _),settings.NativeReadTimeout);
+      var a=ReadReply(bytes=>bytes.Length>0 &&
+        (bytes[^1]==(byte)'\n' || bytes[^1]==(byte)'\r') &&
+        NativeRotatorCodec.TryParseAxis(bytes,"AZ",out _),settings.NativeReadTimeout);
       if(!NativeRotatorCodec.TryParseAxis(a,"AZ",out double az))throw new InvalidDataException("Bad EasyComm azimuth");
       transport.Write(Encoding.ASCII.GetBytes("EL\n"));
-      var e=ReadReply(bytes=>NativeRotatorCodec.TryParseAxis(bytes,"EL",out _),settings.NativeReadTimeout);
+      var e=ReadReply(bytes=>bytes.Length>0 &&
+        (bytes[^1]==(byte)'\n' || bytes[^1]==(byte)'\r') &&
+        NativeRotatorCodec.TryParseAxis(bytes,"EL",out _),settings.NativeReadTimeout);
       if(!NativeRotatorCodec.TryParseAxis(e,"EL",out double el))throw new InvalidDataException("Bad EasyComm elevation");
       return new RotatorPosition(az,el);
     }
