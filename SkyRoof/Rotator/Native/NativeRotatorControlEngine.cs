@@ -44,6 +44,8 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
   private int? manualDirection,appliedDirection;
   private byte[]? lastWire;
   private string? error;
+  private readonly Queue<byte> replyBacklog = new();
+  private int spidAzResolution = 0, spidElResolution = 0;
   public event EventHandler? StatusChanged;
   public event EventHandler? BearingChanged;
   public event EventHandler<RotatorPositionFaultEventArgs>? PositionFaultDetected;
@@ -124,30 +126,47 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
     lock(sync){changed=connected!=value;connected=value;}
     if(changed)StateChanged();
   }
-  private byte[] ReadReply(Func<byte[],bool> complete,int timeoutMs)
+  private byte[] ReadReply(Func<byte[], bool> complete, int timeoutMs)
   {
-    var pending=new List<byte>(128);
-    var buffer=new byte[128];
-    var deadline=Environment.TickCount64+timeoutMs;
-    while(!stopping && Environment.TickCount64<deadline)
+    // Preserve the unused tail of a serial/TCP read. For example, a device
+    // may return two newline-delimited replies in a single OS read; consuming
+    // the first must NOT discard the second.
+    var pending = new List<byte>(128);
+    var buffer = new byte[256];
+    long deadline = Environment.TickCount64 + Math.Clamp(timeoutMs, 100, 30000);
+    while (!stopping && Environment.TickCount64 < deadline)
     {
-      // Explicit STOP must preempt noisy/fragmented replies as well as
-      // idle reads; otherwise a busy serial endpoint delays motor halt.
-      if(stopRequested)throw new OperationCanceledException("STOP pending");
-      int length;
-      try{length=transport!.Read(buffer);}
-      catch(TimeoutException){length=0;}
-      if(length>0)
+      if (stopRequested) throw new OperationCanceledException("STOP pending");
+      if (replyBacklog.Count == 0)
       {
-        pending.AddRange(buffer.AsSpan(0,length).ToArray());
-        if(pending.Count>4096)throw new InvalidDataException("Rotator frame > 4096 bytes");
-        if(complete(pending.ToArray()))return pending.ToArray();
+        int received;
+        try { received = transport!.Read(buffer); }
+        catch (TimeoutException) { received = 0; }
+        if (received == 0)
+        {
+          if (stopRequested) throw new OperationCanceledException("STOP pending");
+          if (stop.WaitOne(10)) throw new OperationCanceledException("Engine disposed");
+          continue;
+        }
+        for (int i = 0; i < received; i++)
+          replyBacklog.Enqueue(buffer[i]);
+        if (replyBacklog.Count > 4096)
+          throw new InvalidDataException("Rotator receive queue exceeded 4096 bytes");
       }
-      else if(stopRequested)throw new OperationCanceledException("STOP pending");
-      else Thread.Sleep(10);
+
+      while (replyBacklog.Count > 0)
+      {
+        if (stopRequested) throw new OperationCanceledException("STOP pending");
+        pending.Add(replyBacklog.Dequeue());
+        if (pending.Count > 4096)
+          throw new InvalidDataException("Rotator response exceeded 4096 bytes");
+        if (complete(pending.ToArray()))
+          return pending.ToArray();
+      }
     }
     throw new TimeoutException("Native rotator position reply timed out");
   }
+
   private byte[]? CommandBytes() => NativeRotatorCodec.Query(settings.NativeProtocol,settings.NativeQueryTemplate);
   private bool CanFeedback => settings.NativeProtocol==RotatorProtocolKind.CustomTemplate
     ? !string.IsNullOrWhiteSpace(settings.NativeResponseTemplate) &&
@@ -239,7 +258,20 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
     Post(()=>BearingChanged?.Invoke(this,EventArgs.Empty));
     if(fault && previous!=null)
     {
-      // Notify only after STOP has been enqueued; serial writes have no ACK.
+      // We're already on the dedicated I/O thread: attempt STOP before
+      // notifying WinForms, so the safety dialog cannot delay the write.
+      // The hardware has no physical STOP acknowledgement; always report
+      // its outcome as unconfirmed even after a successful serial write.
+      try
+      {
+        stopRequested = false;
+        SendStop();
+      }
+      catch(Exception ex)
+      {
+        Log.Error(ex,"Native rotator emergency STOP could not be confirmed");
+        lock(sync){stopRequested=true;}
+      }
       Post(()=>PositionFaultDetected?.Invoke(this,new RotatorPositionFaultEventArgs(
         previous,current,Math.Abs(previous.AzDeg-current.AzDeg),
         Math.Abs(previous.ElDeg-current.ElDeg),false)));
@@ -257,6 +289,8 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
         using var device=NativeTransportFactory.Create(settings);
         transport=device;
         device.Open();
+        replyBacklog.Clear();
+        spidAzResolution = spidElResolution = 0;
         SetConnected(true);
         if(hadConnection)
         {
@@ -301,11 +335,16 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
             byte[] frame;
             if(settings.NativeProtocol==RotatorProtocolKind.SpidRot2Prog)
             {
-              // Query resolution first and use the live controller resolution.
-              var reply=QueryRawSpid();
-              if(!NativeRotatorCodec.TryParseSpid(reply,out _,out var azRes,out var elRes))
-                throw new InvalidDataException("Missing SPID axis resolution");
-              frame=NativeRotatorCodec.Point(settings.NativeProtocol,p,settings.NativePointTemplate,azRes,elRes);
+              // Read SPID resolution once per connection, not on every loop
+              // iteration when an unchanged target is pending.
+              if(spidAzResolution == 0 || spidElResolution == 0)
+              {
+                var reply=QueryRawSpid();
+                if(!NativeRotatorCodec.TryParseSpid(reply,out _,out spidAzResolution,out spidElResolution))
+                  throw new InvalidDataException("Missing SPID axis resolution");
+              }
+              frame=NativeRotatorCodec.Point(settings.NativeProtocol,p,
+                settings.NativePointTemplate,spidAzResolution,spidElResolution);
             }
             else frame=NativeRotatorCodec.Point(settings.NativeProtocol,p,settings.NativePointTemplate);
             bool same;
