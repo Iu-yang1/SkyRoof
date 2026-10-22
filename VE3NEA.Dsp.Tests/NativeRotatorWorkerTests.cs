@@ -96,6 +96,20 @@ public sealed class NativeRotatorWorkerTests
     Assert.Equal(before,server.Commands.Count(x=>x.StartsWith("W",StringComparison.Ordinal)));
   }
 
+  [Fact]
+  public async Task DisconnectAfterMoveLatchesAndSendsStopOnReconnect()
+  {
+    await using var server=new FakeGs232Bridge(dropFirstMove:true);
+    var settings=CreateSettings(server.Port);
+    using var engine=new NativeRotatorControlEngine(settings);
+    await UntilAsync(()=>engine.LastReadBearing!=null);
+    engine.RotateTo(new SkyRoof.Bearing(Math.PI/2,Math.PI/6));
+    await UntilAsync(()=>server.Count("W090 030")>0);
+    await UntilAsync(()=>engine.PositionFaulted);
+    await UntilAsync(()=>server.Count("S")>0);
+    Assert.Equal(1,server.Count("W090 030"));
+  }
+
   private static RotatorSettings CreateSettings(int port)=>new()
   {
     Enabled=true,
@@ -127,10 +141,13 @@ public sealed class NativeRotatorWorkerTests
     private readonly Task worker;
     internal ConcurrentQueue<string> Commands {get;}=new();
     private readonly Func<string,byte[]>? response;
+    private readonly bool dropFirstMove;
+    private int dropped;
     internal int Port {get;}
-    internal FakeGs232Bridge(Func<string,byte[]>? response=null)
+    internal FakeGs232Bridge(Func<string,byte[]>? response=null,bool dropFirstMove=false)
     {
       this.response=response;
+      this.dropFirstMove=dropFirstMove;
       listener.Start();
       Port=((IPEndPoint)listener.LocalEndpoint).Port;
       worker=Task.Run(RunAsync);
@@ -149,6 +166,7 @@ public sealed class NativeRotatorWorkerTests
           while(!cancel.IsCancellationRequested)
           {
             int n=await stream.ReadAsync(data,cancel.Token);
+            bool disconnect=false;
             if(n==0)break;
             for(int i=0;i<n;i++)
             {
@@ -158,6 +176,9 @@ public sealed class NativeRotatorWorkerTests
                 if(command.Length==0)continue;
                 string line=command.ToString();command.Clear();
                 Commands.Enqueue(line);
+                if(dropFirstMove && line.StartsWith("W",StringComparison.Ordinal) &&
+                   Interlocked.CompareExchange(ref dropped,1,0)==0)
+                  disconnect=true;
                 if(line=="C2")
                 {
                   var reply=response?.Invoke(line) ??
@@ -168,6 +189,7 @@ public sealed class NativeRotatorWorkerTests
               }
               else command.Append(c);
             }
+            if(disconnect)break;
           }
         }
       }
