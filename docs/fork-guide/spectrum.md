@@ -18,6 +18,27 @@ The **Scope control path** is a **different** setting: `Auto`, `SkyCat`, `Direct
 
 **Recommended with RS-BA1 + SkyRoof:** choose **RsBa1** as waveform source and **SkyCat** as control path when the currently connected SkyCAT supports IC-9700 scope commands. If no control path is available, continue in read-only mode. Do **not** open the experimental independent Direct LAN session merely to improve FPS.
 
+## Source-specific Settings controls
+
+The **Icom LAN Spectrum** Settings section now hides connection parameters that
+do not apply to the selected waveform source, and updates immediately when
+**Scope source** or **Scope control path** changes:
+
+- **SkyCat:** SkyCAT scope TCP port and optional radio IPv4 filter for
+  native-LAN assist. RS-BA1 CI-V port and Direct LAN login are hidden.
+- **RsBa1:** passive CI-V UDP port and optional radio IPv4 filter. SkyCAT
+  stream port and Direct LAN login are hidden.
+- **DirectLan:** radio IPv4, CI-V UDP port, control port, username, password
+  and client name. **Auto start** is hidden because experimental Direct LAN
+  sessions require manual Start.
+- If **Scope control path = DirectLan** is explicitly selected independently
+  of the waveform source, its connection fields remain visible. Source and
+  control path are separate choices, not interchangeable settings.
+
+These rules affect only the PropertyGrid display. All inactive settings remain
+saved when switching sources, and common spectrum controls (band, RX passband
+estimates, waterfall, averaging and smoothing) remain accessible.
+
 ## Instrument-style scope controls
 
 The updated panel includes a trace and optional waterfall with adjustable splitter height, zoom, scroll, hold/peak-hold reset, and:
