@@ -55,7 +55,7 @@ namespace SkyRoof
     public OnvifCameraSettings OnvifCamera { get; set; } = new();
 
     [DisplayName("Rotator Control")]
-    [TypeConverter(typeof(ExpandableObjectConverter))]
+    [TypeConverter(typeof(RotatorSettingsPropertyConverter))]
     public RotatorSettings Rotator { get; set; } = new();
 
     [Description("Use SDR on a remote computer via the SoapyRemote protocol")]
@@ -215,6 +215,9 @@ namespace SkyRoof
 
     private void SetDefaults()
     {
+      // Replace legacy Auto values with an explicit driver before PropertyGrid
+      // or hardware initialization; never reset a user's explicit selection.
+      Rotator.MigrateDriverMode();
       if (Ui.DockingLayoutString == null)
         Ui.DockingLayoutString = Ui.DefaultDockingString;
 
