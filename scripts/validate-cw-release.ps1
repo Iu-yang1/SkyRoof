@@ -83,19 +83,23 @@ if ($settings -notmatch '(?s)\[DefaultValue\(true\)\].{0,300}public\s+bool\s+Tra
 }
 
 $iss = Get-Content (Require-File "install\SkyRoof.iss") -Raw
-if ($iss -notmatch 'hamnoise_skyroof\.dll') {
-  throw "Production installer must package the pinned HamNoise display-only backend."
+# Packaging root DLLs through a wildcard is intentionally safer than
+# maintaining a hardcoded list: future runtime PackageReferences (such as
+# System.IO.Ports) must not disappear from the installed application.
+$packagesAllRootDlls = $iss -match '(?im)^\s*Source:\s*\.\.\\SkyRoof\\bin\\x64\\Release\\net10\.0-windows7\.0\\\*\.dll\s*;'
+foreach ($runtimeFile in @(
+    "hamnoise_skyroof.dll",
+    "Microsoft.ML.OnnxRuntime.dll",
+    "System.Numerics.Tensors.dll")) {
+  if (-not ($packagesAllRootDlls -or $iss.Contains($runtimeFile))) {
+    throw "Production installer is missing required root DLL: $runtimeFile"
+  }
 }
 if ($iss -notmatch 'Source:\s*\.\.\\licenses\\\*') {
   throw "Production installer no longer packages the licenses directory."
 }
-foreach ($runtimeFile in @(
-    "Microsoft.ML.OnnxRuntime.dll",
-    "System.Numerics.Tensors.dll",
-    "runtimes\win-x64\native\onnxruntime")) {
-  if (-not $iss.Contains($runtimeFile)) {
-    throw "Production installer is missing required DeepCW runtime payload: $runtimeFile"
-  }
+if (-not $iss.Contains('runtimes\win-x64\native\onnxruntime')) {
+  throw "Production installer is missing the DeepCW ONNX native runtime."
 }
 
 $licenseReadme = Get-Content (Require-File "licenses\README.txt") -Raw
