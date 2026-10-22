@@ -32,8 +32,13 @@ internal sealed class SerialTransport : IRotatorTransport
   public bool Connected => serial?.IsOpen==true;
   public void Open()
   {
-    var p=new SerialPort(options.NativeSerialPort,options.NativeBaudRate,Parity.None,8,StopBits.One)
-    {Handshake=Handshake.None,ReadTimeout=Math.Clamp(options.NativeReadTimeout,100,250),
+    if(options.NativeDataBits is < 5 or > 8)
+      throw new ArgumentOutOfRangeException(nameof(options.NativeDataBits),"Serial data bits must be 5 to 8");
+    if(options.NativeBaudRate<=0)
+      throw new ArgumentOutOfRangeException(nameof(options.NativeBaudRate));
+    var p=new SerialPort(options.NativeSerialPort,options.NativeBaudRate,
+      options.NativeParity,options.NativeDataBits,options.NativeStopBits)
+    {Handshake=options.NativeHandshake,ReadTimeout=Math.Clamp(options.NativeReadTimeout,100,250),
       WriteTimeout=Math.Clamp(options.SendTimeout,100,30000),DtrEnable=false,RtsEnable=false};
     try {p.Open();serial=p;}catch{p.Dispose();throw;}
   }
