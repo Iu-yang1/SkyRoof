@@ -102,12 +102,16 @@ public static class NativeRotatorCodec
     {
       if(bytes[start]!=0x57 || bytes[start+11]!=0x20)continue;
       if(bytes[start+5] is <1 or >100 || bytes[start+10] is <1 or >100)continue;
+      // ROT2PROG position replies contain raw numeric digits (0x00..0x09),
+      // unlike command frames which contain ASCII digits. The returned pulse
+      // fields are expressed in tenths of a degree independently of the
+      // per-axis command resolution bytes (see Look4Sat RotatorCodec).
       int az=0,el=0;bool good=true;
-      for(int i=1;i<=4;i++){int d=bytes[start+i];if(d>=0x30&&d<=0x39)d-=0x30;if(d>9){good=false;break;}az=az*10+d;}
-      for(int i=6;i<=9;i++){int d=bytes[start+i];if(d>=0x30&&d<=0x39)d-=0x30;if(d>9){good=false;break;}el=el*10+d;}
+      for(int i=1;i<=4;i++){int d=bytes[start+i];if(d>9){good=false;break;}az=az*10+d;}
+      for(int i=6;i<=9;i++){int d=bytes[start+i];if(d>9){good=false;break;}el=el*10+d;}
       if(!good)continue;
       azRes=bytes[start+5];elRes=bytes[start+10];
-      p=new RotatorPosition(az/(double)azRes-360,el/(double)elRes-360);
+      p=new RotatorPosition(az/10.0-360,el/10.0-360);
       return Valid(p);
     }
     return false;
