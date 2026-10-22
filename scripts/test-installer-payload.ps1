@@ -56,7 +56,7 @@ $deps = Get-Content -LiteralPath $depsPath -Raw | ConvertFrom-Json -AsHashtable
 $windowsAssets = @()
 foreach ($framework in $deps.targets.Values) {
   foreach ($package in $framework.Values) {
-    if (-not $package.ContainsKey('runtimeTargets')) { continue }
+    if (-not $package.Contains('runtimeTargets')) { continue }
     foreach ($asset in $package.runtimeTargets.GetEnumerator()) {
       if ($asset.Value.rid -notin @('win','win-x64')) { continue }
       $assetName = $asset.Key.Replace('/', [IO.Path]::DirectorySeparatorChar)
