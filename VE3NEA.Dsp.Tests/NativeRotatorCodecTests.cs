@@ -44,7 +44,7 @@ public sealed class NativeRotatorCodecTests
     Assert.Equal(0x20,command[12]);
     Assert.Equal(0x1f,NativeRotatorCodec.Query(RotatorProtocolKind.SpidRot2Prog)![11]);
     Assert.Equal(0x0f,NativeRotatorCodec.Stop(RotatorProtocolKind.SpidRot2Prog)![11]);
-    byte[] reply={0x57,0x35,0x30,0x35,0x30,0x01,0x34,0x30,0x35,0x30,0x01,0x20};
+    byte[] reply={0x57,0x30,0x35,0x30,0x35,0x01,0x30,0x34,0x30,0x35,0x01,0x20};
     Assert.True(NativeRotatorCodec.TryParseSpid(reply,out var p,out _,out _));
     Assert.Equal(145,p.Azimuth);
     Assert.Equal(45,p.Elevation);
