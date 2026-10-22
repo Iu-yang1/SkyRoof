@@ -58,6 +58,39 @@ public sealed class NativeRotatorWorkerTests
   }
 
   [Fact]
+  public async Task ManualJogReleaseSendsStopAndDoesNotResume()
+  {
+    await using var server=new FakeGs232Bridge();
+    using var engine=new NativeRotatorControlEngine(CreateSettings(server.Port));
+    await UntilAsync(()=>engine.LastReadBearing!=null);
+    engine.StartContinuousMove(RotatorContinuousDirection.Right);
+    await UntilAsync(()=>server.Count("R")>0);
+    engine.StopRotation();
+    await UntilAsync(()=>server.Count("S")>0);
+    int before=server.Count("R");
+    await Task.Delay(750);
+    Assert.Equal(before,server.Count("R"));
+    Assert.Equal(1,before);
+  }
+
+  [Fact]
+  public async Task StopCancelsQueuedTargetWithoutMovingAfterStop()
+  {
+    await using var server=new FakeGs232Bridge();
+    using var engine=new NativeRotatorControlEngine(CreateSettings(server.Port));
+    await UntilAsync(()=>engine.LastReadBearing!=null);
+    for(int i=0;i<100;i++)
+      engine.RotateTo(new SkyRoof.Bearing((90+i%10)*Math.PI/180,Math.PI/6));
+    engine.StopRotation();
+    await UntilAsync(()=>server.Count("S")>0);
+    await Task.Delay(400);
+    var history=server.Commands.ToArray();
+    int lastStop=Array.FindLastIndex(history,x=>x=="S");
+    Assert.True(lastStop>=0);
+    Assert.DoesNotContain(history.Skip(lastStop+1),x=>x.StartsWith("W",StringComparison.Ordinal));
+  }
+
+  [Fact]
   public async Task RefusesMotionBeforeFirstValidPositionFeedback()
   {
     int enabled=0;
