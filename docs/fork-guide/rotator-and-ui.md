@@ -18,9 +18,9 @@ SkyRoof can use an **in-process driver** in **Settings → Rotator Control** by 
 | PSTRotator | — | — | yes | passive | STOP |
 | Custom Template | yes | yes | yes | configurable | configurable |
 
-Use **NativeProtocol**, **NativeTransport**, and the device fields to select the actual controller. Initial GS-232B serial values are **COM9, 9600 baud, 8N1, no flow control**; change COM9 to the port detected in Windows Device Manager. A separate rotctld instance must **not** simultaneously hold the same COM port.
+Use **NativeProtocol**, **NativeTransport**, and the device fields to select the actual controller. Initial GS-232B serial values are **COM9, 9600 baud, 8N1, no flow control**; change COM9 to the port detected in Windows Device Manager. Other controllers can set **NativeDataBits**, **NativeParity**, **NativeStopBits** and **NativeHandshake** in Settings. A separate rotctld instance must **not** simultaneously hold the same COM port.
 
-The native command worker serializes STOP/manual positioning/telemetry, sends only distinct target frames, and latches motion upon invalid feedback or loss during movement. Position reads remain possible when Track is off, at an independently configurable polling interval (1000 ms by default). Serial command writes do **not** constitute a motor STOP acknowledgment; ensure the controller has an independent physical emergency stop.
+The native **NativeRotatorIO** worker serializes STOP/manual positioning/telemetry off the WinForms UI thread, sends only distinct target frames, and latches motion upon invalid feedback or loss during movement. It does not permit new closed-loop positioning before the first fresh position report, discards superseded commands, caches SPID resolution per connection, and preserves unused serial/TCP receive bytes across response boundaries. Position reads remain possible when Track is off, at an independently configurable polling interval (1000 ms by default). Serial command writes do **not** constitute a motor STOP acknowledgment; ensure the controller has an independent physical emergency stop.
 
 Protocols without feedback or STOP require an explicit **NativeAllowOpenLoopMotion** opt-in for positioning. Continuous-direction wheel commands are supported only for GS-232. The existing Track/PARK/angle limits and UI are preserved.
 
