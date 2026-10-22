@@ -90,9 +90,26 @@ namespace SkyRoof
           _ when LegacyOnly.Contains(p.Name) => !native,
           _ => true
         })
-        .ToArray();
+        .ToList();
 
-      return new PropertyDescriptorCollection(visible, true);
+      // PropertyGrid is configured with PropertySort.NoSort. Present the
+      // address fields next to the chosen transport, instead of leaving
+      // them below all the timeouts and Enabled at the end of the list.
+      if (showNetwork)
+      {
+        var endpoint = visible.Where(p =>
+          p.Name is nameof(RotatorSettings.Host) or nameof(RotatorSettings.Port))
+          .ToArray();
+        visible.RemoveAll(p =>
+          p.Name is nameof(RotatorSettings.Host) or nameof(RotatorSettings.Port));
+
+        string after = native ? nameof(RotatorSettings.NativeTransport)
+          : nameof(RotatorSettings.DriverMode);
+        int index = visible.FindIndex(p => p.Name == after);
+        visible.InsertRange(index < 0 ? 0 : index + 1, endpoint);
+      }
+
+      return new PropertyDescriptorCollection(visible.ToArray(), true);
     }
   }
 }
