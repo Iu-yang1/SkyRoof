@@ -7,7 +7,9 @@ using System.Threading.Tasks;
 
 namespace SkyRoof
 {
-  public enum RotatorDriverMode { Auto, Native, LegacyRotctld }
+  // Auto=0 is retained only to import older Settings.json files.
+  // The PropertyGrid offers exactly Native / LegacyRotctld.
+  public enum RotatorDriverMode { Auto = 0, Native = 1, LegacyRotctld = 2 }
 
   // Mirror the serial port enum values while keeping Settings itself free
   // of System.IO.Ports types. An absent optional driver DLL must not crash
@@ -19,13 +21,24 @@ namespace SkyRoof
   public class RotatorSettings : IControlEngineSettings
   {
     [DisplayName("Controller Driver")]
-    [Description("Auto uses native control for default GS-232 serial settings and preserves nondefault legacy TCP endpoints. Native and Legacy can be selected explicitly.")]
-    [DefaultValue(RotatorDriverMode.Auto)]
-    public RotatorDriverMode DriverMode { get; set; } = RotatorDriverMode.Auto;
+    [Description("Native directly controls the configured serial/TCP/UDP hardware. LegacyRotctld connects to an external Hamlib server.")]
+    [TypeConverter(typeof(RotatorDriverModeConverter))]
+    [DefaultValue(RotatorDriverMode.Native)]
+    public RotatorDriverMode DriverMode { get; set; } = RotatorDriverMode.Native;
 
     [Browsable(false)]
     [Description("Old settings-file field. Use DriverMode to select a rotator driver.")]
     public bool UseNativeDriver { get; set; } = false;
+
+    // Migrate a previous Auto entry once at settings load. Explicit choices
+    // remain untouched; custom remote rotctld endpoints are preserved.
+    public void MigrateDriverMode()
+    {
+      if (DriverMode != RotatorDriverMode.Auto) return;
+      DriverMode = ResolveUseNativeDriver()
+        ? RotatorDriverMode.Native
+        : RotatorDriverMode.LegacyRotctld;
+    }
 
     public bool ResolveUseNativeDriver()
     {
