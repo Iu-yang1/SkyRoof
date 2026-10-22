@@ -39,8 +39,17 @@ internal sealed class SerialTransport : IRotatorTransport
     var p=new SerialPort(options.NativeSerialPort,options.NativeBaudRate,
       options.NativeParity,options.NativeDataBits,options.NativeStopBits)
     {Handshake=options.NativeHandshake,ReadTimeout=Math.Clamp(options.NativeReadTimeout,100,250),
-      WriteTimeout=Math.Clamp(options.SendTimeout,100,30000),DtrEnable=false,RtsEnable=false};
-    try {p.Open();serial=p;}catch{p.Dispose();throw;}
+      WriteTimeout=Math.Clamp(options.SendTimeout,100,30000),DtrEnable=options.NativeDtrEnable};
+    try
+    {
+      // RTS is controlled by the handshake driver when hardware RTS/CTS
+      // flow control is selected. Setting RtsEnable in that mode throws.
+      if(options.NativeHandshake is not (Handshake.RequestToSend or Handshake.RequestToSendXOnXOff))
+        p.RtsEnable=options.NativeRtsEnable;
+      p.Open();
+      serial=p;
+    }
+    catch {p.Dispose();throw;}
   }
   public void Write(ReadOnlySpan<byte> bytes)
   {
