@@ -33,7 +33,7 @@ internal sealed class SerialTransport : IRotatorTransport
   public void Open()
   {
     var p=new SerialPort(options.NativeSerialPort,options.NativeBaudRate,Parity.None,8,StopBits.One)
-    {Handshake=Handshake.None,ReadTimeout=Math.Clamp(options.ReceiveTimeout,100,30000),
+    {Handshake=Handshake.None,ReadTimeout=Math.Clamp(options.NativeReadTimeout,100,250),
       WriteTimeout=Math.Clamp(options.SendTimeout,100,30000),DtrEnable=false,RtsEnable=false};
     try {p.Open();serial=p;}catch{p.Dispose();throw;}
   }
@@ -58,7 +58,7 @@ internal sealed class TcpTransport : IRotatorTransport
   public bool Connected => client?.Connected==true;
   public void Open()
   {
-    var c=new TcpClient{NoDelay=true,ReceiveTimeout=Math.Clamp(options.ReceiveTimeout,100,30000),
+    var c=new TcpClient{NoDelay=true,ReceiveTimeout=Math.Clamp(options.NativeReadTimeout,100,500),
       SendTimeout=Math.Clamp(options.SendTimeout,100,30000)};
     try
     {
@@ -89,7 +89,7 @@ internal sealed class UdpTransport : IRotatorTransport
   {
     int local=options.NativeProtocol==RotatorProtocolKind.PstRotator && options.Port<65535?options.Port+1:0;
     var u=new UdpClient(local);
-    try{u.Connect(options.Host,options.Port);u.Client.ReceiveTimeout=Math.Clamp(options.ReceiveTimeout,100,30000);socket=u;}
+    try{u.Connect(options.Host,options.Port);u.Client.ReceiveTimeout=Math.Clamp(options.NativeReadTimeout,100,30000);socket=u;}
     catch{u.Dispose();throw;}
   }
   public void Write(ReadOnlySpan<byte> bytes)
