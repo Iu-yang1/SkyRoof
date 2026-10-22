@@ -70,10 +70,10 @@ namespace SkyRoof
       }
 
       ChangedFields.Add(label);
-      RefreshRotatorPropertiesWhenModeChanges(label);
+      RefreshConditionalSettingsWhenModeChanges(label);
     }
 
-    private void RefreshRotatorPropertiesWhenModeChanges(string? name)
+    private void RefreshConditionalSettingsWhenModeChanges(string? name)
     {
       if (name is not ("SkyRoof.RotatorSettings.DriverMode" or
           "SkyRoof.RotatorSettings.NativeTransport" or
@@ -201,7 +201,7 @@ namespace SkyRoof
       if (canChange)
       {
         ChangedFields.Add(label);
-        RefreshRotatorPropertiesWhenModeChanges(label);
+        RefreshConditionalSettingsWhenModeChanges(label);
       }
     }
 
