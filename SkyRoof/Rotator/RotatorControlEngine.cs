@@ -42,9 +42,12 @@ namespace SkyRoof
     }
   }
 
-  public class RotatorControlEngine : ControlEngine
+  public class RotatorControlEngine : ControlEngine, IRotatorEngine
   {
     public volatile Bearing? RequestedBearing, LastReadBearing, LastWrittenBearing;
+    Bearing? IRotatorEngine.RequestedBearing => RequestedBearing;
+    Bearing? IRotatorEngine.LastReadBearing => LastReadBearing;
+    Bearing? IRotatorEngine.LastWrittenBearing => LastWrittenBearing;
     private long LastSuccessfulBearingReadTicks;
     public DateTime LastSuccessfulBearingReadUtc =>
       new DateTime(Interlocked.Read(ref LastSuccessfulBearingReadTicks), DateTimeKind.Utc);
