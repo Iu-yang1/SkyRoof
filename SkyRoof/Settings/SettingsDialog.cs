@@ -1,4 +1,5 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.ComponentModel;
+using System.Text.RegularExpressions;
 using Accessibility;
 using VE3NEA;
 
@@ -69,6 +70,26 @@ namespace SkyRoof
       }
 
       ChangedFields.Add(label);
+      RefreshRotatorPropertiesWhenModeChanges(label);
+    }
+
+    private void RefreshRotatorPropertiesWhenModeChanges(string? name)
+    {
+      if (name is not ("SkyRoof.RotatorSettings.DriverMode" or
+          "SkyRoof.RotatorSettings.NativeTransport" or
+          "SkyRoof.RotatorSettings.NativeProtocol")) return;
+
+      // A PropertyGrid caches nested descriptors while an editor dropdown
+      // is open. Refresh after the edit is committed, so hidden fields and
+      // the network endpoint become visible immediately without reopening
+      // Settings or disturbing the rest of the form.
+      BeginInvoke(new Action(() =>
+      {
+        if (IsDisposed || grid.IsDisposed) return;
+        if (grid.SelectedObject is Settings settings)
+          TypeDescriptor.Refresh(settings.Rotator);
+        grid.Refresh();
+      }));
     }
 
     private void applyBtn_Click(object sender, EventArgs e)
@@ -177,7 +198,11 @@ namespace SkyRoof
           break;
       }
 
-      if (canChange) ChangedFields.Add(label);
+      if (canChange)
+      {
+        ChangedFields.Add(label);
+        RefreshRotatorPropertiesWhenModeChanges(label);
+      }
     }
 
     private bool ValidateFt4Transmit(PropertyValueChangedEventArgs e)
