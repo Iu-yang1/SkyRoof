@@ -80,13 +80,11 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
     lock(sync)
     {
       if(stopping || safetyLatched)return;
-      if(!CanFeedback && !settings.NativeAllowOpenLoopMotion)return;
-      // PSTRotator feedback is passive UDP. Never assume a healthy antenna
-      // without a recent packet when open-loop movement is not authorized.
-      if(settings.NativeProtocol==RotatorProtocolKind.PstRotator &&
-         !settings.NativeAllowOpenLoopMotion &&
-         (DateTime.UtcNow-lastReadUtc).TotalMilliseconds>
-           Math.Max(3000,3*Math.Clamp(settings.NativePollMs,200,30000)))return;
+      // Never send a new target before the first real position observation,
+      // or after feedback becomes stale. Open-loop protocols need a separate
+      // explicit user opt-in.
+      if(!settings.NativeAllowOpenLoopMotion &&
+         (!CanFeedback || !HasFreshPositionLocked()))return;
       if(!NativeRotatorCodec.CanStop(settings.NativeProtocol,settings.NativeStopTemplate) &&
          !settings.NativeAllowOpenLoopMotion)return;
       if(appliedDirection.HasValue||manualDirection.HasValue)stopRequested=true;
@@ -100,6 +98,7 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
     lock(sync)
     {
       if(stopping || safetyLatched)return;
+      if(!settings.NativeAllowOpenLoopMotion && !HasFreshPositionLocked())return;
       int value=(int)direction;
       if(value is not (2 or 4 or 8 or 16))return;
       if(appliedDirection.HasValue && appliedDirection!=value || lastWire!=null ||
@@ -166,6 +165,11 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
     }
     throw new TimeoutException("Native rotator position reply timed out");
   }
+
+  private bool HasFreshPositionLocked() =>
+    connected && lastReadUtc != DateTime.MinValue &&
+    (DateTime.UtcNow-lastReadUtc).TotalMilliseconds <=
+      Math.Max(2500,3L*Math.Clamp(settings.NativePollMs,200,30000));
 
   private byte[]? CommandBytes() => NativeRotatorCodec.Query(settings.NativeProtocol,settings.NativeQueryTemplate);
   private bool CanFeedback => settings.NativeProtocol==RotatorProtocolKind.CustomTemplate
@@ -291,6 +295,13 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
         device.Open();
         replyBacklog.Clear();
         spidAzResolution = spidElResolution = 0;
+        lock(sync)
+        {
+          // Invalidate old connection's feedback; it must not authorize a
+          // fresh motion command after a reconnect.
+          lastRead = null;
+          lastReadUtc = DateTime.MinValue;
+        }
         SetConnected(true);
         if(hadConnection)
         {
@@ -410,12 +421,20 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
     if(stopping)return;
     StopRotation();
     // The background I/O thread handles STOP; waiting is bounded by active read.
-    wake.Set();stopCompleted.Wait(Math.Clamp(settings.NativeReadTimeout+100,200,1000));
+    wake.Set();
+    // Do not hold up WinForms when no device is connected. When connected,
+    // allow a bounded interval for a STOP write before aborting the handle.
+    if(IsRunning)
+      stopCompleted.Wait(Math.Clamp(settings.NativeReadTimeout+100,200,1000));
     stopping=true;stop.Set();
     try{transport?.Abort();}catch{}
     wake.Set();
-    if(Thread.CurrentThread!=worker && !worker.Join(2500))
+    bool joined = Thread.CurrentThread != worker && worker.Join(2500);
+    if(!joined)
       Log.Warning("Native rotator worker shutdown timed out; inspect COM driver");
-    wake.Dispose();stop.Dispose();stopCompleted.Dispose();
+    // A wedged vendor serial driver may not release a blocked worker. Leave
+    // its wait handles intact until process exit rather than causing an
+    // ObjectDisposedException from a still-running worker.
+    if(joined){wake.Dispose();stop.Dispose();stopCompleted.Dispose();}
   }
 }
