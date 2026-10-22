@@ -47,7 +47,7 @@ namespace SkyRoof
     public CatSettings Cat { get; set; } = new();
 
     [DisplayName("Icom LAN Spectrum")]
-    [TypeConverter(typeof(ExpandableObjectConverter))]
+    [TypeConverter(typeof(IcomLanSpectrumSettingsPropertyConverter))]
     public IcomLanSpectrumSettings IcomLanSpectrum { get; set; } = new();
 
     [DisplayName("ONVIF Camera")]
