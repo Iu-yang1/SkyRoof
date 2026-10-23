@@ -527,7 +527,7 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
           lock(sync)
           {
             error=ex.Message;
-            if(requiresStopAfterReconnect || appliedDirection.HasValue || lastWire!=null)
+            if(requiresStopAfterReconnect || appliedDirection.HasValue)
             {
               safetyLatched=true;
               stopRequested=true;
