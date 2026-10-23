@@ -101,7 +101,8 @@ namespace SkyRoof
             try
             {
               Cycle();
-              Thread.Sleep(Delay);
+              // A misconfigured Delay=0 used to busy-loop on TCP devices.
+              if(stopEvent.Wait(Math.Clamp(Delay,50,30000)))break;
             }
             catch (SocketException ex)
             {
@@ -110,7 +111,11 @@ namespace SkyRoof
             }
             catch (Exception ex)
             {
-              Log.Error(ex, $"Error in {GetType().Name}");
+              // EOF, socket disposal and transient I/O faults must tear down
+              // the old connection. Repeating Cycle against a failed socket
+              // on the next 300ms tick floods the logs/CPU and delays recovery.
+              Log.Error(ex, $"Error in {GetType().Name}; reconnecting");
+              break;
             }
         }
 
@@ -147,7 +152,12 @@ namespace SkyRoof
       try
       {
         Log.Information($"Connecting to {Host}:{Port}");
-        TcpClient!.Connect(Host, Port);
+        // Blocking Connect() can wait for Windows' long TCP retransmission
+        // timer; use the configured send timeout as a finite connect deadline.
+        using (var timeout = new CancellationTokenSource(
+          Math.Clamp(sendTimeout,500,15000)))
+          TcpClient!.ConnectAsync(Host, Port, timeout.Token)
+            .AsTask().GetAwaiter().GetResult();
         Log.Information($"Connected to {Host}:{Port}");
         return true;
       }
@@ -163,6 +173,20 @@ namespace SkyRoof
       catch (ObjectDisposedException) when (stopping)
       {
         // StopThread closed the socket to interrupt a blocking Connect.
+        return false;
+      }
+      catch (OperationCanceledException) when (!stopping)
+      {
+        if (!ErrorLogged)
+        {
+          ErrorLogged = true;
+          Log.Warning("Timed out connecting to {Host}:{Port} after {Milliseconds} ms",
+            Host,Port,Math.Clamp(sendTimeout,500,15000));
+        }
+        return false;
+      }
+      catch (OperationCanceledException) when (stopping)
+      {
         return false;
       }
     }
