@@ -144,7 +144,11 @@ namespace SkyRoof
 
     public bool IsRunning()
     {
-      return engine != null && engine.IsRunning;
+      // TCP connect alone does not mean the device is answering queries.
+      // Native control becomes operational only after a valid position reply.
+      return engine is NativeRotatorControlEngine native
+        ? native.IsReady && !native.PositionFaulted
+        : engine != null && engine.IsRunning;
     }
 
     // true when the rotator is actively tracking (the track box is on and a rotator is present); the
@@ -494,9 +498,15 @@ namespace SkyRoof
     {
       if (!ctx.Settings.Rotator.Enabled) return "Rotator control disabled";
       if (PositionSafetyTripped) return "Position feedback fault: STOP requested; inspect actual rotor angle";
-      else if (!IsRunning()) return "No connection";
-      else if (!TrackCheckbox.Checked) return "Connected, tracking disabled";
-      else return "Connected and tracking";
+      if (engine is NativeRotatorControlEngine native)
+      {
+        string status=native.GetStatusString();
+        return status=="Ready"
+          ? TrackCheckbox.Checked ? "Ready and tracking" : "Ready, tracking disabled"
+          : status;
+      }
+      if (!IsRunning()) return "No connection";
+      return TrackCheckbox.Checked ? "Connected and tracking" : "Connected, tracking disabled";
     }
 
     //----------------------------------------------------------------------------------------------
