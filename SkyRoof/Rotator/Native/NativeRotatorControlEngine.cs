@@ -195,7 +195,9 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
   }
 
   private bool HasFreshPositionLocked() =>
-    connected && lastReadUtc != DateTime.MinValue &&
+    connected && Volatile.Read(ref ready)==1 &&
+    consecutiveFeedbackMisses==0 &&
+    lastReadUtc != DateTime.MinValue &&
     (DateTime.UtcNow-lastReadUtc).TotalMilliseconds <=
       Math.Max(2500,3L*Math.Clamp(settings.NativePollMs,200,30000));
 
@@ -496,6 +498,9 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
             catch(TimeoutException ex) when(settings.NativeTransport==RotatorTransportKind.Tcp)
             {
               ++consecutiveFeedbackMisses;
+              // A healthy TCP socket is not sufficient to authorize new
+              // movement while a protocol reply is missing.
+              if(Interlocked.Exchange(ref ready,0)!=0)StateChanged();
               Log.Warning("Native rotator: TCP feedback timeout {Misses}/3 from {Host}:{Port}; last valid feedback {AgeMs} ms ago. Keeping socket for recovery.",
                 consecutiveFeedbackMisses,settings.Host,settings.Port,
                 lastSuccessfulSessionFeedbackUtc==DateTime.MinValue ? -1 :
