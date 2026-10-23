@@ -47,6 +47,12 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
   private long commandVersion;
   private readonly Queue<byte> replyBacklog = new();
   private int spidAzResolution = 0, spidElResolution = 0;
+  private int consecutiveFeedbackMisses;
+  private int stableTargetReads;
+  private DateTime stableTargetFirstUtc = DateTime.MinValue;
+  private DateTime lastSuccessfulSessionFeedbackUtc = DateTime.MinValue;
+  private volatile int ready;
+  private long connectionAttemptNumber;
   public event EventHandler? StatusChanged;
   public event EventHandler? BearingChanged;
   public event EventHandler<RotatorPositionFaultEventArgs>? PositionFaultDetected;
@@ -57,7 +63,9 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
   public DateTime LastSuccessfulBearingReadUtc {get {lock(sync)return lastReadUtc;}}
   public bool PositionFaulted {get {lock(sync)return safetyLatched;}}
   public bool IsRunning {get {lock(sync)return connected;}}
-  public string GetStatusString()=>IsRunning?"Connected":"Not connected";
+  public bool IsReady => Volatile.Read(ref ready) == 1;
+  public string GetStatusString()=>PositionFaulted ? "Safety locked" :
+    !IsRunning ? "Reconnecting" : IsReady ? "Ready" : "Synchronizing";
   public NativeRotatorControlEngine(RotatorSettings settings)
   {
     this.settings=settings;
@@ -76,7 +84,13 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
     if(StatusChanged!=null)
       Post(()=>StatusChanged?.Invoke(this,EventArgs.Empty));
   }
-  public void Retry()=>wake.Set();
+  // Called by MainForm's one-second retry tick. Only wake a disconnected
+  // worker; pacing is enforced by the reconnect loop so this cannot turn
+  // into a tight connect/refuse storm.
+  public void Retry()
+  {
+    if(!IsRunning)wake.Set();
+  }
   public void RotateTo(Bearing bearing)
   {
     if(!double.IsFinite(bearing.AzDeg)||!double.IsFinite(bearing.ElDeg))return;
@@ -131,6 +145,7 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
   {
     bool changed;
     lock(sync){changed=connected!=value;connected=value;}
+    if(!value)Volatile.Write(ref ready,0);
     if(changed)StateChanged();
   }
   private byte[] ReadReply(Func<byte[], bool> complete, int timeoutMs)
@@ -180,7 +195,9 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
   }
 
   private bool HasFreshPositionLocked() =>
-    connected && lastReadUtc != DateTime.MinValue &&
+    connected && Volatile.Read(ref ready)==1 &&
+    consecutiveFeedbackMisses==0 &&
+    lastReadUtc != DateTime.MinValue &&
     (DateTime.UtcNow-lastReadUtc).TotalMilliseconds <=
       Math.Max(2500,3L*Math.Clamp(settings.NativePollMs,200,30000));
 
@@ -207,7 +224,13 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
       if(!Regex.IsMatch(Encoding.ASCII.GetString(ack),@"(?m)^RPRT 0\s*$"))
         throw new IOException("rotctld rejected STOP");
     }
-    lock(sync){appliedDirection=null;lastWire=null;lastWritten=null;requiresStopAfterReconnect=false;}
+    lock(sync)
+    {
+      appliedDirection=null;lastWire=null;lastWritten=null;
+      requiresStopAfterReconnect=false;
+      stableTargetReads=0;
+      stableTargetFirstUtc=DateTime.MinValue;
+    }
     stopCompleted.Set();
     // Serial/TCP bridge writes do NOT guarantee a physical motor STOP ACK.
   }
@@ -271,6 +294,26 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
         error="Position feedback jump: STOP sent or pending";
       }
       lastRead=current;lastReadUtc=DateTime.UtcNow;
+      // STOP after link loss is necessary only if a previously issued target
+      // may still be in motion. Two fresh measurements at the target, over
+      // at least 200ms, confirm the target has settled. Continuous manual jog
+      // never clears the interlock this way: it always requires STOP.
+      if(!fault && requested!=null && !manualDirection.HasValue &&
+         !appliedDirection.HasValue && lastWire!=null &&
+         Math.Abs(current.AzDeg-requested.AzDeg)<=1.5 &&
+         Math.Abs(current.ElDeg-requested.ElDeg)<=1.5)
+      {
+        if(stableTargetReads==0)stableTargetFirstUtc=lastReadUtc;
+        stableTargetReads++;
+        if(stableTargetReads>=2 &&
+           (lastReadUtc-stableTargetFirstUtc).TotalMilliseconds>=200)
+          requiresStopAfterReconnect=false;
+      }
+      else
+      {
+        stableTargetReads=0;
+        stableTargetFirstUtc=DateTime.MinValue;
+      }
     }
     // Unlike the legacy engine, the first native implementation posted an
     // event after EVERY position poll, even when the bearings were identical
@@ -302,7 +345,7 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
   }
   private void Run()
   {
-    int reconnect=Math.Clamp(settings.ReconnectDelay,200,30000);
+    int retryFailures=0;
     bool hadConnection=false;
     while(!stopping)
     {
@@ -310,8 +353,21 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
       {
         using var device=NativeTransportFactory.Create(settings);
         transport=device;
+        long attempt=Interlocked.Increment(ref connectionAttemptNumber);
+        var connectWatch=System.Diagnostics.Stopwatch.StartNew();
+        Log.Information("Native rotator: connecting attempt {Attempt} via {Transport} to {Host}:{Port}, protocol {Protocol}",
+          attempt,settings.NativeTransport,
+          settings.NativeTransport==RotatorTransportKind.Serial ? settings.NativeSerialPort : settings.Host,
+          settings.NativeTransport==RotatorTransportKind.Serial ? 0 : settings.Port,
+          settings.NativeProtocol);
         device.Open();
+        Log.Information("Native rotator transport established after {ElapsedMs} ms; synchronizing controller feedback",
+          connectWatch.ElapsedMilliseconds);
         replyBacklog.Clear();
+        consecutiveFeedbackMisses=0;
+        stableTargetReads=0;
+        stableTargetFirstUtc=DateTime.MinValue;
+        Volatile.Write(ref ready,CanFeedback ? 0 : 1);
         spidAzResolution = spidElResolution = 0;
         lock(sync)
         {
@@ -319,6 +375,7 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
           // fresh motion command after a reconnect.
           lastRead = null;
           lastReadUtc = DateTime.MinValue;
+          lastSuccessfulSessionFeedbackUtc=DateTime.MinValue;
         }
         SetConnected(true);
         if(hadConnection)
@@ -329,7 +386,7 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
             // query timed out. Fail-closed only if a motion command could
             // still be active on the physical controller.
             bool potentiallyMoving=requiresStopAfterReconnect ||
-              appliedDirection.HasValue || lastWire!=null;
+              appliedDirection.HasValue;
             requested=lastWritten=null;manualDirection=null;appliedDirection=null;lastWire=null;
             if(potentiallyMoving)
             {
@@ -339,7 +396,8 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
             }
           }
         }
-        hadConnection=true;reconnect=Math.Clamp(settings.ReconnectDelay,200,30000);
+        hadConnection=true;
+        if(!CanFeedback)retryFailures=0;
         long nextQuery=0;
         while(!stopping && device.Connected)
         {
@@ -418,11 +476,39 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
           if(CanFeedback && now>=nextQuery && !stopRequested)
           {
             nextQuery=now+Math.Clamp(settings.NativePollMs,200,30000);
-            try { PublishPosition(Query()); }
+            try
+            {
+              PublishPosition(Query());
+              if(consecutiveFeedbackMisses>0)
+                Log.Information("Native rotator: feedback recovered after {Misses} missed replies",
+                  consecutiveFeedbackMisses);
+              consecutiveFeedbackMisses=0;
+              lastSuccessfulSessionFeedbackUtc=DateTime.UtcNow;
+              if(Interlocked.Exchange(ref ready,1)==0)StateChanged();
+              retryFailures=0;
+            }
             catch(OperationCanceledException) when(stopRequested){continue;}
-            catch(TimeoutException) when(settings.NativeProtocol==RotatorProtocolKind.PstRotator ||
+            catch(TimeoutException ex) when(settings.NativeProtocol==RotatorProtocolKind.PstRotator ||
               settings.NativeProtocol==RotatorProtocolKind.CustomTemplate &&
-              settings.NativeTransport==RotatorTransportKind.Udp){continue;}
+              settings.NativeTransport==RotatorTransportKind.Udp)
+            {
+              // PST is passive UDP: no packet does not indicate a broken connection.
+              continue;
+            }
+            catch(TimeoutException ex) when(settings.NativeTransport==RotatorTransportKind.Tcp)
+            {
+              ++consecutiveFeedbackMisses;
+              // A healthy TCP socket is not sufficient to authorize new
+              // movement while a protocol reply is missing.
+              if(Interlocked.Exchange(ref ready,0)!=0)StateChanged();
+              Log.Warning("Native rotator: TCP feedback timeout {Misses}/3 from {Host}:{Port}; last valid feedback {AgeMs} ms ago. Keeping socket for recovery.",
+                consecutiveFeedbackMisses,settings.Host,settings.Port,
+                lastSuccessfulSessionFeedbackUtc==DateTime.MinValue ? -1 :
+                  (long)(DateTime.UtcNow-lastSuccessfulSessionFeedbackUtc).TotalMilliseconds);
+              if(consecutiveFeedbackMisses>=3)
+                throw new TimeoutException("Native TCP rotator: 3 consecutive protocol feedback timeouts",ex);
+              continue;
+            }
           }
           int remaining=(int)Math.Clamp(nextQuery-Environment.TickCount64,20,1000);
           if(!CanFeedback)remaining=200;
@@ -441,11 +527,12 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
       {
         if(!stopping)
         {
-          Log.Warning(ex,"Native rotator I/O failure");
+          Log.Warning(ex,"Native rotator I/O failure ({Transport}, {Protocol}) after attempt {Attempt}. Reconnecting.",
+            settings.NativeTransport,settings.NativeProtocol,Interlocked.Read(ref connectionAttemptNumber));
           lock(sync)
           {
             error=ex.Message;
-            if(requiresStopAfterReconnect || appliedDirection.HasValue || lastWire!=null)
+            if(requiresStopAfterReconnect || appliedDirection.HasValue)
             {
               safetyLatched=true;
               stopRequested=true;
@@ -460,7 +547,23 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
         try{transport?.Abort();}catch{}
         transport=null;
       }
-      if(!stopping){if(stop.WaitOne(reconnect))break;reconnect=Math.Min(30000,reconnect*2);}
+      if(!stopping)
+      {
+        int delay=NativeRotatorReconnectPolicy.GetDelayMilliseconds(
+          retryFailures++,settings.ReconnectDelay);
+        Log.Information("Native rotator: reconnect backoff {DelayMs} ms (failure streak {Failures})",
+          delay,retryFailures);
+        // Retry() is called once per second by MainForm. It may wake the
+        // reconnect gate, but never permit attempts more frequently than
+        // this minimum interval after the last failure.
+        int waitResult=WaitHandle.WaitAny(new WaitHandle[]{stop,wake},delay);
+        if(waitResult==0)break;
+        if(waitResult==1 && !stop.WaitOne(0))
+        {
+          int minimumDelay=Math.Min(750,delay);
+          if(stop.WaitOne(minimumDelay))break;
+        }
+      }
     }
   }
   private byte[] QueryRawSpid()
