@@ -2,6 +2,32 @@
 
 **Language:** English | [简体中文](../zh-cn/fork-guide/rotator-and-ui.md)
 
+## TCP connection recovery and diagnostics
+
+The native TCP rotator worker distinguishes **transport connected** from
+**protocol ready**. Each valid position frame is an application heartbeat;
+one delayed/lost position reply no longer forces a TCP reconnect. Until
+feedback returns, the UI reports **Synchronizing** and new motor commands
+are inhibited. Three consecutive protocol timeouts trigger a clean reconnect.
+
+Reconnection uses a short capped exponential delay (500 ms to at most the
+configured **Reconnect Delay**, 5 seconds by default). The periodic Retry
+signal can wake the reconnect worker, with a minimum retry interval to avoid
+busy reconnect loops. An in-motion disconnect remains safety-locked with STOP
+on reconnect; two fresh, separated feedback readings at the commanded
+target may clear the settled-motion condition, but **manual jog never clears
+its safety requirement without STOP**.
+
+The status tooltip distinguishes **Reconnecting**, **Synchronizing**,
+**Ready** and **Safety locked**. Detailed connection attempts, feedback
+misses, recovery and socket exceptions are written to the normal log folder:
+`%APPDATA%\Afreet\Products\SkyRoof\Logs`.
+
+For TCP-to-serial bridges, check firmware, client/session limits and the
+bridge's serial response terminator when feedback timeouts persist. TCP
+KeepAlive is supplementary to protocol polling and does not prove motor
+STOP. Never automatically restart manual motion after reconnection.
+
 ## Native C# rotator protocol implementation (experimental)
 
 SkyRoof offers **Controller Driver: Native / LegacyRotctld** in **Settings → Rotator Control**. **Native is the default** for new configurations. Previously saved **Auto** entries are converted at load time: the normal localhost:4533 GS-232B configuration migrates to native serial; an existing nondefault remote rotctld TCP endpoint migrates to **LegacyRotctld**. The old **UseNativeDriver** field is hidden but preserved for backward compatibility. Native control does not need a running `rotctld.exe` process, and the **Enabled** control still determines whether any device is opened.
