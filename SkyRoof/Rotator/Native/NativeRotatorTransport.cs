@@ -69,7 +69,9 @@ internal sealed class TcpTransport : IRotatorTransport
   private readonly RotatorSettings options;
   private TcpClient? client;
   internal TcpTransport(RotatorSettings options)=>this.options=options;
-  public bool Connected => client?.Connected==true;
+  // TcpClient.Connected is merely a snapshot of the previous I/O call.
+  // Let the protocol heartbeat discover half-open links via Read/Write.
+  public bool Connected => client!=null;
   public void Open()
   {
     var c=new TcpClient{NoDelay=true,ReceiveTimeout=Math.Clamp(options.NativeReadTimeout,100,500),
@@ -78,6 +80,9 @@ internal sealed class TcpTransport : IRotatorTransport
     {
       using var timeout = new CancellationTokenSource(Math.Clamp(options.SendTimeout,200,30000));
       c.ConnectAsync(options.Host,options.Port,timeout.Token).AsTask().GetAwaiter().GetResult();
+      // KeepAlive is supplementary to application-layer position polling.
+      // TCP's .Connected property must not be used as a health probe.
+      c.Client.SetSocketOption(SocketOptionLevel.Socket,SocketOptionName.KeepAlive,true);
       client=c;
     }catch{c.Dispose();throw;}
   }
