@@ -197,7 +197,7 @@ internal sealed class Rc3040sOperationsDialog : Form
       {
         var result=await Rc3040sManagementService.SaveSpeedAsync(
           settings.Host,azimuth,proposed,cancel.Token,
-          ()=>commandAttempted=true);
+          ()=>commandAttempted=true,snapshot.Firmware,snapshot.DeviceIdSuffix);
         if(!IsDisposed)
         {
           snapshot=result.Outcome is Rc3040sManagementService.SpeedWriteOutcome.Applied or
