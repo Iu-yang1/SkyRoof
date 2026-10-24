@@ -28,7 +28,7 @@ internal sealed class Rc3040sMotionSettingsDialog : Form
   {
     settings=options;persist=saveSettings;
     Text="RC-3040S · Motion Settings";
-    ClientSize=new Size(490,436);
+    ClientSize=new Size(490,468);
     AutoScaleMode=AutoScaleMode.Font;
     FormBorderStyle=FormBorderStyle.FixedDialog;
     StartPosition=FormStartPosition.CenterParent;
@@ -64,11 +64,11 @@ internal sealed class Rc3040sMotionSettingsDialog : Form
     SetupNumber(jerk,settings.Rc3040sPlanJerk,0.05m,30m,16,124,parameters,"Max jerk","°/s³");
     Controls.Add(parameters);
 
-    availability.SetBounds(17,389,245,29);
+    availability.SetBounds(17,390,458,25);
     availability.ForeColor=SystemColors.GrayText;Controls.Add(availability);
-    defaults.SetBounds(204,394,78,28);
-    save.SetBounds(290,394,91,28);
-    cancel.SetBounds(389,394,88,28);
+    defaults.SetBounds(202,426,80,28);
+    save.SetBounds(290,426,91,28);
+    cancel.SetBounds(389,426,88,28);
     defaults.Click+=(_,_)=>RestoreDefaults();
     save.Click+=(_,_)=>Commit();
     cancel.Click+=(_,_)=>{DialogResult=DialogResult.Cancel;Close();};
