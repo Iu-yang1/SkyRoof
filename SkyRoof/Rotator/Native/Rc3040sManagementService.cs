@@ -212,6 +212,16 @@ internal static class Rc3040sManagementService
   /// then perform a separate independently established readback. Unknown
   /// outcomes must not trigger retries or compensating EEPROM writes.
   /// </summary>
+  internal static SpeedWriteOutcome ClassifySpeedWrite(
+    int before,int requested,int? observed,bool exactEcho)
+  {
+    if(observed is null)return SpeedWriteOutcome.ReadbackUnavailable;
+    if(observed==requested && observed!=before)return SpeedWriteOutcome.Applied;
+    if(observed==before)
+      return exactEcho?SpeedWriteOutcome.EchoOnly:SpeedWriteOutcome.Unchanged;
+    return SpeedWriteOutcome.Failed;
+  }
+
   internal static async Task<SpeedWriteResult> SaveSpeedAsync(
     string host,bool azimuth,int desired,CancellationToken token=default)
   {
@@ -228,7 +238,7 @@ internal static class Rc3040sManagementService
       return new(original,null,SpeedWriteOutcome.Failed,desired,false,
         "Device identity could not be checked; write not sent.");
 
-    bool exactEcho=false;
+    bool exactEcho=false, sent=false;
     // The firmware is allowed to send no explicit ACK for this command.
     // A response containing the requested AT line is NOT an independent
     // speed confirmation; only an independently fetched configuration counts.
@@ -243,6 +253,7 @@ internal static class Rc3040sManagementService
             "Device version/identity changed; write not sent.");
         string command=$"AT+{(azimuth?"AZ":"EL")}_SPD={desired:D5}\r";
         await SendAsync(ws,command,ct).ConfigureAwait(false);
+        sent=true;
         // Not waiting for the AT response was a race: closing immediately
         // after SendAsync could truncate firmware processing. Bounded
         // wait uses the same FrameReader and does not start a second
@@ -252,7 +263,7 @@ internal static class Rc3040sManagementService
           .Any(line=>line.Trim()==command.TrimEnd('\r'));
       },token).ConfigureAwait(false);
     }
-    catch(InvalidOperationException ex)
+    catch(InvalidOperationException ex) when(!sent)
     {
       // "write not sent" preflight failure, not a general proof of failure
       return new(original,null,SpeedWriteOutcome.Failed,desired,false,ex.Message);
@@ -277,17 +288,15 @@ internal static class Rc3040sManagementService
     if(!observed.HasValue)
       return new(original,verified,SpeedWriteOutcome.ReadbackUnavailable,desired,exactEcho,
         "Readback had no speed field for the selected axis.");
-    if(observed==desired && observed!=before)
-      return new(original,verified,SpeedWriteOutcome.Applied,desired,exactEcho,
-        "Independent configuration readback matched the changed speed.");
-    if(observed==before)
-      return new(original,verified,
-        exactEcho?SpeedWriteOutcome.EchoOnly:SpeedWriteOutcome.Unchanged,
-        desired,exactEcho,
-        exactEcho?"Only AT text echo was seen; the configuration did not change.":
-                  "Device still reports its previous speed; write was not verified.");
-    return new(original,verified,SpeedWriteOutcome.Failed,desired,exactEcho,
-      "Device reported a different speed than either old or requested value.");
+    var outcome=ClassifySpeedWrite(before.Value,desired,observed,exactEcho);
+    string message=outcome switch
+    {
+      SpeedWriteOutcome.Applied => "Independent readback matched updated speed.",
+      SpeedWriteOutcome.Unchanged => "Device returned the previous speed.",
+      SpeedWriteOutcome.EchoOnly => "Only AT echo; speed unchanged.",
+      _ => "Readback value differs from requested speed."
+    };
+    return new(original,verified,outcome,desired,exactEcho,message);
   }
 
   internal static Task RestartAsync(string host,string expectedFirmware,
