@@ -112,8 +112,13 @@ namespace SkyRoof.CW
       double low=Quantile(ordered,0.15);
       double high=Quantile(ordered,0.85);
       double threshold=low+0.45*(high-low);
-      double[] other=new double[count];
-      Array.Fill(other,double.NegativeInfinity);
+      // Detect a true switching *dominant frequency*, not just any
+      // sideband energy: FFT sidelobes exist even while the original
+      // CW tone is keyed down.
+      double[] bestFrequency=new double[count];
+      double[] bestSnr=new double[count];
+      Array.Fill(bestSnr,double.NegativeInfinity);
+      for(int i=0;i<count;i++)bestFrequency[i]=double.NaN;
       foreach(CwRidgeObservation obs in scan.FastObservations)
       {
         long relative=obs.CenterSampleIndex-(start+win/2);
@@ -122,25 +127,31 @@ namespace SkyRoof.CW
         double dt=(obs.CenterSampleIndex-snapshot.EndSampleIndex)/
           (double)snapshot.SampleRate;
         double center=track.FrequencyHz+track.DriftHzPerSecond*dt;
-        double distance=Math.Abs(obs.FrequencyHz-center);
-        if(distance>=Math.Max(9,0.8*obs.ResolutionHz) &&
-           distance<=220)
-          other[i]=Math.Max(other[i],obs.SnrDb);
+        if(Math.Abs(obs.FrequencyHz-center)>220)continue;
+        if(obs.SnrDb>bestSnr[i])
+        {
+          bestSnr[i]=obs.SnrDb;
+          bestFrequency[i]=obs.FrequencyHz;
+        }
       }
-      int on=0,off=0,onOther=0,offOther=0;
-      double neighborThreshold=Math.Max(
+      int on=0,off=0,onSwitched=0,offSwitched=0;
+      double strongEnough=Math.Max(
         scanner.Options.FastMinimumSnrDb+4.0,high-9.0);
       for(int i=0;i<count;i++)
       {
-        bool targetOn=snr[i]>=threshold;
-        bool neighborOn=other[i]>=neighborThreshold;
-        if(targetOn){on++;if(neighborOn)onOther++;}
-        else {off++;if(neighborOn)offOther++;}
+        double timeDelta=(start+win/2+(long)i*hop-
+          snapshot.EndSampleIndex)/(double)snapshot.SampleRate;
+        double center=track.FrequencyHz+
+          track.DriftHzPerSecond*timeDelta;
+        bool switched=bestSnr[i]>=strongEnough &&
+          Math.Abs(bestFrequency[i]-center)>=
+            Math.Max(10.0,0.9*snapshot.SampleRate/(double)win);
+        if(snr[i]>=threshold){on++;if(switched)onSwitched++;}
+        else {off++;if(switched)offSwitched++;}
       }
-      if(on>=4 && off>=4 &&
-         offOther>=4 &&
-         offOther/(double)off>=0.85 &&
-         onOther/(double)on<=0.20)
+      if(on>=4 && off>=4 && offSwitched>=4 &&
+         offSwitched/(double)off>=0.75 &&
+         onSwitched/(double)on<=0.35)
         return result with { IsKeyed=false };
       return result;
     }
