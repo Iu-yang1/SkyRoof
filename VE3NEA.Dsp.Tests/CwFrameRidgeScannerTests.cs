@@ -222,6 +222,28 @@ namespace VE3NEA.Dsp.Tests
         .IsKeyed.Should().BeFalse();
     }
 
+    [Fact]
+    public void NearbyIndependentKeyedStationsRemainCwEligible()
+    {
+      const double seconds=2.4;
+      int count=(int)(seconds*SampleRate);
+      float[] audio=MakeNoise(count,0.0015f);
+      for(int n=0;n<count;n++)
+      {
+        double t=n/(double)SampleRate;
+        if((t%0.18)<0.18*0.50)
+          audio[n]+=0.34f*(float)Math.Sin(2*Math.PI*800*t);
+        if((t%0.31)<0.31*0.55)
+          audio[n]+=0.20f*(float)Math.Sin(2*Math.PI*825*t);
+      }
+      var snapshot=new CwAudioSnapshot(SampleRate,T0,count,audio);
+      var scanner=NewScanner(550,1250);
+      CwFrameRidgeScanResult scan=scanner.Scan(snapshot);
+      var main=new CwSignalTrack(1,800,20,0,T0,T0,true,true);
+      CwKeyingGate.AssessRidge(main,scan,snapshot,scanner)
+        .IsKeyed.Should().BeTrue();
+    }
+
     [Theory]
     [InlineData(0.16,170.0)]
     [InlineData(0.12,25.0)]
