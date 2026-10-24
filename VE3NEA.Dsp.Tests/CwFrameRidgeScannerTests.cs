@@ -222,6 +222,32 @@ namespace VE3NEA.Dsp.Tests
         .IsKeyed.Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData(0.16,170.0)]
+    [InlineData(0.12,25.0)]
+    public void FrequencyHoppingDigitalToneIsNotConfirmedAsCw(
+      double symbolSeconds,double separationHz)
+    {
+      const double seconds=2.4;
+      int count=(int)(seconds*SampleRate);
+      float[] audio=MakeNoise(count,0.0015f);
+      double phase=0;
+      for(int n=0;n<count;n++)
+      {
+        int symbol=(int)(n/(symbolSeconds*SampleRate));
+        double hz=800+(symbol%2)*separationHz;
+        phase+=2*Math.PI*hz/SampleRate;
+        audio[n]+=0.36f*(float)Math.Sin(phase);
+      }
+      var snapshot=new CwAudioSnapshot(SampleRate,T0,count,audio);
+      CwFrameRidgeScanner scanner=NewScanner(550,1250);
+      CwFrameRidgeScanResult scan=scanner.Scan(snapshot);
+      scan.FastObservations.Should().NotBeEmpty();
+      var track=new CwSignalTrack(1,800,25,0,T0,T0,true,true);
+      CwKeyingGate.AssessRidge(track,scan,snapshot,scanner)
+        .IsKeyed.Should().BeFalse();
+    }
+
     [Fact]
     public void Scanner_NoiseOnly_DoesNotCreateKalmanMeasurements()
     {
