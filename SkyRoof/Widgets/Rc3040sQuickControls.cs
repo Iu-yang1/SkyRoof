@@ -26,7 +26,6 @@ internal sealed class Rc3040sQuickControls : UserControl
   private Context? context;
   private RotatorWidget? rotator;
   private bool busy, loaded, dirtyAz, dirtyEl, settingValues;
-  private bool? physicalStopConfirmed;
   private const int RawMin = 15;
   private const int RawMax = 10000; // conservative UI band, NOT verified motor safety
 
@@ -35,14 +34,14 @@ internal sealed class Rc3040sQuickControls : UserControl
     Size = new Size(318, 216);
     Margin = Padding.Empty;
     title.SetBounds(12, 3, 294, 19);
-    title.Text = "RC-3040S  |  WebSocket AT speed";
+    title.Text = "RC-3040S · Rotation speed";
     title.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold);
     Controls.Add(title);
 
     azText.SetBounds(12, 25, 294, 16);
     elText.SetBounds(12, 79, 294, 16);
     Controls.Add(azText); Controls.Add(elText);
-    ConfigureSlider(az, 45); ConfigureSlider(el, 99);
+    ConfigureSlider(az,45,true); ConfigureSlider(el,99,false);
     az.Scroll += (_,_) => {if (!settingValues) dirtyAz=true; Display();};
     el.Scroll += (_,_) => {if (!settingValues) dirtyEl=true; Display();};
     Controls.Add(az); Controls.Add(el);
@@ -61,21 +60,20 @@ internal sealed class Rc3040sQuickControls : UserControl
 
     state.SetBounds(12, 179, 294, 32);
     state.AutoEllipsis=true;state.ForeColor=SystemColors.GrayText;
-    state.Text="Read first · no AT write on drag";
+    state.Text="Read speed to begin";
     Controls.Add(state);
     tips.SetToolTip(read,"Read 260223_C configuration via WebSocket/60030");
-    tips.SetToolTip(revert,"Undo unsaved slider changes; does NOT reset firmware or EEPROM");
+    tips.SetToolTip(revert,"Discard unsaved slider edits");
     tips.SetToolTip(restart,"Send AT+RESET only with explicit dual confirmation; motor must be physically stopped");
-    tips.SetToolTip(state,"A completed WebSocket send is not proof of a motor/EEPROM operation.");
+    tips.SetToolTip(state,"Device status");
     RefreshAccess();
   }
 
-  private static void ConfigureSlider(TrackBar bar,int y)
+  private static void ConfigureSlider(TrackBar bar,int y,bool azimuth)
   {
     bar.SetBounds(7,y,301,31);
-    bar.Minimum=RawMin;bar.Maximum=RawMax;
-    bar.TickStyle=TickStyle.None;
-    bar.SmallChange=50;bar.LargeChange=250;
+    bar.Minimum=100;bar.Maximum=Rc3040sManagementService.SpeedUnits.SliderMaximum(azimuth,RawMax);
+    bar.TickStyle=TickStyle.None;bar.SmallChange=5;bar.LargeChange=25;
     bar.Enabled=false;
   }
 
@@ -112,21 +110,31 @@ internal sealed class Rc3040sQuickControls : UserControl
                        snapshot?.ElRaw is >=RawMin and <=RawMax;
     read.Enabled=!busy && context?.Settings.Rotator.Rc3040sAtEnabled==true;
     az.Enabled=el.Enabled=active && valuesKnown;
-    saveAz.Enabled=az.Enabled && dirtyAz && snapshot!.AzRaw!=az.Value;
-    saveEl.Enabled=el.Enabled && dirtyEl && snapshot!.ElRaw!=el.Value;
+    saveAz.Enabled=az.Enabled && dirtyAz && snapshot!.AzRaw!=ProposedRaw(true,az);
+    saveEl.Enabled=el.Enabled && dirtyEl && snapshot!.ElRaw!=ProposedRaw(false,el);
     revert.Enabled=!busy && valuesKnown;
     restart.Enabled=active && snapshot?.Firmware!=null &&
       snapshot.DeviceIdSuffix!=null;
   }
 
+  private static int ProposedRaw(bool azimuth,TrackBar slider) =>
+    Rc3040sManagementService.SpeedUnits.RawFromSlider(azimuth,slider.Value,RawMin,RawMax);
+
   private void Display()
   {
-    azText.Text=$"AZ raw  {az.Value:D5}" +
-      (snapshot?.AzRaw is int originalAz ? $"  (device {originalAz:D5})" : "  (not read)");
-    elText.Text=$"EL raw  {el.Value:D5}" +
-      (snapshot?.ElRaw is int originalEl ? $"  (device {originalEl:D5})" : "  (not read)");
+    azText.Text=$"AZ  {az.Value/100.0:0.00} °/s" +
+      (snapshot?.AzRaw is int azOriginal ?
+        $"    Saved {Rc3040sManagementService.SpeedUnits.ToDegreesPerSecond(true,azOriginal):0.00}" : "");
+    elText.Text=$"EL  {el.Value/100.0:0.00} °/s" +
+      (snapshot?.ElRaw is int elOriginal ?
+        $"    Saved {Rc3040sManagementService.SpeedUnits.ToDegreesPerSecond(false,elOriginal):0.00}" : "");
+    tips.SetToolTip(azText,snapshot?.AzRaw is int a ?
+      $"Raw: {a:D5} · Proposed: {ProposedRaw(true,az):D5}" : "Not read");
+    tips.SetToolTip(elText,snapshot?.ElRaw is int e ?
+      $"Raw: {e:D5} · Proposed: {ProposedRaw(false,el):D5}" : "Not read");
     RefreshAccess();
   }
+
   private void SetState(string message)
   {
     if(IsDisposed)return;
@@ -137,9 +145,14 @@ internal sealed class Rc3040sQuickControls : UserControl
     if(snapshot?.AzRaw is not int azRaw || snapshot.ElRaw is not int elRaw ||
        azRaw is <RawMin or >RawMax || elRaw is <RawMin or >RawMax)return;
     settingValues=true;
-    try {az.Value=azRaw;el.Value=elRaw;dirtyAz=dirtyEl=false;}
+    try
+    {
+      az.Value=Math.Clamp(Rc3040sManagementService.SpeedUnits.SliderTick(true,azRaw),az.Minimum,az.Maximum);
+      el.Value=Math.Clamp(Rc3040sManagementService.SpeedUnits.SliderTick(false,elRaw),el.Minimum,el.Maximum);
+      dirtyAz=dirtyEl=false;
+    }
     finally {settingValues=false;}
-    SetState("Sliders restored from last read (no AT write).");
+    SetState("Unsaved changes discarded.");
     Display();
   }
 
@@ -156,9 +169,9 @@ internal sealed class Rc3040sQuickControls : UserControl
       if(result.AzRaw is >=RawMin and <=RawMax && result.ElRaw is >=RawMin and <=RawMax)
       {
         RevertSliders();
-        SetState("Device speed values read; drag is local only.");
+        SetState("Speeds loaded.");
       }
-      else SetState("Speed fields not returned or outside 15–10000; writes disabled.");
+      else SetState("Speed readback unavailable.");
     }
     catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}
     catch(Exception ex) { SetState("Read failed: "+ex.Message); }
@@ -169,12 +182,12 @@ internal sealed class Rc3040sQuickControls : UserControl
   {
     if(!CanSendAt || snapshot is null || context is null)return;
     int before=azimuth ? snapshot.AzRaw??-1 : snapshot.ElRaw??-1;
-    int desired=azimuth ? az.Value : el.Value;
+    int desired=azimuth ? ProposedRaw(true,az) : ProposedRaw(false,el);
     if(before is <RawMin or >RawMax || desired==before)return;
     string axis=azimuth?"AZ":"EL";
-    if(!Confirm($"Set {axis} raw speed {before:D5} → {desired:D5}?\n" +
-       "May write EEPROM. You must physically stop/isolate the motor.\n" +
-       "Moving hardware/firmware effects are not verified.",
+    if(!Confirm($"{axis}: {Rc3040sManagementService.SpeedUnits.Display(azimuth,before)} → " +
+       $"{Rc3040sManagementService.SpeedUnits.Display(azimuth,desired)}?\n" +
+       "Verify the motor is physically stopped before saving.",
        $"SAVE-{axis}-{desired:D5}"))return;
     if(!CanSendAt)return;
     busy=true;RefreshAccess();SetState($"Sending {axis} once; no retry...");
@@ -191,16 +204,26 @@ internal sealed class Rc3040sQuickControls : UserControl
           context.Settings.Rotator.Host,azimuth,desired,lifetime.Token);
         if(!IsDisposed)
         {
-          snapshot=result.After;
-          RevertSliders();
-          SetState($"{axis} readback matched; reapply rotator settings after physical check.");
+          if(result.After is not null)snapshot=result.After;
+          if(result.Outcome==Rc3040sManagementService.SpeedWriteOutcome.Applied)
+          {
+            RevertSliders();
+            SetState($"{axis} saved; reapply rotator settings.");
+          }
+          else SetState(result.Outcome switch
+          {
+            Rc3040sManagementService.SpeedWriteOutcome.Unchanged => $"{axis}: device speed unchanged.",
+            Rc3040sManagementService.SpeedWriteOutcome.EchoOnly => $"{axis}: echo only; speed unchanged.",
+            Rc3040sManagementService.SpeedWriteOutcome.ReadbackUnavailable => $"{axis}: readback unavailable; do not retry.",
+            _ => $"{axis}: save not verified."
+          });
         }
       }
       finally {motor.LatchAfterManagementChange();}
     }
     catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}
     catch(Exception ex) { SetState($"Write state UNKNOWN: {ex.Message}. Do not retry."); }
-    finally {busy=false;RefreshAccess();Display();}
+    finally {busy=false;if(!IsDisposed){RefreshAccess();Display();}}
   }
 
   private async Task RestartAsync()
