@@ -192,10 +192,12 @@ internal sealed class Rc3040sOperationsDialog : Form
       if(motor is null)throw new InvalidOperationException("RC-3040S native motor worker missing.");
       using var lease=await motor.AcquireManagementLeaseAsync(cancel.Token);
       if(lease is null)throw new InvalidOperationException("STOP/feedback safety check failed.");
+      bool commandAttempted=false;
       try
       {
         var result=await Rc3040sManagementService.SaveSpeedAsync(
-          settings.Host,azimuth,proposed,cancel.Token);
+          settings.Host,azimuth,proposed,cancel.Token,
+          ()=>commandAttempted=true);
         if(!IsDisposed)
         {
           snapshot=result.Outcome is Rc3040sManagementService.SpeedWriteOutcome.Applied or
@@ -204,24 +206,25 @@ internal sealed class Rc3040sOperationsDialog : Form
           if(result.Outcome==Rc3040sManagementService.SpeedWriteOutcome.Applied)
           {
             RestoreSliders();
-            status.Text=$"{axis}: saved. Reapply rotator settings.";
+            status.Text=$"{axis}: readback updated; persistence unverified.";
           }
           else status.Text=result.Outcome switch
           {
             Rc3040sManagementService.SpeedWriteOutcome.Unchanged => $"{axis}: device speed unchanged.",
             Rc3040sManagementService.SpeedWriteOutcome.EchoOnly => $"{axis}: echo received; value unchanged.",
-            Rc3040sManagementService.SpeedWriteOutcome.ReadbackUnavailable => $"{axis}: readback unavailable.",
-            _ => $"{axis}: save not verified."
+            Rc3040sManagementService.SpeedWriteOutcome.ReadbackUnavailable =>
+              $"{axis}: write uncertain; do not retry. Read after recovery.",
+            _ => $"{axis}: {result.Detail}"
           };
         }
       }
-      finally {motor.LatchAfterManagementChange();}
+      finally {if(commandAttempted)motor.LatchAfterManagementChange();}
     }
     catch(OperationCanceledException)when(cancel.IsCancellationRequested){}
     catch(Exception ex)
     {
       snapshot=null;
-      if(!IsDisposed)status.Text=$"{axis} result UNKNOWN: {ex.Message}; read again.";
+      if(!IsDisposed)status.Text=$"{axis} save blocked: {ex.Message}";
     }
     finally{busy=false;if(!IsDisposed){RefreshButtons();ShowValues();}}
   }
