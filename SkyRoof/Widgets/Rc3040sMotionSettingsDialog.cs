@@ -46,7 +46,6 @@ internal sealed class Rc3040sMotionSettingsDialog:Form
   }
   private static NumericUpDown Numeric(double value,decimal min,decimal max,int top)=>
     new(){Left=172,Top=top,Width=216,DecimalPlaces=2,
-      Minimum=min,Maximum=max,Increment=0.05m,Value=decimal.IsFinite((decimal)Math.Clamp(
-        double.IsFinite(value)?value:(double)min,(double)min,(double)max))?
-        (decimal)Math.Clamp(double.IsFinite(value)?value:(double)min,(double)min,(double)max):min};
+      Minimum=min,Maximum=max,Increment=0.05m,
+      Value=(decimal)Math.Clamp(double.IsFinite(value)?value:(double)min,(double)min,(double)max)};
 }
