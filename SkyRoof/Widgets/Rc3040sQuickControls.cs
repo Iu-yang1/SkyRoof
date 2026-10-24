@@ -212,7 +212,7 @@ internal sealed class Rc3040sQuickControls : UserControl
       {
         var result=await Rc3040sManagementService.SaveSpeedAsync(
           context.Settings.Rotator.Host,azimuth,desired,lifetime.Token,
-          ()=>commandAttempted=true);
+          ()=>commandAttempted=true,snapshot.Firmware,snapshot.DeviceIdSuffix);
         if(!IsDisposed)
         {
           // On an ambiguous write, do not enable another speed write based
