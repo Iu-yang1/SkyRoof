@@ -30,6 +30,17 @@ Only fresh GS-232 `C2` readings can authorize a new target. `Rc3040sFeedbackEsti
 
 **IMPORTANT**: GS-232 `Wxxx yyy` has no velocity/acceleration field; the RC-3040S may complete any intermediate W at its fixed, firmware-configured speed. SkyRoof therefore **cannot honestly guarantee** that these reference trajectories become physical jerk-limited motor motion. Near-target quantization may cause stepwise movement or repeated stops. Original software profiles default to Direct/off.
 
+### Analytic fixed-target seven-phase reference
+
+`Rc3040sSevenPhaseTrajectory` additionally implements an exact (floating-point)
+symmetric rest-to-rest seven-segment reference consisting of acceleration jerk-up,
+constant acceleration, jerk-down, optional cruise, then mirrored deceleration.
+Short motions degenerate into 5 or 3 phases. Its samples are checked against
+configured maximum `v/a/j`. This is **not yet a native hardware execution
+primitive**: moving-satellite retargeting in the real worker currently uses the
+online jerk-bounded setpoint planner. Neither path conveys a velocity argument
+to GS-232B firmware, so do not claim a real seven-segment shaft motion.
+
 ## P4 – feedback-aware execution, simulator & rate limit
 
 The new planner is integrated into the same native TCP I/O worker and is active ONLY when both **Enable experimental setpoint planner** and **Physical hardware validated by operator** are selected and the profile is not Direct. A stale feedback sample blocks the new planned endpoint. Planner reference resets after STOP, manual takeover and reconnect, and new motion frames are limited to an interval of at least 450ms. The safety and polling logic remain the same. Simulation tests use synthetic perfect and lagging plants with target swaps, latency, bounds, 450° tracking and STOP-like resets; synthetic behavior is explicitly not physical device acceptance.
@@ -60,3 +71,7 @@ All manual wheel, satellite tracking, PARK and software DEMO remain on the singl
 - `VE3NEA.Dsp.Tests/Rc3040sMotionPlannerTests.cs`, `Rc3040sMotionSimulationTests.cs`, `Rc3040sLanMigrationTests.cs`: offline regression.
 
 **No hardware movement or AT writes have been sent by these GitHub CI jobs**.
+
+## 2026-10-24 final management interlock
+
+For each **speed write or restart**, SkyRoof takes an explicit I/O-thread management lease: it disables any new `W` targets and manual jogs, queues GS-232 `S`, waits for transmission completion (NOT motor-stop acknowledgement), executes a single separately authorized WebSocket AT operation, and latches the motor safety lock afterward. Physical hardware inspection and re-applying rotator settings are required to resume. A failed/unconfirmed operation does **not** automatically retry, write back a previous raw speed, or resume the previous Track/PARK target.
