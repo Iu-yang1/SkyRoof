@@ -6,7 +6,8 @@ namespace SkyRoof.CW
     double LocalSnrDb,
     double KeyingDepthDb,
     double DutyCycle,
-    int KeyingTransitions);
+    int KeyingTransitions,
+    bool MorseTimingPlausible = true);
 
   /// <summary>
   /// Wideband STFT whose physical time/frequency grid is calibrated to the
@@ -271,6 +272,13 @@ namespace SkyRoof.CW
             Math.Max(noise, 1e-12));
       }
 
+      // Temporal keying must have more than a few AGC/QSB ripples.
+      // Evaluate the unchanged per-frame envelope before sorting it.
+      double[] envelopeDb=centerMagnitude
+        .Select(m=>20.0*Math.Log10(Math.Max(m,1e-12)))
+        .ToArray();
+      CwKeyingAssessment morse=CwKeyingGate.AssessSnrSeries(
+        envelopeDb,FrameIntervalSeconds,4.5);
       Array.Sort(localSnr);
       Array.Sort(centerMagnitude);
       double snr75 =
@@ -336,7 +344,8 @@ namespace SkyRoof.CW
         snr75,
         keyingDepthDb,
         duty,
-        transitions);
+        transitions,
+        morse.IsKeyed);
     }
 
     public IReadOnlyDictionary<int, float[]> EstimateActivities(

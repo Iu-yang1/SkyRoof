@@ -544,6 +544,7 @@ namespace SkyRoof.CW
         evidence.LocalSnrDb >= MinimumPhysicalSnrDb &&
         evidence.KeyingDepthDb >= MinimumKeyingDepthDb &&
         evidence.KeyingTransitions >= MinimumKeyingTransitions &&
+        evidence.MorseTimingPlausible &&
         evidence.DutyCycle >= MinimumKeyingDutyCycle &&
         evidence.DutyCycle <= MaximumKeyingDutyCycle;
     }

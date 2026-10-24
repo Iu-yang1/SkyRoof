@@ -310,23 +310,26 @@ namespace SkyRoof.CW
         BuildRidgePortions(fastFrames);
 
       var fastObservations = new List<CwRidgeObservation>();
+      var portionById=portions.ToDictionary(x=>x.Id);
       foreach (List<FramePeak> frame in fastFrames)
       {
         foreach (FramePeak peak in frame)
         {
-          var key = PeakKey(peak);
-          if (!fastPortionIds.TryGetValue(key, out int portionId))
-            continue;
-
-          CwRidgePortion portion =
-            portions.First(p => p.Id == portionId);
+          // Preserve non-Kalman peaks for keying analysis: a valid Morse
+          // element can be shorter than the 120 ms ridge-portion minimum.
+          // Precision tracker admission is still restricted to vetted
+          // portions below. No raw peak gains a Kalman identity here.
+          fastPortionIds.TryGetValue(PeakKey(peak),out int portionId);
+          double activity=portionById.TryGetValue(portionId,
+            out CwRidgePortion portion)
+            ? portion.ActivityProbability : peak.ActivityProbability;
           fastObservations.Add(new(
             peak.CenterSampleIndex,
             peak.FrequencyHz,
             peak.SnrDb,
             peak.MeasurementSigmaHz,
             peak.ResolutionHz,
-            portion.ActivityProbability,
+            activity,
             CwRidgeObservationScale.Fast,
             portionId,
             KalmanEligible: false));
