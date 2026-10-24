@@ -180,10 +180,9 @@ internal sealed class Rc3040sOperationsDialog : Form
     if(before<15 || before>10000 || proposed==before ||
        !Rc3040sManagementService.SpeedUnits.SliderChanged(
          azimuth,azimuth?az.Value:el.Value,before))return;
-    string axis=azimuth?"AZ":"EL",phrase=$"SAVE-{axis}-{proposed:D5}";
-    if(!ConfirmTwice(
-      $"{axis}: {SpeedLabel(azimuth,before)} → {SpeedLabel(azimuth,proposed)}\nVerify the motor is stopped before saving.",
-      phrase))return;
+    string axis=azimuth?"AZ":"EL";
+    if(!Confirm(
+      $"{axis}: {SpeedLabel(azimuth,before)} → {SpeedLabel(azimuth,proposed)}\nVerify the motor is stopped before saving."))return;
     if(!CanEditHardware)return;
     busy=true;status.Text=$"Writing {axis} once; no automatic retries...";
     RefreshButtons();
@@ -231,8 +230,8 @@ internal sealed class Rc3040sOperationsDialog : Form
   {
     if(busy || !CanEditHardware || !settings.Rc3040sAtEnabled ||
       snapshot?.Firmware is null || snapshot.DeviceIdSuffix is null)return;
-    if(!ConfirmTwice("Restart may disconnect RC-3040S and reset its control state.\n"
-      +"Confirm that the motor is physically stopped and a real emergency stop is available.","RESTART"))
+    if(!Confirm("Restart may disconnect RC-3040S and reset its control state.\n"
+      +"Confirm that the motor is physically stopped and a real emergency stop is available."))
       return;
     if(!CanEditHardware)return;
     busy=true;status.Text="Sending one WebSocket restart; reboot is not acknowledged...";
@@ -261,21 +260,10 @@ internal sealed class Rc3040sOperationsDialog : Form
     finally{busy=false;RefreshButtons();}
   }
 
-  private bool ConfirmTwice(string warning,string exactPhrase)
+  private bool Confirm(string warning)
   {
-    if(MessageBox.Show(this,warning,"RC-3040S hardware operation",
-      MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return false;
-    using var confirm=new Form{Text="Type exact confirmation",ClientSize=new Size(380,145),
-      FormBorderStyle=FormBorderStyle.FixedDialog,StartPosition=FormStartPosition.CenterParent,
-      MaximizeBox=false,MinimizeBox=false};
-    var prompt=Label("Type: "+exactPhrase,12,12,352,28);
-    var entry=new TextBox{Location=new Point(12,49),Width=352};
-    var ok=new Button{Text="Confirm",Location=new Point(190,95),Width=84,DialogResult=DialogResult.OK};
-    var cancelButton=new Button{Text="Cancel",Location=new Point(280,95),Width=84,DialogResult=DialogResult.Cancel};
-    confirm.Controls.AddRange(new Control[]{prompt,entry,ok,cancelButton});
-    confirm.AcceptButton=ok;confirm.CancelButton=cancelButton;
-    return confirm.ShowDialog(this)==DialogResult.OK &&
-      string.Equals(entry.Text.Trim(),exactPhrase,StringComparison.Ordinal);
+    return MessageBox.Show(this,warning,"RC-3040S hardware operation",
+      MessageBoxButtons.YesNo,MessageBoxIcon.Warning)==DialogResult.Yes;
   }
 
   protected override void Dispose(bool disposing)

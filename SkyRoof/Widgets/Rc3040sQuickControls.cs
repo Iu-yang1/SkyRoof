@@ -197,8 +197,7 @@ internal sealed class Rc3040sQuickControls : UserControl
     string axis=azimuth?"AZ":"EL";
     if(!Confirm($"{axis}: {Rc3040sManagementService.SpeedUnits.Display(azimuth,before)} → " +
        $"{Rc3040sManagementService.SpeedUnits.Display(azimuth,desired)}?\n" +
-       "Verify the motor is physically stopped before saving.",
-       $"SAVE-{axis}-{desired:D5}"))return;
+       "Verify the motor is physically stopped before saving."))return;
     if(!CanSendAt)return;
     busy=true;RefreshAccess();SetState($"Sending {axis} once; no retry...");
     try
@@ -250,8 +249,7 @@ internal sealed class Rc3040sQuickControls : UserControl
        snapshot?.Firmware is null || snapshot.DeviceIdSuffix is null)return;
     if(!Confirm("Restart RC-3040S via WebSocket/60030?\n" +
       "STOP is not a physical stop acknowledgement.\n" +
-      "Check the actual motor is stationary and emergency STOP is available.",
-      "RESTART"))return;
+      "Check the actual motor is stationary and emergency STOP is available."))return;
     if(!CanSendAt)return;
     busy=true;RefreshAccess();SetState("One restart attempt; no retries...");
     try
@@ -278,22 +276,10 @@ internal sealed class Rc3040sQuickControls : UserControl
     finally {busy=false;if(!IsDisposed){RefreshAccess();Display();}}
   }
 
-  private bool Confirm(string question,string phrase)
+  private bool Confirm(string question)
   {
-    if(MessageBox.Show(FindForm(),question,"RC-3040S hardware safety",
-      MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return false;
-    using var dialog=new Form{Text="Confirm hardware operation",ClientSize=new Size(355,135),
-      StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,
-      MaximizeBox=false,MinimizeBox=false};
-    dialog.Controls.Add(new Label{Text=$"Type {phrase} to authorize one command:",
-      Left=12,Top=12,Width=325,Height=23});
-    var field=new TextBox{Left=12,Top=42,Width=325};
-    var ok=new Button{Text="Confirm",Left=160,Top=90,Width=83,DialogResult=DialogResult.OK};
-    var cancel=new Button{Text="Cancel",Left=253,Top=90,Width=84,DialogResult=DialogResult.Cancel};
-    dialog.Controls.AddRange(new Control[]{field,ok,cancel});
-    dialog.AcceptButton=ok;dialog.CancelButton=cancel;
-    return dialog.ShowDialog(FindForm())==DialogResult.OK &&
-      string.Equals(field.Text.Trim(),phrase,StringComparison.Ordinal);
+    return MessageBox.Show(FindForm(),question,"RC-3040S hardware safety",
+      MessageBoxButtons.YesNo,MessageBoxIcon.Warning)==DialogResult.Yes;
   }
 
   protected override void Dispose(bool disposing)
