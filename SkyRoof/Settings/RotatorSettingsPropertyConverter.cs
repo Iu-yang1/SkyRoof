@@ -54,6 +54,21 @@ namespace SkyRoof
       nameof(RotatorSettings.NativeResponseTemplate)
     };
 
+    private static readonly HashSet<string> DtracOnly = new(StringComparer.Ordinal)
+    {
+      nameof(RotatorSettings.DtracNrlServerHost),
+      nameof(RotatorSettings.DtracNrlServerPort),
+      nameof(RotatorSettings.DtracNrlRotorId),
+      nameof(RotatorSettings.DtracNrlAppSid),
+      nameof(RotatorSettings.DtracUseNativePark),
+      nameof(RotatorSettings.DtracDemoStartAz),
+      nameof(RotatorSettings.DtracDemoEndAz),
+      nameof(RotatorSettings.DtracDemoElevation),
+      nameof(RotatorSettings.DtracDemoStepDegrees),
+      nameof(RotatorSettings.DtracDemoDwellSeconds),
+      nameof(RotatorSettings.DtracDemoCycles)
+    };
+
     private static readonly HashSet<string> LegacyOnly = new(StringComparer.Ordinal)
     {
       nameof(RotatorSettings.Delay),
@@ -71,12 +86,13 @@ namespace SkyRoof
         return base.GetProperties(context, value, attributes)!;
 
       bool native = settings.ResolveUseNativeDriver();
+      bool dtrac = native && settings.NativeProtocol == RotatorProtocolKind.DtracNrl2;
       bool serial = settings.NativeTransport == RotatorTransportKind.Serial;
       bool custom = settings.NativeProtocol == RotatorProtocolKind.CustomTemplate;
 
       // Nondefault remote legacy rotctld endpoints and native TCP/UDP
       // share Host/Port. Direct Serial has no network endpoint to configure.
-      bool showNetwork = !native || !serial;
+      bool showNetwork = !dtrac && (!native || !serial);
       var properties = TypeDescriptor.GetProperties(settings, attributes ?? Array.Empty<Attribute>(), true);
 
       var visible = properties.Cast<PropertyDescriptor>()
@@ -84,7 +100,9 @@ namespace SkyRoof
         .Where(p => p.Name switch
         {
           nameof(RotatorSettings.Host) or nameof(RotatorSettings.Port) => showNetwork,
-          _ when SerialOnly.Contains(p.Name) => native && serial,
+          _ when DtracOnly.Contains(p.Name) => dtrac,
+          nameof(RotatorSettings.NativeTransport) when dtrac => false,
+          _ when SerialOnly.Contains(p.Name) => native && serial && !dtrac,
           _ when NativeOnly.Contains(p.Name) => native,
           _ when CustomOnly.Contains(p.Name) => native && custom,
           _ when LegacyOnly.Contains(p.Name) => !native,

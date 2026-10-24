@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 
 namespace SkyRoof.NativeRotator;
 
-public enum RotatorProtocolKind { Gs232, EasyCommI, EasyCommII, EasyCommIII, SpidRot2Prog, SaebrTrack, Rotctld, PstRotator, Oz9AarUrc, CustomTemplate }
+public enum RotatorProtocolKind { Gs232, EasyCommI, EasyCommII, EasyCommIII, SpidRot2Prog, SaebrTrack, Rotctld, PstRotator, Oz9AarUrc, CustomTemplate, DtracNrl2 }
 public enum RotatorTransportKind { Serial, Tcp, Udp }
 public enum RotatorDirection { Up, Down, Left, Right }
 public readonly record struct RotatorPosition(double Azimuth, double Elevation);
@@ -25,7 +25,7 @@ public static class NativeRotatorCodec
   public static bool Supports(RotatorProtocolKind protocol, RotatorTransportKind transport) => protocol switch
   {
     RotatorProtocolKind.Rotctld or RotatorProtocolKind.Oz9AarUrc => transport == RotatorTransportKind.Tcp,
-    RotatorProtocolKind.PstRotator => transport == RotatorTransportKind.Udp,
+    RotatorProtocolKind.PstRotator or RotatorProtocolKind.DtracNrl2 => transport == RotatorTransportKind.Udp,
     RotatorProtocolKind.CustomTemplate => true,
     _ => transport is RotatorTransportKind.Serial or RotatorTransportKind.Tcp
   };
@@ -36,7 +36,7 @@ public static class NativeRotatorCodec
     RotatorProtocolKind.CustomTemplate => !string.IsNullOrWhiteSpace(custom),
     _ => true
   };
-  public static bool CanJog(RotatorProtocolKind p) => p == RotatorProtocolKind.Gs232;
+  public static bool CanJog(RotatorProtocolKind p) => p is RotatorProtocolKind.Gs232 or RotatorProtocolKind.DtracNrl2;
   public static byte[] Point(RotatorProtocolKind p, RotatorPosition pos, string custom = "", int azRes=1, int elRes=1)
   {
     if (!double.IsFinite(pos.Azimuth) || !double.IsFinite(pos.Elevation))
@@ -44,6 +44,7 @@ public static class NativeRotatorCodec
     double az=pos.Azimuth, el=pos.Elevation;
     return p switch
     {
+      RotatorProtocolKind.DtracNrl2 => DtracNrl2Codec.PositionCommand(pos),
       RotatorProtocolKind.Gs232 => Ascii($"W{(int)Math.Round(az<0?Wrap(az):Math.Min(450,az),MidpointRounding.AwayFromZero):000} {(int)Math.Round(Math.Clamp(el,0,180),MidpointRounding.AwayFromZero):000}\r"),
       RotatorProtocolKind.EasyCommI => Ascii($"AZ{Wrap(az).ToString("0.0",Inv)} EL{Math.Clamp(el,0,180).ToString("0.0",Inv)} UP000 XXX DN000 XXX\n"),
       RotatorProtocolKind.EasyCommII or RotatorProtocolKind.EasyCommIII => Ascii($"AZ{Wrap(az).ToString("0.0",Inv)} EL{Math.Clamp(el,0,180).ToString("0.0",Inv)}\n"),
@@ -59,6 +60,7 @@ public static class NativeRotatorCodec
   public static byte[]? Stop(RotatorProtocolKind p, string custom="") => p switch
   {
     RotatorProtocolKind.Gs232 => Ascii("S\r"),
+    RotatorProtocolKind.DtracNrl2 => Ascii("S\r\n"),
     RotatorProtocolKind.EasyCommI or RotatorProtocolKind.EasyCommII or RotatorProtocolKind.EasyCommIII => Ascii("SA SE \n"),
     RotatorProtocolKind.SpidRot2Prog => Spid(0x0f),
     RotatorProtocolKind.Rotctld => Ascii("S\n"),
@@ -69,6 +71,7 @@ public static class NativeRotatorCodec
   public static byte[]? Query(RotatorProtocolKind p,string custom="")=> p switch
   {
     RotatorProtocolKind.Gs232 => Ascii("C2\r"),
+    RotatorProtocolKind.DtracNrl2 => Ascii("C2\r\n"),
     RotatorProtocolKind.EasyCommII or RotatorProtocolKind.EasyCommIII => Ascii("AZ\n"),
     RotatorProtocolKind.SpidRot2Prog => Spid(0x1f),
     RotatorProtocolKind.Rotctld => Ascii("p\n"),
@@ -76,8 +79,9 @@ public static class NativeRotatorCodec
     RotatorProtocolKind.CustomTemplate when !string.IsNullOrWhiteSpace(custom) => Ascii(Expand(custom,default)),
     _ => null
   };
-  public static byte[] Jog(RotatorDirection direction) => Ascii(direction switch
-  { RotatorDirection.Up=>"U\r", RotatorDirection.Down=>"D\r", RotatorDirection.Left=>"L\r", RotatorDirection.Right=>"R\r",_=>throw new ArgumentOutOfRangeException(nameof(direction)) });
+  public static byte[] Jog(RotatorDirection direction, RotatorProtocolKind protocol = RotatorProtocolKind.Gs232) => Ascii(direction switch
+  { RotatorDirection.Up=>"U", RotatorDirection.Down=>"D", RotatorDirection.Left=>"L", RotatorDirection.Right=>"R",_=>throw new ArgumentOutOfRangeException(nameof(direction)) } +
+    (protocol == RotatorProtocolKind.DtracNrl2 ? "\r\n" : "\r"));
   private static byte[] Spid(int command,double az=0,double el=0,int azRes=1,int elRes=1)
   {
     var b=new byte[13]; b[0]=0x57;b[11]=(byte)command;b[12]=0x20;
@@ -125,6 +129,7 @@ public static class NativeRotatorCodec
     switch(protocol)
     {
       case RotatorProtocolKind.Gs232:
+      case RotatorProtocolKind.DtracNrl2:
         match=Gs232.Match(text);
         if(!match.Success)
         {

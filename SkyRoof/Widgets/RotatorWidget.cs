@@ -12,6 +12,14 @@ namespace SkyRoof
     private OptimizedRotationPath? Path;
     private Bearing? SatBearing;
     private RotatorParkSequence? ParkSequence;
+    private SkyRoof.NativeRotator.DtracDemoSequence? demoSequence;
+    internal bool IsDtracDemoRunning => demoSequence != null;
+    internal string DtracDemoProgressText => demoSequence == null ? "Idle" :
+      $"{demoSequence.Index+1}/{demoSequence.Count}";
+    internal bool DtracNrlOperationsAvailable =>
+      ctx?.Settings.Rotator.NativeProtocol == SkyRoof.NativeRotator.RotatorProtocolKind.DtracNrl2 &&
+      engine is NativeRotatorControlEngine native && native.IsReady &&
+      !native.PositionFaulted && !TrackCheckbox.Checked;
 
     internal bool IsParking => ParkSequence != null;
     internal string ParkProgressText => ParkSequence == null
@@ -47,6 +55,7 @@ namespace SkyRoof
     //----------------------------------------------------------------------------------------------
     public void ApplySettings(bool restoreTracking = false)
     {
+      demoSequence=null;
       bool track = restoreTracking && TrackCheckbox.Checked;
 
       if (engine != null) StopRotation();
@@ -114,6 +123,7 @@ namespace SkyRoof
     internal void Advance()
     {
       AdvanceParkSequence();
+      if (demoSequence != null) { AdvanceDtracDemo(); return; }
       if (Path == null) return;
 
       SatBearing = Path.GetSatelliteBearing()?.Normalize();
@@ -173,6 +183,7 @@ namespace SkyRoof
     {
       if (engine == null || bearing == null) return;
 
+      demoSequence=null;
       // Satellite tracking or other commands supersede an active PARK route.
       CancelParkSequence(stopMotor: false);
       var sanitizedBearing = Sanitize(bearing);
@@ -204,6 +215,7 @@ namespace SkyRoof
 
     public void StopRotation()
     {
+      demoSequence=null;
       CancelParkSequence(stopMotor: false);
       TrackCheckbox.Checked = false;
       engine?.StopRotation();
@@ -341,6 +353,7 @@ namespace SkyRoof
       // Manual ownership supersedes PARK and pre-position tracking exactly as
       // GO/manual-jog did before. During an active pass manual input remains
       // locked by IsManualControlLocked.
+      demoSequence=null;
       CancelParkSequence(
         stopMotor: false);
       if (TrackCheckbox.Checked)
@@ -352,6 +365,7 @@ namespace SkyRoof
 
     internal void EndManualContinuousMove()
     {
+      demoSequence=null;
       engine?.StopRotation();
     }
 
@@ -381,6 +395,7 @@ namespace SkyRoof
 
     internal void ManualPark()
     {
+      if (demoSequence != null) { demoSequence=null; engine?.StopRotation(); }
       if (engine == null || !engine.IsRunning || IsManualControlLocked)
         return;
 
@@ -397,6 +412,9 @@ namespace SkyRoof
         : new List<(double, double)> {
             (settings.ParkAzimuth, settings.ParkElevation) };
 
+      if (settings.NativeProtocol == SkyRoof.NativeRotator.RotatorProtocolKind.DtracNrl2 &&
+          settings.DtracUseNativePark)
+        waypoints = new List<(double,double)> { (settings.ParkAzimuth,settings.ParkElevation) };
       // Reject an invalid/out-of-range route rather than silently sending
       // potentially dangerous substitute positions to physical hardware.
       if (waypoints.Any(w =>
@@ -414,6 +432,52 @@ namespace SkyRoof
       IssueParkWaypoint();
     }
 
+    internal void StartDtracDemo()
+    {
+      if (!DtracNrlOperationsAvailable || engine == null ||
+          !engine.IsRunning || engine.PositionFaulted || IsManualControlLocked ||
+          DateTime.UtcNow - engine.LastSuccessfulBearingReadUtc > TimeSpan.FromSeconds(3))
+        throw new InvalidOperationException("DTrac DEMO requires fresh feedback and no TRACK");
+      var s=ctx.Settings.Rotator;
+      var seq=SkyRoof.NativeRotator.DtracDemoSequence.Create(
+        s.DtracDemoStartAz,s.DtracDemoEndAz,s.DtracDemoElevation,
+        s.DtracDemoStepDegrees,s.DtracDemoCycles,s.DtracDemoDwellSeconds,
+        s.MinAzimuth,s.MaxAzimuth,s.MinElevation,s.MaxElevation,DateTime.UtcNow);
+      CancelParkSequence(stopMotor:true);
+      demoSequence=seq;
+      engine.RotateTo(new Bearing(seq.Current.Azimuth*Trig.RinD,seq.Current.Elevation*Trig.RinD));
+    }
+    internal void StopDtracDemo()
+    {
+      if (demoSequence == null) return;
+      demoSequence=null;
+      engine?.StopRotation();
+    }
+    internal bool RequestDtracRestart()
+    {
+      if (!DtracNrlOperationsAvailable || demoSequence != null ||
+          engine is not NativeRotatorControlEngine native) return false;
+      StopRotation();
+      return native.RequestDtracRestart();
+    }
+    private void AdvanceDtracDemo()
+    {
+      if (demoSequence == null) return;
+      var reading=engine?.LastReadBearing;
+      var progress=demoSequence.Observe(DateTime.UtcNow,
+        engine?.LastSuccessfulBearingReadUtc ?? DateTime.MinValue,
+        reading?.AzDeg ?? double.NaN,reading?.ElDeg ?? double.NaN,
+        engine is NativeRotatorControlEngine n && n.IsReady && !n.PositionFaulted &&
+        !TrackCheckbox.Checked);
+      if (progress == SkyRoof.NativeRotator.DtracDemoProgress.NextWaypoint)
+      {
+        var next=demoSequence.Current;
+        engine?.RotateTo(new Bearing(next.Azimuth*Trig.RinD,next.Elevation*Trig.RinD));
+      }
+      else if (progress is SkyRoof.NativeRotator.DtracDemoProgress.Completed or
+                          SkyRoof.NativeRotator.DtracDemoProgress.Aborted)
+        StopDtracDemo();
+    }
     private void CancelParkSequence(bool stopMotor)
     {
       if (ParkSequence == null)

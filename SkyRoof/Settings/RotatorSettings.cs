@@ -55,13 +55,60 @@ namespace SkyRoof
       return local && Port == 4533;
     }
 
+    private SkyRoof.NativeRotator.RotatorProtocolKind nativeProtocol = SkyRoof.NativeRotator.RotatorProtocolKind.Gs232;
     [DisplayName("Native Protocol")]
     [DefaultValue(SkyRoof.NativeRotator.RotatorProtocolKind.Gs232)]
-    public SkyRoof.NativeRotator.RotatorProtocolKind NativeProtocol { get; set; } = SkyRoof.NativeRotator.RotatorProtocolKind.Gs232;
+    public SkyRoof.NativeRotator.RotatorProtocolKind NativeProtocol
+    {
+      get => nativeProtocol;
+      set { nativeProtocol=value; if(value==SkyRoof.NativeRotator.RotatorProtocolKind.DtracNrl2)
+        NativeTransport=SkyRoof.NativeRotator.RotatorTransportKind.Udp; }
+    }
 
     [DisplayName("Native Transport")]
     [DefaultValue(SkyRoof.NativeRotator.RotatorTransportKind.Serial)]
     public SkyRoof.NativeRotator.RotatorTransportKind NativeTransport { get; set; } = SkyRoof.NativeRotator.RotatorTransportKind.Serial;
+
+    [DisplayName("NRL2 Server Host")]
+    [Description("DTrac-compatible relay host (not the RC-3040S LAN address).")]
+    public string DtracNrlServerHost { get; set; } = "";
+
+    [DisplayName("NRL2 Server Port")]
+    [DefaultValue((ushort)60050)]
+    public ushort DtracNrlServerPort { get; set; } = 60050;
+
+    [DisplayName("RC-3040S Rotor ID")]
+    [Editor(typeof(SkyRoof.NativeRotator.DtracRotorIdEditor),typeof(System.Drawing.Design.UITypeEditor))]
+    public string DtracNrlRotorId { get; set; } = "";
+
+    [DisplayName("NRL2 Client SID")]
+    [Description("Persistent 14-hex-character client ID, generated locally.")]
+    public string DtracNrlAppSid { get; set; } =
+      Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(7));
+
+    [DisplayName("DTrac Single Target PARK")]
+    [Description("PARK is a single firmware-positioned W movement, not mechanical zero calibration.")]
+    [DefaultValue(false)]
+    public bool DtracUseNativePark { get; set; } = false;
+
+    [DisplayName("DTrac DEMO Start AZ")]
+    [DefaultValue(0d)]
+    public double DtracDemoStartAz { get; set; } = 0;
+    [DisplayName("DTrac DEMO End AZ")]
+    [DefaultValue(180d)]
+    public double DtracDemoEndAz { get; set; } = 180;
+    [DisplayName("DTrac DEMO EL")]
+    [DefaultValue(30d)]
+    public double DtracDemoElevation { get; set; } = 30;
+    [DisplayName("DTrac DEMO Step")]
+    [DefaultValue(10d)]
+    public double DtracDemoStepDegrees { get; set; } = 10;
+    [DisplayName("DTrac DEMO Dwell Seconds")]
+    [DefaultValue(3)]
+    public int DtracDemoDwellSeconds { get; set; } = 3;
+    [DisplayName("DTrac DEMO Cycles")]
+    [DefaultValue(1)]
+    public int DtracDemoCycles { get; set; } = 1;
 
     [DisplayName("Serial Port")]
     [DefaultValue("COM9")]

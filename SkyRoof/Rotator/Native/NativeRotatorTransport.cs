@@ -16,7 +16,9 @@ public interface IRotatorTransport : IDisposable
 }
 public static class NativeTransportFactory
 {
-  public static IRotatorTransport Create(RotatorSettings options) => options.NativeTransport switch
+  public static IRotatorTransport Create(RotatorSettings options) =>
+    options.NativeProtocol == RotatorProtocolKind.DtracNrl2
+      ? new DtracNrlTransport(options) : options.NativeTransport switch
   {
     RotatorTransportKind.Serial => new SerialTransport(options),
     RotatorTransportKind.Tcp => new TcpTransport(options),
