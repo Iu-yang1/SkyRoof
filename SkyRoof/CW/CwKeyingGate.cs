@@ -99,7 +99,50 @@ namespace SkyRoof.CW
         if(Math.Abs(obs.FrequencyHz-expected)>gateHz)continue;
         snr[i]=Math.Max(snr[i],obs.SnrDb);
       }
-      return AssessSnrSeries(snr,hop/(double)snapshot.SampleRate);
+      CwKeyingAssessment result=AssessSnrSeries(
+        snr,hop/(double)snapshot.SampleRate);
+      if(!result.IsKeyed)return result;
+
+      // FSK/MFSK can key *one spectral bin* without keying a transmitter.
+      // Reject frequency hopping when neighboring tones occupy the exact
+      // complementary OFF intervals but disappear during target ON intervals.
+      // Independent CW neighbors normally have overlapping ON intervals.
+      double[] ordered=snr.ToArray();
+      Array.Sort(ordered);
+      double low=Quantile(ordered,0.15);
+      double high=Quantile(ordered,0.85);
+      double threshold=low+0.45*(high-low);
+      double[] other=new double[count];
+      Array.Fill(other,double.NegativeInfinity);
+      foreach(CwRidgeObservation obs in scan.FastObservations)
+      {
+        long relative=obs.CenterSampleIndex-(start+win/2);
+        int i=(int)Math.Round(relative/(double)hop);
+        if(i<0 || i>=count)continue;
+        double dt=(obs.CenterSampleIndex-snapshot.EndSampleIndex)/
+          (double)snapshot.SampleRate;
+        double center=track.FrequencyHz+track.DriftHzPerSecond*dt;
+        double distance=Math.Abs(obs.FrequencyHz-center);
+        if(distance>=Math.Max(9,0.8*obs.ResolutionHz) &&
+           distance<=220)
+          other[i]=Math.Max(other[i],obs.SnrDb);
+      }
+      int on=0,off=0,onOther=0,offOther=0;
+      double neighborThreshold=Math.Max(
+        scanner.Options.FastMinimumSnrDb+4.0,high-9.0);
+      for(int i=0;i<count;i++)
+      {
+        bool targetOn=snr[i]>=threshold;
+        bool neighborOn=other[i]>=neighborThreshold;
+        if(targetOn){on++;if(neighborOn)onOther++;}
+        else {off++;if(neighborOn)offOther++;}
+      }
+      if(on>=4 && off>=4 &&
+         offOther>=4 &&
+         offOther/(double)off>=0.85 &&
+         onOther/(double)on<=0.20)
+        return result with { IsKeyed=false };
+      return result;
     }
 
     private static double Quantile(double[] sorted,double q)
