@@ -76,19 +76,6 @@ namespace SkyRoof
     [DefaultValue(SkyRoof.NativeRotator.RotatorTransportKind.Serial)]
     public SkyRoof.NativeRotator.RotatorTransportKind NativeTransport { get; set; } = SkyRoof.NativeRotator.RotatorTransportKind.Serial;
 
-    [DisplayName("RC-3040S DEMO Start AZ")]
-    [DefaultValue(0d)] public double Rc3040sDemoStartAz { get; set; } = 0;
-    [DisplayName("RC-3040S DEMO End AZ")]
-    [DefaultValue(180d)] public double Rc3040sDemoEndAz { get; set; } = 180;
-    [DisplayName("RC-3040S DEMO EL")]
-    [DefaultValue(30d)] public double Rc3040sDemoElevation { get; set; } = 30;
-    [DisplayName("RC-3040S DEMO Step")]
-    [DefaultValue(10d)] public double Rc3040sDemoStepDegrees { get; set; } = 10;
-    [DisplayName("RC-3040S DEMO Dwell Seconds")]
-    [DefaultValue(3)] public int Rc3040sDemoDwellSeconds { get; set; } = 3;
-    [DisplayName("RC-3040S DEMO Cycles")]
-    [DefaultValue(1)] public int Rc3040sDemoCycles { get; set; } = 1;
-
     [DisplayName("RC-3040S Motion Profile")]
     [DefaultValue(Rc3040sMotionProfile.Direct)]
     public Rc3040sMotionProfile Rc3040sMotionMode { get; set; } = Rc3040sMotionProfile.Direct;

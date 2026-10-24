@@ -12,14 +12,6 @@ namespace SkyRoof
     private OptimizedRotationPath? Path;
     private Bearing? SatBearing;
     private RotatorParkSequence? ParkSequence;
-    private SkyRoof.NativeRotator.Rc3040sDemoSequence? demoSequence;
-    internal bool IsRc3040sDemoRunning => demoSequence != null;
-    internal string Rc3040sDemoProgressText => demoSequence == null ? "Idle" :
-      $"{demoSequence.Index+1}/{demoSequence.Count}";
-    internal bool Rc3040sManagementAvailable =>
-      ctx?.Settings.Rotator.NativeProtocol == SkyRoof.NativeRotator.RotatorProtocolKind.Rc3040sLan &&
-      engine is NativeRotatorControlEngine native && native.IsReady &&
-      !native.PositionFaulted && !TrackCheckbox.Checked;
     internal NativeRotatorControlEngine? EngineForRc3040s =>
       ctx?.Settings.Rotator.NativeProtocol == SkyRoof.NativeRotator.RotatorProtocolKind.Rc3040sLan
         ? engine as NativeRotatorControlEngine : null;
@@ -58,7 +50,6 @@ namespace SkyRoof
     //----------------------------------------------------------------------------------------------
     public void ApplySettings(bool restoreTracking = false)
     {
-      demoSequence=null;
       bool track = restoreTracking && TrackCheckbox.Checked;
 
       if (engine != null) StopRotation();
@@ -126,7 +117,6 @@ namespace SkyRoof
     internal void Advance()
     {
       AdvanceParkSequence();
-      if (demoSequence != null) { AdvanceRc3040sDemo(); return; }
       if (Path == null) return;
 
       SatBearing = Path.GetSatelliteBearing()?.Normalize();
@@ -186,7 +176,6 @@ namespace SkyRoof
     {
       if (engine == null || bearing == null) return;
 
-      demoSequence=null;
       // Satellite tracking or other commands supersede an active PARK route.
       CancelParkSequence(stopMotor: false);
       var sanitizedBearing = Sanitize(bearing);
@@ -218,7 +207,6 @@ namespace SkyRoof
 
     public void StopRotation()
     {
-      demoSequence=null;
       CancelParkSequence(stopMotor: false);
       TrackCheckbox.Checked = false;
       engine?.StopRotation();
@@ -356,7 +344,6 @@ namespace SkyRoof
       // Manual ownership supersedes PARK and pre-position tracking exactly as
       // GO/manual-jog did before. During an active pass manual input remains
       // locked by IsManualControlLocked.
-      demoSequence=null;
       CancelParkSequence(
         stopMotor: false);
       if (TrackCheckbox.Checked)
@@ -368,7 +355,6 @@ namespace SkyRoof
 
     internal void EndManualContinuousMove()
     {
-      demoSequence=null;
       engine?.StopRotation();
     }
 
@@ -398,7 +384,6 @@ namespace SkyRoof
 
     internal void ManualPark()
     {
-      if (demoSequence != null) { demoSequence=null; engine?.StopRotation(); }
       if (engine == null || !engine.IsRunning || IsManualControlLocked)
         return;
 
@@ -432,45 +417,6 @@ namespace SkyRoof
       IssueParkWaypoint();
     }
 
-    internal void StartRc3040sDemo()
-    {
-      if (!Rc3040sManagementAvailable || engine == null ||
-          !engine.IsRunning || engine.PositionFaulted || IsManualControlLocked ||
-          DateTime.UtcNow - engine.LastSuccessfulBearingReadUtc > TimeSpan.FromSeconds(3))
-        throw new InvalidOperationException("RC-3040S LAN DEMO requires fresh feedback and no TRACK");
-      var s=ctx.Settings.Rotator;
-      var seq=SkyRoof.NativeRotator.Rc3040sDemoSequence.Create(
-        s.Rc3040sDemoStartAz,s.Rc3040sDemoEndAz,s.Rc3040sDemoElevation,
-        s.Rc3040sDemoStepDegrees,s.Rc3040sDemoCycles,s.Rc3040sDemoDwellSeconds,
-        s.MinAzimuth,s.MaxAzimuth,s.MinElevation,s.MaxElevation,DateTime.UtcNow);
-      CancelParkSequence(stopMotor:true);
-      demoSequence=seq;
-      engine.RotateTo(new Bearing(seq.Current.Azimuth*Trig.RinD,seq.Current.Elevation*Trig.RinD));
-    }
-    internal void StopRc3040sDemo()
-    {
-      if (demoSequence == null) return;
-      demoSequence=null;
-      engine?.StopRotation();
-    }
-    private void AdvanceRc3040sDemo()
-    {
-      if (demoSequence == null) return;
-      var reading=engine?.LastReadBearing;
-      var progress=demoSequence.Observe(DateTime.UtcNow,
-        engine?.LastSuccessfulBearingReadUtc ?? DateTime.MinValue,
-        reading?.AzDeg ?? double.NaN,reading?.ElDeg ?? double.NaN,
-        engine is NativeRotatorControlEngine n && n.IsReady && !n.PositionFaulted &&
-        !TrackCheckbox.Checked);
-      if (progress == SkyRoof.NativeRotator.Rc3040sDemoProgress.NextWaypoint)
-      {
-        var next=demoSequence.Current;
-        engine?.RotateTo(new Bearing(next.Azimuth*Trig.RinD,next.Elevation*Trig.RinD));
-      }
-      else if (progress is SkyRoof.NativeRotator.Rc3040sDemoProgress.Completed or
-                          SkyRoof.NativeRotator.Rc3040sDemoProgress.Aborted)
-        StopRc3040sDemo();
-    }
     private void CancelParkSequence(bool stopMotor)
     {
       if (ParkSequence == null)

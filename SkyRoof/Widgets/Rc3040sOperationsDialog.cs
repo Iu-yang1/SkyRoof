@@ -24,7 +24,6 @@ internal sealed class Rc3040sOperationsDialog : Form
   private readonly Button read=new(){Text="Read device"},reset=new(){Text="Revert sliders"};
   private readonly Button saveAz=new(){Text="Save AZ..."},saveEl=new(){Text="Save EL..."};
   private readonly Button reboot=new(){Text="Restart..."};
-  private readonly Button demo=new(){Text="Start DEMO"},stopDemo=new(){Text="STOP DEMO"};
   private readonly Button motion=new(){Text="Motion Settings..."};
   private readonly System.Windows.Forms.Timer refresh=new(){Interval=500};
   private readonly CancellationTokenSource cancel=new();
@@ -67,18 +66,14 @@ internal sealed class Rc3040sOperationsDialog : Form
     Controls.Add(saveAz);Controls.Add(saveEl);
     Controls.Add(Label("Sliders are local until Save. EEPROM effects are unverified.",12,313,451,26));
 
-    Controls.Add(Label("LAN motor operations",12,345,260,19));
-    demo.SetBounds(12,367,105,29);stopDemo.SetBounds(127,367,105,29);
-    reboot.SetBounds(349,367,112,29);motion.SetBounds(242,367,100,29);
-    demo.Click+=(_,_)=>{try{rotor.StartRc3040sDemo();}catch(Exception ex) when(ex is ArgumentException or InvalidOperationException)
-      {MessageBox.Show(this,ex.Message,"DEMO",MessageBoxButtons.OK,MessageBoxIcon.Warning);}};
-    stopDemo.Click+=(_,_)=>rotor.StopRc3040sDemo();
+    Controls.Add(Label("Device actions",12,345,260,19));
+    reboot.SetBounds(343,367,118,29);motion.SetBounds(12,367,165,29);
     reboot.Click+=async(_,_)=>await RestartAsync();
     motion.Click+=(_,_)=>{
       using var dialog=new Rc3040sMotionSettingsDialog(rotor.ctx.Settings.Rotator,rotor.ctx.Settings.SaveToFile);
       dialog.ShowDialog(this);
     };
-    Controls.Add(demo);Controls.Add(stopDemo);Controls.Add(reboot);Controls.Add(motion);
+    Controls.Add(reboot);Controls.Add(motion);
     status.SetBounds(12,412,451,45);status.ForeColor=SystemColors.GrayText;Controls.Add(status);
     refresh.Tick+=(_,_)=>RefreshButtons();refresh.Start();
     RefreshButtons();ShowValues();
@@ -92,7 +87,7 @@ internal sealed class Rc3040sOperationsDialog : Form
   private bool CanEditHardware =>
     settings.Enabled && settings.NativeProtocol==RotatorProtocolKind.Rc3040sLan &&
     rotor.IsRunning() && !rotor.IsTracking && !rotor.IsParking &&
-    !rotor.IsRc3040sDemoRunning && !rotor.PositionSafetyTripped;
+    !rotor.PositionSafetyTripped;
 
   private void RefreshButtons()
   {
@@ -106,13 +101,12 @@ internal sealed class Rc3040sOperationsDialog : Form
     saveEl.Enabled=safe && dirtyEl && el.Enabled;
     reboot.Enabled=safe && snapshot?.Firmware!=null &&
       snapshot.DeviceIdSuffix!=null;
-    demo.Enabled=safe;stopDemo.Enabled=rotor.IsRc3040sDemoRunning;
     motion.Enabled=!busy;
     // Status is updated by explicit actions. Do not erase network errors and
     // readback/uncertain-write warnings every 500 ms during the UI refresh.
     if(!busy && string.IsNullOrEmpty(status.Text))
       status.Text=safe ? "Ready · no AT is sent while dragging" :
-        "AT writes locked: stop TRACK / PARK / DEMO first.";
+        "AT writes locked: stop TRACK / PARK first.";
   }
 
   private void ShowValues()

@@ -77,10 +77,7 @@ namespace SkyRoof
       nameof(RotatorSettings.Rc3040sPlanElSpeed),
       nameof(RotatorSettings.Rc3040sPlanAcceleration),
       nameof(RotatorSettings.Rc3040sPlanJerk),
-      nameof(RotatorSettings.Rc3040sAtEnabled),
-      nameof(RotatorSettings.Rc3040sDemoStartAz), nameof(RotatorSettings.Rc3040sDemoEndAz),
-      nameof(RotatorSettings.Rc3040sDemoElevation), nameof(RotatorSettings.Rc3040sDemoStepDegrees),
-      nameof(RotatorSettings.Rc3040sDemoDwellSeconds), nameof(RotatorSettings.Rc3040sDemoCycles)
+      nameof(RotatorSettings.Rc3040sAtEnabled)
     };
     private static readonly HashSet<string> LegacyOnly = new(StringComparer.Ordinal)
     {

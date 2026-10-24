@@ -101,7 +101,7 @@ internal sealed class Rc3040sQuickControls : UserControl
       NativeProtocol:RotatorProtocolKind.Rc3040sLan} &&
     rotator is not null && rotator.IsRunning() &&
     !rotator.IsManualControlLocked && !rotator.IsTracking &&
-    !rotator.IsParking && !rotator.IsRc3040sDemoRunning &&
+    !rotator.IsParking &&
     !rotator.PositionSafetyTripped;
 
   internal void RefreshAccess()
