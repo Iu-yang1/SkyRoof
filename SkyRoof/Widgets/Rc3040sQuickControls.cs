@@ -64,7 +64,7 @@ internal sealed class Rc3040sQuickControls : UserControl
     Controls.Add(state);
     tips.SetToolTip(read,"Read 260223_C configuration via WebSocket/60030");
     tips.SetToolTip(revert,"Discard unsaved slider edits");
-    tips.SetToolTip(restart,"Send AT+RESET only with explicit dual confirmation; motor must be physically stopped");
+    tips.SetToolTip(restart,"Restart requires confirmation; motor must be physically stopped");
     tips.SetToolTip(state,"Device status");
     RefreshAccess();
   }
@@ -207,10 +207,12 @@ internal sealed class Rc3040sQuickControls : UserControl
       using var lease=await motor.AcquireManagementLeaseAsync(lifetime.Token);
       if(lease is null)throw new InvalidOperationException(
         "Motor is not ready or is safety locked; AT write blocked.");
+      bool commandAttempted=false;
       try
       {
         var result=await Rc3040sManagementService.SaveSpeedAsync(
-          context.Settings.Rotator.Host,azimuth,desired,lifetime.Token);
+          context.Settings.Rotator.Host,azimuth,desired,lifetime.Token,
+          ()=>commandAttempted=true);
         if(!IsDisposed)
         {
           // On an ambiguous write, do not enable another speed write based
@@ -221,24 +223,25 @@ internal sealed class Rc3040sQuickControls : UserControl
           if(result.Outcome==Rc3040sManagementService.SpeedWriteOutcome.Applied)
           {
             RevertSliders();
-            SetState($"{axis} saved; reapply rotator settings.");
+            SetState($"{axis}: readback updated; persistence unverified.");
           }
           else SetState(result.Outcome switch
           {
             Rc3040sManagementService.SpeedWriteOutcome.Unchanged => $"{axis}: device speed unchanged.",
             Rc3040sManagementService.SpeedWriteOutcome.EchoOnly => $"{axis}: echo only; speed unchanged.",
-            Rc3040sManagementService.SpeedWriteOutcome.ReadbackUnavailable => $"{axis}: readback unavailable; do not retry.",
-            _ => $"{axis}: save not verified."
+            Rc3040sManagementService.SpeedWriteOutcome.ReadbackUnavailable =>
+              $"{axis}: write uncertain; do not retry. Read after recovery.",
+            _ => $"{axis}: {result.Detail}"
           });
         }
       }
-      finally {motor.LatchAfterManagementChange();}
+      finally {if(commandAttempted)motor.LatchAfterManagementChange();}
     }
     catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}
     catch(Exception ex)
     {
       snapshot=null;
-      SetState($"Write state UNKNOWN: {ex.Message}. Do not retry.");
+      SetState($"Speed save blocked: {ex.Message}");
     }
     finally {busy=false;if(!IsDisposed){RefreshAccess();Display();}}
   }
