@@ -4,7 +4,7 @@
 
 - **Controller:** SkyRoof Native / `Rc3040sLan`, a dedicated GS-232B TCP/60020 transport. No NRL2 UDP or remote relay in SkyRoof.
 - **Management:** Independent on-demand `ws://<controller-ip>:60030/`. Real 260223_C hardware confirmed C2 read and `AT+TEST` exact echo, as well as `AT+AZ_SPD=05000 / AT+EL_SPD=05000` strings after echo. It has **not** validated speed writes, actual EEPROM retention, restart, hardware acceleration or automatic jerk limiting.
-- **One motor command writer:** NativeRotatorControlEngine. Manual wheel, satellite target updates, STOP, PARK and DEMO share its motion arbitration and safety latches. The speed control panel NEVER writes `W` or `S` through a second motor TCP connection.
+- **One motor command writer:** NativeRotatorControlEngine. Manual wheel, satellite target updates, STOP and PARK share its motion arbitration and safety latches. The speed control panel NEVER writes `W` or `S` through a second motor TCP connection.
 
 ## P0 – protocol separation / safety
 
@@ -12,7 +12,7 @@ Direct LAN motion uses GS-232B W/C2/S on 60020. Restart and AT raw-speed writes 
 
 ## P1 – management + manual wheel UI
 
-Right-click the rotator status to open the existing wheel popup. On `Rc3040sLan` only, an **inline** lower section appears with AZ and EL raw speed sliders, Read, Save AZ, Save EL, Revert, Restart. Other protocols keep the original popup dimensions. The dialog `RC-3040S` still offers separate DEMO, detailed status and Motion Settings.
+Right-click the rotator status to open the existing wheel popup. On `Rc3040sLan` only, an **inline** lower section appears with AZ and EL raw speed sliders, Read, Save AZ, Save EL, Revert, Restart. Other protocols keep the original popup dimensions. The dialog `RC-3040S` offers device status, speed controls, Restart and Motion Settings. The unused RC-3040S DEMO mode and its settings were removed.
 
 - Read obtains the on-device configuration; firmware and the device ID suffix are used to pin subsequent write/restart sessions.
 - Drag changes **UI only**. Nothing is transmitted until one explicit Save AZ or Save EL; both actions require a warning and a precise typed confirmation, never auto-repeat.
@@ -51,7 +51,7 @@ An operator with access to the specific 260223_C unit must complete the followin
 
 1. Ensure physical hard limits and emergency STOP, isolate motor load where possible; backup exact device configuration (both raw speeds). Verify real-time feedback (C2) and motor STOP/reconnect procedures.
 2. Measure AZ and EL `05000` motor speed over multiple **controlled, limited-angle** moves with time-stamped C2 feedback and compare to legacy 251217 nominal formula (AZ ~4.98 °/s; EL ~5.51 °/s). Do not assume formulas are correct for 260223_C.
-3. Verify manual/Track/PARK/DEMO takeover, unexpected link loss, feedback jumps, a STOP while moving, and 360°/450° cable-limit transitions in a safe fixture.
+3. Verify manual/Track/PARK takeover, unexpected link loss, feedback jumps, a STOP while moving, and 360°/450° cable-limit transitions in a safe fixture.
 4. Only in an electrically safe setup, and with operator consent, attempt a **single** AT speed setting update and re-read, then after a controlled power cycle determine persistence, and restore the original configuration explicitly. Do not use a realtime speed-write feedback loop. Do not auto-retry ambiguous EEPROM writes.
 5. Collect actual position-vs-time traces for direct and experimental profiles, calculate overshoot, settling, maximum speed/acceleration and jerk, and disable profile execution if quantified limits are not met. Reference trajectory pass is **not** sufficient to declare real S-curve.
 
@@ -59,7 +59,7 @@ If the WebSocket management listener intermittently refuses TCP connections, it 
 
 ## P6 – integrated SkyRoof behaviors
 
-All manual wheel, satellite tracking, PARK and software DEMO remain on the single native worker. The quick speed panel does not block the wheel; manual operations are disabled while live satellite tracking owns the motor. Motion-profiles settings are scoped to RC-3040S LAN and persisted in existing Settings.json. Simulator CI covers default-off behavior and setpoint limits; **physical P5 results are required before signing off the complete P0–P6 hardware rollout**.
+All manual wheel, satellite tracking and PARK remain on the single native worker. The quick speed panel does not block the wheel; manual operations are disabled while live satellite tracking owns the motor. Motion-profiles settings are scoped to RC-3040S LAN and persisted in existing Settings.json. Simulator CI covers default-off behavior and setpoint limits; **physical P5 results are required before signing off the complete P0–P6 hardware rollout**.
 
 ## Source, tests and repeatability
 
@@ -75,3 +75,9 @@ All manual wheel, satellite tracking, PARK and software DEMO remain on the singl
 ## 2026-10-24 final management interlock
 
 For each **speed write or restart**, SkyRoof takes an explicit I/O-thread management lease: it disables any new `W` targets and manual jogs, queues GS-232 `S`, waits for transmission completion (NOT motor-stop acknowledgement), executes a single separately authorized WebSocket AT operation, and latches the motor safety lock afterward. Physical hardware inspection and re-applying rotator settings are required to resume. A failed/unconfirmed operation does **not** automatically retry, write back a previous raw speed, or resume the previous Track/PARK target.
+
+## 2026-10-24: speed UI and write-readback semantics
+
+- Both speed sliders display AZ/EL angular speed in °/s; device AT raw parameters remain available in tooltips and are computed using separate historical conversion factors (AZ: 360/361600; EL: 360/326400). These are engineering display mappings, not physical motion measurements.
+- Save actions transmit at most one AT setting command, keep the WebSocket receive window open after sending, then establish a separate connection for readback. `Applied` requires a **changed** field matching the requested raw value. Unchanged, echo-only, unavailable and mismatched readback are distinct states. No automatic retry or EEPROM rollback.
+- The former DEMO parameter group, state machine and dialog actions are removed. The Motion Settings interface uses grouped options, short descriptions, Defaults, and a hardware-authorization gate.

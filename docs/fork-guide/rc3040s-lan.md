@@ -4,9 +4,9 @@ This is SkyRoof's **only dedicated RC-3040S integration**. The experimental DTra
 
 To use the direct LAN controller, choose **Rotator > Controller Driver: Native**, **Native Protocol: Rc3040sLan**, **Rotator Network Host** (your controller's current IPv4), and **Rotator Network Port: 60020**. The protocol automatically uses TCP; GS-232B `Wxxx yyy\r` moves, `C2\r` queries actual position, and `S\r` stops. No external NRL2 relay, client SID, Rotor ID, or internet service is used.
 
-Right-click the rotator status icon for manual wheel. The **RC-3040S** button launches the LAN management dialog. The software DEMO waypoint sequence and PARK functions continue to use actual position feedback and the existing single motor I/O thread, not a separate motor socket.
+Right-click the rotator status icon for manual wheel. The **RC-3040S** button launches the LAN management dialog. PARK and satellite tracking continue to use the existing single TCP/60020 motor I/O thread.
 
-The on-demand **management WebSocket** at TCP/60030 can read the configuration (including `AZ_SPD`, `EL_SPD` when actually emitted), offer proposed raw speeds in UI sliders, and send one explicitly confirmed setting at a time with independent configuration readback. **Dragging a slider does not send AT commands.** Revert resets the local sliders to last read values, not factory settings. Restart is a separate doubly confirmed operation. Firmware 260223_C has hardware-verified `AT+TEST` echo, but speed writes/reboot/EEPROM persistence do **not** have real-hardware acceptance evidence.
+The on-demand **management WebSocket** at TCP/60030 can read the configuration (including `AZ_SPD`, `EL_SPD` when actually emitted), offer AZ/EL speed controls in °/s (converting to raw AT values), and send one explicitly confirmed setting at a time with independent configuration readback. **Dragging a slider does not send AT commands.** Revert resets the local sliders to last read values, not factory settings. Restart is a separate doubly confirmed operation. Firmware 260223_C has hardware-verified `AT+TEST` echo, but speed writes/reboot/EEPROM persistence do **not** have real-hardware acceptance evidence.
 
 ### Legacy settings safety
 
@@ -14,4 +14,4 @@ NRL2 UDP's former numeric protocol ID was **10**. Rc3040sLan has ID **11**, and 
 
 ### Motion planning status
 
-The settings UI exposes Direct / Precision Stop / Trapezoidal / S-Curve preferences, but the engine currently keeps direct GS-232 W execution until a properly validated feedback-driven planner is integrated and hardware-tested. Merely showing the profile options **does not** implement physical jerk-limited motor motion. No automatic EEPROM writes during satellite tracking. Continue to use the physical emergency stop and soft limits.
+The Motion Settings window offers Direct, Precision Stop, Trapezoidal and S-curve modes. A profile can only control the rotator after explicitly enabling it and completing hardware checks; Direct remains the default. No AT speed writes occur during tracking.

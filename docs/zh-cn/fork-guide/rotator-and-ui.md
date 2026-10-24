@@ -55,4 +55,4 @@ SkyRoof 已**完全删除 NRL2 UDP 旋转器驱动**及其 RotorID、APP SID、�
 
 请在 **Settings → Rotator Control** 选择 **Controller Driver: Native / Native Protocol: Rc3040sLan**，设置控制板的局域网 IPv4 和端口 **60020**；它使用 GS-232B 的 W/C2/S 命令，不依赖互联网。管理接口通过独立的 **WebSocket TCP/60030** 按需读取配置，原始 AZ/EL 速度条在管理窗口内拖动不会自动写 EEPROM，保存与设备重启均需明确确认。
 
-原 NRL2 数字协议值 10 已废弃，不会自动迁移为 Rc3040sLan（值 11），旧配置必须由用户重新确认连接目标并启用云台。软件 DEMO、PARK 则继续在局域网模式下工作。
+原 NRL2 数字协议值 10 已废弃，不会自动迁移为 Rc3040sLan（值 11），旧配置必须由用户重新确认连接目标并启用云台。、PARK 则继续在局域网模式下工作。
