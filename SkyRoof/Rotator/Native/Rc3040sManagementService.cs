@@ -208,11 +208,14 @@ internal static class Rc3040sManagementService
     return (original,after);
   }
 
-  internal static Task RestartAsync(string host,CancellationToken token=default)=>
+  internal static Task RestartAsync(string host,string expectedFirmware,
+    string expectedDeviceIdSuffix,CancellationToken token=default)=>
     WithSessionAsync(host,async(ws,ct)=>{
       var configuration=await QueryCoreAsync(ws,false,ct).ConfigureAwait(false);
-      if(configuration.Firmware is null)
-        throw new InvalidOperationException("Cannot verify controller version before restart.");
+      if(configuration.Firmware!=expectedFirmware ||
+         configuration.DeviceIdSuffix is null ||
+         !string.Equals(configuration.DeviceIdSuffix,expectedDeviceIdSuffix,StringComparison.Ordinal))
+        throw new InvalidOperationException("Controller firmware/device changed: restart blocked.");
       await SendAsync(ws,"AT+RESET\r",ct).ConfigureAwait(false);
       return true; // Network send only; reboot confirmation is not provided.
     },token);

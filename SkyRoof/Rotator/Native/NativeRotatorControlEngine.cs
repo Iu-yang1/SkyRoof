@@ -53,6 +53,10 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
   private DateTime lastSuccessfulSessionFeedbackUtc = DateTime.MinValue;
   private volatile int ready;
   private long connectionAttemptNumber;
+  private readonly Rc3040sFeedbackEstimator rateEstimator=new();
+  private Rc3040sFeedbackEstimator.Observation? latestRate;
+  internal Rc3040sFeedbackEstimator.Observation? LatestObservedRate
+  {get{lock(sync)return latestRate;}}
   public event EventHandler? StatusChanged;
   public event EventHandler? BearingChanged;
   public event EventHandler<RotatorPositionFaultEventArgs>? PositionFaultDetected;
@@ -303,6 +307,12 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
         error="Position feedback jump: STOP sent or pending";
       }
       lastRead=current;lastReadUtc=DateTime.UtcNow;
+      if(settings.NativeProtocol==RotatorProtocolKind.Rc3040sLan)
+      {
+        if(rateEstimator.Observe(p,lastReadUtc,out var observation))
+          latestRate=observation;
+        else latestRate=null;
+      }
       // STOP after link loss is necessary only if a previously issued target
       // may still be in motion. Two fresh measurements at the target, over
       // at least 200ms, confirm the target has settled. Continuous manual jog
@@ -389,6 +399,7 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
           lastRead = null;
           lastReadUtc = DateTime.MinValue;
           lastSuccessfulSessionFeedbackUtc=DateTime.MinValue;
+          rateEstimator.Reset();latestRate=null;
         }
         SetConnected(true);
         if(hadConnection)

@@ -104,7 +104,8 @@ internal sealed class Rc3040sOperationsDialog : Form
       snapshot?.ElRaw is >=15 and <=10000;
     saveAz.Enabled=safe && dirtyAz && az.Enabled;
     saveEl.Enabled=safe && dirtyEl && el.Enabled;
-    reboot.Enabled=safe;
+    reboot.Enabled=safe && snapshot?.Firmware!=null &&
+      snapshot.DeviceIdSuffix!=null;
     demo.Enabled=safe;stopDemo.Enabled=rotor.IsRc3040sDemoRunning;
     motion.Enabled=!busy;
     // Status is updated by explicit actions. Do not erase network errors and
@@ -187,17 +188,22 @@ internal sealed class Rc3040sOperationsDialog : Form
 
   private async Task RestartAsync()
   {
-    if(busy || !CanEditHardware || !settings.Rc3040sAtEnabled)return;
+    if(busy || !CanEditHardware || !settings.Rc3040sAtEnabled ||
+      snapshot?.Firmware is null || snapshot.DeviceIdSuffix is null)return;
     if(!ConfirmTwice("Restart may disconnect RC-3040S and reset its control state.\n"
       +"Confirm that the motor is physically stopped and a real emergency stop is available.","RESTART"))
       return;
     if(!CanEditHardware)return;
     rotor.StopRotation(); // serialized STOP on dedicated motor I/O worker
+    if(rotor.EngineForRc3040s is not NativeRotatorControlEngine motor ||
+       !await motor.WaitForStopTransmissionAsync(2500,cancel.Token))
+    {status.Text="STOP transmission not confirmed; restart blocked.";return;}
     busy=true;status.Text="Sending one WebSocket restart; reboot is not acknowledged...";
     RefreshButtons();
     try
     {
-      await Rc3040sManagementService.RestartAsync(settings.Host,cancel.Token);
+      await Rc3040sManagementService.RestartAsync(
+        settings.Host,snapshot.Firmware,snapshot.DeviceIdSuffix,cancel.Token);
       if(!IsDisposed)status.Text="Restart command transmitted, device reboot NOT verified. Recheck position before motion.";
     }
     catch(OperationCanceledException)when(cancel.IsCancellationRequested){}

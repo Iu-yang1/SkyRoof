@@ -115,7 +115,8 @@ internal sealed class Rc3040sQuickControls : UserControl
     saveAz.Enabled=az.Enabled && dirtyAz && snapshot!.AzRaw!=az.Value;
     saveEl.Enabled=el.Enabled && dirtyEl && snapshot!.ElRaw!=el.Value;
     revert.Enabled=!busy && valuesKnown;
-    restart.Enabled=active;
+    restart.Enabled=active && snapshot?.Firmware!=null &&
+      snapshot.DeviceIdSuffix!=null;
   }
 
   private void Display()
@@ -161,7 +162,7 @@ internal sealed class Rc3040sQuickControls : UserControl
     }
     catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}
     catch(Exception ex) { SetState("Read failed: "+ex.Message); }
-    finally {busy=false;RefreshAccess();Display();}
+    finally {busy=false;if(!IsDisposed){RefreshAccess();Display();}}
   }
 
   private async Task SaveAsync(bool azimuth)
@@ -193,7 +194,8 @@ internal sealed class Rc3040sQuickControls : UserControl
 
   private async Task RestartAsync()
   {
-    if(!CanSendAt || context is null || rotator is null)return;
+    if(!CanSendAt || context is null || rotator is null ||
+       snapshot?.Firmware is null || snapshot.DeviceIdSuffix is null)return;
     if(!Confirm("Restart RC-3040S via WebSocket/60030?\n" +
       "STOP is not a physical stop acknowledgement.\n" +
       "Check the actual motor is stationary and emergency STOP is available.",
@@ -210,7 +212,7 @@ internal sealed class Rc3040sQuickControls : UserControl
     try
     {
       await Rc3040sManagementService.RestartAsync(
-        context.Settings.Rotator.Host,lifetime.Token);
+        context.Settings.Rotator.Host,snapshot.Firmware,snapshot.DeviceIdSuffix,lifetime.Token);
       SetState("Restart sent, reboot not verified. Inspect before moving.");
     }
     catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}
