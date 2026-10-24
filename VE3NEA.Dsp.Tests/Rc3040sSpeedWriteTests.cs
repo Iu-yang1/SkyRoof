@@ -61,6 +61,26 @@ public sealed class Rc3040sSpeedWriteTests
       Rc3040sManagementService.SpeedUnits.ToDegreesPerSecond(azimuth,raw)),0,0.0051);
   }
 
+  [Theory]
+  [InlineData(true,5000,"AT+AZ_SPD=05000\r")]
+  [InlineData(false,5735,"AT+EL_SPD=05735\r")]
+  public void SpeedWriteEncodingUsesOneCrTerminatedFiveDigitCommand(
+    bool azimuth,int raw,string expected)
+  {
+    Assert.Equal(expected,Rc3040sManagementService.SpeedCommand(azimuth,raw));
+  }
+
+  [Fact]
+  public void AWriteResultIdentifiesWhetherTransmissionWasAttempted()
+  {
+    var snapshot=new Rc3040sManagementService.Snapshot(null,null,null,null,null,0,false);
+    var preflight=new Rc3040sManagementService.SpeedWriteResult(snapshot,null,
+      Rc3040sManagementService.SpeedWriteOutcome.Failed,5735,false,
+      "Preflight unavailable");
+    Assert.False(preflight.CommandAttempted);
+    Assert.True((preflight with { CommandAttempted=true }).CommandAttempted);
+  }
+
   [Fact]
   public void NumericGuardRejectsInvalidSpeed()
   {
