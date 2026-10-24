@@ -247,6 +247,33 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void Manifest_AllowsInterferenceOnlyNegativeControl()
+    {
+      string root=Path.Combine(Path.GetTempPath(),
+        "skyroof-negative-"+Guid.NewGuid().ToString("N"));
+      Directory.CreateDirectory(root);
+      try
+      {
+        File.WriteAllBytes(Path.Combine(root,"negative.wav"),[0,1,2,3]);
+        var manifest=new CwCorpusManifest
+        {
+          Name="no-cw",
+          Cases=[new CwCorpusCase
+          {
+            Name="continuous-carrier",
+            Wav="negative.wav",
+            Lanes=[]
+          }]
+        };
+        manifest.Validate(root);
+      }
+      finally
+      {
+        Directory.Delete(root,recursive:true);
+      }
+    }
+
+    [Fact]
     public void RecordedCorpus_EndToEnd()
     {
       if (!string.Equals(

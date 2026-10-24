@@ -92,6 +92,8 @@ namespace SkyRoof
       IReadOnlyDictionary<CwConsoleLaneIdentity, CwTranscriptSnapshot> transcripts,
       CwConsoleLaneIdentity? selected)
     {
+      header.Text="CW verified · "+slots.Count(slot =>
+        slot.Present && slot.Track.HasValue)+"/8";
       foreach (CwConsoleLaneSlot slot in slots)
       {
         if (slot.Index < 0 || slot.Index >= cards.Length)

@@ -948,7 +948,11 @@ namespace SkyRoof
       lock (stateSync)
         tracks = CwConsolePresentation
           .CollapseDuplicateLaneIdentities(latestTracks);
-      WaterfallView.SetTracks(tracks, selectedIdentity);
+      // Keep waterfall overlays consistent with the eight CW-verified lanes.
+      // The raw spectrogram remains visible, including unclassified QRM.
+      WaterfallView.SetTracks(tracks.Where(track =>
+        track.KeyingStatus!=CwKeyingStatus.Candidate).ToArray(),
+        selectedIdentity);
     }
 
     private void WaterfallView_LaneClicked(
