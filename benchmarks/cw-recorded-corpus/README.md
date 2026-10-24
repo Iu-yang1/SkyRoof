@@ -89,3 +89,17 @@ Useful corpus axes include:
 
 Do not put private callsign/operator material in a public corpus unless you have
 permission to publish it.
+
+
+## P0–P2 negative-control and false-alarm metrics
+
+An empty `lanes: []` is supported for a WAV containing no CW. Use negative
+controls for SSB speech, FT8/FT4, FSK/RTTY, steady carriers, AGC/QSB,
+impulsive interference and receiver noise.
+
+Reports additionally contain `falseAcceptedCwLanes` (unmatched decoded
+lanes), `falseCharacterRatePerMinute` (unmatched output characters/minute),
+`falseCandidateTrackRatePerMinute` (raw nontruth ridge identities/minute)
+and `negativeCases`. The scoring uses truth frequencies only after inference;
+it never supplies a truth frequency to detection, tracker or neural decoder.
+Compare baseline v.1.58 and new code against the same WAV/manifest collection.

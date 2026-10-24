@@ -136,8 +136,7 @@ namespace VE3NEA.Dsp.Tests
       if (MaxDecodeLanes is < 1 or > 8)
         throw new InvalidDataException(
           $"CW corpus case '{Name}' max lane count must be 1..8.");
-      if (Lanes.Length == 0 ||
-          Lanes.Length > 8)
+      if (Lanes.Length > 8)
         throw new InvalidDataException(
           $"CW corpus case '{Name}' must define 1..8 truth lanes.");
 
@@ -331,6 +330,18 @@ namespace VE3NEA.Dsp.Tests
       var summary = new
       {
         manifest = manifest.Name,
+        negativeCases = caseReports.Cast<CwCorpusCaseReport>()
+          .Count(x=>x.Lanes.Length==0),
+        falseAcceptedCwLanes = caseReports.Cast<CwCorpusCaseReport>()
+          .Sum(x=>x.FalseAcceptedCW),
+        falseCharacterRatePerMinute = caseReports.Cast<CwCorpusCaseReport>()
+          .Sum(x=>x.FalseCharacters) /
+          Math.Max(caseReports.Cast<CwCorpusCaseReport>()
+            .Sum(x=>x.DurationSeconds)/60.0,1e-9),
+        falseCandidateTrackRatePerMinute = caseReports.Cast<CwCorpusCaseReport>()
+          .Sum(x=>x.FalseCandidateTracks) /
+          Math.Max(caseReports.Cast<CwCorpusCaseReport>()
+            .Sum(x=>x.DurationSeconds)/60.0,1e-9),
         cases = manifest.Cases.Length,
         truthLanes,
         matchedLanes = matched,
@@ -398,7 +409,7 @@ namespace VE3NEA.Dsp.Tests
         JsonSerializer.Serialize(
           summary));
 
-      truthLanes.Should().BeGreaterThan(0);
+      manifest.Cases.Length.Should().BeGreaterThan(0);
       double.IsFinite(
           summary.meanCer)
         .Should().BeTrue();
@@ -470,6 +481,7 @@ namespace VE3NEA.Dsp.Tests
 
       var frequencyByIdentity =
         new Dictionary<int, List<double>>();
+      var candidateFrequencyById=new Dictionary<int,List<double>>();
 
       int trackingHop =
         Math.Max(
@@ -526,6 +538,16 @@ namespace VE3NEA.Dsp.Tests
             frontEnd.Analyze(
               item.KnownDopplerRateHzPerSecond);
 
+        foreach(CwSignalTrack track in tracks)
+        {
+          if (!candidateFrequencyById.TryGetValue(
+                track.Id,out List<double>? points))
+          {
+            points=[];
+            candidateFrequencyById[track.Id]=points;
+          }
+          points.Add(track.FrequencyHz);
+        }
         if (end < nextDecodeEnd)
           continue;
 
@@ -611,6 +633,19 @@ namespace VE3NEA.Dsp.Tests
           item.Lanes,
           observed);
 
+      HashSet<int> usedObserved=matches.Values.ToHashSet();
+      CwCorpusObservedLane[] unmatched=observed
+        .Where((x,i)=>!usedObserved.Contains(i))
+        .ToArray();
+      int falseCharacters=unmatched.Sum(x=>x.Text.Length);
+      int falseTracks=candidateFrequencyById.Values.Count(freq =>
+      {
+        double center=Median(freq);
+        return !item.Lanes.Any(truth =>
+          Math.Abs(center-truth.ReferenceFrequencyHz) <=
+            truth.FrequencyToleranceHz);
+      });
+
       CwCorpusLaneReport[] lanesReport =
         item.Lanes
           .Select((truth, index) =>
@@ -687,7 +722,8 @@ namespace VE3NEA.Dsp.Tests
         stopwatch.Elapsed.TotalSeconds /
           Math.Max(
             wave.DurationSeconds,
-            1e-9));
+            1e-9),
+        unmatched.Length,falseCharacters,falseTracks);
     }
 
     private static Dictionary<int, int>
@@ -1077,6 +1113,9 @@ namespace VE3NEA.Dsp.Tests
         double KnownDopplerRateHzPerSecond,
         int ObservedLanes,
         CwCorpusLaneReport[] Lanes,
-        double RealTimeFactor);
+        double RealTimeFactor,
+        int FalseAcceptedCW = 0,
+        int FalseCharacters = 0,
+        int FalseCandidateTracks = 0);
   }
 }
