@@ -195,8 +195,14 @@ internal sealed class Rc3040sOperationsDialog : Form
       return;
     if(!CanEditHardware)return;
     rotor.StopRotation(); // serialized STOP on dedicated motor I/O worker
-    if(rotor.EngineForRc3040s is not NativeRotatorControlEngine motor ||
-       !await motor.WaitForStopTransmissionAsync(2500,cancel.Token))
+    bool stopTransmitted=false;
+    try
+    {
+      if(rotor.EngineForRc3040s is NativeRotatorControlEngine motor)
+        stopTransmitted=await motor.WaitForStopTransmissionAsync(2500,cancel.Token);
+    }
+    catch(OperationCanceledException) when(cancel.IsCancellationRequested){return;}
+    if(!stopTransmitted)
     {status.Text="STOP transmission not confirmed; restart blocked.";return;}
     busy=true;status.Text="Sending one WebSocket restart; reboot is not acknowledged...";
     RefreshButtons();

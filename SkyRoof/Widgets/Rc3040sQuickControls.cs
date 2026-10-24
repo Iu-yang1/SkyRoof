@@ -204,8 +204,14 @@ internal sealed class Rc3040sQuickControls : UserControl
     rotator.StopRotation();
     // Stop is queued on a separate I/O worker; wait for the transmission result
     // before trying a management restart, but never assume the motor is stopped.
-    if(rotator.EngineForRc3040s is not NativeRotatorControlEngine engine ||
-       !await engine.WaitForStopTransmissionAsync(2500,lifetime.Token))
+    bool stopTransmitted=false;
+    try
+    {
+      if(rotator.EngineForRc3040s is NativeRotatorControlEngine engine)
+        stopTransmitted=await engine.WaitForStopTransmissionAsync(2500,lifetime.Token);
+    }
+    catch(OperationCanceledException) when(lifetime.IsCancellationRequested){return;}
+    if(!stopTransmitted)
     {SetState("Motor STOP transmission not confirmed; restart blocked.");return;}
     if(!CanSendAt)return;
     busy=true;RefreshAccess();SetState("One restart attempt; no retries...");
