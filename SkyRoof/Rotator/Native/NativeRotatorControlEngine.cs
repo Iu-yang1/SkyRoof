@@ -356,6 +356,8 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
   {
     int retryFailures=0;
     bool hadConnection=false;
+    var motionPlanner=new Rc3040sMotionPlanner();
+    long lastPlanTick=0,lastPlannerCommandTick=0;
     while(!stopping)
     {
       try
@@ -373,6 +375,8 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
         Log.Information("Native rotator transport established after {ElapsedMs} ms; synchronizing controller feedback",
           connectWatch.ElapsedMilliseconds);
         replyBacklog.Clear();
+        motionPlanner.Reset();
+        lastPlanTick=lastPlannerCommandTick=0;
         consecutiveFeedbackMisses=0;
         stableTargetReads=0;
         stableTargetFirstUtc=DateTime.MinValue;
@@ -421,12 +425,14 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
           }
           if(stopNow)
           {
+            motionPlanner.Reset();lastPlanTick=0;
             SendStop();
             continue;
           }
 
           if(jog.HasValue && !PositionFaulted)
           {
+            motionPlanner.Reset();lastPlanTick=0;
             bool shouldSend;
             lock(sync){shouldSend=appliedDirection!=jog;}
             if(shouldSend)
@@ -448,6 +454,43 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
           else if(target!=null && !PositionFaulted)
           {
             var p=new RotatorPosition(target.AzDeg,target.ElDeg);
+            bool planning=settings.NativeProtocol==RotatorProtocolKind.Rc3040sLan &&
+              settings.Rc3040sPlannerEnabled &&
+              settings.Rc3040sMotionHardwareValidated &&
+              settings.Rc3040sMotionMode!=Rc3040sMotionProfile.Direct;
+            bool plannerBlocked=false;
+            if(planning)
+            {
+              Bearing? actual;DateTime readUtc;bool fresh;
+              lock(sync)
+              {
+                actual=lastRead;readUtc=lastReadUtc;
+                fresh=HasFreshPositionLocked();
+              }
+              if(!fresh || actual==null ||
+                 readUtc==DateTime.MinValue ||
+                 (DateTime.UtcNow-readUtc).TotalSeconds>2.5)
+                plannerBlocked=true;
+              else
+              {
+                long tick=Environment.TickCount64;
+                double dt=lastPlanTick==0 ? 0.20 :
+                  Math.Clamp((tick-lastPlanTick)/1000.0,0.02,0.5);
+                lastPlanTick=tick;
+                var limits=new Rc3040sMotionPlanner.Limits(
+                  settings.Rc3040sPlanAzSpeed,settings.Rc3040sPlanElSpeed,
+                  settings.Rc3040sPlanAcceleration,settings.Rc3040sPlanJerk,
+                  settings.MinAzimuth,settings.MaxAzimuth,
+                  settings.MinElevation,settings.MaxElevation);
+                var next=motionPlanner.Step(actual.AzDeg,actual.ElDeg,
+                  target.AzDeg,target.ElDeg,dt,settings.Rc3040sMotionMode,limits);
+                p=new RotatorPosition(next.Azimuth,next.Elevation);
+              }
+            }
+            else if(lastPlanTick!=0)
+            {
+              motionPlanner.Reset();lastPlanTick=0;
+            }
             byte[] frame;
             if(settings.NativeProtocol==RotatorProtocolKind.SpidRot2Prog)
             {
@@ -465,6 +508,10 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
             else frame=NativeRotatorCodec.Point(settings.NativeProtocol,p,settings.NativePointTemplate);
             bool same;
             lock(sync){same=lastWire!=null&&lastWire.SequenceEqual(frame);}
+            if(planning && (plannerBlocked ||
+               lastPlannerCommandTick!=0 &&
+               Environment.TickCount64-lastPlannerCommandTick<450))
+              same=true;
             if(!same)
             {
               if(stopRequested || Interlocked.Read(ref commandVersion)!=selectedVersion ||
@@ -479,7 +526,13 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
                 if(!Encoding.ASCII.GetString(ack).Contains("RPRT 0"))
                   throw new IOException("rotctld rejected position");
               }
-              lock(sync){lastWritten=target;lastWire=frame;}
+              if(planning)lastPlannerCommandTick=Environment.TickCount64;
+              lock(sync)
+              {
+                lastWritten=planning ?
+                  new Bearing(p.Azimuth*Math.PI/180,p.Elevation*Math.PI/180):target;
+                lastWire=frame;
+              }
             }
           }
           long now=Environment.TickCount64;
@@ -549,6 +602,7 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
             }
             requested=lastWritten=null;manualDirection=null;appliedDirection=null;lastWire=null;
           }
+          motionPlanner.Reset();lastPlanTick=lastPlannerCommandTick=0;
         }
       }
       finally
