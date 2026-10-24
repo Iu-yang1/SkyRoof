@@ -72,6 +72,7 @@ namespace SkyRoof
     {
       nameof(RotatorSettings.Rc3040sMotionMode),
       nameof(RotatorSettings.Rc3040sPlannerEnabled),
+      nameof(RotatorSettings.Rc3040sMotionHardwareValidated),
       nameof(RotatorSettings.Rc3040sPlanAzSpeed),
       nameof(RotatorSettings.Rc3040sPlanElSpeed),
       nameof(RotatorSettings.Rc3040sPlanAcceleration),

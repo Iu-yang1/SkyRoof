@@ -114,6 +114,11 @@ namespace SkyRoof
     [DefaultValue(1.5)]
     public double Rc3040sPlanJerk { get; set; } = 1.5;
 
+    [DisplayName("RC-3040S Motion Hardware Validated")]
+    [Description("Explicit operator acknowledgement of physical calibration and STOP/limits verification; this does NOT prove hardware obeys the software S-curve.")]
+    [DefaultValue(false)]
+    public bool Rc3040sMotionHardwareValidated { get; set; } = false;
+
     [DisplayName("RC-3040S AT Readback")]
     [Description("WebSocket/60030 on-demand management: read-only unless explicitly saved.")]
     [DefaultValue(true)]
