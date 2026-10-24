@@ -10,6 +10,7 @@ namespace SkyRoof.CW
     public int MinimumConfirmations { get; init; } = 2;
     public double MinimumConsensus { get; init; } = 0.60;
     public double MinimumAverageConfidence { get; init; } = 0.52;
+    public double MinimumEvidenceSpanSeconds { get; init; } = 0;
     public double CommittedMatchRetentionSeconds { get; init; } = 8.0;
   }
 
@@ -78,6 +79,7 @@ namespace SkyRoof.CW
       public double TimeWeight;
       public readonly Dictionary<char, Vote> Votes = [];
       public readonly HashSet<long> WindowIds = [];
+      public DateTime FirstObservedWindowEndUtc;
       public DateTime LastObservedWindowEndUtc;
       public bool Committed;
       public char CommittedCharacter;
@@ -540,6 +542,8 @@ namespace SkyRoof.CW
     {
       if (!cluster.WindowIds.Add(windowId))
         return;
+      if(cluster.WindowIds.Count==1)
+        cluster.FirstObservedWindowEndUtc=windowEndUtc;
 
       if (!cluster.Votes.TryGetValue(
             symbol.Character,
@@ -620,7 +624,10 @@ namespace SkyRoof.CW
           consensus >=
             options.MinimumConsensus &&
           averageConfidence >=
-            options.MinimumAverageConfidence;
+            options.MinimumAverageConfidence &&
+          (cluster.LastObservedWindowEndUtc -
+            cluster.FirstObservedWindowEndUtc).TotalSeconds >=
+            options.MinimumEvidenceSpanSeconds;
 
         if (ready)
         {

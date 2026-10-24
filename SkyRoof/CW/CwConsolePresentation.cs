@@ -211,6 +211,8 @@ namespace SkyRoof.CW
     internal static string StateText(
       CwSignalTrack track)
     {
+      if (track.KeyingStatus == CwKeyingStatus.Candidate)
+        return "Candidate";
       if (track.Ambiguous)
         return "Ambiguous";
       if (track.Active)

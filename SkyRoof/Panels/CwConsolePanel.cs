@@ -870,7 +870,9 @@ namespace SkyRoof
       }
 
       IReadOnlyList<CwConsoleLaneSlot> slots =
-        laneSlots.Update(tracks, DateTime.UtcNow);
+        laneSlots.Update(tracks.Where(track =>
+          track.KeyingStatus != CwKeyingStatus.Candidate),
+          DateTime.UtcNow);
 
       if (!slots.Any(slot =>
         slot.Identity.HasValue &&

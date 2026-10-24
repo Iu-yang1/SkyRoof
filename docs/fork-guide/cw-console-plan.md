@@ -116,3 +116,22 @@ Use synthetic and recorded simultaneous CW WAV at 10/20/30/40 WPM; 3/5/8 carrier
 13. Persistent F1–F8 CW message presets: normal F keys/buttons load only; Shift+F1–F8 explicitly sends through the complete TX state machine; no auto-reply or macro queue (**SkyRoof PR #53**).
 14. Supervised IC-9700 RF sign-off: dummy load / low power first; verify CW/CW-R, BK-IN, actual uplink, Doppler catch-up, macro Shift-send and STOP. Software checks do not replace local regulatory/license requirements.
 15. Recorded-WAV corpus v1 schema/runner, HTTPS+SHA-256 manual CI, complete bilingual CW Console user guide, DeepCW/HamNoise provenance audit, and Compile/Docs/Release invariant gates (**PR #54**). Final quality numbers still require an external recorded corpus; the software infrastructure is complete.
+## 2026-10-24: CW candidate and text false-alarm controls (P0–P2)
+
+- Spectral ridges remain low-threshold **candidates**; only observed keyed
+  time-frequency envelopes promote them to **CW Verified**. Suspect tracks
+  do not occupy the eight decoded/UI lanes. The classifier uses the existing
+  short-window STFT observations, avoiding new FFTs on the live tracking path.
+- Weak/nearby signals remain in the ridge tracker and may be promoted once
+  keying is observed. Confirmed-track ID persistence is intentionally distinct
+  from a valid keyed CW classification. Short CW key-up gaps retain an existing
+  verified identity for at most three seconds.
+- The ONNX wideband mask now only uses physically accepted CW tracks; its
+  per-lane denoiser path is subject to the same physical gate.
+- The production overlapping 6-second/1-second transcript path demands at
+  least two seconds of distinct observation-window span before committing
+  a candidate character. The generic transcript API retains its legacy
+  zero-span default for compatible direct callers.
+- Explicitly evaluate false CW acceptance, false characters per minute,
+  near/far doublets, weak CW recall and realtime factor before tuning
+  receiver-specific thresholds.

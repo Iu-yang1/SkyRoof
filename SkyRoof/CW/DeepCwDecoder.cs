@@ -333,7 +333,8 @@ namespace SkyRoof.CW
         throw new InvalidOperationException("CW lane count must be 1..8.");
 
       CwSignalTrack[] allDetectedTracks = tracks
-        .Where(t => t.Confirmed)
+        .Where(t => t.Confirmed &&
+          t.KeyingStatus != CwKeyingStatus.Candidate)
         .Where(t => double.IsFinite(t.FrequencyHz))
         .Where(t => t.FrequencyHz > 0 &&
                     t.FrequencyHz < sourceSampleRate / 2.0)
@@ -413,11 +414,16 @@ namespace SkyRoof.CW
                 track,
                 activityByTrack[track.Id]));
 
+        CwSignalTrack[] physicallyAccepted =
+          allDetectedTracks.Where(track =>
+            IsPlausibleKeyedCarrier(physicalEvidence[track.Id]))
+          .ToArray();
+        // The interference mask must not be contaminated by tracks already
+        // rejected as non-CW. Keep every *valid* competing lane, even if the
+        // inference budget selects fewer than MaxLanes.
+        allDetectedTracks = physicallyAccepted;
         decodeSelectedTracks =
-          allDetectedTracks
-            .Where(track =>
-              IsPlausibleKeyedCarrier(
-                physicalEvidence[track.Id]))
+          physicallyAccepted
             // Physical evidence is a reject gate, not a new resource-ranking
             // policy. Preserve the established Active -> tracker SNR order.
             .OrderByDescending(track => track.Active)
@@ -428,10 +434,17 @@ namespace SkyRoof.CW
       }
       else
       {
-        // Experimental per-lane denoiser path lacks the shared wideband
-        // physical-evidence estimator. Preserve its legacy selection policy.
+        // Per-lane denoising must not bypass the physical CW gate.
+        // Check raw audio before expensive denoising or neural inference.
+        var evidenceWindow = DeepCwWidebandFeatureWindow.Create(
+          audio,sourceSampleRate,metadata);
+        var rawActivities = evidenceWindow.EstimateActivities(
+          allDetectedTracks,activityEstimator);
         decodeSelectedTracks =
           allDetectedTracks
+            .Where(t=>IsPlausibleKeyedCarrier(
+              evidenceWindow.EvaluatePhysicalEvidence(
+                t,rawActivities[t.Id])))
             .OrderByDescending(t => t.Active)
             .ThenByDescending(t => t.SnrDb)
             .ThenBy(t => t.FrequencyHz)

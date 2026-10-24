@@ -104,9 +104,16 @@ namespace SkyRoof.CW
             options.TargetCenterHz
         };
 
+      // Consecutive 6 s / 1 s ONNX windows are highly correlated.
+      // Require evidence from separated windows for committed text.
       continuous =
         new CwContinuousDeepCwDecoder(
-          decoder);
+          decoder,
+          new CwIncrementalTranscriptCoordinator(
+            new CwTranscriptOptions
+            {
+              MinimumEvidenceSpanSeconds = 2.0
+            }));
     }
 
     public CwContinuousDecodeBatch Decode(

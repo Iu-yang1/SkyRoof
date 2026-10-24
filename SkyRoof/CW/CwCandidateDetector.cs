@@ -239,6 +239,7 @@ namespace SkyRoof.CW
     private DateTime? lastCommittedUtc;
     private IReadOnlyList<CwSignalTrack> latestTracks =
       Array.Empty<CwSignalTrack>();
+    private readonly Dictionary<int,DateTime> verifiedUntil = new();
 
     public CwAudioHub Audio { get; }
     public CwCandidateDetector Detector { get; }
@@ -391,6 +392,27 @@ namespace SkyRoof.CW
           batch.CenterSampleIndex;
       }
 
+      // A Kalman-confirmed ridge is not necessarily keyed CW. Only the
+      // short-time spectral envelope may elevate it to a decodable lane.
+      // Keep a previously verified identity through brief Morse key-up/QSB.
+      DateTime now=snapshot.EndUtc;
+      CwSignalTrack[] vetted=new CwSignalTrack[latestTracks.Count];
+      for(int i=0;i<latestTracks.Count;i++)
+      {
+        CwSignalTrack track=latestTracks[i];
+        CwKeyingAssessment evidence=
+          CwKeyingGate.AssessRidge(track,scan,snapshot,FrameScanner);
+        if(evidence.IsKeyed)
+          verifiedUntil[track.Id]=now.AddSeconds(3);
+        bool verified=verifiedUntil.TryGetValue(track.Id,out DateTime until) &&
+          until>=now;
+        vetted[i]=track with {KeyingStatus=verified
+          ? CwKeyingStatus.Verified : CwKeyingStatus.Candidate};
+      }
+      latestTracks=vetted;
+      foreach(int id in verifiedUntil
+        .Where(x=>x.Value<now).Select(x=>x.Key).ToArray())
+        verifiedUntil.Remove(id);
       return latestTracks;
     }
 
@@ -400,6 +422,7 @@ namespace SkyRoof.CW
       FrameScanner.ResetCache();
       Associations.Reset();
       Tracks.Reset();
+      verifiedUntil.Clear();
       lastPrecisionSampleIndex = long.MinValue;
       lastCommittedSampleIndex = long.MinValue;
       lastCommittedUtc = null;

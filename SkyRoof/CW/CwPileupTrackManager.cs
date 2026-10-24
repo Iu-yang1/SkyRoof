@@ -30,7 +30,8 @@ namespace SkyRoof.CW
     double FrequencySigmaHz = 0,
     int MergeGroupId = 0,
     double IdentityConfidence = 1,
-    int AssociationHintId = 0);
+    int AssociationHintId = 0,
+    CwKeyingStatus KeyingStatus = CwKeyingStatus.Unknown);
 
   /// <summary>
   /// Multi-target CW ridge tracker.
