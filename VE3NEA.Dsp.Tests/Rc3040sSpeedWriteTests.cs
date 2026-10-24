@@ -71,6 +71,18 @@ public sealed class Rc3040sSpeedWriteTests
   }
 
   [Fact]
+  public async System.Threading.Tasks.Task ConnectionPreflightRefusalNeverAttemptsAtWrite()
+  {
+    int sends=0;
+    var result=await Rc3040sManagementService.SaveSpeedAsync(
+      "127.0.0.1",true,5735,onCommandAttempt:()=>sends++);
+    Assert.Equal(Rc3040sManagementService.SpeedWriteOutcome.Failed,result.Outcome);
+    Assert.Equal(0,sends);
+    Assert.False(result.CommandAttempted);
+    Assert.Contains("AT command NOT sent",result.Detail);
+  }
+
+  [Fact]
   public void AWriteResultIdentifiesWhetherTransmissionWasAttempted()
   {
     var snapshot=new Rc3040sManagementService.Snapshot(null,null,null,null,null,0,false);
