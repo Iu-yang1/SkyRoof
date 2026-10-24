@@ -30,6 +30,9 @@ internal interface IRotatorEngine : IDisposable
 internal sealed class NativeRotatorControlEngine : IRotatorEngine
 {
   private readonly RotatorSettings settings;
+  private readonly bool plannerAuthorizedAtEngineStart;
+  private readonly Rc3040sMotionProfile plannerProfileAtEngineStart;
+  private readonly Rc3040sMotionPlanner.Limits plannerLimitsAtEngineStart;
   private readonly SynchronizationContext ui;
   private readonly object sync = new();
   private readonly AutoResetEvent wake = new(false);
@@ -73,6 +76,19 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
   public NativeRotatorControlEngine(RotatorSettings settings)
   {
     this.settings=settings;
+    // Motion settings are sampled when the motor worker starts; changing
+    // UI preferences never enables a new profile mid-movement. An operator
+    // must stop and re-apply rotator settings to activate a new calibration.
+    plannerProfileAtEngineStart=settings.Rc3040sMotionMode;
+    plannerLimitsAtEngineStart=new Rc3040sMotionPlanner.Limits(
+      settings.Rc3040sPlanAzSpeed,settings.Rc3040sPlanElSpeed,
+      settings.Rc3040sPlanAcceleration,settings.Rc3040sPlanJerk,
+      settings.MinAzimuth,settings.MaxAzimuth,
+      settings.MinElevation,settings.MaxElevation);
+    plannerAuthorizedAtEngineStart=settings.NativeProtocol==RotatorProtocolKind.Rc3040sLan &&
+      settings.Rc3040sPlannerEnabled && settings.Rc3040sMotionHardwareValidated &&
+      plannerProfileAtEngineStart!=Rc3040sMotionProfile.Direct &&
+      Rc3040sMotionPlanner.ValidLimits(plannerLimitsAtEngineStart);
     if (!NativeRotatorCodec.Supports(settings.NativeProtocol,settings.NativeTransport))
       throw new ArgumentException("This protocol cannot use selected transport");
     if (settings.NativeProtocol==RotatorProtocolKind.CustomTemplate &&
@@ -529,10 +545,8 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
           else if(target!=null && !PositionFaulted)
           {
             var p=new RotatorPosition(target.AzDeg,target.ElDeg);
-            bool planning=settings.NativeProtocol==RotatorProtocolKind.Rc3040sLan &&
-              settings.Rc3040sPlannerEnabled &&
-              settings.Rc3040sMotionHardwareValidated &&
-              settings.Rc3040sMotionMode!=Rc3040sMotionProfile.Direct;
+            bool planning=plannerAuthorizedAtEngineStart &&
+              settings.Rc3040sPlannerEnabled && settings.Rc3040sMotionHardwareValidated;
             bool plannerBlocked=false;
             if(planning)
             {
@@ -552,13 +566,9 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
                 double dt=lastPlanTick==0 ? 0.20 :
                   Math.Clamp((tick-lastPlanTick)/1000.0,0.02,0.5);
                 lastPlanTick=tick;
-                var limits=new Rc3040sMotionPlanner.Limits(
-                  settings.Rc3040sPlanAzSpeed,settings.Rc3040sPlanElSpeed,
-                  settings.Rc3040sPlanAcceleration,settings.Rc3040sPlanJerk,
-                  settings.MinAzimuth,settings.MaxAzimuth,
-                  settings.MinElevation,settings.MaxElevation);
                 var next=motionPlanner.Step(actual.AzDeg,actual.ElDeg,
-                  target.AzDeg,target.ElDeg,dt,settings.Rc3040sMotionMode,limits);
+                  target.AzDeg,target.ElDeg,dt,plannerProfileAtEngineStart,
+                  plannerLimitsAtEngineStart);
                 p=new RotatorPosition(next.Azimuth,next.Elevation);
               }
             }
