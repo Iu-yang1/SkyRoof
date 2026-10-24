@@ -137,25 +137,61 @@ namespace SkyRoof.CW
           bestFrequency[i]=obs.FrequencyHz;
         }
       }
-      int on=0,off=0,onSwitched=0,offSwitched=0;
-      double strongEnough=Math.Max(
-        scanner.Options.FastMinimumSnrDb+4.0,high-9.0);
+      // Spectral dominance alone is insufficient: randomly varying noise
+      // peaks also dominate some CW key-up frames. A hopping modulation
+      // repeatedly occupies the SAME alternate frequency during target OFF.
+      int on=0,off=0;
+      double binHz=snapshot.SampleRate/(double)win;
+      double separation=Math.Max(10.0,0.9*binHz);
+      var switchedOff=new List<double>();
       for(int i=0;i<count;i++)
       {
-        double timeDelta=(start+win/2+(long)i*hop-
+        double dt=(start+win/2+(long)i*hop-
           snapshot.EndSampleIndex)/(double)snapshot.SampleRate;
         double center=track.FrequencyHz+
-          track.DriftHzPerSecond*timeDelta;
-        bool switched=bestSnr[i]>=strongEnough &&
-          Math.Abs(bestFrequency[i]-center)>=
-            Math.Max(10.0,0.9*snapshot.SampleRate/(double)win);
-        if(snr[i]>=threshold){on++;if(switched)onSwitched++;}
-        else {off++;if(switched)offSwitched++;}
+          track.DriftHzPerSecond*dt;
+        bool targetOn=snr[i]>=threshold;
+        if(targetOn){on++;continue;}
+        off++;
+        if(bestSnr[i]>=scanner.Options.FastMinimumSnrDb+4 &&
+           double.IsFinite(bestFrequency[i]) &&
+           Math.Abs(bestFrequency[i]-center)>=separation)
+          switchedOff.Add(bestFrequency[i]);
       }
-      double offRatio=offSwitched/(double)Math.Max(1,off);
-      double onRatio=onSwitched/(double)Math.Max(1,on);
-      bool hopping=on>=4 && off>=4 && offSwitched>=4 &&
-        offRatio>=0.75 && onRatio<=0.35;
+
+      double modeFrequency=double.NaN;
+      int modeCount=0;
+      double tolerance=1.5*binHz;
+      foreach(double candidate in switchedOff)
+      {
+        int amount=switchedOff.Count(f=>
+          Math.Abs(f-candidate)<=tolerance);
+        if(amount>modeCount)
+        {
+          modeCount=amount;
+          modeFrequency=candidate;
+        }
+      }
+      // Independent CW stations often coexist in the same narrow band.
+      // Only classify as frequency hopping if the modal alternate tone
+      // is essentially absent while the target tone is on.
+      var alternateOnFrames=new HashSet<int>();
+      if(double.IsFinite(modeFrequency))
+      {
+        foreach(CwRidgeObservation obs in scan.FastObservations)
+        {
+          long relative=obs.CenterSampleIndex-(start+win/2);
+          int i=(int)Math.Round(relative/(double)hop);
+          if(i<0 || i>=count || snr[i]<threshold)continue;
+          if(Math.Abs(obs.FrequencyHz-modeFrequency)<=tolerance &&
+             obs.SnrDb>=scanner.Options.FastMinimumSnrDb+8)
+            alternateOnFrames.Add(i);
+        }
+      }
+      double offRatio=modeCount/(double)Math.Max(1,off);
+      double onRatio=alternateOnFrames.Count/(double)Math.Max(1,on);
+      bool hopping=on>=4 && off>=4 && modeCount>=6 &&
+        offRatio>=0.45 && onRatio<=0.30;
       return result with
       {
         IsKeyed=!hopping,
