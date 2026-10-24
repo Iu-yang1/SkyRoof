@@ -142,7 +142,7 @@ namespace SkyRoof.CW
       // repeatedly occupies the SAME alternate frequency during target OFF.
       int on=0,off=0;
       double binHz=snapshot.SampleRate/(double)win;
-      double separation=Math.Max(10.0,0.9*binHz);
+      double separation=Math.Max(18.0,1.4*binHz);
       var switchedOff=new List<double>();
       for(int i=0;i<count;i++)
       {
@@ -161,7 +161,7 @@ namespace SkyRoof.CW
 
       double modeFrequency=double.NaN;
       int modeCount=0;
-      double tolerance=1.5*binHz;
+      double tolerance=1.2*binHz;
       foreach(double candidate in switchedOff)
       {
         int amount=switchedOff.Count(f=>
@@ -183,7 +183,11 @@ namespace SkyRoof.CW
           long relative=obs.CenterSampleIndex-(start+win/2);
           int i=(int)Math.Round(relative/(double)hop);
           if(i<0 || i>=count || snr[i]<threshold)continue;
-          if(Math.Abs(obs.FrequencyHz-modeFrequency)<=tolerance &&
+          double dt=(obs.CenterSampleIndex-snapshot.EndSampleIndex)/
+            (double)snapshot.SampleRate;
+          double center=track.FrequencyHz+track.DriftHzPerSecond*dt;
+          if(Math.Abs(obs.FrequencyHz-center)>=separation &&
+             Math.Abs(obs.FrequencyHz-modeFrequency)<=tolerance &&
              obs.SnrDb>=scanner.Options.FastMinimumSnrDb+8)
             alternateOnFrames.Add(i);
         }
