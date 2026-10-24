@@ -15,10 +15,14 @@ namespace SkyRoof.NativeRotator;
 internal static class Rc3040sManagementService
 {
   internal sealed record Snapshot(string? Firmware, int? AzRaw, int? ElRaw,
-    string? Mode, string? Travel, int Frames, bool EchoVerified);
+    string? Mode, string? Travel, int Frames, bool EchoVerified,
+    string? DeviceIdSuffix = null);
 
   private static readonly Regex Banner = new(
     @"RC_3040S_67S_8H_\d{6}_[A-Za-z0-9]+",
+    RegexOptions.Compiled | RegexOptions.CultureInvariant);
+  private static readonly Regex FirmwareId = new(
+    @"RC_3040S_67S_8H_\d{6}_[A-Za-z0-9]+\s+([0-9A-Fa-f]{14})",
     RegexOptions.Compiled | RegexOptions.CultureInvariant);
   private static readonly Regex Speed = new(
     @"(?im)^\s*AT\+(AZ|EL)_SPD=(\d{5})\s*$",
@@ -43,7 +47,9 @@ internal static class Rc3040sManagementService
       ? m.Groups[1].Value : null;
     string? travel=Regex.Match(data,@"(?im)^AT\+(P450|P360)\s*$") is var t && t.Success
       ? t.Groups[1].Value : null;
-    snapshot=new Snapshot(banner.Success?banner.Value:null,az,el,model,travel,frames,echo);
+    var deviceId=FirmwareId.Match(data);
+    snapshot=new Snapshot(banner.Success?banner.Value:null,az,el,model,travel,frames,echo,
+      deviceId.Success ? deviceId.Groups[1].Value[^4..].ToUpperInvariant() : null);
     return snapshot.Firmware!=null && data.Contains("NET SETUP",StringComparison.OrdinalIgnoreCase);
   }
 
@@ -72,50 +78,64 @@ internal static class Rc3040sManagementService
     await ws.SendAsync(Encoding.ASCII.GetBytes(cmd),WebSocketMessageType.Text,true,token)
       .ConfigureAwait(false);
   }
-  private static async Task<(string Text,int Frames,bool Echo)> CollectAsync(
-    ClientWebSocket ws,string? expectedEcho,CancellationToken token)
+  // Embedded RC-3040S devices may pause between WebSocket frames. An ordinary
+  // ReceiveAsync cancellation can abort the ClientWebSocket and break the next
+  // AT+TEST request. Keep exactly one in-flight receive per socket and apply
+  // idle deadlines ONLY to the waiter, not to the transport's receive task.
+  private sealed class FrameReader
   {
-    var b=new byte[2048];var all=new StringBuilder();int frames=0;bool echo=false;
-    // First frame up to 3 seconds, subsequent inter-frame gap 800 ms;
-    // neither a gap nor WS send completion is a firmware-level ACK.
+    private readonly ClientWebSocket socket;
+    private readonly byte[] buffer = new byte[2048];
+    private Task<ValueWebSocketReceiveResult>? pending;
+    internal FrameReader(ClientWebSocket ws) => socket=ws;
+
+    internal async Task<string?> ReadMessageAsync(TimeSpan timeout,CancellationToken token)
+    {
+      var chunk=new StringBuilder();
+      while(true)
+      {
+        pending ??= socket.ReceiveAsync(buffer.AsMemory(),token).AsTask();
+        ValueWebSocketReceiveResult part;
+        try { part=await pending.WaitAsync(timeout,token).ConfigureAwait(false); }
+        catch(TimeoutException) { return null; }
+        pending=null;
+        if(part.MessageType==WebSocketMessageType.Close)return null;
+        if(part.MessageType!=WebSocketMessageType.Text)
+          throw new InvalidDataException("Unexpected binary management frame.");
+        chunk.Append(Encoding.UTF8.GetString(buffer,0,part.Count));
+        if(chunk.Length>4096)throw new InvalidDataException("Management frame exceeded 4096 characters");
+        if(part.EndOfMessage)return chunk.ToString();
+      }
+    }
+  }
+
+  private static async Task<(string Text,int Frames,bool Echo)> CollectAsync(
+    FrameReader reader,string? expectedEcho,CancellationToken token)
+  {
+    var all=new StringBuilder();int frames=0;bool echo=false;
+    // First frame 3s, subsequent inter-frame gap 850ms. This is a bounded
+    // heuristic only, NOT a firmware transaction completion marker.
     while(frames<MaxFrames && all.Length<MaxChars)
     {
-      using var poll=CancellationTokenSource.CreateLinkedTokenSource(token);
-      poll.CancelAfter(frames==0?TimeSpan.FromSeconds(3):TimeSpan.FromMilliseconds(850));
-      var chunk=new StringBuilder();
-      try
-      {
-        ValueWebSocketReceiveResult result;
-        do
-        {
-          result=await ws.ReceiveAsync(b.AsMemory(),poll.Token).ConfigureAwait(false);
-          if(result.MessageType==WebSocketMessageType.Close)
-            return (all.ToString(),frames,echo);
-          if(result.MessageType!=WebSocketMessageType.Text)
-            throw new InvalidDataException("Unexpected binary management frame.");
-          chunk.Append(Encoding.UTF8.GetString(b,0,result.Count));
-          if(chunk.Length>4096)throw new InvalidDataException("Management frame oversized.");
-        }while(!result.EndOfMessage);
-      }
-      catch(OperationCanceledException) when(!token.IsCancellationRequested)
-      {
-        break;
-      }
-      var message=chunk.ToString();
+      var message=await reader.ReadMessageAsync(
+        frames==0?TimeSpan.FromSeconds(3):TimeSpan.FromMilliseconds(850),
+        token).ConfigureAwait(false);
+      if(message is null)break;
       if(expectedEcho!=null && message.TrimEnd('\r','\n')==expectedEcho)echo=true;
-      all.Append(message);
-      frames++;
+      all.Append(message);frames++;
     }
     if(all.Length>=MaxChars || frames>=MaxFrames)
       throw new InvalidDataException("Management dump exceeded safe limits.");
     return (all.ToString(),frames,echo);
   }
+
   private static async Task<Snapshot> QueryCoreAsync(
     ClientWebSocket socket,bool includeEcho,CancellationToken token)
   {
     // C2 was confirmed read-only by 260223_C hardware.
+    var reader=new FrameReader(socket);
     await SendAsync(socket,"C2\r",token).ConfigureAwait(false);
-    var (data,n,_) = await CollectAsync(socket,null,token).ConfigureAwait(false);
+    var (data,n,_) = await CollectAsync(reader,null,token).ConfigureAwait(false);
     if(!TryParse(data,n,false,out var snapshot))
       throw new InvalidDataException("Incomplete RC-3040S C2 management snapshot.");
     if(snapshot.AzRaw.HasValue && snapshot.ElRaw.HasValue || !includeEcho)
@@ -124,7 +144,7 @@ internal static class Rc3040sManagementService
     // and then emitted a delayed YUNTAI block. This behavior is not a query ACK.
     const string echo="SKYROOF_READ";
     await SendAsync(socket,"AT+TEST="+echo+"\r",token).ConfigureAwait(false);
-    var (extra,frames,matched)=await CollectAsync(socket,echo,token).ConfigureAwait(false);
+    var (extra,frames,matched)=await CollectAsync(reader,echo,token).ConfigureAwait(false);
     if(!matched || !TryParse(data+extra,n+frames,true,out snapshot))
       throw new InvalidDataException("Diagnostic echo mismatch or incomplete configuration dump.");
     return snapshot;
@@ -171,7 +191,9 @@ internal static class Rc3040sManagementService
     if(existing==desired)return (original,original);
     var sent=await WithSessionAsync(host,async(ws,ct)=>{
       var check=await QueryCoreAsync(ws,false,ct).ConfigureAwait(false);
-      if(check.Firmware!=original.Firmware)
+      if(check.Firmware!=original.Firmware ||
+         original.DeviceIdSuffix is null ||
+         check.DeviceIdSuffix!=original.DeviceIdSuffix)
         throw new InvalidOperationException("Controller firmware changed: speed write blocked.");
       string command=$"AT+{(azimuth?"AZ":"EL")}_SPD={desired:00000}\r";
       await SendAsync(ws,command,ct).ConfigureAwait(false);
