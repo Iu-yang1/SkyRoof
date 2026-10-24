@@ -43,6 +43,8 @@ internal static class Rc3040sManagementService
       (int)Math.Floor(ToDegreesPerSecond(azimuth,maxRaw)*100.0);
     internal static int RawFromSlider(bool azimuth,int tick,int minRaw,int maxRaw) =>
       Math.Clamp(ToRaw(azimuth,tick/100.0),minRaw,maxRaw);
+    internal static bool SliderChanged(bool azimuth,int tick,int originalRaw) =>
+      tick!=SliderTick(azimuth,originalRaw);
     internal static string Display(bool azimuth,int raw) =>
       ToDegreesPerSecond(azimuth,raw).ToString("0.00",CultureInfo.InvariantCulture)+" °/s";
   }

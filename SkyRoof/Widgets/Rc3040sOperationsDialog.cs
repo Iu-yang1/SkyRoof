@@ -48,14 +48,14 @@ internal sealed class Rc3040sOperationsDialog : Form
     Controls.Add(read);Controls.Add(reset);
 
     Controls.Add(Label("AZ rotation speed (°/s)",12,137,265,19));
-    az.SetBounds(12,160,330,35);az.Minimum=100;az.Maximum=Rc3040sManagementService.SpeedUnits.SliderMaximum(true,10000);
+    az.SetBounds(12,160,330,35);az.Minimum=1;az.Maximum=Rc3040sManagementService.SpeedUnits.SliderMaximum(true,10000);
     az.TickFrequency=50;az.SmallChange=5;az.LargeChange=25;
     az.Enabled=false;Controls.Add(az);
     azValue.SetBounds(349,158,114,31);Controls.Add(azValue);
     az.Scroll+=(_,_)=>{if(!updating)dirtyAz=true;ShowValues();};
 
     Controls.Add(Label("EL rotation speed (°/s)",12,203,265,19));
-    el.SetBounds(12,227,330,35);el.Minimum=100;el.Maximum=Rc3040sManagementService.SpeedUnits.SliderMaximum(false,10000);
+    el.SetBounds(12,227,330,35);el.Minimum=1;el.Maximum=Rc3040sManagementService.SpeedUnits.SliderMaximum(false,10000);
     el.TickFrequency=50;el.SmallChange=5;el.LargeChange=25;
     el.Enabled=false;Controls.Add(el);
     elValue.SetBounds(349,225,114,31);Controls.Add(elValue);
@@ -97,8 +97,12 @@ internal sealed class Rc3040sOperationsDialog : Form
     reset.Enabled=!busy && snapshot!=null;
     az.Enabled=el.Enabled=safe && snapshot?.AzRaw is >=15 and <=10000 &&
       snapshot?.ElRaw is >=15 and <=10000;
-    saveAz.Enabled=safe && dirtyAz && az.Enabled && snapshot?.AzRaw!=SelectedRaw(true,az);
-    saveEl.Enabled=safe && dirtyEl && el.Enabled && snapshot?.ElRaw!=SelectedRaw(false,el);
+    saveAz.Enabled=safe && dirtyAz && az.Enabled && snapshot?.AzRaw is int currentAz &&
+      Rc3040sManagementService.SpeedUnits.SliderChanged(true,az.Value,currentAz) &&
+      currentAz!=SelectedRaw(true,az);
+    saveEl.Enabled=safe && dirtyEl && el.Enabled && snapshot?.ElRaw is int currentEl &&
+      Rc3040sManagementService.SpeedUnits.SliderChanged(false,el.Value,currentEl) &&
+      currentEl!=SelectedRaw(false,el);
     reboot.Enabled=safe && snapshot?.Firmware!=null &&
       snapshot.DeviceIdSuffix!=null;
     motion.Enabled=!busy;
@@ -169,7 +173,9 @@ internal sealed class Rc3040sOperationsDialog : Form
     if(busy || !CanEditHardware || snapshot is null || !settings.Rc3040sAtEnabled)return;
     int before=azimuth?(snapshot.AzRaw??-1):(snapshot.ElRaw??-1);
     int proposed=azimuth?SelectedRaw(true,az):SelectedRaw(false,el);
-    if(before<15 || before>10000 || proposed==before)return;
+    if(before<15 || before>10000 || proposed==before ||
+       !Rc3040sManagementService.SpeedUnits.SliderChanged(
+         azimuth,azimuth?az.Value:el.Value,before))return;
     string axis=azimuth?"AZ":"EL",phrase=$"SAVE-{axis}-{proposed:D5}";
     if(!ConfirmTwice(
       $"{axis}: {SpeedLabel(azimuth,before)} → {SpeedLabel(azimuth,proposed)}\nVerify the motor is stopped before saving.",

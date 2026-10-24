@@ -72,7 +72,7 @@ internal sealed class Rc3040sQuickControls : UserControl
   private static void ConfigureSlider(TrackBar bar,int y,bool azimuth)
   {
     bar.SetBounds(7,y,301,31);
-    bar.Minimum=100;bar.Maximum=Rc3040sManagementService.SpeedUnits.SliderMaximum(azimuth,RawMax);
+    bar.Minimum=1;bar.Maximum=Rc3040sManagementService.SpeedUnits.SliderMaximum(azimuth,RawMax);
     bar.TickStyle=TickStyle.None;bar.SmallChange=5;bar.LargeChange=25;
     bar.Enabled=false;
   }
@@ -110,8 +110,12 @@ internal sealed class Rc3040sQuickControls : UserControl
                        snapshot?.ElRaw is >=RawMin and <=RawMax;
     read.Enabled=!busy && context?.Settings.Rotator.Rc3040sAtEnabled==true;
     az.Enabled=el.Enabled=active && valuesKnown;
-    saveAz.Enabled=az.Enabled && dirtyAz && snapshot!.AzRaw!=ProposedRaw(true,az);
-    saveEl.Enabled=el.Enabled && dirtyEl && snapshot!.ElRaw!=ProposedRaw(false,el);
+    saveAz.Enabled=az.Enabled && dirtyAz &&
+      Rc3040sManagementService.SpeedUnits.SliderChanged(true,az.Value,snapshot!.AzRaw!.Value) &&
+      snapshot.AzRaw!=ProposedRaw(true,az);
+    saveEl.Enabled=el.Enabled && dirtyEl &&
+      Rc3040sManagementService.SpeedUnits.SliderChanged(false,el.Value,snapshot!.ElRaw!.Value) &&
+      snapshot.ElRaw!=ProposedRaw(false,el);
     revert.Enabled=!busy && valuesKnown;
     restart.Enabled=active && snapshot?.Firmware!=null &&
       snapshot.DeviceIdSuffix!=null;
@@ -183,7 +187,9 @@ internal sealed class Rc3040sQuickControls : UserControl
     if(!CanSendAt || snapshot is null || context is null)return;
     int before=azimuth ? snapshot.AzRaw??-1 : snapshot.ElRaw??-1;
     int desired=azimuth ? ProposedRaw(true,az) : ProposedRaw(false,el);
-    if(before is <RawMin or >RawMax || desired==before)return;
+    if(before is <RawMin or >RawMax || desired==before ||
+       !Rc3040sManagementService.SpeedUnits.SliderChanged(
+         azimuth,azimuth?az.Value:el.Value,before))return;
     string axis=azimuth?"AZ":"EL";
     if(!Confirm($"{axis}: {Rc3040sManagementService.SpeedUnits.Display(azimuth,before)} → " +
        $"{Rc3040sManagementService.SpeedUnits.Display(azimuth,desired)}?\n" +

@@ -46,6 +46,21 @@ public sealed class Rc3040sSpeedWriteTests
       Rc3040sManagementService.ClassifySpeedWrite(before,desired,readback,echo));
   }
 
+  [Theory]
+  [InlineData(true,5000)]
+  [InlineData(false,5000)]
+  [InlineData(true,15)]
+  [InlineData(false,15)]
+  public void RevertingToTheSameDisplayedSpeedWillNotScheduleAnAtWrite(
+    bool azimuth,int raw)
+  {
+    var tick=Rc3040sManagementService.SpeedUnits.SliderTick(azimuth,raw);
+    Assert.False(Rc3040sManagementService.SpeedUnits.SliderChanged(azimuth,tick,raw));
+    int roundtrip=Rc3040sManagementService.SpeedUnits.RawFromSlider(azimuth,tick,15,10000);
+    Assert.InRange(Math.Abs(Rc3040sManagementService.SpeedUnits.ToDegreesPerSecond(azimuth,roundtrip)-
+      Rc3040sManagementService.SpeedUnits.ToDegreesPerSecond(azimuth,raw)),0,0.0051);
+  }
+
   [Fact]
   public void NumericGuardRejectsInvalidSpeed()
   {
