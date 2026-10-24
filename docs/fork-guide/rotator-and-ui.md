@@ -35,6 +35,7 @@ SkyRoof offers **Controller Driver: Native / LegacyRotctld** in **Settings → R
 | Protocol | Native serial | Native TCP bridge | UDP | Feedback | STOP |
 |---|---|---|---|---|---|
 | GS-232 | yes | yes | — | C2 | S |
+| RC-3040S LAN | — | yes (TCP/60020) | — | C2 | S |
 | EasyComm I | yes | yes | — | unsupported | SA SE |
 | EasyComm II/III | yes | yes | — | AZ/EL | SA SE |
 | SPID ROT2PROG | yes | yes | — | binary | binary |
@@ -102,3 +103,7 @@ SkyRoof performs its normal position query (`p`) every 300 ms by default, regard
 To avoid multiple `P` commands that ultimately mean the exact same physical target, SkyRoof now coalesces duplicate commands at the selected **Position Command Resolution (deg)** in Rotator Control settings. The safe generic default remains **0.1°** (preserves high-resolution rotators). For a **GS-232B controller**, choose **1.0°** and reapply settings. Distinct integer-degree targets, manual commands, PARK sequences, safety STOP and reconnection continue to work. A successful `S` clears the command cache so an identical target can be requested again after STOP.
 
 This eliminates redundant motion commands but is **not a proven explanation for 20% CPU usage inside rotctld.exe**. Hamlib serial-port behavior, other clients and driver retries require direct process/thread sampling if the load continues. To isolate them, compare idle, manual movement, Track, and Track with SkyRoof disconnected from port 4533; inspect rotctld command logs if necessary. Do not disable the safety STOP or the 300 ms position feedback just to lower CPU.
+
+## RC-3040S direct LAN replaces the former NRL2 UDP driver
+
+The former experimental DTrac NRL2 UDP driver and its RotorID/SID settings are **removed from SkyRoof**. The protocol source and historical settings schema were archived in [DTracNRL2.NET](https://github.com/Iu-yang1/DTracNRL2.NET/tree/main/docs/archive/skyroof-nrl2). The active protocol is **Native / Rc3040sLan** using TCP/60020 for GS-232 motion and WebSocket/60030 for on-demand AT management. Existing NRL2 protocol ID 10 is reserved and cannot start an alternative LAN connection. See [RC-3040S LAN guide](rc3040s-lan.md).
