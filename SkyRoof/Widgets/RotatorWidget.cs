@@ -27,6 +27,10 @@ namespace SkyRoof
     public Bearing? AntBearing { get => engine?.LastReadBearing; }
     public Bearing? SatelliteBearing => SatBearing;
     public bool PositionSafetyTripped => engine?.PositionFaulted == true;
+    internal bool ManagementReviewRequired =>
+      engine is NativeRotatorControlEngine native && native.ManagementReviewRequired;
+    internal bool NativeTelemetryConnected =>
+      engine is NativeRotatorControlEngine native && native.HasLiveConnection;
 
     // PathOptimizerForm instance is created once and reused
     private PathOptimizerForm dialog = new();
@@ -500,6 +504,10 @@ namespace SkyRoof
     public string? GetStatusString()
     {
       if (!ctx.Settings.Rotator.Enabled) return "Rotator control disabled";
+      if (ManagementReviewRequired)
+        return NativeTelemetryConnected
+          ? "Management safety lock; position telemetry connected. Inspect and reapply settings."
+          : "Management safety lock; position telemetry unavailable. Inspect controller.";
       if (PositionSafetyTripped) return "Position feedback fault: STOP requested; inspect actual rotor angle";
       if (engine is NativeRotatorControlEngine native)
       {

@@ -170,6 +170,50 @@ public sealed class NativeRotatorWorkerTests
   }
 
   [Fact]
+  public async Task VerifiedManagementUpdateResumesAfterFreshMotorFeedbackWithoutReconnect()
+  {
+    await using var server=new FakeGs232Bridge();
+    var config=CreateSettings(server.Port);
+    config.NativeProtocol=RotatorProtocolKind.Rc3040sLan;
+    using var engine=new NativeRotatorControlEngine(config);
+    await UntilAsync(()=>engine.IsReady && engine.LastReadBearing!=null);
+    int connections=server.ConnectionCount;
+    using(var lease=await engine.AcquireManagementLeaseAsync())
+    {
+      Assert.NotNull(lease);
+      Assert.True(await engine.VerifyPostManagementFeedbackAsync());
+      engine.RotateTo(new SkyRoof.Bearing(120*Math.PI/180,30*Math.PI/180));
+      await Task.Delay(250);
+      Assert.DoesNotContain(server.Commands,x=>x.StartsWith("W",StringComparison.Ordinal));
+    }
+    Assert.False(engine.PositionFaulted);
+    Assert.False(engine.ManagementReviewRequired);
+    Assert.True(engine.HasLiveConnection);
+    Assert.Equal(connections,server.ConnectionCount);
+    engine.RotateTo(new SkyRoof.Bearing(120*Math.PI/180,30*Math.PI/180));
+    await UntilAsync(()=>server.Count("W120 030")>=1);
+  }
+
+  [Fact]
+  public async Task ManagementSafetyLockDoesNotImplyTcpDisconnection()
+  {
+    await using var server=new FakeGs232Bridge();
+    var config=CreateSettings(server.Port);
+    config.NativeProtocol=RotatorProtocolKind.Rc3040sLan;
+    using var engine=new NativeRotatorControlEngine(config);
+    await UntilAsync(()=>engine.IsReady && engine.LastReadBearing!=null);
+    using(var lease=await engine.AcquireManagementLeaseAsync())
+    {
+      Assert.NotNull(lease);
+      engine.LatchAfterManagementChange();
+    }
+    Assert.True(engine.PositionFaulted);
+    Assert.True(engine.ManagementReviewRequired);
+    Assert.True(engine.HasLiveConnection);
+    Assert.Contains("Management safety lock",engine.GetStatusString());
+  }
+
+  [Fact]
   public async Task Rc3040sReferencePlannerCannotRunWithoutPhysicalValidation()
   {
     await using var server=new FakeGs232Bridge();
@@ -217,7 +261,8 @@ public sealed class NativeRotatorWorkerTests
     internal ConcurrentQueue<string> Commands {get;}=new();
     private readonly Func<string,byte[]>? response;
     private readonly bool dropFirstMove;
-    private int dropped;
+    private int dropped,connections;
+    internal int ConnectionCount => Volatile.Read(ref connections);
     internal int Port {get;}
     internal FakeGs232Bridge(Func<string,byte[]>? response=null,bool dropFirstMove=false)
     {
@@ -235,6 +280,7 @@ public sealed class NativeRotatorWorkerTests
         while(!cancel.IsCancellationRequested)
         {
           using var client=await listener.AcceptTcpClientAsync(cancel.Token);
+          Interlocked.Increment(ref connections);
           var stream=client.GetStream();
           var data=new byte[256];
           var command=new StringBuilder();

@@ -192,12 +192,14 @@ internal sealed class Rc3040sOperationsDialog : Form
       if(motor is null)throw new InvalidOperationException("RC-3040S native motor worker missing.");
       using var lease=await motor.AcquireManagementLeaseAsync(cancel.Token);
       if(lease is null)throw new InvalidOperationException("STOP/feedback safety check failed.");
-      bool commandAttempted=false;
+      bool commandAttempted=false,feedbackVerified=false;
       try
       {
         var result=await Rc3040sManagementService.SaveSpeedAsync(
           settings.Host,azimuth,proposed,cancel.Token,
           ()=>commandAttempted=true,snapshot.Firmware,snapshot.DeviceIdSuffix);
+        if(result.Outcome==Rc3040sManagementService.SpeedWriteOutcome.Applied)
+          feedbackVerified=await motor.VerifyPostManagementFeedbackAsync(cancel.Token);
         if(!IsDisposed)
         {
           snapshot=result.Outcome is Rc3040sManagementService.SpeedWriteOutcome.Applied or
@@ -206,7 +208,9 @@ internal sealed class Rc3040sOperationsDialog : Form
           if(result.Outcome==Rc3040sManagementService.SpeedWriteOutcome.Applied)
           {
             RestoreSliders();
-            status.Text=$"{axis}: readback updated; persistence unverified.";
+            status.Text=feedbackVerified
+              ? $"{axis}: updated; motor feedback OK. Retention unverified."
+              : $"{axis}: updated; motor locked. Reapply settings.";
           }
           else status.Text=result.Outcome switch
           {
@@ -218,7 +222,7 @@ internal sealed class Rc3040sOperationsDialog : Form
           };
         }
       }
-      finally {if(commandAttempted)motor.LatchAfterManagementChange();}
+      finally {if(commandAttempted && !feedbackVerified)motor.LatchAfterManagementChange();}
     }
     catch(OperationCanceledException)when(cancel.IsCancellationRequested){}
     catch(Exception ex)

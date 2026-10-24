@@ -207,12 +207,14 @@ internal sealed class Rc3040sQuickControls : UserControl
       using var lease=await motor.AcquireManagementLeaseAsync(lifetime.Token);
       if(lease is null)throw new InvalidOperationException(
         "Motor is not ready or is safety locked; AT write blocked.");
-      bool commandAttempted=false;
+      bool commandAttempted=false,feedbackVerified=false;
       try
       {
         var result=await Rc3040sManagementService.SaveSpeedAsync(
           context.Settings.Rotator.Host,azimuth,desired,lifetime.Token,
           ()=>commandAttempted=true,snapshot.Firmware,snapshot.DeviceIdSuffix);
+        if(result.Outcome==Rc3040sManagementService.SpeedWriteOutcome.Applied)
+          feedbackVerified=await motor.VerifyPostManagementFeedbackAsync(lifetime.Token);
         if(!IsDisposed)
         {
           // On an ambiguous write, do not enable another speed write based
@@ -223,7 +225,9 @@ internal sealed class Rc3040sQuickControls : UserControl
           if(result.Outcome==Rc3040sManagementService.SpeedWriteOutcome.Applied)
           {
             RevertSliders();
-            SetState($"{axis}: readback updated; persistence unverified.");
+            SetState(feedbackVerified
+              ? $"{axis}: updated; motor feedback OK. Retention unverified."
+              : $"{axis}: updated; motor locked. Reapply settings.");
           }
           else SetState(result.Outcome switch
           {
@@ -235,7 +239,7 @@ internal sealed class Rc3040sQuickControls : UserControl
           });
         }
       }
-      finally {if(commandAttempted)motor.LatchAfterManagementChange();}
+      finally {if(commandAttempted && !feedbackVerified)motor.LatchAfterManagementChange();}
     }
     catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}
     catch(Exception ex)

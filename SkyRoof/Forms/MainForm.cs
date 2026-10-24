@@ -1702,6 +1702,8 @@ namespace SkyRoof
     {
       if (!ctx.Settings.Rotator.Enabled) RotatorLedLabel.ForeColor = SystemColors.GrayText;
       else if (ctx.FrequencyControl.RadioLink.IsTerrestrial) RotatorLedLabel.ForeColor = SystemColors.ControlText;
+      else if (ctx.RotatorControl.ManagementReviewRequired &&
+               ctx.RotatorControl.NativeTelemetryConnected) RotatorLedLabel.ForeColor = Color.DarkOrange;
       else if (ctx.RotatorControl.IsRunning()) RotatorLedLabel.ForeColor = Color.Lime;
       else RotatorLedLabel.ForeColor = Color.Red;
 

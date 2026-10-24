@@ -314,6 +314,7 @@ namespace SkyRoof
       ConnectionLabel.Text =
         !enabled ? "Disabled" :
         rotator.IsManualControlLocked ? "Live Track" :
+        rotator.ManagementReviewRequired ? "Safety lock" :
         rotator.PositionSafetyTripped ? "POSITION FAULT" :
         connected ? "Connected" :
         "Connecting";
@@ -321,6 +322,7 @@ namespace SkyRoof
       ConnectionLabel.ForeColor =
         !enabled ? SystemColors.GrayText :
         rotator.IsManualControlLocked ? Color.Goldenrod :
+        rotator.ManagementReviewRequired && rotator.NativeTelemetryConnected ? Color.DarkOrange :
         rotator.PositionSafetyTripped ? Color.IndianRed :
         connected ? Color.LimeGreen :
         Color.IndianRed;

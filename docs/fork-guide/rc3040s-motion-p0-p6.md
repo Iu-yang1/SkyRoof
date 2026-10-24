@@ -88,3 +88,9 @@ For each **speed write or restart**, SkyRoof takes an explicit I/O-thread manage
 - Local management sessions are serialized and paced with a short post-session cooldown. This is mitigation for previously observed TCP/60030 connection refusals on real 260223_C hardware, not proof that their firmware root cause has been eliminated.
 - **No AT command sent** if the initial connection or preflight fails. Such failure does **not** unnecessarily latch the motor worker. From the moment an AT send may start, the worker remains safety-locked and there is **no automatic retry**, including on cancellation, timeout, or WebSocket close.
 - 260223_C speed writes are still not hardware-validated. A firmware refusal, disconnected 60030 port, or prior speed being reported after reboot must be investigated with controlled, isolated equipment rather than automated repeated EEPROM changes.
+
+## 2026-10-24: clarify post-save motor status and verified recovery
+
+- An Applied speed readback no longer unconditionally invokes `LatchAfterManagementChange()`. The management lease is released only after fresh position feedback on TCP/60020 is independently observed following the speed operation; tracking/jog never automatically resumes.
+- If feedback is lost, the speed command result is uncertain, or a safety fault occurs, the motor remains latched. A live TCP position channel with management safety lock is shown in amber instead of the disconnected red indicator; readback on TCP/60030 is not evidence that TCP/60020 is available.
+- Resuming control does not imply the speed is permanently stored across power cycles. Motor safety and physical stop must still be independently checked by the operator.

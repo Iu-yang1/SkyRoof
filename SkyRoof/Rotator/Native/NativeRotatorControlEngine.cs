@@ -43,7 +43,7 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
   private Bearing? requested,lastRead,lastWritten;
   private DateTime lastReadUtc = DateTime.MinValue;
   private volatile bool stopping,stopRequested;
-  private bool connected,safetyLatched,requiresStopAfterReconnect,managementHeld;
+  private bool connected,safetyLatched,requiresStopAfterReconnect,managementHeld,managementReviewRequired;
   private int? manualDirection,appliedDirection;
   private byte[]? lastWire;
   private string? error;
@@ -69,10 +69,15 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
   public Bearing? LastWrittenBearing {get {lock(sync)return lastWritten;}}
   public DateTime LastSuccessfulBearingReadUtc {get {lock(sync)return lastReadUtc;}}
   public bool PositionFaulted {get {lock(sync)return safetyLatched;}}
+  internal bool ManagementReviewRequired {get {lock(sync)return managementReviewRequired;}}
   public bool IsRunning {get {lock(sync)return connected;}}
   public bool IsReady => Volatile.Read(ref ready) == 1;
-  public string GetStatusString()=>PositionFaulted ? "Safety locked" :
-    !IsRunning ? "Reconnecting" : IsReady ? "Ready" : "Synchronizing";
+  internal bool HasLiveConnection => IsRunning && IsReady;
+  public string GetStatusString() =>
+    !IsRunning ? "Reconnecting" :
+    !IsReady ? "Synchronizing" :
+    ManagementReviewRequired ? "Management safety lock; inspect and reapply settings" :
+    PositionFaulted ? "Position safety fault" : "Ready";
   public NativeRotatorControlEngine(RotatorSettings settings)
   {
     this.settings=settings;
@@ -199,17 +204,44 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
 
   internal void LatchAfterManagementChange()
   {
-    // A sent firmware command does not prove STOP, EEPROM commit, speed
-    // stabilization or restart. Require operator inspection and re-apply
-    // device settings before any new motor movement.
+    // Ambiguous write results and unavailable motor feedback remain locked.
+    // Distinguish this state from an actual network disconnection.
     lock(sync)
     {
+      managementReviewRequired=true;
       safetyLatched=true;requiresStopAfterReconnect=true;
       requested=lastWritten=null;manualDirection=null;lastWire=null;
       stopRequested=true;commandVersion++;
       error="RC-3040S management change: inspect physical position and reapply rotator settings";
     }
     wake.Set();StateChanged();
+  }
+
+  /// <summary>
+  /// Following a verified speed readback on WebSocket/60030, wait for a new
+  /// healthy position sample from the independent motor TCP/60020 worker.
+  /// Queued target and jog commands remain blocked until lease release.
+  /// </summary>
+  internal async Task<bool> VerifyPostManagementFeedbackAsync(
+    CancellationToken cancellationToken=default)
+  {
+    DateTime checkpoint=DateTime.UtcNow;
+    long deadline=Environment.TickCount64+4000;
+    while(Environment.TickCount64<deadline)
+    {
+      cancellationToken.ThrowIfCancellationRequested();
+      lock(sync)
+      {
+        if(stopping || !managementHeld || safetyLatched ||
+           managementReviewRequired)return false;
+        if(HasFreshPositionLocked() && lastReadUtc>checkpoint &&
+           !requiresStopAfterReconnect && !stopRequested)
+          return true;
+      }
+      wake.Set();
+      await Task.Delay(100,cancellationToken).ConfigureAwait(false);
+    }
+    return false;
   }
 
   private void ReleaseManagementLease()
