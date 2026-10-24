@@ -34,15 +34,15 @@ public sealed class Rc3040sSpeedWriteTests
   }
 
   [Theory]
-  [InlineData(5000,5500,5500,false,Rc3040sManagementService.SpeedWriteOutcome.Applied)]
-  [InlineData(5000,5500,5000,false,Rc3040sManagementService.SpeedWriteOutcome.Unchanged)]
-  [InlineData(5000,5500,5000,true,Rc3040sManagementService.SpeedWriteOutcome.EchoOnly)]
-  [InlineData(5000,5500,null,true,Rc3040sManagementService.SpeedWriteOutcome.ReadbackUnavailable)]
-  [InlineData(5000,5500,5200,false,Rc3040sManagementService.SpeedWriteOutcome.Failed)]
+  [InlineData(5000,5500,5500,false,0)]
+  [InlineData(5000,5500,5000,false,1)]
+  [InlineData(5000,5500,5000,true,3)]
+  [InlineData(5000,5500,null,true,2)]
+  [InlineData(5000,5500,5200,false,4)]
   public void DistinguishesChangedReadbackFromEchoAndNoEffect(int before,int desired,
-    int? readback,bool echo,Rc3040sManagementService.SpeedWriteOutcome expected)
+    int? readback,bool echo,int expected)
   {
-    Assert.Equal(expected,
+    Assert.Equal((Rc3040sManagementService.SpeedWriteOutcome)expected,
       Rc3040sManagementService.ClassifySpeedWrite(before,desired,readback,echo));
   }
 
