@@ -29,8 +29,8 @@ namespace SkyRoof
     private readonly Button GoButton = new();
     private readonly Button ParkButton = new();
     private readonly Button TrackButton = new();
-    private readonly Button DtracButton = new();
-    private Label? dtracFooter;
+    private readonly Button Rc3040sButton = new();
+    private Label? managementFooter;
     private readonly Label ManualHintLabel = new();
     private readonly ToolTip UiToolTip = new();
     private readonly System.Windows.Forms.Timer RefreshTimer = new();
@@ -207,17 +207,17 @@ namespace SkyRoof
         TextAlign = ContentAlignment.MiddleLeft
       };
       Controls.Add(footer);
-      dtracFooter=footer;
-      DtracButton.Text="NRL2...";
-      DtracButton.Location=new Point(232,353);
-      DtracButton.Size=new Size(72,25);
-      DtracButton.Visible=false;
-      DtracButton.Click+=(_,_)=>{
+      managementFooter=footer;
+      Rc3040sButton.Text="RC-3040S";
+      Rc3040sButton.Location=new Point(232,353);
+      Rc3040sButton.Size=new Size(72,25);
+      Rc3040sButton.Visible=false;
+      Rc3040sButton.Click+=(_,_)=>{
         if(ctx==null || rotator==null)return;
-        using var dialog=new DtracNrlOperationsDialog(rotator,ctx.Settings.Rotator);
+        using var dialog=new Rc3040sOperationsDialog(rotator,ctx.Settings.Rotator);
         dialog.ShowDialog(ctx.MainForm);
       };
-      Controls.Add(DtracButton);
+      Controls.Add(Rc3040sButton);
 
       RefreshTimer.Interval = 250;
       RefreshTimer.Tick += (_, _) => RefreshState();
@@ -287,10 +287,10 @@ namespace SkyRoof
         "Satellite " +
         FormatBearing(satellite);
 
-      // NRL2 UDP control is suspended. The old protocol implementation and
-      // settings remain available in source for future reactivation.
-      DtracButton.Visible=false;
-      if(dtracFooter!=null)dtracFooter.Size=DtracButton.Visible?new Size(204,20):new Size(292,20);
+      Rc3040sButton.Visible=ctx.Settings.Rotator.NativeProtocol ==
+        SkyRoof.NativeRotator.RotatorProtocolKind.Rc3040sLan;
+      if(managementFooter!=null)
+        managementFooter.Size=Rc3040sButton.Visible?new Size(204,20):new Size(292,20);
       bool enabled = ctx.Settings.Rotator.Enabled;
       bool connected = rotator.IsRunning();
 

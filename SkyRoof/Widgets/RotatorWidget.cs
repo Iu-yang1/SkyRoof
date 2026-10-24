@@ -12,15 +12,14 @@ namespace SkyRoof
     private OptimizedRotationPath? Path;
     private Bearing? SatBearing;
     private RotatorParkSequence? ParkSequence;
-    private SkyRoof.NativeRotator.DtracDemoSequence? demoSequence;
-    internal bool IsDtracDemoRunning => demoSequence != null;
-    internal string DtracDemoProgressText => demoSequence == null ? "Idle" :
+    private SkyRoof.NativeRotator.Rc3040sDemoSequence? demoSequence;
+    internal bool IsRc3040sDemoRunning => demoSequence != null;
+    internal string Rc3040sDemoProgressText => demoSequence == null ? "Idle" :
       $"{demoSequence.Index+1}/{demoSequence.Count}";
-    internal bool DtracNrlOperationsAvailable =>
-      false && ctx?.Settings.Rotator.NativeProtocol == SkyRoof.NativeRotator.RotatorProtocolKind.DtracNrl2 &&
+    internal bool Rc3040sManagementAvailable =>
+      ctx?.Settings.Rotator.NativeProtocol == SkyRoof.NativeRotator.RotatorProtocolKind.Rc3040sLan &&
       engine is NativeRotatorControlEngine native && native.IsReady &&
       !native.PositionFaulted && !TrackCheckbox.Checked;
-
     internal bool IsParking => ParkSequence != null;
     internal string ParkProgressText => ParkSequence == null
       ? "PARK"
@@ -123,7 +122,7 @@ namespace SkyRoof
     internal void Advance()
     {
       AdvanceParkSequence();
-      if (demoSequence != null) { AdvanceDtracDemo(); return; }
+      if (demoSequence != null) { AdvanceRc3040sDemo(); return; }
       if (Path == null) return;
 
       SatBearing = Path.GetSatelliteBearing()?.Normalize();
@@ -412,9 +411,6 @@ namespace SkyRoof
         : new List<(double, double)> {
             (settings.ParkAzimuth, settings.ParkElevation) };
 
-      if (settings.NativeProtocol == SkyRoof.NativeRotator.RotatorProtocolKind.DtracNrl2 &&
-          settings.DtracUseNativePark)
-        waypoints = new List<(double,double)> { (settings.ParkAzimuth,settings.ParkElevation) };
       // Reject an invalid/out-of-range route rather than silently sending
       // potentially dangerous substitute positions to physical hardware.
       if (waypoints.Any(w =>
@@ -432,35 +428,28 @@ namespace SkyRoof
       IssueParkWaypoint();
     }
 
-    internal void StartDtracDemo()
+    internal void StartRc3040sDemo()
     {
-      if (!DtracNrlOperationsAvailable || engine == null ||
+      if (!Rc3040sManagementAvailable || engine == null ||
           !engine.IsRunning || engine.PositionFaulted || IsManualControlLocked ||
           DateTime.UtcNow - engine.LastSuccessfulBearingReadUtc > TimeSpan.FromSeconds(3))
-        throw new InvalidOperationException("DTrac DEMO requires fresh feedback and no TRACK");
+        throw new InvalidOperationException("RC-3040S LAN DEMO requires fresh feedback and no TRACK");
       var s=ctx.Settings.Rotator;
-      var seq=SkyRoof.NativeRotator.DtracDemoSequence.Create(
-        s.DtracDemoStartAz,s.DtracDemoEndAz,s.DtracDemoElevation,
-        s.DtracDemoStepDegrees,s.DtracDemoCycles,s.DtracDemoDwellSeconds,
+      var seq=SkyRoof.NativeRotator.Rc3040sDemoSequence.Create(
+        s.Rc3040sDemoStartAz,s.Rc3040sDemoEndAz,s.Rc3040sDemoElevation,
+        s.Rc3040sDemoStepDegrees,s.Rc3040sDemoCycles,s.Rc3040sDemoDwellSeconds,
         s.MinAzimuth,s.MaxAzimuth,s.MinElevation,s.MaxElevation,DateTime.UtcNow);
       CancelParkSequence(stopMotor:true);
       demoSequence=seq;
       engine.RotateTo(new Bearing(seq.Current.Azimuth*Trig.RinD,seq.Current.Elevation*Trig.RinD));
     }
-    internal void StopDtracDemo()
+    internal void StopRc3040sDemo()
     {
       if (demoSequence == null) return;
       demoSequence=null;
       engine?.StopRotation();
     }
-    internal bool RequestDtracRestart()
-    {
-      if (!DtracNrlOperationsAvailable || demoSequence != null ||
-          engine is not NativeRotatorControlEngine native) return false;
-      StopRotation();
-      return native.RequestDtracRestart();
-    }
-    private void AdvanceDtracDemo()
+    private void AdvanceRc3040sDemo()
     {
       if (demoSequence == null) return;
       var reading=engine?.LastReadBearing;
@@ -469,14 +458,14 @@ namespace SkyRoof
         reading?.AzDeg ?? double.NaN,reading?.ElDeg ?? double.NaN,
         engine is NativeRotatorControlEngine n && n.IsReady && !n.PositionFaulted &&
         !TrackCheckbox.Checked);
-      if (progress == SkyRoof.NativeRotator.DtracDemoProgress.NextWaypoint)
+      if (progress == SkyRoof.NativeRotator.Rc3040sDemoProgress.NextWaypoint)
       {
         var next=demoSequence.Current;
         engine?.RotateTo(new Bearing(next.Azimuth*Trig.RinD,next.Elevation*Trig.RinD));
       }
-      else if (progress is SkyRoof.NativeRotator.DtracDemoProgress.Completed or
-                          SkyRoof.NativeRotator.DtracDemoProgress.Aborted)
-        StopDtracDemo();
+      else if (progress is SkyRoof.NativeRotator.Rc3040sDemoProgress.Completed or
+                          SkyRoof.NativeRotator.Rc3040sDemoProgress.Aborted)
+        StopRc3040sDemo();
     }
     private void CancelParkSequence(bool stopMotor)
     {
