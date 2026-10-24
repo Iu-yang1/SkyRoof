@@ -18,6 +18,35 @@ internal static class Rc3040sManagementService
     string? Mode, string? Travel, int Frames, bool EchoVerified,
     string? DeviceIdSuffix = null);
 
+  internal enum SpeedWriteOutcome { Applied, Unchanged, ReadbackUnavailable, EchoOnly, Failed }
+  internal sealed record SpeedWriteResult(Snapshot Before, Snapshot? After,
+    SpeedWriteOutcome Outcome, int RequestedRaw, bool ExactTextEcho, string Detail);
+
+  // Numeric conversion constants recovered from the 251217 software diagnostic.
+  // Display is nominal speed; real calibration belongs to hardware acceptance.
+  internal static class SpeedUnits
+  {
+    private const double AzDivisor=361600.0;
+    private const double ElDivisor=326400.0;
+    internal static double ToDegreesPerSecond(bool azimuth,int raw) =>
+      raw*360.0/(azimuth?AzDivisor:ElDivisor);
+    internal static int ToRaw(bool azimuth,double degreesPerSecond)
+    {
+      if(!double.IsFinite(degreesPerSecond)||degreesPerSecond<=0)
+        throw new ArgumentOutOfRangeException(nameof(degreesPerSecond));
+      return checked((int)Math.Round(degreesPerSecond*
+        (azimuth?AzDivisor:ElDivisor)/360.0,MidpointRounding.AwayFromZero));
+    }
+    internal static int SliderTick(bool azimuth,int raw) =>
+      (int)Math.Round(ToDegreesPerSecond(azimuth,raw)*100.0,MidpointRounding.AwayFromZero);
+    internal static int SliderMaximum(bool azimuth,int maxRaw) =>
+      (int)Math.Floor(ToDegreesPerSecond(azimuth,maxRaw)*100.0);
+    internal static int RawFromSlider(bool azimuth,int tick,int minRaw,int maxRaw) =>
+      Math.Clamp(ToRaw(azimuth,tick/100.0),minRaw,maxRaw);
+    internal static string Display(bool azimuth,int raw) =>
+      ToDegreesPerSecond(azimuth,raw).ToString("0.00",CultureInfo.InvariantCulture)+" °/s";
+  }
+
   private static readonly Regex Banner = new(
     @"RC_3040S_67S_8H_\d{6}_[A-Za-z0-9]+",
     RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -130,10 +159,11 @@ internal static class Rc3040sManagementService
   }
 
   private static async Task<Snapshot> QueryCoreAsync(
-    ClientWebSocket socket,bool includeEcho,CancellationToken token)
+    ClientWebSocket socket,bool includeEcho,CancellationToken token,
+    FrameReader? existingReader=null)
   {
     // C2 was confirmed read-only by 260223_C hardware.
-    var reader=new FrameReader(socket);
+    var reader=existingReader??new FrameReader(socket);
     await SendAsync(socket,"C2\r",token).ConfigureAwait(false);
     var (data,n,_) = await CollectAsync(reader,null,token).ConfigureAwait(false);
     if(!TryParse(data,n,false,out var snapshot))
@@ -177,35 +207,87 @@ internal static class Rc3040sManagementService
     WithSessionAsync(host,(ws,ct)=>QueryCoreAsync(ws,detailed,ct),token);
 
   /// <summary>
-  /// Sends one explicitly approved speed configuration AT command, and performs a
-  /// separate on-demand C2 readback afterward. No automatic retries or rollback:
-  /// interrupted EEPROM writes have indeterminate result.
+  /// A write is never "applied" based on WebSocketSendCompleted/echo alone.
+  /// Send exactly once, collect a bounded response BEFORE closing the socket,
+  /// then perform a separate independently established readback. Unknown
+  /// outcomes must not trigger retries or compensating EEPROM writes.
   /// </summary>
-  internal static async Task<(Snapshot Before,Snapshot After)> SaveSpeedAsync(
+  internal static async Task<SpeedWriteResult> SaveSpeedAsync(
     string host,bool azimuth,int desired,CancellationToken token=default)
   {
-    if(desired is <15 or >65535)throw new ArgumentOutOfRangeException(nameof(desired));
+    if(desired is <15 or >10000)throw new ArgumentOutOfRangeException(nameof(desired));
     var original=await ReadAsync(host,true,token).ConfigureAwait(false);
-    int? existing=azimuth?original.AzRaw:original.ElRaw;
-    if(existing is null)throw new InvalidOperationException("Current raw speed not read: write blocked.");
-    if(existing==desired)return (original,original);
-    var sent=await WithSessionAsync(host,async(ws,ct)=>{
-      var check=await QueryCoreAsync(ws,false,ct).ConfigureAwait(false);
-      if(check.Firmware!=original.Firmware ||
-         original.DeviceIdSuffix is null ||
-         check.DeviceIdSuffix!=original.DeviceIdSuffix)
-        throw new InvalidOperationException("Controller firmware changed: speed write blocked.");
-      string command=$"AT+{(azimuth?"AZ":"EL")}_SPD={desired:00000}\r";
-      await SendAsync(ws,command,ct).ConfigureAwait(false);
-      return true;
-    },token).ConfigureAwait(false);
-    _=sent;
-    // A post-write read is not EEPROM validation. If timing uncertain, report
-    // failure rather than issuing any automatic retry/compensating write.
-    var after=await ReadAsync(host,true,token).ConfigureAwait(false);
-    if((azimuth?after.AzRaw:after.ElRaw)!=desired)
-      throw new InvalidDataException("Readback did not match desired raw speed. No retry attempted.");
-    return (original,after);
+    int? before=azimuth?original.AzRaw:original.ElRaw;
+    if(before is null)
+      return new(original,null,SpeedWriteOutcome.Failed,desired,false,
+        "Original axis speed unavailable; write not sent.");
+    if(before==desired)
+      return new(original,original,SpeedWriteOutcome.Unchanged,desired,false,
+        "Requested speed equals current configuration. No AT command was sent.");
+    if(original.Firmware is null || original.DeviceIdSuffix is null)
+      return new(original,null,SpeedWriteOutcome.Failed,desired,false,
+        "Device identity could not be checked; write not sent.");
+
+    bool exactEcho=false;
+    // The firmware is allowed to send no explicit ACK for this command.
+    // A response containing the requested AT line is NOT an independent
+    // speed confirmation; only an independently fetched configuration counts.
+    try
+    {
+      exactEcho=await WithSessionAsync(host,async(ws,ct)=>{
+        var reader=new FrameReader(ws);
+        var check=await QueryCoreAsync(ws,false,ct,reader).ConfigureAwait(false);
+        if(check.Firmware!=original.Firmware ||
+           check.DeviceIdSuffix!=original.DeviceIdSuffix)
+          throw new InvalidOperationException(
+            "Device version/identity changed; write not sent.");
+        string command=$"AT+{(azimuth?"AZ":"EL")}_SPD={desired:D5}\r";
+        await SendAsync(ws,command,ct).ConfigureAwait(false);
+        // Not waiting for the AT response was a race: closing immediately
+        // after SendAsync could truncate firmware processing. Bounded
+        // wait uses the same FrameReader and does not start a second
+        // concurrent ReceiveAsync after a heuristic idle gap.
+        var (text,_,_) = await CollectAsync(reader,null,ct).ConfigureAwait(false);
+        return text.Split('\r','\n',StringSplitOptions.RemoveEmptyEntries)
+          .Any(line=>line.Trim()==command.TrimEnd('\r'));
+      },token).ConfigureAwait(false);
+    }
+    catch(InvalidOperationException ex)
+    {
+      // "write not sent" preflight failure, not a general proof of failure
+      return new(original,null,SpeedWriteOutcome.Failed,desired,false,ex.Message);
+    }
+    // Transport failures after the actual write are ambiguous and propagate:
+    // a caller's motor safety lease must stay latched and never retry them.
+    Snapshot verified;
+    try { verified=await ReadAsync(host,true,token).ConfigureAwait(false); }
+    catch(OperationCanceledException) when(token.IsCancellationRequested){throw;}
+    catch(Exception ex) when(ex is WebSocketException or InvalidDataException or
+      TimeoutException or OperationCanceledException or HttpRequestException)
+    {
+      return new(original,null,SpeedWriteOutcome.ReadbackUnavailable,desired,exactEcho,
+        "Write sent; independent speed readback unavailable: "+ex.GetType().Name);
+    }
+
+    if(verified.Firmware!=original.Firmware ||
+       verified.DeviceIdSuffix!=original.DeviceIdSuffix)
+      return new(original,verified,SpeedWriteOutcome.Failed,desired,exactEcho,
+        "Readback came from an unexpected firmware/device.");
+    int? observed=azimuth?verified.AzRaw:verified.ElRaw;
+    if(!observed.HasValue)
+      return new(original,verified,SpeedWriteOutcome.ReadbackUnavailable,desired,exactEcho,
+        "Readback had no speed field for the selected axis.");
+    if(observed==desired && observed!=before)
+      return new(original,verified,SpeedWriteOutcome.Applied,desired,exactEcho,
+        "Independent configuration readback matched the changed speed.");
+    if(observed==before)
+      return new(original,verified,
+        exactEcho?SpeedWriteOutcome.EchoOnly:SpeedWriteOutcome.Unchanged,
+        desired,exactEcho,
+        exactEcho?"Only AT text echo was seen; the configuration did not change.":
+                  "Device still reports its previous speed; write was not verified.");
+    return new(original,verified,SpeedWriteOutcome.Failed,desired,exactEcho,
+      "Device reported a different speed than either old or requested value.");
   }
 
   internal static Task RestartAsync(string host,string expectedFirmware,
