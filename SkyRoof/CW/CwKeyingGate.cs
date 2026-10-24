@@ -9,7 +9,10 @@ namespace SkyRoof.CW
 
   public readonly record struct CwKeyingAssessment(
     bool IsKeyed, double KeyingDepthDb, double DutyCycle,
-    int Transitions, int OnRuns);
+    int Transitions, int OnRuns,
+    double FskOffDominance = 0,
+    double FskOnDominance = 0,
+    int FskOffFrames = 0);
 
   /// <summary>
   /// Evidence of *keying*, as opposed to evidence of a stable spectral ridge.
@@ -149,11 +152,17 @@ namespace SkyRoof.CW
         if(snr[i]>=threshold){on++;if(switched)onSwitched++;}
         else {off++;if(switched)offSwitched++;}
       }
-      if(on>=4 && off>=4 && offSwitched>=4 &&
-         offSwitched/(double)off>=0.75 &&
-         onSwitched/(double)on<=0.35)
-        return result with { IsKeyed=false };
-      return result;
+      double offRatio=offSwitched/(double)Math.Max(1,off);
+      double onRatio=onSwitched/(double)Math.Max(1,on);
+      bool hopping=on>=4 && off>=4 && offSwitched>=4 &&
+        offRatio>=0.75 && onRatio<=0.35;
+      return result with
+      {
+        IsKeyed=!hopping,
+        FskOffDominance=offRatio,
+        FskOnDominance=onRatio,
+        FskOffFrames=off
+      };
     }
 
     private static double Quantile(double[] sorted,double q)

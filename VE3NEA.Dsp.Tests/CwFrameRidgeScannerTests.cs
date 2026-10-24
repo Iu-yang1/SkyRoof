@@ -244,8 +244,10 @@ namespace VE3NEA.Dsp.Tests
       CwFrameRidgeScanResult scan=scanner.Scan(snapshot);
       scan.FastObservations.Should().NotBeEmpty();
       var track=new CwSignalTrack(1,800,25,0,T0,T0,true,true);
-      CwKeyingGate.AssessRidge(track,scan,snapshot,scanner)
-        .IsKeyed.Should().BeFalse();
+      CwKeyingAssessment result=CwKeyingGate.AssessRidge(
+        track,scan,snapshot,scanner);
+      result.IsKeyed.Should().BeFalse(
+        $"FSK diagnostics: {result}, peaks={scan.FastObservations.Count}");
     }
 
     [Fact]
