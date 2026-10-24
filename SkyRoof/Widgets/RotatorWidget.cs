@@ -20,6 +20,10 @@ namespace SkyRoof
       ctx?.Settings.Rotator.NativeProtocol == SkyRoof.NativeRotator.RotatorProtocolKind.Rc3040sLan &&
       engine is NativeRotatorControlEngine native && native.IsReady &&
       !native.PositionFaulted && !TrackCheckbox.Checked;
+    internal NativeRotatorControlEngine? EngineForRc3040s =>
+      ctx?.Settings.Rotator.NativeProtocol == SkyRoof.NativeRotator.RotatorProtocolKind.Rc3040sLan
+        ? engine as NativeRotatorControlEngine : null;
+
     internal bool IsParking => ParkSequence != null;
     internal string ParkProgressText => ParkSequence == null
       ? "PARK"

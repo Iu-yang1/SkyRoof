@@ -1651,6 +1651,13 @@ namespace SkyRoof
 
       RotatorControlCard.RefreshState();
 
+      // The RC-3040S version adds a speed panel beneath the same manual
+      // direction wheel. Update the host and popup before clamping to the
+      // working area, including on subsequent protocol/theme changes.
+      RotatorControlHost!.Size = RotatorControlCard.Size;
+      RotatorControlPopup.Size = new Size(
+        RotatorControlCard.Width + 2,RotatorControlCard.Height + 2);
+
       Point location =
         ClampPopupLocation(
           Screen.FromPoint(screenPoint).WorkingArea,
@@ -1663,6 +1670,7 @@ namespace SkyRoof
 
       RotatorControlPopup.Show(
         location);
+      RotatorControlCard.PopupOpened();
     }
 
     internal static Point ClampPopupLocation(

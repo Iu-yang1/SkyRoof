@@ -141,6 +141,15 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
     }
     wake.Set();
   }
+  internal Task<bool> WaitForStopTransmissionAsync(int timeoutMilliseconds,
+      CancellationToken cancellationToken=default)
+  {
+    // The manual reset event is set when the GS-232 S frame is transmitted.
+    // It is NOT a motor brake/encoder acknowledgment.
+    return Task.Run(() => stopCompleted.Wait(
+      Math.Clamp(timeoutMilliseconds,100,3000),cancellationToken),cancellationToken);
+  }
+
   private void SetConnected(bool value)
   {
     bool changed;

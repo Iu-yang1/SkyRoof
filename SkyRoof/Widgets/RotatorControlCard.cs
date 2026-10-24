@@ -30,6 +30,7 @@ namespace SkyRoof
     private readonly Button ParkButton = new();
     private readonly Button TrackButton = new();
     private readonly Button Rc3040sButton = new();
+    private readonly Rc3040sQuickControls QuickControls = new();
     private Label? managementFooter;
     private readonly Label ManualHintLabel = new();
     private readonly ToolTip UiToolTip = new();
@@ -218,6 +219,9 @@ namespace SkyRoof
         dialog.ShowDialog(ctx.MainForm);
       };
       Controls.Add(Rc3040sButton);
+      QuickControls.Location = new Point(0, 382);
+      QuickControls.Visible = false;
+      Controls.Add(QuickControls);
 
       RefreshTimer.Interval = 250;
       RefreshTimer.Tick += (_, _) => RefreshState();
@@ -228,6 +232,7 @@ namespace SkyRoof
     {
       ctx = context;
       rotator = widget;
+      QuickControls.Attach(context,widget);
 
       var sett = ctx.Settings.Rotator;
       updatingStepUi = true;
@@ -287,8 +292,20 @@ namespace SkyRoof
         "Satellite " +
         FormatBearing(satellite);
 
-      Rc3040sButton.Visible=ctx.Settings.Rotator.NativeProtocol ==
+      bool rc3040s = ctx.Settings.Rotator.NativeProtocol ==
         SkyRoof.NativeRotator.RotatorProtocolKind.Rc3040sLan;
+      Rc3040sButton.Visible = rc3040s;
+      QuickControls.Visible = rc3040s;
+      int desiredHeight = rc3040s ? 600 : 386;
+      if(Height != desiredHeight)
+      {
+        // Keep the entire fixed-layout card scaled together; never add
+        // scrollbars or rearrange the original manual direction controls.
+        MinimumSize=Size.Empty;MaximumSize=Size.Empty;
+        Size=new Size(318,desiredHeight);
+        MinimumSize=Size;MaximumSize=Size;
+      }
+      QuickControls.RefreshAccess();
       if(managementFooter!=null)
         managementFooter.Size=Rc3040sButton.Visible?new Size(204,20):new Size(292,20);
       bool enabled = ctx.Settings.Rotator.Enabled;
@@ -369,6 +386,8 @@ namespace SkyRoof
       Wheel.SatelliteBearing = satellite;
       Wheel.Invalidate();
     }
+
+    internal void PopupOpened() => QuickControls.PopupOpened();
 
     protected override void Dispose(bool disposing)
     {
