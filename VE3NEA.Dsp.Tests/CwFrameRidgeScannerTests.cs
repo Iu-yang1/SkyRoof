@@ -172,6 +172,57 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void KeyedCarrierGateRejectsStableAndSlowFadingInterference()
+    {
+      const int n=160;
+      double[] stable=Enumerable.Repeat(26.0,n).ToArray();
+      CwKeyingGate.AssessSnrSeries(stable,0.015).IsKeyed
+        .Should().BeFalse();
+      // Slowly fading continuous birdie with no Morse-like on/off cadence.
+      double[] fading=Enumerable.Range(0,n)
+        .Select(i=>15+9*Math.Sin(Math.PI*i/(n-1))).ToArray();
+      CwKeyingGate.AssessSnrSeries(fading,0.015).IsKeyed
+        .Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(0.12,0.55)]
+    [InlineData(0.20,0.50)]
+    public void KeyedCarrierGateAcceptsRepeatedMorseEnvelope(
+      double period,double duty)
+    {
+      double[] series=Enumerable.Range(0,160)
+        .Select(i=>i*0.015%period < period*duty ? 22.0 : -4.0)
+        .ToArray();
+      CwKeyingAssessment result=
+        CwKeyingGate.AssessSnrSeries(series,0.015);
+      result.IsKeyed.Should().BeTrue();
+      result.KeyingDepthDb.Should().BeGreaterThan(8);
+    }
+
+    [Fact]
+    public void FrameLevelGateRejectsContinuousToneButAcceptsKeyedTone()
+    {
+      var scanner=NewScanner(500,1200);
+      float[] keyed=MakeKeyedTone(2.4,800,0,0.36f,0.18,0.50);
+      var keyedSnap=new CwAudioSnapshot(
+        SampleRate,T0,keyed.Length,keyed);
+      var keyedScan=scanner.Scan(keyedSnap);
+      var track=new CwSignalTrack(1,800,20,0,T0,T0,true,true);
+      CwKeyingGate.AssessRidge(track,keyedScan,keyedSnap,scanner)
+        .IsKeyed.Should().BeTrue();
+
+      float[] tone=MakeNoise(keyed.Length,0.0015f);
+      for(int n=0;n<tone.Length;n++)
+        tone[n]+=0.36f*(float)Math.Sin(2*Math.PI*800*n/SampleRate);
+      var toneSnap=new CwAudioSnapshot(
+        SampleRate,T0,tone.Length,tone);
+      var toneScan=scanner.Scan(toneSnap);
+      CwKeyingGate.AssessRidge(track,toneScan,toneSnap,scanner)
+        .IsKeyed.Should().BeFalse();
+    }
+
+    [Fact]
     public void Scanner_NoiseOnly_DoesNotCreateKalmanMeasurements()
     {
       const double seconds = 2.0;

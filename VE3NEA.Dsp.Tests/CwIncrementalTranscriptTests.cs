@@ -65,6 +65,21 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void CorrelatedWindowsMustSpanRequiredTimeBeforeCommitting()
+    {
+      var coordinator=new CwIncrementalTranscriptCoordinator(
+        new CwTranscriptOptions
+        {
+          MinimumEvidenceSpanSeconds=2.0
+        });
+      coordinator.Push(Window(3,303,4.0,('C',2.00,0.94)));
+      var overlap=coordinator.Push(Window(3,303,5.0,('C',2.01,0.94)));
+      overlap.CommittedText.Should().BeEmpty();
+      var distinct=coordinator.Push(Window(3,303,6.0,('C',2.01,0.94)));
+      distinct.CommittedText.Should().Be("C");
+    }
+
+    [Fact]
     public void RepeatedCharactersAtDifferentTimes_RemainDistinct()
     {
       CwIncrementalTranscriptCoordinator coordinator =

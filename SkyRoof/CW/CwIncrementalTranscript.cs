@@ -809,6 +809,11 @@ namespace SkyRoof.CW
           value.MinimumConsensus > 1)
         throw new ArgumentOutOfRangeException(
           nameof(value.MinimumConsensus));
+      if (!double.IsFinite(value.MinimumEvidenceSpanSeconds) ||
+          value.MinimumEvidenceSpanSeconds < 0 ||
+          value.MinimumEvidenceSpanSeconds > 10)
+        throw new ArgumentOutOfRangeException(
+          nameof(value.MinimumEvidenceSpanSeconds));
       if (value.MinimumAverageConfidence < 0 ||
           value.MinimumAverageConfidence > 1)
         throw new ArgumentOutOfRangeException(

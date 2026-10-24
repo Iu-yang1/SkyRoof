@@ -378,6 +378,22 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void NonCwCandidateNeverInvokesOnnx()
+    {
+      var fake=new QueueTensorDecoder("FALSE");
+      var decoder=new DeepCwMultiLaneDecoder(
+        DeepCwModelMetadata.Parse(MetadataJson),fake);
+      float[] keyed=MakeKeyedAudio(4.0,(800,0.32f,0.18,0.50));
+      CwSignalTrack candidate=Track(1,800,22) with
+      {
+        KeyingStatus=CwKeyingStatus.Candidate
+      };
+      decoder.Decode(keyed,SourceRate,T0,[candidate])
+        .Should().BeEmpty();
+      fake.Calls.Should().Be(0);
+    }
+
+    [Fact]
     public void DeepCwDefaults_AllowAllEightVisibleSkimmerSlots()
     {
       new CwReceiveWorkerOptions().MaxDecodeLanes.Should().Be(8);
