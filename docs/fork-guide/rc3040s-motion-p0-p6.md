@@ -15,9 +15,9 @@ Direct LAN motion uses GS-232B W/C2/S on 60020. Restart and AT raw-speed writes 
 Right-click the rotator status to open the existing wheel popup. On `Rc3040sLan` only, an **inline** lower section appears with AZ and EL raw speed sliders, Read, Save AZ, Save EL, Revert, Restart. Other protocols keep the original popup dimensions. The dialog `RC-3040S` offers device status, speed controls, Restart and Motion Settings. The unused RC-3040S DEMO mode and its settings were removed.
 
 - Read obtains the on-device configuration; firmware and the device ID suffix are used to pin subsequent write/restart sessions.
-- Drag changes **UI only**. Nothing is transmitted until one explicit Save AZ or Save EL; both actions require a warning and a precise typed confirmation, never auto-repeat.
+- Drag changes **UI only**. Nothing is transmitted until one explicit Save AZ or Save EL; both actions require one Yes/No confirmation and never auto-repeat.
 - Revert restores the last **read** values in local sliders. It is not factory reset, not a mechanical re-home and not an EEPROM write.
-- Restart has a separate double confirmation and requires the motor TCP thread to have sent STOP before issuing one `AT+RESET`; this does **not** prove the motor physically stopped or the device rebooted. User must verify the physical state.
+- Restart requires one Yes/No confirmation and requires the motor TCP thread to have sent STOP before issuing one `AT+RESET`; this does **not** prove the motor physically stopped or the device rebooted. User must verify the physical state.
 - Write/Restart may persist or change motor configuration on 260223_C. Do not test unattended or with moving hardware. If uncertain, do not retry, re-read first after operator inspection.
 
 ## P2 – closed-loop position and feedback-rate estimator
@@ -81,3 +81,10 @@ For each **speed write or restart**, SkyRoof takes an explicit I/O-thread manage
 - Both speed sliders display AZ/EL angular speed in °/s; device AT raw parameters remain available in tooltips and are computed using separate historical conversion factors (AZ: 360/361600; EL: 360/326400). These are engineering display mappings, not physical motion measurements.
 - Save actions transmit at most one AT setting command, keep the WebSocket receive window open after sending, then establish a separate connection for readback. `Applied` requires a **changed** field matching the requested raw value. Unchanged, echo-only, unavailable and mismatched readback are distinct states. No automatic retry or EEPROM rollback.
 - The former DEMO parameter group, state machine and dialog actions are removed. The Motion Settings interface uses grouped options, short descriptions, Defaults, and a hardware-authorization gate.
+
+## 2026-10-24: WebSocket/60030 speed-save stability
+
+- A Save now uses **one bounded WebSocket connection** for fresh configuration preflight, one explicit AT write, and a separate **in-session C2** readback request. This is a separate query, not a separately established connection. The reported value is not proof of EEPROM retention after reboot.
+- Local management sessions are serialized and paced with a short post-session cooldown. This is mitigation for previously observed TCP/60030 connection refusals on real 260223_C hardware, not proof that their firmware root cause has been eliminated.
+- **No AT command sent** if the initial connection or preflight fails. Such failure does **not** unnecessarily latch the motor worker. From the moment an AT send may start, the worker remains safety-locked and there is **no automatic retry**, including on cancellation, timeout, or WebSocket close.
+- 260223_C speed writes are still not hardware-validated. A firmware refusal, disconnected 60030 port, or prior speed being reported after reboot must be investigated with controlled, isolated equipment rather than automated repeated EEPROM changes.
