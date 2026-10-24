@@ -179,10 +179,19 @@ jobs:
           prerelease: ${{ env.SIGNPATH_AVAILABLE != 'true' }}
           tag_name: v.${{ steps.get_version.outputs.version }}
           body: |
-            SkyRoof fork release based on VE3NEA/SkyRoof v.1.56, including CW Pileup,
-            IC-9700 LAN spectrum, satellite CAT/rotator improvements and updated documentation.
-            See [fork documentation](https://iu-yang1.github.io/SkyRoof/) and
-            [upstream version history](https://ve3nea.github.io/SkyRoof/download.html).
+            SkyRoof Fork v.${{ steps.get_version.outputs.version }} (based on VE3NEA/SkyRoof v.1.56)
+
+            ### Improvements / 改进
+            - RC-3040S LAN rotator: improved AZ/EL speed readback, single-session WebSocket/60030 AT saves, identity checks and safe status recovery after fresh TCP/60020 feedback.
+            - Reduced confirmation friction: one Yes/No prompt; removed redundant typed authorization and obsolete DEMO controls.
+            - Added Direct / Precision stop / Trapezoidal / S-curve reference motion profiles and a simplified Motion Settings UI.
+            - Preserved IC-9700 LAN scope, satellite CAT/Doppler, CW Console and Pileup functionality.
+            - 修复速度保存后的虚假断连与管理安全锁显示；优化 WebSocket 写入、读回、旋转器快捷控制和界面布局。
+
+            Read [full bilingual changelog](https://github.com/Iu-yang1/SkyRoof/blob/master/FORK-CHANGELOG.md)
+            and [fork documentation](https://iu-yang1.github.io/SkyRoof/).
+
+            Note: a configured/read-back speed is not verified EEPROM persistence or a measured mechanical speed; software motion profiles do not guarantee firmware-level velocity or jerk control.
 
             When this release is marked pre-release, its executable is unsigned;
             verify the downloaded installer before running it.
