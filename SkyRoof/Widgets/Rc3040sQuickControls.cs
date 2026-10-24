@@ -178,7 +178,11 @@ internal sealed class Rc3040sQuickControls : UserControl
       else SetState("Speed readback unavailable.");
     }
     catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}
-    catch(Exception ex) { SetState("Read failed: "+ex.Message); }
+    catch(Exception ex)
+    {
+      snapshot=null;dirtyAz=dirtyEl=false;
+      SetState("Read failed: "+ex.Message);
+    }
     finally {busy=false;if(!IsDisposed){RefreshAccess();Display();}}
   }
 
@@ -210,7 +214,11 @@ internal sealed class Rc3040sQuickControls : UserControl
           context.Settings.Rotator.Host,azimuth,desired,lifetime.Token);
         if(!IsDisposed)
         {
-          if(result.After is not null)snapshot=result.After;
+          // On an ambiguous write, do not enable another speed write based
+          // on an old readback. The operator must explicitly read again.
+          snapshot=result.Outcome is Rc3040sManagementService.SpeedWriteOutcome.Applied or
+            Rc3040sManagementService.SpeedWriteOutcome.Unchanged or
+            Rc3040sManagementService.SpeedWriteOutcome.EchoOnly ? result.After : null;
           if(result.Outcome==Rc3040sManagementService.SpeedWriteOutcome.Applied)
           {
             RevertSliders();
@@ -228,7 +236,11 @@ internal sealed class Rc3040sQuickControls : UserControl
       finally {motor.LatchAfterManagementChange();}
     }
     catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}
-    catch(Exception ex) { SetState($"Write state UNKNOWN: {ex.Message}. Do not retry."); }
+    catch(Exception ex)
+    {
+      snapshot=null;
+      SetState($"Write state UNKNOWN: {ex.Message}. Do not retry.");
+    }
     finally {busy=false;if(!IsDisposed){RefreshAccess();Display();}}
   }
 
@@ -252,13 +264,18 @@ internal sealed class Rc3040sQuickControls : UserControl
       {
         await Rc3040sManagementService.RestartAsync(
           context.Settings.Rotator.Host,snapshot.Firmware,snapshot.DeviceIdSuffix,lifetime.Token);
-        SetState("Restart command sent; reboot unverified. Reapply settings.");
+        snapshot=null;
+        SetState("Restart command sent; verify device before further changes.");
       }
       finally {motor.LatchAfterManagementChange();}
     }
     catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}
-    catch(Exception ex) { SetState("Restart result UNKNOWN: "+ex.Message); }
-    finally {busy=false;RefreshAccess();}
+    catch(Exception ex)
+    {
+      snapshot=null;
+      SetState("Restart result UNKNOWN: "+ex.Message);
+    }
+    finally {busy=false;if(!IsDisposed){RefreshAccess();Display();}}
   }
 
   private bool Confirm(string question,string phrase)

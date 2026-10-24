@@ -164,7 +164,11 @@ internal sealed class Rc3040sOperationsDialog : Form
         : "Speeds loaded.";
     }
     catch(OperationCanceledException)when(cancel.IsCancellationRequested){}
-    catch(Exception ex){if(!IsDisposed)status.Text="Management read failed: "+ex.Message;}
+    catch(Exception ex)
+    {
+      snapshot=null;dirtyAz=dirtyEl=false;
+      if(!IsDisposed)status.Text="Read failed: "+ex.Message;
+    }
     finally {busy=false;RefreshButtons();}
   }
 
@@ -195,7 +199,9 @@ internal sealed class Rc3040sOperationsDialog : Form
           settings.Host,azimuth,proposed,cancel.Token);
         if(!IsDisposed)
         {
-          if(result.After is not null)snapshot=result.After;
+          snapshot=result.Outcome is Rc3040sManagementService.SpeedWriteOutcome.Applied or
+            Rc3040sManagementService.SpeedWriteOutcome.Unchanged or
+            Rc3040sManagementService.SpeedWriteOutcome.EchoOnly ? result.After : null;
           if(result.Outcome==Rc3040sManagementService.SpeedWriteOutcome.Applied)
           {
             RestoreSliders();
@@ -213,8 +219,12 @@ internal sealed class Rc3040sOperationsDialog : Form
       finally {motor.LatchAfterManagementChange();}
     }
     catch(OperationCanceledException)when(cancel.IsCancellationRequested){}
-    catch(Exception ex){if(!IsDisposed)status.Text=$"{axis} result UNKNOWN: {ex.Message}; do not retry blindly.";}
-    finally{busy=false;RefreshButtons();}
+    catch(Exception ex)
+    {
+      snapshot=null;
+      if(!IsDisposed)status.Text=$"{axis} result UNKNOWN: {ex.Message}; read again.";
+    }
+    finally{busy=false;if(!IsDisposed){RefreshButtons();ShowValues();}}
   }
 
   private async Task RestartAsync()
@@ -237,12 +247,17 @@ internal sealed class Rc3040sOperationsDialog : Form
       {
         await Rc3040sManagementService.RestartAsync(
           settings.Host,snapshot.Firmware,snapshot.DeviceIdSuffix,cancel.Token);
-        if(!IsDisposed)status.Text="Restart sent, reboot NOT verified. Reapply settings after physical inspection.";
+        snapshot=null;
+        if(!IsDisposed)status.Text="Restart sent; verify the device and read again.";
       }
       finally {motor.LatchAfterManagementChange();}
     }
     catch(OperationCanceledException)when(cancel.IsCancellationRequested){}
-    catch(Exception ex){if(!IsDisposed)status.Text="Restart result unknown: "+ex.Message;}
+    catch(Exception ex)
+    {
+      snapshot=null;
+      if(!IsDisposed)status.Text="Restart result unknown: "+ex.Message;
+    }
     finally{busy=false;RefreshButtons();}
   }
 
