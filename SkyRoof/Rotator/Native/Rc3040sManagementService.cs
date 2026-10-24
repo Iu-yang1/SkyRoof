@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.Net;
+using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -20,7 +21,8 @@ internal static class Rc3040sManagementService
 
   internal enum SpeedWriteOutcome { Applied, Unchanged, ReadbackUnavailable, EchoOnly, Failed }
   internal sealed record SpeedWriteResult(Snapshot Before, Snapshot? After,
-    SpeedWriteOutcome Outcome, int RequestedRaw, bool ExactTextEcho, string Detail);
+    SpeedWriteOutcome Outcome, int RequestedRaw, bool ExactTextEcho, string Detail,
+    bool CommandAttempted = false);
 
   // Numeric conversion constants recovered from the 251217 software diagnostic.
   // Display is nominal speed; real calibration belongs to hardware acceptance.
@@ -59,6 +61,8 @@ internal static class Rc3040sManagementService
     @"(?im)^\s*AT\+(AZ|EL)_SPD=(\d{5})\s*$",
     RegexOptions.Compiled | RegexOptions.CultureInvariant);
   private static readonly SemaphoreSlim Exclusive = new(1, 1);
+  private static DateTime nextSessionUtc = DateTime.MinValue;
+  private static readonly TimeSpan SessionCooldown = TimeSpan.FromMilliseconds(1200);
   private const int MaxFrames = 40, MaxChars = 16384;
 
   internal static bool TryParse(string data, int frames, bool echo, out Snapshot snapshot)
@@ -187,8 +191,11 @@ internal static class Rc3040sManagementService
     await Exclusive.WaitAsync(token).ConfigureAwait(false);
     try
     {
+      // Pace sessions on the constrained Socket0 listener without retrying writes.
+      var pause=nextSessionUtc-DateTime.UtcNow;
+      if(pause>TimeSpan.Zero)await Task.Delay(pause,token).ConfigureAwait(false);
       using var deadline=CancellationTokenSource.CreateLinkedTokenSource(token);
-      deadline.CancelAfter(TimeSpan.FromSeconds(14));
+      deadline.CancelAfter(TimeSpan.FromSeconds(22));
       using var socket=await ConnectAsync(host,deadline.Token).ConfigureAwait(false);
       try {return await work(socket,deadline.Token).ConfigureAwait(false);}
       finally
@@ -202,17 +209,20 @@ internal static class Rc3040sManagementService
         }
       }
     }
-    finally {Exclusive.Release();}
+    finally
+    {
+      nextSessionUtc=DateTime.UtcNow+SessionCooldown;
+      Exclusive.Release();
+    }
   }
 
   internal static Task<Snapshot> ReadAsync(string host,bool detailed,CancellationToken token=default) =>
     WithSessionAsync(host,(ws,ct)=>QueryCoreAsync(ws,detailed,ct),token);
 
   /// <summary>
-  /// A write is never "applied" based on WebSocketSendCompleted/echo alone.
-  /// Send exactly once, collect a bounded response BEFORE closing the socket,
-  /// then perform a separate independently established readback. Unknown
-  /// outcomes must not trigger retries or compensating EEPROM writes.
+  /// One connection per Save: fresh C2 identity/speed preflight, one AT write,
+  /// then a separate C2 readback request in the SAME WebSocket session.
+  /// Readback may reflect volatile state and does not prove EEPROM retention.
   /// </summary>
   internal static SpeedWriteOutcome ClassifySpeedWrite(
     int before,int requested,int? observed,bool exactEcho)
@@ -224,81 +234,98 @@ internal static class Rc3040sManagementService
     return SpeedWriteOutcome.Failed;
   }
 
-  internal static async Task<SpeedWriteResult> SaveSpeedAsync(
-    string host,bool azimuth,int desired,CancellationToken token=default)
+  internal static string SpeedCommand(bool azimuth,int raw)
   {
-    if(desired is <15 or >10000)throw new ArgumentOutOfRangeException(nameof(desired));
-    var original=await ReadAsync(host,true,token).ConfigureAwait(false);
-    int? before=azimuth?original.AzRaw:original.ElRaw;
-    if(before is null)
-      return new(original,null,SpeedWriteOutcome.Failed,desired,false,
-        "Original axis speed unavailable; write not sent.");
-    if(before==desired)
-      return new(original,original,SpeedWriteOutcome.Unchanged,desired,false,
-        "Requested speed equals current configuration. No AT command was sent.");
-    if(original.Firmware is null || original.DeviceIdSuffix is null)
-      return new(original,null,SpeedWriteOutcome.Failed,desired,false,
-        "Device identity could not be checked; write not sent.");
+    if(raw is <15 or >10000)throw new ArgumentOutOfRangeException(nameof(raw));
+    return $"AT+{(azimuth?"AZ":"EL")}_SPD={raw:D5}\r";
+  }
 
-    bool exactEcho=false, sent=false;
-    // The firmware is allowed to send no explicit ACK for this command.
-    // A response containing the requested AT line is NOT an independent
-    // speed confirmation; only an independently fetched configuration counts.
+  private static string FailureReason(Exception ex)
+  {
+    var socket=ex as SocketException ?? ex.InnerException as SocketException ??
+      ex.InnerException?.InnerException as SocketException;
+    if(socket!=null)return $"TCP {socket.SocketErrorCode} ({socket.NativeErrorCode})";
+    return ex switch
+    {
+      WebSocketException => "WebSocket connection or transport failure",
+      OperationCanceledException => "Management session deadline exceeded",
+      TimeoutException => "Management reply timeout",
+      InvalidDataException => "Incomplete management configuration",
+      _ => ex.GetType().Name
+    };
+  }
+
+  internal static async Task<SpeedWriteResult> SaveSpeedAsync(
+    string host,bool azimuth,int desired,CancellationToken token=default,
+    Action? onCommandAttempt=null)
+  {
+    string command=SpeedCommand(azimuth,desired);
+    Snapshot original=new(null,null,null,null,null,0,false);
+    bool attempted=false,exactEcho=false;
     try
     {
-      exactEcho=await WithSessionAsync(host,async(ws,ct)=>{
+      return await WithSessionAsync(host,async(ws,ct)=>
+      {
+        // Read fresh device state. A previously cached UI snapshot cannot
+        // authorize the write, even if the same IP is being used.
         var reader=new FrameReader(ws);
-        var check=await QueryCoreAsync(ws,false,ct,reader).ConfigureAwait(false);
-        if(check.Firmware!=original.Firmware ||
-           check.DeviceIdSuffix!=original.DeviceIdSuffix)
-          throw new InvalidOperationException(
-            "Device version/identity changed; write not sent.");
-        string command=$"AT+{(azimuth?"AZ":"EL")}_SPD={desired:D5}\r";
+        original=await QueryCoreAsync(ws,true,ct,reader).ConfigureAwait(false);
+        int? before=azimuth?original.AzRaw:original.ElRaw;
+        if(before is null)
+          return new SpeedWriteResult(original,null,SpeedWriteOutcome.Failed,
+            desired,false,"Preflight speed field absent; AT command NOT sent.");
+        if(before==desired)
+          return new SpeedWriteResult(original,original,SpeedWriteOutcome.Unchanged,
+            desired,false,"Already at requested speed; AT command NOT sent.");
+        if(original.Firmware is null || original.DeviceIdSuffix is null)
+          return new SpeedWriteResult(original,null,SpeedWriteOutcome.Failed,
+            desired,false,"Preflight identity incomplete; AT command NOT sent.");
+
+        // Mark the safety latch BEFORE the potentially transmitted SendAsync.
+        // Cancellation/disposal after this point must not re-enable motion.
+        attempted=true;
+        onCommandAttempt?.Invoke();
         await SendAsync(ws,command,ct).ConfigureAwait(false);
-        sent=true;
-        // Not waiting for the AT response was a race: closing immediately
-        // after SendAsync could truncate firmware processing. Bounded
-        // wait uses the same FrameReader and does not start a second
-        // concurrent ReceiveAsync after a heuristic idle gap.
-        var (text,_,_) = await CollectAsync(reader,null,ct).ConfigureAwait(false);
-        return text.Split('\r','\n',StringSplitOptions.RemoveEmptyEntries)
+
+        // Do not open another TCP socket for verification. The device may
+        // return a delayed configuration dump, not an explicit AT ACK.
+        var (response,_,_)=await CollectAsync(reader,null,ct).ConfigureAwait(false);
+        exactEcho=response.Split('\r','\n',StringSplitOptions.RemoveEmptyEntries)
           .Any(line=>line.Trim()==command.TrimEnd('\r'));
+        var verified=await QueryCoreAsync(ws,true,ct,reader).ConfigureAwait(false);
+        if(verified.Firmware!=original.Firmware ||
+           verified.DeviceIdSuffix!=original.DeviceIdSuffix)
+          return new SpeedWriteResult(original,verified,SpeedWriteOutcome.Failed,
+            desired,exactEcho,"Readback device identity changed; inspect controller.",true);
+        int? observed=azimuth?verified.AzRaw:verified.ElRaw;
+        var outcome=ClassifySpeedWrite(before.Value,desired,observed,exactEcho);
+        var detail=outcome switch
+        {
+          SpeedWriteOutcome.Applied => "Fresh C2 readback reports updated speed; persistence unverified.",
+          SpeedWriteOutcome.Unchanged => "Fresh C2 readback reports the original speed.",
+          SpeedWriteOutcome.EchoOnly => "Echo observed but fresh readback reports original speed.",
+          SpeedWriteOutcome.ReadbackUnavailable => "Write attempted; speed field absent from fresh readback.",
+          _ => "Fresh readback differs from original and requested speed."
+        };
+        return new SpeedWriteResult(original,verified,outcome,desired,exactEcho,detail,true);
       },token).ConfigureAwait(false);
     }
-    catch(InvalidOperationException ex) when(!sent)
+    catch(OperationCanceledException) when(token.IsCancellationRequested)
     {
-      // "write not sent" preflight failure, not a general proof of failure
-      return new(original,null,SpeedWriteOutcome.Failed,desired,false,ex.Message);
+      throw; // No assumption about wire transmission after user cancellation.
     }
-    // Transport failures after the actual write are ambiguous and propagate:
-    // a caller's motor safety lease must stay latched and never retry them.
-    Snapshot verified;
-    try { verified=await ReadAsync(host,true,token).ConfigureAwait(false); }
-    catch(OperationCanceledException) when(token.IsCancellationRequested){throw;}
-    catch(Exception ex) when(ex is WebSocketException or InvalidDataException or
-      TimeoutException or OperationCanceledException or HttpRequestException)
+    catch(Exception ex) when(ex is WebSocketException or IOException or
+      OperationCanceledException or TimeoutException or HttpRequestException or
+      ArgumentException or InvalidOperationException)
     {
-      return new(original,null,SpeedWriteOutcome.ReadbackUnavailable,desired,exactEcho,
-        "Write sent; independent speed readback unavailable: "+ex.GetType().Name);
+      var reason=FailureReason(ex);
+      return new SpeedWriteResult(original,null,
+        attempted?SpeedWriteOutcome.ReadbackUnavailable:SpeedWriteOutcome.Failed,
+        desired,exactEcho,attempted
+          ? $"AT may have been sent; verification failed: {reason}. Do not retry."
+          : $"Management preflight failed: {reason}. AT command NOT sent.",
+        attempted);
     }
-
-    if(verified.Firmware!=original.Firmware ||
-       verified.DeviceIdSuffix!=original.DeviceIdSuffix)
-      return new(original,verified,SpeedWriteOutcome.Failed,desired,exactEcho,
-        "Readback came from an unexpected firmware/device.");
-    int? observed=azimuth?verified.AzRaw:verified.ElRaw;
-    if(!observed.HasValue)
-      return new(original,verified,SpeedWriteOutcome.ReadbackUnavailable,desired,exactEcho,
-        "Readback had no speed field for the selected axis.");
-    var outcome=ClassifySpeedWrite(before.Value,desired,observed,exactEcho);
-    string message=outcome switch
-    {
-      SpeedWriteOutcome.Applied => "Independent readback matched updated speed.",
-      SpeedWriteOutcome.Unchanged => "Device returned the previous speed.",
-      SpeedWriteOutcome.EchoOnly => "Only AT echo; speed unchanged.",
-      _ => "Readback value differs from requested speed."
-    };
-    return new(original,verified,outcome,desired,exactEcho,message);
   }
 
   internal static Task RestartAsync(string host,string expectedFirmware,
