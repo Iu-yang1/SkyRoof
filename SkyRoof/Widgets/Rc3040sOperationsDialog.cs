@@ -107,10 +107,11 @@ internal sealed class Rc3040sOperationsDialog : Form
     reboot.Enabled=safe;
     demo.Enabled=safe;stopDemo.Enabled=rotor.IsRc3040sDemoRunning;
     motion.Enabled=!busy;
-    if(!busy)status.Text=rotor.IsRc3040sDemoRunning?
-      "Software DEMO active. STOP cancels the sequence." :
-      safe ? "Ready · no AT is sent while dragging" :
-        "AT writes locked: stop tracking, PARK, DEMO, or check motor readiness.";
+    // Status is updated by explicit actions. Do not erase network errors and
+    // readback/uncertain-write warnings every 500 ms during the UI refresh.
+    if(!busy && string.IsNullOrEmpty(status.Text))
+      status.Text=safe ? "Ready · no AT is sent while dragging" :
+        "AT writes locked: stop TRACK / PARK / DEMO first.";
   }
 
   private void ShowValues()
