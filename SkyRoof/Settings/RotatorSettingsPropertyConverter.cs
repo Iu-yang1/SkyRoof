@@ -19,11 +19,7 @@ namespace SkyRoof
       new(new[] { RotatorDriverMode.Native, RotatorDriverMode.LegacyRotctld });
   }
 
-  /// <summary>
-  /// Keep obsolete DTrac NRL2 enum identity stable for Settings.json but do not
-  /// offer UDP relay control as a selectable driver. The retained codec can
-  /// still be independently regression-tested without opening a socket.
-  /// </summary>
+  /// <summary>Historical protocol slot 10 is retired and cannot be selected.</summary>
   public sealed class RotatorProtocolSelectionConverter : EnumConverter
   {
     public RotatorProtocolSelectionConverter()
@@ -32,7 +28,9 @@ namespace SkyRoof
     public override bool GetStandardValuesExclusive(ITypeDescriptorContext? context) => true;
     public override StandardValuesCollection GetStandardValues(ITypeDescriptorContext? context) =>
       new(Enum.GetValues<RotatorProtocolKind>()
-        .Where(p => p != RotatorProtocolKind.DtracNrl2).ToArray());
+        .Where(p => NativeRotatorCodec.Supports(p,RotatorTransportKind.Tcp) ||
+          NativeRotatorCodec.Supports(p,RotatorTransportKind.Serial) ||
+          NativeRotatorCodec.Supports(p,RotatorTransportKind.Udp)).ToArray());
   }
 
   // The existing Settings.json stays unchanged. Filter only the nested
@@ -78,23 +76,11 @@ namespace SkyRoof
       nameof(RotatorSettings.Rc3040sPlanElSpeed),
       nameof(RotatorSettings.Rc3040sPlanAcceleration),
       nameof(RotatorSettings.Rc3040sPlanJerk),
-      nameof(RotatorSettings.Rc3040sAtEnabled)
+      nameof(RotatorSettings.Rc3040sAtEnabled),
+      nameof(RotatorSettings.Rc3040sDemoStartAz), nameof(RotatorSettings.Rc3040sDemoEndAz),
+      nameof(RotatorSettings.Rc3040sDemoElevation), nameof(RotatorSettings.Rc3040sDemoStepDegrees),
+      nameof(RotatorSettings.Rc3040sDemoDwellSeconds), nameof(RotatorSettings.Rc3040sDemoCycles)
     };
-    private static readonly HashSet<string> DtracOnly = new(StringComparer.Ordinal)
-    {
-      nameof(RotatorSettings.DtracNrlServerHost),
-      nameof(RotatorSettings.DtracNrlServerPort),
-      nameof(RotatorSettings.DtracNrlRotorId),
-      nameof(RotatorSettings.DtracNrlAppSid),
-      nameof(RotatorSettings.DtracUseNativePark),
-      nameof(RotatorSettings.DtracDemoStartAz),
-      nameof(RotatorSettings.DtracDemoEndAz),
-      nameof(RotatorSettings.DtracDemoElevation),
-      nameof(RotatorSettings.DtracDemoStepDegrees),
-      nameof(RotatorSettings.DtracDemoDwellSeconds),
-      nameof(RotatorSettings.DtracDemoCycles)
-    };
-
     private static readonly HashSet<string> LegacyOnly = new(StringComparer.Ordinal)
     {
       nameof(RotatorSettings.Delay),
@@ -112,16 +98,13 @@ namespace SkyRoof
         return base.GetProperties(context, value, attributes)!;
 
       bool native = settings.ResolveUseNativeDriver();
-      // Legacy NRL2 settings are retained in Settings.json but hidden while
-      // the operational UDP driver is suspended.
-      bool dtrac = false;
       bool rc3040Lan = native && settings.NativeProtocol == RotatorProtocolKind.Rc3040sLan;
       bool serial = settings.NativeTransport == RotatorTransportKind.Serial;
       bool custom = settings.NativeProtocol == RotatorProtocolKind.CustomTemplate;
 
       // Nondefault remote legacy rotctld endpoints and native TCP/UDP
       // share Host/Port. Direct Serial has no network endpoint to configure.
-      bool showNetwork = !dtrac && (!native || !serial);
+      bool showNetwork = !native || !serial;
       var properties = TypeDescriptor.GetProperties(settings, attributes ?? Array.Empty<Attribute>(), true);
 
       var visible = properties.Cast<PropertyDescriptor>()
@@ -129,7 +112,6 @@ namespace SkyRoof
         .Where(p => p.Name switch
         {
           nameof(RotatorSettings.Host) or nameof(RotatorSettings.Port) => showNetwork,
-          _ when DtracOnly.Contains(p.Name) => dtrac,
           _ when Rc3040sOnly.Contains(p.Name) => rc3040Lan,
           nameof(RotatorSettings.NativeTransport) when rc3040Lan => false,
           nameof(RotatorSettings.NativeTransport) when dtrac => false,

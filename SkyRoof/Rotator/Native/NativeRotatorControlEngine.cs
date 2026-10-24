@@ -40,7 +40,6 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
   private Bearing? requested,lastRead,lastWritten;
   private DateTime lastReadUtc = DateTime.MinValue;
   private volatile bool stopping,stopRequested;
-  private bool dtracRestartPending;
   private bool connected,safetyLatched,requiresStopAfterReconnect;
   private int? manualDirection,appliedDirection;
   private byte[]? lastWire;
@@ -141,19 +140,6 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
       commandVersion++;
     }
     wake.Set();
-  }
-  internal bool RequestDtracRestart()
-  {
-    if (settings.NativeProtocol != RotatorProtocolKind.DtracNrl2 || !IsReady || PositionFaulted)
-      return false;
-    lock(sync)
-    {
-      if(stopping || !connected || dtracRestartPending) return false;
-      requested=lastWritten=null; manualDirection=null; lastWire=null;
-      dtracRestartPending=true; stopRequested=true; commandVersion++;
-    }
-    wake.Set();
-    return true;
   }
   private void SetConnected(bool value)
   {
@@ -429,18 +415,7 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
             SendStop();
             continue;
           }
-          bool rebootNow;
-          lock(sync){ rebootNow=dtracRestartPending; if(rebootNow)dtracRestartPending=false; }
-          if(rebootNow)
-          {
-            lock(sync)
-            {
-              safetyLatched=true; requiresStopAfterReconnect=true;
-              requested=lastWritten=null; manualDirection=appliedDirection=null; lastWire=null;
-            }
-            device.Write("AT+RESET\r\n"u8);
-            throw new IOException("DTrac experimental restart sent; verify position and reapply settings");
-          }
+
           if(jog.HasValue && !PositionFaulted)
           {
             bool shouldSend;
@@ -521,14 +496,6 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
               // PST is passive UDP: no packet does not indicate a broken connection.
               continue;
             }
-            catch(TimeoutException ex) when(settings.NativeProtocol==RotatorProtocolKind.DtracNrl2)
-            {
-              ++consecutiveFeedbackMisses;
-              if(Interlocked.Exchange(ref ready,0)!=0)StateChanged();
-              if(consecutiveFeedbackMisses>=3)
-                throw new TimeoutException("DTrac NRL2: three consecutive feedback timeouts",ex);
-              continue;
-            }
             catch(TimeoutException ex) when(settings.NativeTransport==RotatorTransportKind.Tcp)
             {
               ++consecutiveFeedbackMisses;
@@ -577,7 +544,7 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
       }
       finally
       {
-        lock(sync)dtracRestartPending=false;
+
         SetConnected(false);
         try{transport?.Abort();}catch{}
         transport=null;
