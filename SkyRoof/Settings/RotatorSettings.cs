@@ -18,6 +18,8 @@ namespace SkyRoof
   public enum RotatorSerialStopBits { None = 0, One = 1, Two = 2, OnePointFive = 3 }
   public enum RotatorSerialHandshake { None = 0, XOnXOff = 1, RequestToSend = 2, RequestToSendXOnXOff = 3 }
 
+  public enum Rc3040sMotionProfile { Direct = 0, PrecisionStop = 1, Trapezoidal = 2, SCurve = 3 }
+
   public class RotatorSettings : IControlEngineSettings
   {
     [DisplayName("Controller Driver")]
@@ -62,7 +64,10 @@ namespace SkyRoof
     {
       get => nativeProtocol;
       set { nativeProtocol=value; if(value==SkyRoof.NativeRotator.RotatorProtocolKind.DtracNrl2)
-        NativeTransport=SkyRoof.NativeRotator.RotatorTransportKind.Udp; }
+        NativeTransport=SkyRoof.NativeRotator.RotatorTransportKind.Udp;
+        else if(value==SkyRoof.NativeRotator.RotatorProtocolKind.Rc3040sLan)
+        { NativeTransport=SkyRoof.NativeRotator.RotatorTransportKind.Tcp;
+          if(Port==4533)Port=60020; } }
     }
 
     [DisplayName("Native Transport")]
@@ -109,6 +114,36 @@ namespace SkyRoof
     [DisplayName("DTrac DEMO Cycles")]
     [DefaultValue(1)]
     public int DtracDemoCycles { get; set; } = 1;
+
+    [DisplayName("RC-3040S Motion Profile")]
+    [DefaultValue(Rc3040sMotionProfile.Direct)]
+    public Rc3040sMotionProfile Rc3040sMotionMode { get; set; } = Rc3040sMotionProfile.Direct;
+
+    [DisplayName("RC-3040S Motion Planner Enabled")]
+    [Description("Opt-in software setpoint planning; not native hardware speed control.")]
+    [DefaultValue(false)]
+    public bool Rc3040sPlannerEnabled { get; set; }
+
+    [DisplayName("RC-3040S AZ Planned Speed (deg/s)")]
+    [DefaultValue(2.0)]
+    public double Rc3040sPlanAzSpeed { get; set; } = 2.0;
+
+    [DisplayName("RC-3040S EL Planned Speed (deg/s)")]
+    [DefaultValue(2.0)]
+    public double Rc3040sPlanElSpeed { get; set; } = 2.0;
+
+    [DisplayName("RC-3040S Acceleration (deg/s²)")]
+    [DefaultValue(0.8)]
+    public double Rc3040sPlanAcceleration { get; set; } = 0.8;
+
+    [DisplayName("RC-3040S Jerk (deg/s³)")]
+    [DefaultValue(1.5)]
+    public double Rc3040sPlanJerk { get; set; } = 1.5;
+
+    [DisplayName("RC-3040S AT Readback")]
+    [Description("WebSocket/60030 on-demand management: read-only unless explicitly saved.")]
+    [DefaultValue(true)]
+    public bool Rc3040sAtEnabled { get; set; } = true;
 
     [DisplayName("Serial Port")]
     [DefaultValue("COM9")]

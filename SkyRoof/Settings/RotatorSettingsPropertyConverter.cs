@@ -54,6 +54,16 @@ namespace SkyRoof
       nameof(RotatorSettings.NativeResponseTemplate)
     };
 
+    private static readonly HashSet<string> Rc3040sOnly = new(StringComparer.Ordinal)
+    {
+      nameof(RotatorSettings.Rc3040sMotionMode),
+      nameof(RotatorSettings.Rc3040sPlannerEnabled),
+      nameof(RotatorSettings.Rc3040sPlanAzSpeed),
+      nameof(RotatorSettings.Rc3040sPlanElSpeed),
+      nameof(RotatorSettings.Rc3040sPlanAcceleration),
+      nameof(RotatorSettings.Rc3040sPlanJerk),
+      nameof(RotatorSettings.Rc3040sAtEnabled)
+    };
     private static readonly HashSet<string> DtracOnly = new(StringComparer.Ordinal)
     {
       nameof(RotatorSettings.DtracNrlServerHost),
@@ -87,6 +97,7 @@ namespace SkyRoof
 
       bool native = settings.ResolveUseNativeDriver();
       bool dtrac = native && settings.NativeProtocol == RotatorProtocolKind.DtracNrl2;
+      bool rc3040Lan = native && settings.NativeProtocol == RotatorProtocolKind.Rc3040sLan;
       bool serial = settings.NativeTransport == RotatorTransportKind.Serial;
       bool custom = settings.NativeProtocol == RotatorProtocolKind.CustomTemplate;
 
@@ -101,6 +112,8 @@ namespace SkyRoof
         {
           nameof(RotatorSettings.Host) or nameof(RotatorSettings.Port) => showNetwork,
           _ when DtracOnly.Contains(p.Name) => dtrac,
+          _ when Rc3040sOnly.Contains(p.Name) => rc3040Lan,
+          nameof(RotatorSettings.NativeTransport) when rc3040Lan => false,
           nameof(RotatorSettings.NativeTransport) when dtrac => false,
           _ when SerialOnly.Contains(p.Name) => native && serial && !dtrac,
           _ when NativeOnly.Contains(p.Name) => native,

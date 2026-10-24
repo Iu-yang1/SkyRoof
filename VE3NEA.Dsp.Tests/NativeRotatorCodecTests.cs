@@ -26,6 +26,19 @@ public sealed class NativeRotatorCodecTests
       Assert.Equal(expected,Text(NativeRotatorCodec.Point(p,new(145,45))));}
     finally{CultureInfo.CurrentCulture=previous;}
   }
+  [Fact]
+  public void Rc3040sLanPreservesGs232ByteProtocolAndNeverUsesNRL2Udp()
+  {
+    Assert.True(NativeRotatorCodec.Supports(RotatorProtocolKind.Rc3040sLan,RotatorTransportKind.Tcp));
+    Assert.False(NativeRotatorCodec.Supports(RotatorProtocolKind.Rc3040sLan,RotatorTransportKind.Udp));
+    Assert.Equal("W319 036\r",Text(NativeRotatorCodec.Point(RotatorProtocolKind.Rc3040sLan,new(319,36))));
+    Assert.Equal("C2\r",Text(NativeRotatorCodec.Query(RotatorProtocolKind.Rc3040sLan)));
+    Assert.Equal("S\r",Text(NativeRotatorCodec.Stop(RotatorProtocolKind.Rc3040sLan)));
+    Assert.True(NativeRotatorCodec.CanJog(RotatorProtocolKind.Rc3040sLan));
+    Assert.True(NativeRotatorCodec.TryParse(RotatorProtocolKind.Rc3040sLan,
+      System.Text.Encoding.ASCII.GetBytes("AZ=319 EL=36\r"),out _));
+  }
+
   [Fact] public void Gs232HasExtendedAzimuthAndContinuousMotion()
   {
     Assert.Equal("W450 090\r",Text(NativeRotatorCodec.Point(RotatorProtocolKind.Gs232,new(450,90))));
