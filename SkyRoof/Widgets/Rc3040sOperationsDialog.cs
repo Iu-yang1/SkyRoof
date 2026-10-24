@@ -174,12 +174,22 @@ internal sealed class Rc3040sOperationsDialog : Form
     RefreshButtons();
     try
     {
-      var result=await Rc3040sManagementService.SaveSpeedAsync(
-        settings.Host,azimuth,proposed,cancel.Token);
-      if(IsDisposed)return;
-      snapshot=result.After;
-      RestoreSliders();
-      status.Text=$"{axis} config readback matched {proposed:D5}. EEPROM persistence and actual motor speed remain UNVERIFIED.";
+      var motor=rotor.EngineForRc3040s;
+      if(motor is null)throw new InvalidOperationException("RC-3040S native motor worker missing.");
+      using var lease=await motor.AcquireManagementLeaseAsync(cancel.Token);
+      if(lease is null)throw new InvalidOperationException("STOP/feedback safety check failed.");
+      try
+      {
+        var result=await Rc3040sManagementService.SaveSpeedAsync(
+          settings.Host,azimuth,proposed,cancel.Token);
+        if(!IsDisposed)
+        {
+          snapshot=result.After;
+          RestoreSliders();
+          status.Text=$"{axis} config readback matched. EEPROM/motor UNVERIFIED; reapply settings.";
+        }
+      }
+      finally {motor.LatchAfterManagementChange();}
     }
     catch(OperationCanceledException)when(cancel.IsCancellationRequested){}
     catch(Exception ex){if(!IsDisposed)status.Text=$"{axis} result UNKNOWN: {ex.Message}; do not retry blindly.";}
@@ -194,23 +204,21 @@ internal sealed class Rc3040sOperationsDialog : Form
       +"Confirm that the motor is physically stopped and a real emergency stop is available.","RESTART"))
       return;
     if(!CanEditHardware)return;
-    rotor.StopRotation(); // serialized STOP on dedicated motor I/O worker
-    bool stopTransmitted=false;
-    try
-    {
-      if(rotor.EngineForRc3040s is NativeRotatorControlEngine motor)
-        stopTransmitted=await motor.WaitForStopTransmissionAsync(2500,cancel.Token);
-    }
-    catch(OperationCanceledException) when(cancel.IsCancellationRequested){return;}
-    if(!stopTransmitted)
-    {status.Text="STOP transmission not confirmed; restart blocked.";return;}
     busy=true;status.Text="Sending one WebSocket restart; reboot is not acknowledged...";
     RefreshButtons();
     try
     {
-      await Rc3040sManagementService.RestartAsync(
-        settings.Host,snapshot.Firmware,snapshot.DeviceIdSuffix,cancel.Token);
-      if(!IsDisposed)status.Text="Restart command transmitted, device reboot NOT verified. Recheck position before motion.";
+      var motor=rotor.EngineForRc3040s;
+      if(motor is null)throw new InvalidOperationException("RC-3040S native motor worker missing.");
+      using var lease=await motor.AcquireManagementLeaseAsync(cancel.Token);
+      if(lease is null)throw new InvalidOperationException("STOP/feedback safety check failed.");
+      try
+      {
+        await Rc3040sManagementService.RestartAsync(
+          settings.Host,snapshot.Firmware,snapshot.DeviceIdSuffix,cancel.Token);
+        if(!IsDisposed)status.Text="Restart sent, reboot NOT verified. Reapply settings after physical inspection.";
+      }
+      finally {motor.LatchAfterManagementChange();}
     }
     catch(OperationCanceledException)when(cancel.IsCancellationRequested){}
     catch(Exception ex){if(!IsDisposed)status.Text="Restart result unknown: "+ex.Message;}

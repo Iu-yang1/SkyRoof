@@ -180,12 +180,23 @@ internal sealed class Rc3040sQuickControls : UserControl
     busy=true;RefreshAccess();SetState($"Sending {axis} once; no retry...");
     try
     {
-      var result=await Rc3040sManagementService.SaveSpeedAsync(
-        context.Settings.Rotator.Host,azimuth,desired,lifetime.Token);
-      if(IsDisposed)return;
-      snapshot=result.After;
-      RevertSliders();
-      SetState($"{axis} config readback matched; EEPROM/motion UNVERIFIED.");
+      var motor=rotator?.EngineForRc3040s;
+      if(motor is null)throw new InvalidOperationException("No RC-3040S motor worker.");
+      using var lease=await motor.AcquireManagementLeaseAsync(lifetime.Token);
+      if(lease is null)throw new InvalidOperationException(
+        "Motor is not ready or is safety locked; AT write blocked.");
+      try
+      {
+        var result=await Rc3040sManagementService.SaveSpeedAsync(
+          context.Settings.Rotator.Host,azimuth,desired,lifetime.Token);
+        if(!IsDisposed)
+        {
+          snapshot=result.After;
+          RevertSliders();
+          SetState($"{axis} readback matched; reapply rotator settings after physical check.");
+        }
+      }
+      finally {motor.LatchAfterManagementChange();}
     }
     catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}
     catch(Exception ex) { SetState($"Write state UNKNOWN: {ex.Message}. Do not retry."); }
@@ -201,25 +212,20 @@ internal sealed class Rc3040sQuickControls : UserControl
       "Check the actual motor is stationary and emergency STOP is available.",
       "RESTART"))return;
     if(!CanSendAt)return;
-    rotator.StopRotation();
-    // Stop is queued on a separate I/O worker; wait for the transmission result
-    // before trying a management restart, but never assume the motor is stopped.
-    bool stopTransmitted=false;
-    try
-    {
-      if(rotator.EngineForRc3040s is NativeRotatorControlEngine engine)
-        stopTransmitted=await engine.WaitForStopTransmissionAsync(2500,lifetime.Token);
-    }
-    catch(OperationCanceledException) when(lifetime.IsCancellationRequested){return;}
-    if(!stopTransmitted)
-    {SetState("Motor STOP transmission not confirmed; restart blocked.");return;}
-    if(!CanSendAt)return;
     busy=true;RefreshAccess();SetState("One restart attempt; no retries...");
     try
     {
-      await Rc3040sManagementService.RestartAsync(
-        context.Settings.Rotator.Host,snapshot.Firmware,snapshot.DeviceIdSuffix,lifetime.Token);
-      SetState("Restart sent, reboot not verified. Inspect before moving.");
+      var motor=rotator.EngineForRc3040s;
+      if(motor is null)throw new InvalidOperationException("No RC-3040S motor worker.");
+      using var lease=await motor.AcquireManagementLeaseAsync(lifetime.Token);
+      if(lease is null)throw new InvalidOperationException("STOP/feedback safety check failed.");
+      try
+      {
+        await Rc3040sManagementService.RestartAsync(
+          context.Settings.Rotator.Host,snapshot.Firmware,snapshot.DeviceIdSuffix,lifetime.Token);
+        SetState("Restart command sent; reboot unverified. Reapply settings.");
+      }
+      finally {motor.LatchAfterManagementChange();}
     }
     catch(OperationCanceledException) when(lifetime.IsCancellationRequested){}
     catch(Exception ex) { SetState("Restart result UNKNOWN: "+ex.Message); }
