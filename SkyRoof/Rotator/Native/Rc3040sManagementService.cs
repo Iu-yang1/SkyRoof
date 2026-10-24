@@ -257,7 +257,8 @@ internal static class Rc3040sManagementService
 
   internal static async Task<SpeedWriteResult> SaveSpeedAsync(
     string host,bool azimuth,int desired,CancellationToken token=default,
-    Action? onCommandAttempt=null)
+    Action? onCommandAttempt=null,string? expectedFirmware=null,
+    string? expectedIdSuffix=null)
   {
     string command=SpeedCommand(azimuth,desired);
     Snapshot original=new(null,null,null,null,null,0,false);
@@ -280,6 +281,10 @@ internal static class Rc3040sManagementService
         if(original.Firmware is null || original.DeviceIdSuffix is null)
           return new SpeedWriteResult(original,null,SpeedWriteOutcome.Failed,
             desired,false,"Preflight identity incomplete; AT command NOT sent.");
+        if(expectedFirmware!=null && original.Firmware!=expectedFirmware ||
+           expectedIdSuffix!=null && original.DeviceIdSuffix!=expectedIdSuffix)
+          return new SpeedWriteResult(original,null,SpeedWriteOutcome.Failed,
+            desired,false,"Preflight device differs from earlier UI read; AT command NOT sent.");
 
         // Mark the safety latch BEFORE the potentially transmitted SendAsync.
         // Cancellation/disposal after this point must not re-enable motion.
