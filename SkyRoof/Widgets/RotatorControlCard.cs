@@ -296,7 +296,7 @@ namespace SkyRoof
         SkyRoof.NativeRotator.RotatorProtocolKind.Rc3040sLan;
       Rc3040sButton.Visible = rc3040s;
       QuickControls.Visible = rc3040s;
-      int desiredHeight = rc3040s ? 600 : 386;
+      int desiredHeight = rc3040s ? 640 : 386;
       if(Height != desiredHeight)
       {
         // Keep the entire fixed-layout card scaled together; never add

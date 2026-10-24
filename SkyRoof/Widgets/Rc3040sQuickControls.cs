@@ -31,7 +31,7 @@ internal sealed class Rc3040sQuickControls : UserControl
 
   internal Rc3040sQuickControls()
   {
-    Size = new Size(318, 216);
+    Size = new Size(318, 250);
     Margin = Padding.Empty;
     title.SetBounds(12, 3, 294, 19);
     title.Text = "RC-3040S · Rotation speed";
@@ -46,11 +46,11 @@ internal sealed class Rc3040sQuickControls : UserControl
     el.Scroll += (_,_) => {if (!settingValues) dirtyEl=true; Display();};
     Controls.Add(az); Controls.Add(el);
 
-    read.SetBounds(12, 149, 49, 25);
-    saveAz.SetBounds(66, 149, 57, 25);
-    saveEl.SetBounds(128, 149, 57, 25);
-    revert.SetBounds(190, 149, 56, 25);
-    restart.SetBounds(251, 149, 55, 25);
+    read.SetBounds(12, 145, 91, 27);
+    revert.SetBounds(111, 145, 91, 27);
+    restart.SetBounds(210, 145, 96, 27);
+    saveAz.SetBounds(12, 181, 142, 27);
+    saveEl.SetBounds(164, 181, 142, 27);
     foreach(var button in new[]{read,saveAz,saveEl,revert,restart}) Controls.Add(button);
     read.Click += async (_,_)=>await ReadAsync();
     saveAz.Click += async (_,_)=>await SaveAsync(true);
@@ -58,7 +58,7 @@ internal sealed class Rc3040sQuickControls : UserControl
     revert.Click += (_,_)=>RevertSliders();
     restart.Click += async (_,_)=>await RestartAsync();
 
-    state.SetBounds(12, 179, 294, 32);
+    state.SetBounds(12, 213, 294, 32);
     state.AutoEllipsis=true;state.ForeColor=SystemColors.GrayText;
     state.Text="Read speed to begin";
     Controls.Add(state);

@@ -81,7 +81,7 @@ namespace SkyRoof
     public Rc3040sMotionProfile Rc3040sMotionMode { get; set; } = Rc3040sMotionProfile.Direct;
 
     [DisplayName("RC-3040S Motion Planner Enabled")]
-    [Description("Opt-in software setpoint planning; not native hardware speed control.")]
+    [Description("Enable the selected motion profile.")]
     [DefaultValue(false)]
     public bool Rc3040sPlannerEnabled { get; set; }
 
@@ -102,12 +102,12 @@ namespace SkyRoof
     public double Rc3040sPlanJerk { get; set; } = 1.5;
 
     [DisplayName("RC-3040S Motion Hardware Validated")]
-    [Description("Explicit operator acknowledgement of physical calibration and STOP/limits verification; this does NOT prove hardware obeys the software S-curve.")]
+    [Description("Enable only after checking the actual motor and limits.")]
     [DefaultValue(false)]
     public bool Rc3040sMotionHardwareValidated { get; set; } = false;
 
     [DisplayName("RC-3040S AT Readback")]
-    [Description("WebSocket/60030 on-demand management: read-only unless explicitly saved.")]
+    [Description("Allow device speed readback and manual management.")]
     [DefaultValue(true)]
     public bool Rc3040sAtEnabled { get; set; } = true;
 

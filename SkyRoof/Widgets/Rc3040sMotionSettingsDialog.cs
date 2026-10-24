@@ -29,7 +29,6 @@ internal sealed class Rc3040sMotionSettingsDialog : Form
     settings=options;persist=saveSettings;
     Text="RC-3040S · Motion Settings";
     ClientSize=new Size(490,436);
-    MinimumSize=MaximumSize=Size;
     AutoScaleMode=AutoScaleMode.Font;
     FormBorderStyle=FormBorderStyle.FixedDialog;
     StartPosition=FormStartPosition.CenterParent;
@@ -67,12 +66,9 @@ internal sealed class Rc3040sMotionSettingsDialog : Form
 
     availability.SetBounds(17,389,245,29);
     availability.ForeColor=SystemColors.GrayText;Controls.Add(availability);
-    defaults.SetBounds(262,394,68,28);
-    save.SetBounds(337,394,91,28);
-    cancel.SetBounds(434,394,43,28);
-    // The compact Cancel button uses a close glyph to preserve room at 100–150% DPI.
-    cancel.Text="×";
-    new ToolTip().SetToolTip(cancel,"Cancel without saving");
+    defaults.SetBounds(204,394,78,28);
+    save.SetBounds(290,394,91,28);
+    cancel.SetBounds(389,394,88,28);
     defaults.Click+=(_,_)=>RestoreDefaults();
     save.Click+=(_,_)=>Commit();
     cancel.Click+=(_,_)=>{DialogResult=DialogResult.Cancel;Close();};
