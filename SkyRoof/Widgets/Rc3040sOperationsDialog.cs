@@ -34,7 +34,7 @@ internal sealed class Rc3040sOperationsDialog : Form
   {
     rotor=widget;settings=options;
     Text="RC-3040S LAN | Motion & AT Management";
-    ClientSize=new Size(475,465);
+    ClientSize=new Size(475,430);
     AutoScaleMode=AutoScaleMode.Font;
     FormBorderStyle=FormBorderStyle.FixedDialog;
     StartPosition=FormStartPosition.CenterParent;
@@ -42,21 +42,21 @@ internal sealed class Rc3040sOperationsDialog : Form
     MinimizeBox=false;
     Controls.Add(Label("GS-232B motor TCP/60020  |  WebSocket management TCP/60030",12,12,451,23));
     firmware.SetBounds(12,42,451,19);firmware.Text="Firmware: not read";Controls.Add(firmware);
-    actual.SetBounds(12,66,451,18);actual.Text="AZ/EL raw speeds: unknown";Controls.Add(actual);
+    actual.SetBounds(12,66,451,18);actual.Text="Rotation speed: not read";Controls.Add(actual);
     read.SetBounds(12,91,112,29);read.Click+=async(_,_)=>await ReadDeviceAsync();
     reset.SetBounds(135,91,116,29);reset.Click+=(_,_)=>RestoreSliders();
     Controls.Add(read);Controls.Add(reset);
 
-    Controls.Add(Label("AZ raw speed · proposed value",12,137,265,19));
-    az.SetBounds(12,160,330,35);az.Minimum=15;az.Maximum=10000;
-    az.TickFrequency=1000;az.SmallChange=100;az.LargeChange=500;
+    Controls.Add(Label("AZ rotation speed (°/s)",12,137,265,19));
+    az.SetBounds(12,160,330,35);az.Minimum=100;az.Maximum=Rc3040sManagementService.SpeedUnits.SliderMaximum(true,10000);
+    az.TickFrequency=50;az.SmallChange=5;az.LargeChange=25;
     az.Enabled=false;Controls.Add(az);
     azValue.SetBounds(349,158,114,31);Controls.Add(azValue);
     az.Scroll+=(_,_)=>{if(!updating)dirtyAz=true;ShowValues();};
 
-    Controls.Add(Label("EL raw speed · proposed value",12,203,265,19));
-    el.SetBounds(12,227,330,35);el.Minimum=15;el.Maximum=10000;
-    el.TickFrequency=1000;el.SmallChange=100;el.LargeChange=500;
+    Controls.Add(Label("EL rotation speed (°/s)",12,203,265,19));
+    el.SetBounds(12,227,330,35);el.Minimum=100;el.Maximum=Rc3040sManagementService.SpeedUnits.SliderMaximum(false,10000);
+    el.TickFrequency=50;el.SmallChange=5;el.LargeChange=25;
     el.Enabled=false;Controls.Add(el);
     elValue.SetBounds(349,225,114,31);Controls.Add(elValue);
     el.Scroll+=(_,_)=>{if(!updating)dirtyEl=true;ShowValues();};
@@ -64,17 +64,17 @@ internal sealed class Rc3040sOperationsDialog : Form
     saveAz.Click+=async(_,_)=>await SaveSpeedAsync(true);
     saveEl.Click+=async(_,_)=>await SaveSpeedAsync(false);
     Controls.Add(saveAz);Controls.Add(saveEl);
-    Controls.Add(Label("Sliders are local until Save. EEPROM effects are unverified.",12,313,451,26));
+    Controls.Add(Label("Drag to adjust · Save each axis separately",12,308,451,24));
 
-    Controls.Add(Label("Device actions",12,345,260,19));
-    reboot.SetBounds(343,367,118,29);motion.SetBounds(12,367,165,29);
+    Controls.Add(Label("Device actions",12,334,260,19));
+    reboot.SetBounds(343,356,118,29);motion.SetBounds(12,356,165,29);
     reboot.Click+=async(_,_)=>await RestartAsync();
     motion.Click+=(_,_)=>{
       using var dialog=new Rc3040sMotionSettingsDialog(rotor.ctx.Settings.Rotator,rotor.ctx.Settings.SaveToFile);
       dialog.ShowDialog(this);
     };
     Controls.Add(reboot);Controls.Add(motion);
-    status.SetBounds(12,412,451,45);status.ForeColor=SystemColors.GrayText;Controls.Add(status);
+    status.SetBounds(12,388,451,36);status.ForeColor=SystemColors.GrayText;Controls.Add(status);
     refresh.Tick+=(_,_)=>RefreshButtons();refresh.Start();
     RefreshButtons();ShowValues();
     Shown+=async(_,_)=>await ReadDeviceAsync();
@@ -97,8 +97,8 @@ internal sealed class Rc3040sOperationsDialog : Form
     reset.Enabled=!busy && snapshot!=null;
     az.Enabled=el.Enabled=safe && snapshot?.AzRaw is >=15 and <=10000 &&
       snapshot?.ElRaw is >=15 and <=10000;
-    saveAz.Enabled=safe && dirtyAz && az.Enabled;
-    saveEl.Enabled=safe && dirtyEl && el.Enabled;
+    saveAz.Enabled=safe && dirtyAz && az.Enabled && snapshot?.AzRaw!=SelectedRaw(true,az);
+    saveEl.Enabled=safe && dirtyEl && el.Enabled && snapshot?.ElRaw!=SelectedRaw(false,el);
     reboot.Enabled=safe && snapshot?.Firmware!=null &&
       snapshot.DeviceIdSuffix!=null;
     motion.Enabled=!busy;
@@ -109,24 +109,35 @@ internal sealed class Rc3040sOperationsDialog : Form
         "AT writes locked: stop TRACK / PARK first.";
   }
 
+  private static int SelectedRaw(bool azimuth,TrackBar slider) =>
+    Rc3040sManagementService.SpeedUnits.RawFromSlider(azimuth,slider.Value,15,10000);
+
   private void ShowValues()
   {
-    azValue.Text=snapshot==null ? "Unknown" : az.Value.ToString("D5",CultureInfo.InvariantCulture);
-    elValue.Text=snapshot==null ? "Unknown" : el.Value.ToString("D5",CultureInfo.InvariantCulture);
+    azValue.Text=snapshot==null?"Unknown":$"{az.Value/100.0:0.00} °/s";
+    elValue.Text=snapshot==null?"Unknown":$"{el.Value/100.0:0.00} °/s";
     if(snapshot is not null)
-      actual.Text=$"Device snapshot: AZ={snapshot.AzRaw?.ToString("D5")??"unknown"}  EL={snapshot.ElRaw?.ToString("D5")??"unknown"}";
+      actual.Text=$"Saved: AZ {SpeedLabel(true,snapshot.AzRaw)}   EL {SpeedLabel(false,snapshot.ElRaw)}";
     RefreshButtons();
   }
+  private static string SpeedLabel(bool azimuth,int? raw) =>
+    raw.HasValue?Rc3040sManagementService.SpeedUnits.Display(azimuth,raw.Value):"Unknown";
+
   private void RestoreSliders()
   {
     if(snapshot?.AzRaw is not int a || snapshot.ElRaw is not int e)return;
     if(a is <15 or >10000 || e is <15 or >10000)
     {
-      status.Text="Current raw speeds outside slider range (15-10000); read-only view.";
+      status.Text="Speed outside slider range; read-only.";
       return;
     }
     updating=true;
-    try {az.Value=a;el.Value=e;dirtyAz=dirtyEl=false;}
+    try
+    {
+      az.Value=Math.Clamp(Rc3040sManagementService.SpeedUnits.SliderTick(true,a),az.Minimum,az.Maximum);
+      el.Value=Math.Clamp(Rc3040sManagementService.SpeedUnits.SliderTick(false,e),el.Minimum,el.Maximum);
+      dirtyAz=dirtyEl=false;
+    }
     finally {updating=false;}
     ShowValues();
   }
@@ -146,7 +157,7 @@ internal sealed class Rc3040sOperationsDialog : Form
       RestoreSliders();
       status.Text=current.AzRaw is null || current.ElRaw is null
         ? "Speed fields not received; writing disabled. No automatic retry."
-        : "Device raw speed snapshot obtained. No configuration write occurred.";
+        : "Speeds loaded.";
     }
     catch(OperationCanceledException)when(cancel.IsCancellationRequested){}
     catch(Exception ex){if(!IsDisposed)status.Text="Management read failed: "+ex.Message;}
@@ -157,11 +168,11 @@ internal sealed class Rc3040sOperationsDialog : Form
   {
     if(busy || !CanEditHardware || snapshot is null || !settings.Rc3040sAtEnabled)return;
     int before=azimuth?(snapshot.AzRaw??-1):(snapshot.ElRaw??-1);
-    int proposed=azimuth?az.Value:el.Value;
+    int proposed=azimuth?SelectedRaw(true,az):SelectedRaw(false,el);
     if(before<15 || before>10000 || proposed==before)return;
     string axis=azimuth?"AZ":"EL",phrase=$"SAVE-{axis}-{proposed:D5}";
     if(!ConfirmTwice(
-      $"{axis}: {before:D5} -> {proposed:D5}\nThis may write EEPROM and change motor speed.\nMotor must be isolated or safely stopped.",
+      $"{axis}: {SpeedLabel(azimuth,before)} → {SpeedLabel(azimuth,proposed)}\nVerify the motor is stopped before saving.",
       phrase))return;
     if(!CanEditHardware)return;
     busy=true;status.Text=$"Writing {axis} once; no automatic retries...";
@@ -178,9 +189,19 @@ internal sealed class Rc3040sOperationsDialog : Form
           settings.Host,azimuth,proposed,cancel.Token);
         if(!IsDisposed)
         {
-          snapshot=result.After;
-          RestoreSliders();
-          status.Text=$"{axis} config readback matched. EEPROM/motor UNVERIFIED; reapply settings.";
+          if(result.After is not null)snapshot=result.After;
+          if(result.Outcome==Rc3040sManagementService.SpeedWriteOutcome.Applied)
+          {
+            RestoreSliders();
+            status.Text=$"{axis}: saved. Reapply rotator settings.";
+          }
+          else status.Text=result.Outcome switch
+          {
+            Rc3040sManagementService.SpeedWriteOutcome.Unchanged => $"{axis}: device speed unchanged.",
+            Rc3040sManagementService.SpeedWriteOutcome.EchoOnly => $"{axis}: echo received; value unchanged.",
+            Rc3040sManagementService.SpeedWriteOutcome.ReadbackUnavailable => $"{axis}: readback unavailable.",
+            _ => $"{axis}: save not verified."
+          };
         }
       }
       finally {motor.LatchAfterManagementChange();}
