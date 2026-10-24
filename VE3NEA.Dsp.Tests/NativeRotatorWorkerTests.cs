@@ -143,6 +143,48 @@ public sealed class NativeRotatorWorkerTests
     Assert.Equal(1,server.Count("W090 030"));
   }
 
+  [Fact]
+  public async Task Rc3040sManagementLeaseBlocksNewMotionWhileStopIsTransmitted()
+  {
+    await using var server=new FakeGs232Bridge();
+    var config=CreateSettings(server.Port);
+    config.NativeProtocol=RotatorProtocolKind.Rc3040sLan;
+    using var engine=new NativeRotatorControlEngine(config);
+    await UntilAsync(()=>engine.IsReady && engine.LastReadBearing!=null);
+    using var lease=await engine.AcquireManagementLeaseAsync();
+    Assert.NotNull(lease);
+    await UntilAsync(()=>server.Count("S")>=1);
+    engine.RotateTo(new SkyRoof.Bearing(120*Math.PI/180,30*Math.PI/180));
+    engine.StartContinuousMove(RotatorContinuousDirection.Right);
+    await Task.Delay(450);
+    Assert.DoesNotContain(server.Commands,x=>x.StartsWith("W",StringComparison.Ordinal));
+    Assert.Equal(0,server.Count("R"));
+    // Even if EEPROM operation completes, motor control remains latched
+    // until the operator inspects hardware and explicitly reapplies settings.
+    engine.LatchAfterManagementChange();
+    Assert.True(engine.PositionFaulted);
+    lease!.Dispose();
+    engine.RotateTo(new SkyRoof.Bearing(120*Math.PI/180,30*Math.PI/180));
+    await Task.Delay(350);
+    Assert.DoesNotContain(server.Commands,x=>x.StartsWith("W",StringComparison.Ordinal));
+  }
+
+  [Fact]
+  public async Task Rc3040sReferencePlannerCannotRunWithoutPhysicalValidation()
+  {
+    await using var server=new FakeGs232Bridge();
+    var config=CreateSettings(server.Port);
+    config.NativeProtocol=RotatorProtocolKind.Rc3040sLan;
+    config.Rc3040sPlannerEnabled=true;
+    config.Rc3040sMotionHardwareValidated=false;
+    config.Rc3040sMotionMode=Rc3040sMotionProfile.SCurve;
+    using var engine=new NativeRotatorControlEngine(config);
+    await UntilAsync(()=>engine.IsReady && engine.LastReadBearing!=null);
+    engine.RotateTo(new SkyRoof.Bearing(120*Math.PI/180,30*Math.PI/180));
+    await UntilAsync(()=>server.Count("W120 030")>0);
+    Assert.Equal(1,server.Count("W120 030")); // baseline direct path
+  }
+
   private static RotatorSettings CreateSettings(int port)=>new()
   {
     Enabled=true,
