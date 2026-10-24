@@ -25,6 +25,25 @@ public sealed class DtracNrl2Tests
     Assert.Equal(command,Encoding.ASCII.GetString(frame,48,frame.Length-48));
     Assert.False(DtracNrl2Codec.TryDecodeReply(frame,Rid,Sid,out _));
   }
+  [Fact]
+  public void Nrl2LegacySettingsRemainButAreSafelyDisabledAtLoad()
+  {
+    var settings = new RotatorSettings
+    {
+      DriverMode = RotatorDriverMode.Native,
+      NativeProtocol = RotatorProtocolKind.DtracNrl2,
+      Enabled = true
+    };
+    settings.MigrateDriverMode();
+    Assert.False(settings.Enabled);
+    Assert.Equal(RotatorProtocolKind.DtracNrl2,settings.NativeProtocol);
+    Assert.False(NativeRotatorCodec.Supports(RotatorProtocolKind.DtracNrl2,RotatorTransportKind.Udp));
+    var converter = new RotatorProtocolSelectionConverter();
+    var offered = converter.GetStandardValues(null)!.Cast<RotatorProtocolKind>().ToArray();
+    Assert.DoesNotContain(RotatorProtocolKind.DtracNrl2,offered);
+    Assert.Contains(RotatorProtocolKind.Rc3040sLan,offered);
+  }
+
   [Fact] public void RepliesAreMatchedToBothIdentifiers()
   {
     var frame=DtracNrl2Codec.BuildCommand(Rid,Sid,"AZ=180  EL=030\r\n"u8);
@@ -45,7 +64,8 @@ public sealed class DtracNrl2Tests
   {
     var settings=new RotatorSettings{NativeProtocol=RotatorProtocolKind.DtracNrl2};
     Assert.Equal(RotatorTransportKind.Udp,settings.NativeTransport);
-    Assert.True(NativeRotatorCodec.Supports(RotatorProtocolKind.DtracNrl2,RotatorTransportKind.Udp));
+    // NRL2 wire-format tests remain, but operational UDP is hidden/disabled.
+    Assert.False(NativeRotatorCodec.Supports(RotatorProtocolKind.DtracNrl2,RotatorTransportKind.Udp));
     Assert.False(NativeRotatorCodec.Supports(RotatorProtocolKind.DtracNrl2,RotatorTransportKind.Tcp));
     Assert.Equal("C2\r\n",Encoding.ASCII.GetString(NativeRotatorCodec.Query(RotatorProtocolKind.DtracNrl2)!));
     Assert.Equal("S\r\n",Encoding.ASCII.GetString(NativeRotatorCodec.Stop(RotatorProtocolKind.DtracNrl2)!));

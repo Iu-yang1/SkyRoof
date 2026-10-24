@@ -17,7 +17,7 @@ namespace SkyRoof
     internal string DtracDemoProgressText => demoSequence == null ? "Idle" :
       $"{demoSequence.Index+1}/{demoSequence.Count}";
     internal bool DtracNrlOperationsAvailable =>
-      ctx?.Settings.Rotator.NativeProtocol == SkyRoof.NativeRotator.RotatorProtocolKind.DtracNrl2 &&
+      false && ctx?.Settings.Rotator.NativeProtocol == SkyRoof.NativeRotator.RotatorProtocolKind.DtracNrl2 &&
       engine is NativeRotatorControlEngine native && native.IsReady &&
       !native.PositionFaulted && !TrackCheckbox.Checked;
 

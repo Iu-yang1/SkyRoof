@@ -287,8 +287,9 @@ namespace SkyRoof
         "Satellite " +
         FormatBearing(satellite);
 
-      DtracButton.Visible=ctx.Settings.Rotator.NativeProtocol ==
-        SkyRoof.NativeRotator.RotatorProtocolKind.DtracNrl2;
+      // NRL2 UDP control is suspended. The old protocol implementation and
+      // settings remain available in source for future reactivation.
+      DtracButton.Visible=false;
       if(dtracFooter!=null)dtracFooter.Size=DtracButton.Visible?new Size(204,20):new Size(292,20);
       bool enabled = ctx.Settings.Rotator.Enabled;
       bool connected = rotator.IsRunning();

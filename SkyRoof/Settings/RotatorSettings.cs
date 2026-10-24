@@ -36,6 +36,11 @@ namespace SkyRoof
     // remain untouched; custom remote rotctld endpoints are preserved.
     public void MigrateDriverMode()
     {
+      // Preserve legacy NRL2 identifiers/settings, but NEVER automatically
+      // translate their endpoint to the unrelated local TCP/60020 controller.
+      // Disable the old UDP driver safely before SkyRoof starts its I/O worker.
+      if (NativeProtocol == NativeRotator.RotatorProtocolKind.DtracNrl2)
+        Enabled = false;
       if (DriverMode != RotatorDriverMode.Auto) return;
       DriverMode = ResolveUseNativeDriver()
         ? RotatorDriverMode.Native
@@ -59,6 +64,7 @@ namespace SkyRoof
 
     private SkyRoof.NativeRotator.RotatorProtocolKind nativeProtocol = SkyRoof.NativeRotator.RotatorProtocolKind.Gs232;
     [DisplayName("Native Protocol")]
+    [TypeConverter(typeof(RotatorProtocolSelectionConverter))]
     [DefaultValue(SkyRoof.NativeRotator.RotatorProtocolKind.Gs232)]
     public SkyRoof.NativeRotator.RotatorProtocolKind NativeProtocol
     {

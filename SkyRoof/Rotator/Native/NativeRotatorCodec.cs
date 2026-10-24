@@ -25,7 +25,10 @@ public static class NativeRotatorCodec
   public static bool Supports(RotatorProtocolKind protocol, RotatorTransportKind transport) => protocol switch
   {
     RotatorProtocolKind.Rotctld or RotatorProtocolKind.Oz9AarUrc or RotatorProtocolKind.Rc3040sLan => transport == RotatorTransportKind.Tcp,
-    RotatorProtocolKind.PstRotator or RotatorProtocolKind.DtracNrl2 => transport == RotatorTransportKind.Udp,
+    RotatorProtocolKind.PstRotator => transport == RotatorTransportKind.Udp,
+    // Kept for loading legacy configurations and offline protocol research,
+    // but temporarily removed as an operational control driver.
+    RotatorProtocolKind.DtracNrl2 => false,
     RotatorProtocolKind.CustomTemplate => true,
     _ => transport is RotatorTransportKind.Serial or RotatorTransportKind.Tcp
   };

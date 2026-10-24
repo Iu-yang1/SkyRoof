@@ -19,6 +19,22 @@ namespace SkyRoof
       new(new[] { RotatorDriverMode.Native, RotatorDriverMode.LegacyRotctld });
   }
 
+  /// <summary>
+  /// Keep obsolete DTrac NRL2 enum identity stable for Settings.json but do not
+  /// offer UDP relay control as a selectable driver. The retained codec can
+  /// still be independently regression-tested without opening a socket.
+  /// </summary>
+  public sealed class RotatorProtocolSelectionConverter : EnumConverter
+  {
+    public RotatorProtocolSelectionConverter()
+      : base(typeof(RotatorProtocolKind)) { }
+    public override bool GetStandardValuesSupported(ITypeDescriptorContext? context) => true;
+    public override bool GetStandardValuesExclusive(ITypeDescriptorContext? context) => true;
+    public override StandardValuesCollection GetStandardValues(ITypeDescriptorContext? context) =>
+      new(Enum.GetValues<RotatorProtocolKind>()
+        .Where(p => p != RotatorProtocolKind.DtracNrl2).ToArray());
+  }
+
   // The existing Settings.json stays unchanged. Filter only the nested
   // WinForms PropertyGrid descriptors, not the serialized settings object.
   // This also preserves all inactive protocol/transport values when users
@@ -96,7 +112,9 @@ namespace SkyRoof
         return base.GetProperties(context, value, attributes)!;
 
       bool native = settings.ResolveUseNativeDriver();
-      bool dtrac = native && settings.NativeProtocol == RotatorProtocolKind.DtracNrl2;
+      // Legacy NRL2 settings are retained in Settings.json but hidden while
+      // the operational UDP driver is suspended.
+      bool dtrac = false;
       bool rc3040Lan = native && settings.NativeProtocol == RotatorProtocolKind.Rc3040sLan;
       bool serial = settings.NativeTransport == RotatorTransportKind.Serial;
       bool custom = settings.NativeProtocol == RotatorProtocolKind.CustomTemplate;
