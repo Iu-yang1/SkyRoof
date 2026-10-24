@@ -40,7 +40,7 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
   private Bearing? requested,lastRead,lastWritten;
   private DateTime lastReadUtc = DateTime.MinValue;
   private volatile bool stopping,stopRequested;
-  private bool connected,safetyLatched,requiresStopAfterReconnect;
+  private bool connected,safetyLatched,requiresStopAfterReconnect,managementHeld;
   private int? manualDirection,appliedDirection;
   private byte[]? lastWire;
   private string? error;
@@ -102,7 +102,7 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
        bearing.ElDeg<settings.MinElevation||bearing.ElDeg>settings.MaxElevation)return;
     lock(sync)
     {
-      if(stopping || safetyLatched)return;
+      if(stopping || safetyLatched || managementHeld)return;
       // Never send a new target before the first real position observation,
       // or after feedback becomes stale. Open-loop protocols need a separate
       // explicit user opt-in.
@@ -121,7 +121,7 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
     if(!NativeRotatorCodec.CanJog(settings.NativeProtocol))return;
     lock(sync)
     {
-      if(stopping || safetyLatched)return;
+      if(stopping || safetyLatched || managementHeld)return;
       if(!settings.NativeAllowOpenLoopMotion && !HasFreshPositionLocked())return;
       int value=(int)direction;
       if(value is not (2 or 4 or 8 or 16))return;
@@ -145,6 +145,70 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
     }
     wake.Set();
   }
+  /// <summary>
+  /// Prevent *all new motor positioning and manual jogs* during a one-shot
+  /// WS/60030 management write or restart. Only STOP and feedback polling
+  /// remain permitted on TCP/60020. This is a motor command serialization
+  /// lease, not evidence of a physically stopped shaft.
+  /// </summary>
+  internal async Task<IDisposable?> AcquireManagementLeaseAsync(
+    CancellationToken cancellationToken=default)
+  {
+    lock(sync)
+    {
+      if(managementHeld || stopping || safetyLatched ||
+         !HasFreshPositionLocked())
+        return null;
+      managementHeld=true;
+      requested=lastWritten=null;manualDirection=null;lastWire=null;
+      stopCompleted.Reset();stopRequested=true;commandVersion++;
+    }
+    wake.Set();
+    try
+    {
+      if(!await WaitForStopTransmissionAsync(2500,cancellationToken)
+        .ConfigureAwait(false))
+      {
+        ReleaseManagementLease();
+        return null;
+      }
+      return new ManagementLease(this);
+    }
+    catch
+    {
+      ReleaseManagementLease();
+      throw;
+    }
+  }
+
+  internal void LatchAfterManagementChange()
+  {
+    // A sent firmware command does not prove STOP, EEPROM commit, speed
+    // stabilization or restart. Require operator inspection and re-apply
+    // device settings before any new motor movement.
+    lock(sync)
+    {
+      safetyLatched=true;requiresStopAfterReconnect=true;
+      requested=lastWritten=null;manualDirection=null;lastWire=null;
+      stopRequested=true;commandVersion++;
+      error="RC-3040S management change: inspect physical position and reapply rotator settings";
+    }
+    wake.Set();StateChanged();
+  }
+
+  private void ReleaseManagementLease()
+  {
+    lock(sync)managementHeld=false;
+    StateChanged();
+  }
+
+  private sealed class ManagementLease : IDisposable
+  {
+    private NativeRotatorControlEngine? owner;
+    internal ManagementLease(NativeRotatorControlEngine engine)=>owner=engine;
+    public void Dispose()=>Interlocked.Exchange(ref owner,null)?.ReleaseManagementLease();
+  }
+
   internal Task<bool> WaitForStopTransmissionAsync(int timeoutMilliseconds,
       CancellationToken cancellationToken=default)
   {
