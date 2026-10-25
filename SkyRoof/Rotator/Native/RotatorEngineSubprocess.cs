@@ -43,6 +43,17 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
   private RotatorWireMessage? newestTarget;
   private bool disposed,connected,ready,faulted=true,review,localSafetyLatched;
   private long nextId,readTicks,targetTicks,stopTicks,rateTicks;
+  private long lastHeartbeatTimestamp;
+  private const double HeartbeatTimeoutSeconds=5.0;
+  // A living PID is not proof that the motion controller is responsive.
+  // Stopwatch avoids invalidating the watchdog on system-clock corrections.
+  internal static bool IsHeartbeatExpired(long last,long now,long frequency,
+    double timeoutSeconds=HeartbeatTimeoutSeconds) =>
+    last>0 && frequency>0 && now>=last &&
+    (now-last)/(double)frequency>=timeoutSeconds;
+  private bool HeartbeatExpired =>
+    IsHeartbeatExpired(Interlocked.Read(ref lastHeartbeatTimestamp),
+      Stopwatch.GetTimestamp(),Stopwatch.Frequency);
   private double? az,el,requestAz,requestEl,writtenAz,writtenEl,rateAz,rateEl;
   private string status="Starting isolated rotator controller";
   public event EventHandler? StatusChanged;
@@ -110,18 +121,23 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
     }
   }
   public bool IsRunning
-  {get {lock(sync)return !disposed && connected && !ChildExited;}}
+  {get {lock(sync)return !disposed && connected && !ChildExited && !HeartbeatExpired;}}
   public bool IsReady
-  {get {lock(sync)return !disposed && connected && ready && !ChildExited;}}
+  {get {lock(sync)return !disposed && connected && ready &&
+    !localSafetyLatched && !ChildExited && !HeartbeatExpired;}}
   public bool HasLiveConnection => IsRunning && IsReady;
   public bool PositionFaulted
-  {get {lock(sync)return faulted || disposed || ChildExited;}}
+  {get {lock(sync)return faulted || disposed || ChildExited || HeartbeatExpired;}}
   public bool ManagementReviewRequired
-  {get {lock(sync)return review;}}
+  {get {lock(sync)return review || HeartbeatExpired;}}
   public string GetStatusString()
-  {lock(sync)return ChildExited
-    ? "Rotator worker exited; STOP unverified. Reapply settings."
-    : status;}
+  {
+    lock(sync)return ChildExited
+      ? "Rotator worker exited; STOP unverified. Reapply settings."
+      : HeartbeatExpired
+        ? "Rotator worker heartbeat expired; motor STOP unverified. Reapply settings."
+        : status;
+  }
 
   private static Bearing? ToBearing(double? az,double? el) =>
     az.HasValue && el.HasValue
@@ -132,7 +148,8 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
     if(!double.IsFinite(bearing.AzDeg)||!double.IsFinite(bearing.ElDeg))return;
     lock(sync)
     {
-      if(disposed || ChildExited || faulted || !ready || !connected)return;
+      if(disposed || ChildExited || HeartbeatExpired ||
+         localSafetyLatched || faulted || !ready || !connected)return;
       requestAz=bearing.AzDeg;requestEl=bearing.ElDeg;
       newestTarget=new RotatorWireMessage{
         Type="move",Az=bearing.AzDeg,El=bearing.ElDeg};
@@ -285,6 +302,7 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
       using var writer=new StreamWriter(pipe,new UTF8Encoding(false),
         leaveOpen:true){AutoFlush=true};
       var writerTask=WriteCommandsAsync(writer);
+      var heartbeatWatch=WatchHeartbeatsAsync(cancel.Token);
       while(!cancel.IsCancellationRequested)
       {
         string? line=await reader.ReadLineAsync(cancel.Token)
@@ -299,6 +317,7 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
       }
       cancel.Cancel();SignalWriter();
       try{await writerTask.ConfigureAwait(false);}catch{}
+      try{await heartbeatWatch.ConfigureAwait(false);}catch(OperationCanceledException){}
     }
     catch(Exception ex) when(ex is not StackOverflowException)
     {
@@ -336,6 +355,38 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
         finally{child.Dispose();}
       });
     }
+  }
+
+  private async Task WatchHeartbeatsAsync(CancellationToken cancellationToken)
+  {
+    try
+    {
+      while(!cancellationToken.IsCancellationRequested)
+      {
+        await Task.Delay(350,cancellationToken).ConfigureAwait(false);
+        if(!HeartbeatExpired)continue;
+        bool newlyLatched=false;
+        lock(sync)
+        {
+          if(!disposed && !localSafetyLatched)
+          {
+            localSafetyLatched=true;faulted=true;ready=false;review=true;
+            newestTarget=null;
+            requestAz=requestEl=null;
+            status="Rotator heartbeat expired: STOP requested; physical STOP unverified. Reapply settings.";
+            newlyLatched=true;
+          }
+        }
+        if(newlyLatched)
+        {
+          Log.Error("Rotator child PID {Pid} stopped publishing telemetry. Latching motion and requesting priority STOP.",WorkerPid);
+          Enqueue("latch");
+          NotifyStatus();
+        }
+        return;
+      }
+    }
+    catch(OperationCanceledException){}
   }
 
   private async Task WriteCommandsAsync(StreamWriter writer)
@@ -382,6 +433,7 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
       Interlocked.Exchange(ref targetTicks,m.TargetTicks);
       Interlocked.Exchange(ref stopTicks,m.StopTicks);
       status=m.Status??"Rotator status unavailable";
+      Interlocked.Exchange(ref lastHeartbeatTimestamp,Stopwatch.GetTimestamp());
     }
     if(changed)NotifyStatus();
     if(posChanged)ui.Post(_=>{if(!disposed)BearingChanged?.Invoke(this,EventArgs.Empty);},null);
