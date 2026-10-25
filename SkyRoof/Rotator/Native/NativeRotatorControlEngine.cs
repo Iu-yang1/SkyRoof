@@ -795,12 +795,16 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
     wake.Set();
     // Do not hold up WinForms when no device is connected. When connected,
     // allow a bounded interval for a STOP write before aborting the handle.
-    if(IsRunning)
+    bool onUi=SynchronizationContext.Current is
+      System.Windows.Forms.WindowsFormsSynchronizationContext;
+    if(IsRunning && !onUi)
       stopCompleted.Wait(Math.Clamp(settings.NativeReadTimeout+100,200,1000));
     stopping=true;stop.Set();
     try{transport?.Abort();}catch{}
     wake.Set();
-    bool joined = Thread.CurrentThread != worker && worker.Join(2500);
+    // Never block the WinForms message pump on a hung vendor device or
+    // worker thread. Its I/O child can be terminated independently.
+    bool joined = Thread.CurrentThread != worker && !onUi && worker.Join(2500);
     if(!joined)
       Log.Warning("Native rotator worker shutdown timed out; inspect COM driver");
     // A wedged vendor serial driver may not release a blocked worker. Leave

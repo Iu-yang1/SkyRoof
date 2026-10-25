@@ -17,6 +17,12 @@ public interface IRotatorTransport : IDisposable
 public static class NativeTransportFactory
 {
   public static IRotatorTransport Create(RotatorSettings options) =>
+    IsolatedRotatorTransport.ShouldIsolateThisProcess()
+      ? new IsolatedRotatorTransport(options) : CreateDirect(options);
+
+  // The child alone owns OS serial/TCP/UDP handles. Tests hosted by
+  // testhost.exe retain the direct fake transport to test motion semantics.
+  internal static IRotatorTransport CreateDirect(RotatorSettings options) =>
     options.NativeTransport switch
   {
     RotatorTransportKind.Serial => new SerialTransport(options),
