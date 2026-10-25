@@ -96,6 +96,56 @@ public sealed class NativeRotatorWorkerTests
   }
 
   [Fact]
+  public async Task FullEngineStopPreemptsQueuedManualJogsAndBoundsQueue()
+  {
+    string? root=Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
+    if(string.IsNullOrWhiteSpace(root))return;
+    string exe=Path.Combine(root,"SkyRoof","bin","x64","Release",
+      "net10.0-windows7.0","SkyRoof.exe");
+    await using var server=new FakeGs232Bridge();
+    using var proxy=new RotatorEngineSubprocess(CreateSettings(server.Port),exe);
+    for(int i=0;i<120 && !proxy.IsReady;i++)await Task.Delay(50);
+    Assert.True(proxy.IsReady);
+    // Repeated mouse events must never create an unbounded IPC queue.
+    for(int i=0;i<5000;i++)
+    {
+      proxy.StartContinuousMove(i%2==0
+        ? RotatorContinuousDirection.Right
+        : RotatorContinuousDirection.Left);
+      Assert.InRange(proxy.PendingControlCommands,0,64);
+    }
+    proxy.StopRotation();
+    Assert.InRange(proxy.PendingControlCommands,0,64);
+    await UntilAsync(()=>server.Count("S")>0);
+    await Task.Delay(600);
+    string[] commands=server.Commands.ToArray();
+    int lastStop=Array.LastIndexOf(commands,"S");
+    Assert.True(lastStop>=0);
+    Assert.DoesNotContain(commands.Skip(lastStop+1),
+      x=>x is "R" or "L" or "U" or "D");
+  }
+
+  [Fact]
+  public async Task SecondMotionProcessCannotOwnAnAlreadyOpenController()
+  {
+    string? root=Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
+    if(string.IsNullOrWhiteSpace(root))return;
+    string exe=Path.Combine(root,"SkyRoof","bin","x64","Release",
+      "net10.0-windows7.0","SkyRoof.exe");
+    await using var server=new FakeGs232Bridge();
+    var cfg=CreateSettings(server.Port);
+    using var first=new RotatorEngineSubprocess(cfg,exe);
+    for(int i=0;i<120 && !first.IsReady;i++)await Task.Delay(50);
+    Assert.True(first.IsReady);
+    using var second=new RotatorEngineSubprocess(cfg,exe);
+    await Task.Delay(1250);
+    Assert.False(second.IsReady);
+    Assert.True(first.IsReady);
+    first.RotateTo(new SkyRoof.Bearing(Math.PI/2,Math.PI/6));
+    await UntilAsync(()=>server.Count("W090 030")>0);
+  }
+
+  [Fact]
   public async Task TrackDisabledPollsAtBoundedRateWithoutMotionOrBusyLoop()
   {
     await using var server=new FakeGs232Bridge();
