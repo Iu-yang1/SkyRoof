@@ -417,6 +417,29 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
     });
   }
 
+  private static FileStream AcquireExclusiveDeviceOwner(RotatorSettings settings)
+  {
+    string identity=settings.NativeTransport==RotatorTransportKind.Serial
+      ? "serial:"+settings.NativeSerialPort.Trim().ToUpperInvariant()
+      : settings.NativeTransport.ToString()+":"+settings.Host.Trim().ToLowerInvariant()+
+        ":"+settings.Port;
+    string fingerprint=Convert.ToHexString(
+      System.Security.Cryptography.SHA256.HashData(
+        Encoding.UTF8.GetBytes(identity)));
+    string directory=Path.Combine(Utils.GetUserDataFolder(),"WorkerLocks");
+    Directory.CreateDirectory(directory);
+    string path=Path.Combine(directory,"rotator-"+fingerprint+".lock");
+    try
+    {
+      return new FileStream(path,FileMode.OpenOrCreate,
+        FileAccess.ReadWrite,FileShare.None);
+    }
+    catch(IOException ex)
+    {
+      throw new IOException("Rotator hardware endpoint is already owned by another SkyRoof child process; refusing a second controller.",ex);
+    }
+  }
+
   internal static void RunChild(string[] args) =>
     RunChildAsync(args).GetAwaiter().GetResult();
 
@@ -440,6 +463,10 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
       var settings=JsonSerializer.Deserialize<RotatorSettings>(
         Convert.FromBase64String(args[2])) ??
         throw new InvalidDataException("Missing rotator engine configuration");
+      // Two generations of the motion engine must NEVER command the same
+      // hardware simultaneously, even if a user changes settings quickly.
+      // The OS releases this cross-process file lock after a process crash.
+      using var hardwareOwner=AcquireExclusiveDeviceOwner(settings);
       using var connection=new NamedPipeClientStream(".",args[1],
         PipeDirection.InOut,PipeOptions.Asynchronous);
       connection.Connect(4500);
