@@ -301,7 +301,10 @@ namespace VE3NEA.Dsp.Tests
         new BenchmarkScenario("exp_8db_15",800,15,8,0,-2),
         new BenchmarkScenario("exp_8db_10",800,10,8,0,-2),
         new BenchmarkScenario("exp_8db_5",800,5,8,0,-2),
-        new BenchmarkScenario("exp_doppler_15",800,15,8,10,-2)
+        new BenchmarkScenario("exp_doppler_15",800,15,8,10,-2),
+        new BenchmarkScenario("exp_8db_15_offset05",800,15,8,0,-2),
+        new BenchmarkScenario("exp_8db_15_offset10",800,15,8,0,-2),
+        new BenchmarkScenario("exp_equal_5_offset05",800,5,0,0,-2)
       };
       var rows=new List<object>();
       var at=new DateTime(2026,10,9,0,0,0,DateTimeKind.Utc);
@@ -309,11 +312,15 @@ namespace VE3NEA.Dsp.Tests
       {
         GeneratedMix mix=GenerateMix(scenario,
           "CQ DE K1ABC","CQ DE W9XYZ",24,27);
+        double frequencyBias=scenario.Name.EndsWith(
+          "offset05",StringComparison.Ordinal) ? 0.5 :
+          scenario.Name.EndsWith("offset10",StringComparison.Ordinal)
+          ? 1.0 : 0.0;
         CwSignalTrack[] tracks=
         [
-          MakeTrack(1,mix.EndFrequencyA,14,
+          MakeTrack(1,mix.EndFrequencyA+frequencyBias,14,
             scenario.DriftHzPerSecond),
-          MakeTrack(2,mix.EndFrequencyB,14+
+          MakeTrack(2,mix.EndFrequencyB-frequencyBias,14+
             scenario.PowerDeltaDb,-scenario.DriftHzPerSecond)
         ];
 
