@@ -183,7 +183,7 @@ GitHub Actions 的 `CW Pileup Real Model Benchmark` 产出
 
 在固定种子的合成 PCM、已知的两个正确轨迹和固定 DeepCW ONNX
 模型下，采用 10 组频率/频漂误差的 15 Hz／8 dB 场景，弱台平均
-CER 从 0.800 降至约 0.573，强台 CER 仍为 0。8 秒窗口在
+CER 从 0.800 降至约 0.591（另一轮为 0.573），强台 CER 仍为 0。8 秒窗口在
 Windows CI 上该批测试通常约 0.3–0.4 秒处理完，但不是完整应用
 8 路高负载的延迟上限。
 
