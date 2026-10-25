@@ -409,7 +409,16 @@ namespace SkyRoof.CW
         vetted[i]=track with {KeyingStatus=verified
           ? CwKeyingStatus.Verified : CwKeyingStatus.Candidate};
       }
-      latestTracks=vetted;
+      // Resolve co-keyed duplicates before they consume ONNX lanes or
+      // become independent competitors in the DeepCW soft mask.
+      // Only identities with corroborating fast/precision evidence retire.
+      CwIdentityResolution resolution =
+        CwTrackIdentityResolver.Resolve(
+          vetted,scan,snapshot.SampleRate,snapshot.EndSampleIndex);
+      Tracks.RetireAliases(resolution.RetiredTrackIds);
+      foreach(int id in resolution.RetiredTrackIds)
+        verifiedUntil.Remove(id);
+      latestTracks=resolution.Tracks;
       foreach(int id in verifiedUntil
         .Where(x=>x.Value<now).Select(x=>x.Key).ToArray())
         verifiedUntil.Remove(id);
