@@ -354,6 +354,10 @@ namespace SkyRoof
       if (!move.HasValue)
         return;
 
+      // Any real manual movement invalidates the last controller-PARK
+      // confirmation; it was never a mechanical home calibration.
+      parkControllerReportedHome=false;
+      lastParkFailure=null;
       // Manual ownership supersedes PARK and pre-position tracking exactly as
       // GO/manual-jog did before. During an active pass manual input remains
       // locked by IsManualControlLocked.
