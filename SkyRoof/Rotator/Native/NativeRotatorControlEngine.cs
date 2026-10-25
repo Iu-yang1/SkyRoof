@@ -27,7 +27,7 @@ internal interface IRotatorEngine : IDisposable
   void Retry();
 }
 
-internal sealed class NativeRotatorControlEngine : IRotatorEngine
+internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
 {
   private readonly RotatorSettings settings;
   private readonly bool plannerAuthorizedAtEngineStart;
@@ -61,7 +61,7 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
   private long connectionAttemptNumber;
   private readonly Rc3040sFeedbackEstimator rateEstimator=new();
   private Rc3040sFeedbackEstimator.Observation? latestRate;
-  internal Rc3040sFeedbackEstimator.Observation? LatestObservedRate
+  public Rc3040sFeedbackEstimator.Observation? LatestObservedRate
   {get{lock(sync)return latestRate;}}
   public event EventHandler? StatusChanged;
   public event EventHandler? BearingChanged;
@@ -71,17 +71,17 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
   public Bearing? LastReadBearing {get {lock(sync)return lastRead;}}
   public Bearing? LastWrittenBearing {get {lock(sync)return lastWritten;}}
   public DateTime LastSuccessfulBearingReadUtc {get {lock(sync)return lastReadUtc;}}
-  internal DateTime LastParkTargetWriteUtc {get {lock(sync)return lastTargetWriteUtc;}}
-  internal DateTime LastParkStopWriteUtc {get {lock(sync)return lastStopWriteUtc;}}
-  internal void SetParkDiagnostics(bool active)
+  public DateTime LastParkTargetWriteUtc {get {lock(sync)return lastTargetWriteUtc;}}
+  public DateTime LastParkStopWriteUtc {get {lock(sync)return lastStopWriteUtc;}}
+  public void SetParkDiagnostics(bool active)
   {
     lock(sync)parkDiagnosticsActive=active;
   }
   public bool PositionFaulted {get {lock(sync)return safetyLatched;}}
-  internal bool ManagementReviewRequired {get {lock(sync)return managementReviewRequired;}}
+  public bool ManagementReviewRequired {get {lock(sync)return managementReviewRequired;}}
   public bool IsRunning {get {lock(sync)return connected;}}
   public bool IsReady => Volatile.Read(ref ready) == 1;
-  internal bool HasLiveConnection => IsRunning && IsReady;
+  public bool HasLiveConnection => IsRunning && IsReady;
   public string GetStatusString() =>
     !IsRunning ? "Reconnecting" :
     !IsReady ? "Synchronizing" :
@@ -181,7 +181,7 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
   /// remain permitted on TCP/60020. This is a motor command serialization
   /// lease, not evidence of a physically stopped shaft.
   /// </summary>
-  internal async Task<IDisposable?> AcquireManagementLeaseAsync(
+  public async Task<IDisposable?> AcquireManagementLeaseAsync(
     CancellationToken cancellationToken=default)
   {
     lock(sync)
@@ -211,7 +211,7 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
     }
   }
 
-  internal void LatchAfterManagementChange()
+  public void LatchAfterManagementChange()
   {
     // Ambiguous write results and unavailable motor feedback remain locked.
     // Distinguish this state from an actual network disconnection.
@@ -231,7 +231,7 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
   /// healthy position sample from the independent motor TCP/60020 worker.
   /// Queued target and jog commands remain blocked until lease release.
   /// </summary>
-  internal async Task<bool> VerifyPostManagementFeedbackAsync(
+  public async Task<bool> VerifyPostManagementFeedbackAsync(
     CancellationToken cancellationToken=default)
   {
     DateTime checkpoint=DateTime.UtcNow;

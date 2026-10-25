@@ -17,7 +17,8 @@ public interface IRotatorTransport : IDisposable
 public static class NativeTransportFactory
 {
   public static IRotatorTransport Create(RotatorSettings options) =>
-    IsolatedRotatorTransport.ShouldIsolateThisProcess()
+    IsolatedRotatorTransport.ShouldIsolateThisProcess() &&
+    !RotatorEngineSubprocess.InChildEngine
       ? new IsolatedRotatorTransport(options) : CreateDirect(options);
 
   // The child alone owns OS serial/TCP/UDP handles. Tests hosted by
