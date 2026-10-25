@@ -22,12 +22,20 @@ namespace SkyRoof
     private Process? child;
     private NamedPipeServerStream? pipe;
     private string? activeKey;
-    private bool ready,disposed,expectedExit,restartBlocked;
+    private bool ready,disposed,restartBlocked;
+    // Stop intent belongs to a specific process, never a global boolean.
+    private readonly HashSet<Process> requestedStops=new();
     internal event EventHandler? ReadinessChanged;
+
+    private static bool ProcessAlive(Process? process)
+    {
+      try{return process!=null && !process.HasExited;}
+      catch(InvalidOperationException){return false;}
+    }
 
     internal bool IsRunning
     {
-      get { lock(gate) return ready && child is { HasExited:false }; }
+      get {lock(gate)return ready && ProcessAlive(child);}
     }
 
     internal void Apply(EmbeddedSkyCatSettings settings)
@@ -45,14 +53,14 @@ namespace SkyRoof
       lock(gate)
       {
         if(restartBlocked)return;
-        if(activeKey==key && child is { HasExited:false })return;
+        if(activeKey==key && ProcessAlive(child))return;
       }
       Stop();
       lock(gate)
       {
         // Never start a second owner of the serial port while a previous
         // worker remains alive. It must terminate before a new launch.
-        if(child is { HasExited:false })
+        if(ProcessAlive(child))
         {
           Log.Warning("Old SkyCAT child still exiting; refusing a second CI-V serial owner.");
           return;
@@ -84,7 +92,7 @@ namespace SkyRoof
         process=Process.Start(start) ?? throw new IOException("SkyCAT worker process failed to launch");
         lock(gate)
         {
-          child=process;pipe=created;activeKey=key;expectedExit=false;ready=false;
+          child=process;pipe=created;activeKey=key;ready=false;
         }
         _=MonitorAsync(process,created);
         Log.Information("Started isolated SkyCAT child PID={Pid}. CAT and CI-V are no longer in SkyRoof's UI process.",process.Id);
@@ -92,14 +100,13 @@ namespace SkyRoof
       catch(Exception ex)
       {
         created?.Dispose();
-        if(process is { HasExited:false })try{process.Kill();}catch{}
+        if(ProcessAlive(process))try{process!.Kill();}catch{}
         Log.Error(ex,"SkyCAT process launch failed");
       }
     }
 
     private async Task MonitorAsync(Process process,NamedPipeServerStream connection)
     {
-      bool unexpected=false;
       try
       {
         using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(6));
@@ -110,7 +117,7 @@ namespace SkyRoof
           throw new IOException("SkyCAT child rejected startup handshake");
         lock(gate)
         {
-          if(ReferenceEquals(process,child) && !expectedExit)
+          if(ReferenceEquals(process,child) && !requestedStops.Contains(process))
           {
             ready=true;
             restartBlocked=false;
@@ -122,17 +129,17 @@ namespace SkyRoof
       catch(Exception ex)
       {
         Log.Warning(ex,"SkyCAT child control channel closed before normal shutdown");
-        unexpected=true;
       }
       finally
       {
-        bool wasExpected;
+        bool wasExpected,isCurrent;
         lock(gate)
         {
-          wasExpected=expectedExit;
-          if(!wasExpected)restartBlocked=true;
-          if(ReferenceEquals(process,child))
+          wasExpected=requestedStops.Remove(process);
+          isCurrent=ReferenceEquals(process,child);
+          if(isCurrent)
           {
+            if(!wasExpected)restartBlocked=true;
             ready=false;
             activeKey=null;
             if(process.HasExited){child=null;pipe=null;}
@@ -144,7 +151,7 @@ namespace SkyRoof
         }
         connection.Dispose();
         process.Dispose();
-        if(!wasExpected)
+        if(!wasExpected && isCurrent)
         {
           Log.Warning("SkyCAT child exited. CAT controls remain disabled. Turn Embedded SkyCAT off then on to recover after verifying radio PTT.");
           ReadinessChanged?.Invoke(this,EventArgs.Empty);
@@ -177,39 +184,50 @@ namespace SkyRoof
       NamedPipeServerStream? connection;
       lock(gate)
       {
-        process=child;connection=pipe;expectedExit=true;ready=false;
-        activeKey=null;
+        process=child;connection=pipe;ready=false;activeKey=null;
+        if(process!=null)requestedStops.Add(process);
       }
       if(process==null)return;
-      try
-      {
-        if(connection?.IsConnected==true)
-        {
-          // A graceful EOF lets the child release SkyCAT-owned PTT/CW,
-          // restore CI-V configuration, and close the serial port.
-          connection.WriteByte((byte)'S');
-          connection.Flush();
-        }
-      }
-      catch(IOException){}
-      catch(ObjectDisposedException){}
-      // Never Wait/Join on a WinForms callback, including FormClosing.
-      _=Task.Run(async () =>
+      // No synchronous WriteByte/Flush on WinForms. A non-reading child
+      // cannot block repaint, settings changes or FormClosing.
+      _=Task.Run(async ()=>
       {
         try
         {
+          if(connection?.IsConnected==true)
+          {
+            using var writeDeadline=new CancellationTokenSource(
+              TimeSpan.FromSeconds(1));
+            try
+            {
+              await connection.WriteAsync(new byte[]{(byte)'S'},
+                writeDeadline.Token).ConfigureAwait(false);
+              await connection.FlushAsync(writeDeadline.Token)
+                .ConfigureAwait(false);
+            }
+            catch(Exception ex) when(ex is IOException or OperationCanceledException
+              or ObjectDisposedException or InvalidOperationException)
+            {
+              Log.Warning(ex,"SkyCAT child shutdown signal was not acknowledged");
+            }
+          }
           if(!process.HasExited)
           {
-            using var cts=new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            try{await process.WaitForExitAsync(cts.Token).ConfigureAwait(false);}
+            using var deadline=new CancellationTokenSource(
+              TimeSpan.FromSeconds(5));
+            try{await process.WaitForExitAsync(deadline.Token).ConfigureAwait(false);}
             catch(OperationCanceledException)
             {
-              Log.Error("SkyCAT child did not safely stop within 5s. Forcibly terminating; radio PTT must be checked.");
-              try{process.Kill(entireProcessTree:true);}catch{}
+              Log.Error("SkyCAT child failed to stop in 5s. Forcing exit; hardware PTT must be checked.");
+              if(!process.HasExited)
+                process.Kill(entireProcessTree:true);
             }
           }
         }
-        catch(InvalidOperationException){}
+        catch(Exception ex) when(ex is InvalidOperationException or ObjectDisposedException)
+        {
+          // MonitorAsync may have reaped this exact process already.
+        }
       });
     }
 

@@ -6,7 +6,7 @@ using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
-using System.Threading.Channels;
+using System.Linq;
 using System.Threading.Tasks;
 using Serilog;
 using SkyRoof.NativeRotator;
@@ -22,6 +22,7 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
 {
   internal static bool InChildEngine {get;private set;}
   internal int WorkerPid => child.Id;
+  internal bool WorkerExited => ChildExited;
   internal static bool ShouldHostWorker() =>
     !InChildEngine && string.Equals(
       System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name,
@@ -33,12 +34,14 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
   private readonly NamedPipeServerStream pipe;
   private readonly CancellationTokenSource cancel=new();
   private readonly SemaphoreSlim commandsAvailable=new(0);
-  private readonly Channel<RotatorWireMessage> highPriority=
-    Channel.CreateUnbounded<RotatorWireMessage>(
-      new UnboundedChannelOptions{SingleReader=true,SingleWriter=false});
+  // Motion commands are coalesced; administrative commands have a strict
+  // upper bound. STOP is inserted at the FRONT, never behind buffered jogs.
+  private readonly Queue<RotatorWireMessage> controlQueue=new();
+  private const int MaxQueuedControls=64;
+  private int writerWakePending;
   private readonly ConcurrentDictionary<long,TaskCompletionSource<bool>> pending=new();
   private RotatorWireMessage? newestTarget;
-  private bool disposed,connected,ready,faulted=true,review;
+  private bool disposed,connected,ready,faulted=true,review,localSafetyLatched;
   private long nextId,readTicks,targetTicks,stopTicks,rateTicks;
   private double? az,el,requestAz,requestEl,writtenAz,writtenEl,rateAz,rateEl;
   private string status="Starting isolated rotator controller";
@@ -98,17 +101,25 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
         : null;
     }
   }
+  private bool ChildExited
+  {
+    get
+    {
+      try{return child.HasExited;}
+      catch(InvalidOperationException){return true;}
+    }
+  }
   public bool IsRunning
-  {get {lock(sync)return !disposed && connected && !child.HasExited;}}
+  {get {lock(sync)return !disposed && connected && !ChildExited;}}
   public bool IsReady
-  {get {lock(sync)return !disposed && connected && ready && !child.HasExited;}}
+  {get {lock(sync)return !disposed && connected && ready && !ChildExited;}}
   public bool HasLiveConnection => IsRunning && IsReady;
   public bool PositionFaulted
-  {get {lock(sync)return faulted || disposed || child.HasExited;}}
+  {get {lock(sync)return faulted || disposed || ChildExited;}}
   public bool ManagementReviewRequired
   {get {lock(sync)return review;}}
   public string GetStatusString()
-  {lock(sync)return child.HasExited
+  {lock(sync)return ChildExited
     ? "Rotator worker exited; STOP unverified. Reapply settings."
     : status;}
 
@@ -121,7 +132,7 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
     if(!double.IsFinite(bearing.AzDeg)||!double.IsFinite(bearing.ElDeg))return;
     lock(sync)
     {
-      if(disposed || child.HasExited || faulted || !ready || !connected)return;
+      if(disposed || ChildExited || faulted || !ready || !connected)return;
       requestAz=bearing.AzDeg;requestEl=bearing.ElDeg;
       newestTarget=new RotatorWireMessage{
         Type="move",Az=bearing.AzDeg,El=bearing.ElDeg};
@@ -136,14 +147,18 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
   }
   public void StopRotation()
   {
-    lock(sync){requestAz=requestEl=null;newestTarget=null;}
+    // Collapse buffered manual/jog/retry commands before queueing STOP.
+    // A stopped motor must never be restarted by stale operator input.
     Enqueue("stop");
   }
   public void Retry(){if(!IsReady)Enqueue("retry");}
   public void SetParkDiagnostics(bool active)=>Enqueue("diagnostics",flag:active);
   public void LatchAfterManagementChange()
   {
-    lock(sync){faulted=true;review=true;newestTarget=null;}
+    lock(sync)
+    {
+      faulted=true;review=true;localSafetyLatched=true;newestTarget=null;
+    }
     Enqueue("latch");NotifyStatus();
   }
 
@@ -187,15 +202,75 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
     finally{pending.TryRemove(id,out _);}
   }
 
+  internal int PendingControlCommands
+  {get{lock(sync)return controlQueue.Count;}}
+
   private void Enqueue(string type,long id=0,bool flag=false,int direction=0)
   {
-    if(disposed)return;
-    if(highPriority.Writer.TryWrite(new RotatorWireMessage{
-      Type=type,Id=id,Flag=flag,Direction=direction}))
-      SignalWriter();
+    bool overflow=false;
+    lock(sync)
+    {
+      if(disposed)return;
+      var item=new RotatorWireMessage{
+        Type=type,Id=id,Flag=flag,Direction=direction};
+      if(type is "stop" or "latch")
+      {
+        requestAz=requestEl=null;
+        newestTarget=null;
+        // An emergency stop gets ahead of *all* queued management
+        // requests, but retains release/verify/lease transactions so
+        // their owners can fail or complete in a defined order.
+        var retained=controlQueue
+          .Where(m=>m.Type is "lease" or "release" or "verify" or "latch")
+          .Take(MaxQueuedControls-2).ToArray();
+        controlQueue.Clear();
+        controlQueue.Enqueue(new RotatorWireMessage{Type="stop"});
+        if(type=="latch")controlQueue.Enqueue(item);
+        foreach(var saved in retained)
+          if(saved.Type!="latch" || type!="latch")
+            controlQueue.Enqueue(saved);
+      }
+      else
+      {
+        if(type is "jog" or "retry" or "diagnostics")
+        {
+          // Wheel hold/retry/diagnostics updates are state, not a backlog.
+          var keep=controlQueue.Where(m=>m.Type!=type).ToArray();
+          controlQueue.Clear();
+          foreach(var m in keep)controlQueue.Enqueue(m);
+          if(type=="jog")newestTarget=null;
+        }
+        if(controlQueue.Count>=MaxQueuedControls)
+        {
+          // Any queue overflow makes motion unsafe. Latch and send STOP;
+          // never allow the IPC queue to consume unbounded memory.
+          controlQueue.Clear();
+          newestTarget=null;
+          requestAz=requestEl=null;
+          faulted=true;review=true;localSafetyLatched=true;
+          status="Rotator IPC overload: STOP requested; reapply settings after inspection.";
+          controlQueue.Enqueue(new RotatorWireMessage{Type="stop"});
+          controlQueue.Enqueue(new RotatorWireMessage{Type="latch"});
+          overflow=true;
+        }
+        else controlQueue.Enqueue(item);
+      }
+    }
+    SignalWriter();
+    if(overflow)
+    {
+      Log.Error("Rotator control queue overflow; no further motion allowed");
+      NotifyStatus();
+      foreach(var result in pending.Values)result.TrySetResult(false);
+    }
   }
+
   private void SignalWriter()
-  {try{commandsAvailable.Release();}catch(SemaphoreFullException){}}
+  {
+    // One wake means "queue changed", not one semaphore permit per message.
+    if(Interlocked.Exchange(ref writerWakePending,1)==0)
+      commandsAvailable.Release();
+  }
 
   private async Task SuperviseAsync()
   {
@@ -236,6 +311,7 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
         connected=ready=false;
         faulted=true;
         review=true;
+        localSafetyLatched=true;
         status="Rotator control child offline; hardware STOP unverified. Reapply settings after inspecting rotor.";
         newestTarget=null;
       }
@@ -267,12 +343,16 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
     while(!cancel.IsCancellationRequested)
     {
       await commandsAvailable.WaitAsync(cancel.Token).ConfigureAwait(false);
-      RotatorWireMessage? command;
+      Interlocked.Exchange(ref writerWakePending,0);
       while(!cancel.IsCancellationRequested)
       {
-        if(!highPriority.Reader.TryRead(out command))
+        RotatorWireMessage? command;
+        lock(sync)
         {
-          lock(sync){command=newestTarget;newestTarget=null;}
+          // Controls (including STOP/latch) always precede track targets.
+          command=controlQueue.Count>0 ? controlQueue.Dequeue() : newestTarget;
+          if(controlQueue.Count==0 && ReferenceEquals(command,newestTarget))
+            newestTarget=null;
         }
         if(command==null)break;
         await writer.WriteLineAsync(JsonSerializer.Serialize(command))
@@ -291,7 +371,10 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
       posChanged=az!=m.Az||el!=m.El;
       changed=connected!=m.Running || ready!=m.Ready ||
         faulted!=m.Faulted || review!=m.Review;
-      connected=m.Running;ready=m.Ready;faulted=m.Faulted;review=m.Review;
+      connected=m.Running;
+      ready=m.Ready && !localSafetyLatched;
+      faulted=m.Faulted || localSafetyLatched;
+      review=m.Review || localSafetyLatched;
       az=m.Az;el=m.El;requestAz=m.RequestAz;requestEl=m.RequestEl;
       writtenAz=m.WrittenAz;writtenEl=m.WrittenEl;
       rateAz=m.RateAz;rateEl=m.RateEl;rateTicks=m.RateTicks;
@@ -306,7 +389,10 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
 
   private void ApplyFault(RotatorWireMessage m)
   {
-    lock(sync){faulted=true;ready=false;}
+    lock(sync)
+    {
+      faulted=true;ready=false;review=true;localSafetyLatched=true;
+    }
     var prev=ToBearing(m.Az,m.El);
     var reported=ToBearing(m.Az2,m.El2);
     if(prev!=null && reported!=null)
@@ -341,6 +427,29 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
     });
   }
 
+  private static FileStream AcquireExclusiveDeviceOwner(RotatorSettings settings)
+  {
+    string identity=settings.NativeTransport==RotatorTransportKind.Serial
+      ? "serial:"+settings.NativeSerialPort.Trim().ToUpperInvariant()
+      : settings.NativeTransport.ToString()+":"+settings.Host.Trim().ToLowerInvariant()+
+        ":"+settings.Port;
+    string fingerprint=Convert.ToHexString(
+      System.Security.Cryptography.SHA256.HashData(
+        Encoding.UTF8.GetBytes(identity)));
+    string directory=Path.Combine(Utils.GetUserDataFolder(),"WorkerLocks");
+    Directory.CreateDirectory(directory);
+    string path=Path.Combine(directory,"rotator-"+fingerprint+".lock");
+    try
+    {
+      return new FileStream(path,FileMode.OpenOrCreate,
+        FileAccess.ReadWrite,FileShare.None);
+    }
+    catch(IOException ex)
+    {
+      throw new IOException("Rotator hardware endpoint is already owned by another SkyRoof child process; refusing a second controller.",ex);
+    }
+  }
+
   internal static void RunChild(string[] args) =>
     RunChildAsync(args).GetAwaiter().GetResult();
 
@@ -364,6 +473,10 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
       var settings=JsonSerializer.Deserialize<RotatorSettings>(
         Convert.FromBase64String(args[2])) ??
         throw new InvalidDataException("Missing rotator engine configuration");
+      // Two generations of the motion engine must NEVER command the same
+      // hardware simultaneously, even if a user changes settings quickly.
+      // The OS releases this cross-process file lock after a process crash.
+      using var hardwareOwner=AcquireExclusiveDeviceOwner(settings);
       using var connection=new NamedPipeClientStream(".",args[1],
         PipeDirection.InOut,PipeOptions.Asynchronous);
       connection.Connect(4500);
@@ -388,6 +501,56 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
       };
       var engine=native;
       using var clock=new CancellationTokenSource();
+      // Lease verification can take several seconds. Never await it on
+      // the pipe reader, or STOP/jog-release will be blocked behind it.
+      Task managementTail=Task.CompletedTask;
+      var motionGate=new object();
+      long motionEpoch=0;
+      void ScheduleManagement(Func<Task> operation)
+      {
+        var previous=managementTail;
+        managementTail=Task.Run(async ()=>
+        {
+          try{await previous.ConfigureAwait(false);}
+          catch(Exception ex){Log.Warning(ex,"Previous rotator management operation failed");}
+          await operation().ConfigureAwait(false);
+        });
+      }
+      void DispatchMotion(Action motion)
+      {
+        long epoch=Interlocked.Read(ref motionEpoch);
+        void Perform()
+        {
+          lock(motionGate)
+          {
+            if(epoch!=Interlocked.Read(ref motionEpoch) ||
+               clock.IsCancellationRequested)return;
+            motion();
+          }
+        }
+        // In normal tracking the management tail is complete; move/jog
+        // dispatch is immediate. After a lease/verify/release, defer the
+        // motion until management ownership has actually been released.
+        if(managementTail.IsCompleted)Perform();
+        else ScheduleManagement(()=>
+        {
+          Perform();
+          return Task.CompletedTask;
+        });
+      }
+      void ImmediateStop(bool latch=false)
+      {
+        // The STOP invalidates previously deferred movement generations.
+        // This lock also prevents a deferred move from slipping between
+        // generation validation and STOP transmission.
+        lock(motionGate)
+        {
+          Interlocked.Increment(ref motionEpoch);
+          engine.StopRotation();
+          if(latch)engine.LatchAfterManagementChange();
+        }
+      }
+
       var states=Task.Run(async ()=>
       {
         try
@@ -425,35 +588,89 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
           if(line==null)break;
           var cmd=JsonSerializer.Deserialize<RotatorWireMessage>(line);
           if(cmd==null)continue;
-          bool reply=false;
           switch(cmd.Type)
           {
             case "move":
               if(cmd.Az.HasValue&&cmd.El.HasValue)
-                engine.RotateTo(new Bearing(cmd.Az.Value*Math.PI/180,
-                  cmd.El.Value*Math.PI/180));
+              {
+                var az=cmd.Az.Value;
+                var el=cmd.El.Value;
+                DispatchMotion(() => engine.RotateTo(
+                  new Bearing(az*Math.PI/180,el*Math.PI/180)));
+              }
               break;
-            case "jog": engine.StartContinuousMove(
-              (RotatorContinuousDirection)cmd.Direction);break;
-            case "stop":engine.StopRotation();break;
+            case "jog":
+            {
+              var direction=(RotatorContinuousDirection)cmd.Direction;
+              DispatchMotion(() => engine.StartContinuousMove(direction));
+              break;
+            }
+            case "stop":
+              // STOP never waits on the management task; it invalidates
+              // all deferred moves from before this operator STOP.
+              ImmediateStop();break;
             case "retry":engine.Retry();break;
             case "diagnostics":engine.SetParkDiagnostics(cmd.Flag);break;
             case "lease":
-              lease?.Dispose();lease=null;
-              lease=await engine.AcquireManagementLeaseAsync();
-              reply=lease!=null;break;
-            case "release":lease?.Dispose();lease=null;break;
-            case "verify":reply=await engine.VerifyPostManagementFeedbackAsync();break;
-            case "latch":engine.LatchAfterManagementChange();break;
+            {
+              long id=cmd.Id;
+              ScheduleManagement(async ()=>
+              {
+                bool success=false;
+                try
+                {
+                  lease?.Dispose();lease=null;
+                  lease=await engine.AcquireManagementLeaseAsync(clock.Token)
+                    .ConfigureAwait(false);
+                  success=lease!=null;
+                }
+                catch(Exception ex)
+                {
+                  Log.Warning(ex,"Rotator management lease acquisition failed");
+                }
+                await Publish(new RotatorWireMessage{
+                  Type="reply",Id=id,Flag=success});
+              });
+              break;
+            }
+            case "release":
+              ScheduleManagement(()=>
+              {
+                lease?.Dispose();lease=null;
+                return Task.CompletedTask;
+              });
+              break;
+            case "verify":
+            {
+              long id=cmd.Id;
+              ScheduleManagement(async ()=>
+              {
+                bool success=false;
+                try
+                {
+                  success=await engine.VerifyPostManagementFeedbackAsync(clock.Token)
+                    .ConfigureAwait(false);
+                }
+                catch(Exception ex)
+                {
+                  Log.Warning(ex,"Rotator management feedback verification failed");
+                }
+                await Publish(new RotatorWireMessage{
+                  Type="reply",Id=id,Flag=success});
+              });
+              break;
+            }
+            case "latch":ImmediateStop(latch:true);break;
           }
-          if(cmd.Type is "lease" or "verify")
-            await Publish(new RotatorWireMessage{
-              Type="reply",Id=cmd.Id,Flag=reply});
         }
       }
       finally
       {
         clock.Cancel();
+        // Initiate STOP before awaiting any unfinished management operation.
+        // The motion worker handles the STOP request independently.
+        ImmediateStop();
+        try{await managementTail.WaitAsync(TimeSpan.FromSeconds(2));}catch(Exception){}
         try{await states.WaitAsync(TimeSpan.FromSeconds(1));}catch(Exception){}
       }
     }
