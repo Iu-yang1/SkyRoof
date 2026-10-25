@@ -348,6 +348,15 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
   {
     if(args.Length!=3)return;
     InChildEngine=true;
+    // This child has its own PID and logging sink; do not initialize the
+    // parent WinForms exception handler or global radio/UI resources.
+    Directory.CreateDirectory(Utils.GetLogArchiveFolder());
+    Log.Logger=new LoggerConfiguration().MinimumLevel.Debug()
+      .WriteTo.File(Path.Combine(Utils.GetLogArchiveFolder(),
+        "RotatorEngine-Worker_.txt"),
+        rollingInterval:RollingInterval.Day,
+        fileSizeLimitBytes:3_000_000,rollOnFileSizeLimit:true,
+        retainedFileCountLimit:10,shared:true).CreateLogger();
     NativeRotatorControlEngine? native=null;
     IDisposable? lease=null;
     try
@@ -459,6 +468,7 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
       try{native?.StopRotation();}catch{}
       try{lease?.Dispose();}catch{}
       try{native?.Dispose();}catch{}
+      Log.CloseAndFlush();
       InChildEngine=false;
     }
   }
