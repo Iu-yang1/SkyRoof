@@ -396,6 +396,13 @@ namespace VE3NEA.Dsp.Tests
         EnableCoherentDenseSeparation=true,
         EnableCoherentNearFarCancellation=true
       };
+      var refinedDecoder=new DeepCwMultiLaneDecoder(metadata,model)
+      {
+        MaxLanes=2,LaneBandwidthHz=240,TargetCenterHz=800,
+        EnableCoherentDenseSeparation=true,
+        EnableCoherentNearFarCancellation=true,
+        EnableCoherentTrackRefinement=true
+      };
       var cases=new[]
       {
         new BenchmarkScenario("exp_8db_15",800,15,8,0,-2),
@@ -447,6 +454,9 @@ namespace VE3NEA.Dsp.Tests
           sw.Restart();
           var cancelled=Run(cancelDecoder);
           var cancelMs=sw.Elapsed.TotalMilliseconds;
+          sw.Restart();
+          var refined=Run(refinedDecoder);
+          var refinedMs=sw.Elapsed.TotalMilliseconds;
 
           double Error(IReadOnlyList<DeepCwLaneResult> decoded,int id)=>
             CharacterErrorRate(
@@ -465,7 +475,9 @@ namespace VE3NEA.Dsp.Tests
             activityCerB=Error(activity,2),
             cancelCerA=Error(cancelled,1),
             cancelCerB=Error(cancelled,2),
-            oldMs,activityMs,cancelMs
+            refinedCerA=Error(refined,1),
+            refinedCerB=Error(refined,2),
+            oldMs,activityMs,cancelMs,refinedMs
           };
           results.Add(result);
           output.WriteLine(JsonSerializer.Serialize(result));
