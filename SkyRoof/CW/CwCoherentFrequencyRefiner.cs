@@ -185,32 +185,38 @@ namespace SkyRoof.CW
           double fStep=iteration==0 ? 0.10 : 0.05;
           double fRange=iteration==0 ? 0.80 : 0.20;
           int fSteps=(int)Math.Round(fRange/fStep);
+          double startingCenter=centerHz;
+          double candidateCenter=centerHz;
           for(int k=-fSteps;k<=fSteps;k++)
           {
-            double candidate=centerHz+k*fStep;
+            double candidate=startingCenter+k*fStep;
             if(Math.Abs(candidate)>3.0)continue;
             double score=CoherentScore(candidate,rate);
             if(score>quality)
             {
               quality=score;
-              centerHz=candidate;
+              candidateCenter=candidate;
             }
           }
+          centerHz=candidateCenter;
 
           double rStep=iteration==0 ? 0.025 : 0.0125;
           double rRange=iteration==0 ? 0.20 : 0.05;
           int rSteps=(int)Math.Round(rRange/rStep);
+          double startingRate=rate;
+          double candidateRate=rate;
           for(int k=-rSteps;k<=rSteps;k++)
           {
-            double candidate=rate+k*rStep;
+            double candidate=startingRate+k*rStep;
             if(Math.Abs(candidate)>0.9)continue;
             double score=CoherentScore(centerHz,candidate);
             if(score>quality)
             {
               quality=score;
-              rate=candidate;
+              candidateRate=candidate;
             }
           }
+          rate=candidateRate;
         }
         if(quality>bestScore)
         {
