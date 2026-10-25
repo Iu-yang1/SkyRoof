@@ -76,10 +76,10 @@ namespace VE3NEA.Dsp.Tests
       var port = Assert.IsType<EmbeddedSkyCatSerialPortConverter>(
         properties[nameof(EmbeddedSkyCatSettings.SerialPort)]!.Converter);
 
-      Assert.True(model.GetStandardValuesSupported());
-      Assert.False(model.GetStandardValuesExclusive());
-      Assert.True(port.GetStandardValuesSupported());
-      Assert.False(port.GetStandardValuesExclusive());
+      Assert.True(model.GetStandardValuesSupported(null));
+      Assert.False(model.GetStandardValuesExclusive(null));
+      Assert.True(port.GetStandardValuesSupported(null));
+      Assert.False(port.GetStandardValuesExclusive(null));
 
       var settings = new EmbeddedSkyCatSettings { Enabled = true, SerialPort = "COM6" };
       Assert.Null(settings.Validate());
