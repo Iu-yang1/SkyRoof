@@ -485,7 +485,8 @@ namespace SkyRoof.CW
           tensor = coherentDense
             ? CwCoherentDenseSeparator.BuildLaneTensor(
                 audio,sourceSampleRate,metadata,track,
-                allDetectedTracks,TargetCenterHz)
+                allDetectedTracks,TargetCenterHz,
+                widebandFeatures,activityByTrack)
             : widebandFeatures!.BuildLaneTensor(
                 track,allDetectedTracks,activityByTrack!,
                 TargetCenterHz,LaneBandwidthHz);
