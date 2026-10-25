@@ -76,8 +76,9 @@ internal sealed class IsolatedRotatorTransport : IRotatorTransport
         throw new IOException("Rotator worker launch failed");
       using var wait=new CancellationTokenSource(TimeSpan.FromSeconds(7));
       endpoint.WaitForConnectionAsync(wait.Token).GetAwaiter().GetResult();
-      endpoint.ReadTimeout=2500;
-      endpoint.WriteTimeout=2500;
+      // Asynchronous NamedPipeServerStream does not support ReadTimeout.
+      // Never configure Stream.ReadTimeout here; it throws on Windows.
+      // Failures are surfaced by the OS pipe or subprocess death.
       var reader=new BinaryReader(endpoint);
       var writer=new BinaryWriter(endpoint);
       // OPEN happens entirely within child; a stuck vendor Open() cannot
