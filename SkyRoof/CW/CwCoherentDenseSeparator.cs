@@ -33,7 +33,8 @@ namespace SkyRoof.CW
       IReadOnlyList<CwSignalTrack> allTracks,
       double targetCenterHz,
       DeepCwWidebandFeatureWindow? originalFeatures = null,
-      IReadOnlyDictionary<int,float[]>? originalActivities = null)
+      IReadOnlyDictionary<int,float[]>? originalActivities = null,
+      bool cancelStrongerInterference = false)
     {
       if (sourceSampleRate < 6000 ||
           metadata.SampleRate < 1000 ||
@@ -188,6 +189,46 @@ namespace SkyRoof.CW
         amplitudes[frame]=Math.Clamp(solution[0],0,2.0);
         for(int j=0;j<sources.Length;j++)
           otherAmplitudes[j][frame]=Math.Clamp(solution[j],0,2.0);
+      }
+
+      if(cancelStrongerInterference && sources.Length >= 2)
+      {
+        // Physically subtract the modelled STRONGER carrier from the
+        // original waveform, retaining the target, RF noise and actual
+        // spectrum statistics. Only called on weaker near-far lanes.
+        float[] residual=input.ToArray();
+        for(int j=1;j<sources.Length;j++)
+        {
+          if(sources[j].SnrDb < target.SnrDb+6)
+            continue;
+          double cosine=phaseSolution[2*j];
+          double sine=phaseSolution[2*j+1];
+          double scale=Math.Sqrt(cosine*cosine+sine*sine);
+          if(scale<1e-10)continue;
+          cosine/=scale; sine/=scale;
+          for(int n=0;n<residual.Length;n++)
+          {
+            double hopPosition=n/(double)sourceSampleRate*
+              metadata.SampleRate/modelHop;
+            int lo=Math.Min((int)hopPosition,frameCount-1);
+            int hi=Math.Min(lo+1,frameCount-1);
+            double frac=hopPosition-lo;
+            double amplitude=otherAmplitudes[j][lo]*(1-frac)+
+              otherAmplitudes[j][hi]*frac;
+            double tau=(n-(input.Length-1))/(double)sourceSampleRate;
+            double phi=2*Math.PI*(sources[j].FrequencyHz*tau+
+              0.5*sources[j].DriftHzPerSecond*tau*tau);
+            double wave=amplitude*(cosine*Math.Cos(phi)+sine*Math.Sin(phi));
+            residual[n]-=(float)(0.95*wave);
+          }
+        }
+        var corrected=DeepCwWidebandFeatureWindow.Create(
+          residual,sourceSampleRate,metadata);
+        var onlyTarget=new[]{target};
+        var correctedActivity=corrected.EstimateActivities(
+          onlyTarget,new CwCarrierActivityEstimator());
+        return corrected.BuildLaneTensor(target,
+          onlyTarget,correctedActivity,targetCenterHz);
       }
 
       if(originalFeatures != null && originalActivities != null)
