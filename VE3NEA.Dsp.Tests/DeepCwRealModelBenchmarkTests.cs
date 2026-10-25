@@ -480,8 +480,12 @@ namespace VE3NEA.Dsp.Tests
               calibratedB.Track.DriftHzPerSecond-tracks[1].DriftHzPerSecond,
             calibrationAcceptedA=calibratedA.Applied,
             calibrationAcceptedB=calibratedB.Applied,
-            calibrationResidualA=calibratedA.ResidualRmsHz,
-            calibrationResidualB=calibratedB.ResidualRmsHz,
+            calibrationResidualA=
+              double.IsFinite(calibratedA.ResidualRmsHz)
+                ? (double?)calibratedA.ResidualRmsHz : null,
+            calibrationResidualB=
+              double.IsFinite(calibratedB.ResidualRmsHz)
+                ? (double?)calibratedB.ResidualRmsHz : null,
             freqErrorA=perturb.FrequencyA,
             freqErrorB=perturb.FrequencyB,
             driftErrorA=perturb.RateA,
