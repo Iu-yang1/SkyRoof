@@ -129,6 +129,38 @@ namespace VE3NEA.Dsp.Tests
       isolated.Data.Max().Should().BeGreaterThan(0.1f);
     }
 
+    [Theory]
+    [InlineData(0.50,0)]
+    [InlineData(-1.00,0)]
+    [InlineData(0.50,0.20)]
+    [InlineData(0.00,-0.50)]
+    public void CoherentRefiner_ReacquiresKeyedCarrierWithTrackerBias(
+      double frequencyBias,double driftBias)
+    {
+      float[] pcm=MakeKeyedAudio(
+        8.0,(800.0,0.30f,0.14,0.50));
+      CwSignalTrack estimated=Track(7,800+frequencyBias,14)
+        with { DriftHzPerSecond=driftBias };
+      var result=CwCoherentFrequencyRefiner.Refine(
+        pcm,SourceRate,estimated,15.0);
+      result.Applied.Should().BeTrue();
+      result.AcceptedWindows.Should().BeGreaterThanOrEqualTo(4);
+      result.Track.FrequencyHz.Should()
+        .BeInRange(799.60,800.40);
+      result.Track.DriftHzPerSecond.Should()
+        .BeInRange(-0.16,0.16);
+    }
+
+    [Fact]
+    public void CoherentRefiner_CannotTurnSilenceIntoConfidentCW()
+    {
+      float[] silence=new float[8*SourceRate];
+      var result=CwCoherentFrequencyRefiner.Refine(
+        silence,SourceRate,Track(7,801,12),15);
+      result.Applied.Should().BeFalse();
+      result.Track.FrequencyHz.Should().Be(801);
+    }
+
     [Fact]
     public void RidgeSoftMask_SuppressesStrongerNeighborInWeakLane()
     {
