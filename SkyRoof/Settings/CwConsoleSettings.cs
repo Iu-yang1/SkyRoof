@@ -50,6 +50,12 @@ namespace SkyRoof
     public CwDenoiseMode SpectrumDenoiseMode { get; set; } =
       CwDenoiseMode.Bypass;
 
+    [DisplayName("Enhanced Dense CW Separation (experimental)")]
+    [Description(
+      "Enable coherent carrier activity fitting for closely spaced CW Pileup and cautious near-far cancellation for weak stations. Off by default; real IC-9700 recordings must validate this experimental mode. Restart SkyRoof after changing it.")]
+    [DefaultValue(false)]
+    public bool EnhancedDenseSeparation { get; set; } = false;
+
     // Compatibility field for older SkyRoof settings files. Manual CW
     // transmission no longer requires or consults a separate software
     // enable gate; the real radio/SkyCAT status is verified on Send.
