@@ -18,6 +18,7 @@ namespace SkyRoof.NativeRotator;
 internal sealed class IsolatedRotatorTransport : IRotatorTransport
 {
   private readonly RotatorSettings settings;
+  private readonly string? workerExecutable;
   private readonly object sync=new();
   private Process? child;
   private NamedPipeServerStream? pipe;
@@ -25,7 +26,13 @@ internal sealed class IsolatedRotatorTransport : IRotatorTransport
   private BinaryWriter? output;
   private bool disposed;
   private int abortRequested;
-  internal IsolatedRotatorTransport(RotatorSettings settings)=>this.settings=settings;
+  internal IsolatedRotatorTransport(RotatorSettings settings,
+    string? workerExecutable=null)
+  {
+    this.settings=settings;
+    this.workerExecutable=workerExecutable;
+  }
+  internal int? WorkerPid => child?.Id;
   internal static bool ShouldIsolateThisProcess() =>
     string.Equals(Path.GetFileName(Environment.ProcessPath),
       "SkyRoof.exe",StringComparison.OrdinalIgnoreCase);
@@ -53,7 +60,7 @@ internal sealed class IsolatedRotatorTransport : IRotatorTransport
     {
       endpoint=new NamedPipeServerStream(id,PipeDirection.InOut,1,
         PipeTransmissionMode.Byte,PipeOptions.Asynchronous);
-      var args=new ProcessStartInfo(Environment.ProcessPath ??
+      var args=new ProcessStartInfo(workerExecutable ?? Environment.ProcessPath ??
         throw new IOException("Rotator worker executable is unavailable"))
       {
         UseShellExecute=false,CreateNoWindow=true,

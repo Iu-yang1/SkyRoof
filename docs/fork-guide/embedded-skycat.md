@@ -27,3 +27,26 @@ SkyRoof 支持将经上游同步的 SkyCAT 1.8 **直接运行在 SkyRoof 进程�
 不要让其他软件同时占用同一 COM 口。正常退出时先释放 SkyRoof 的 CW、PTT 控制权，再停止内嵌 SkyCAT，避免意外解除其他应用持有的发射状态。多个 TCP 客户端分别断开时，不会提前执行整个电台的 teardown。
 
 本地从 Git 克隆源码后需要运行 `git submodule update --init --recursive`。实际串口连接及发射安全仍需实机验证。
+
+
+### Process fault isolation / 进程故障隔离 (2026-10-25)
+
+Embedded SkyCAT runs as a **separate SkyRoof.exe child PID**. The supervisor
+uses a private per-launch named pipe, startup handshake, child-liveness
+monitoring and asynchronous shutdown. CAT clients are activated only after
+readiness; a crashed SkyCAT child is *not restarted automatically*. Verify
+PTT and disable/re-enable Embedded SkyCAT before manual recovery.
+
+The native rotator serial/TCP/UDP drivers open their physical hardware
+handles in a **second SkyRoof.exe child PID**. The managed motion/safety
+scheduler remains on a non-UI thread in SkyRoof and communicates through
+bounded IPC. A crashed child cannot corrupt the main process's serial-driver
+memory; lost communications fail closed through the existing feedback and
+reconnect interlocks. Native transport shutdown does not synchronously
+join a hung device worker on WinForms.
+
+**Important limitation:** managed trajectory calculation is still in
+the main process, although hardware transport I/O is isolated. This is
+not yet full scheduler process isolation. Child process death cannot
+physically guarantee motor STOP or PTT OFF without independent firmware/
+hardware fail-safe mechanisms.

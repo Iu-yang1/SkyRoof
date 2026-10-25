@@ -16,6 +16,36 @@ namespace VE3NEA.Dsp.Tests;
 public sealed class NativeRotatorWorkerTests
 {
   [Fact]
+  public async Task IsolatedRotatorChildCrashCannotTerminateTestHost()
+  {
+    // CI has built SkyRoof.exe before running this functional child test.
+    string? workspace=Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
+    if(string.IsNullOrWhiteSpace(workspace))return;
+    string exe=Path.Combine(workspace,"SkyRoof","bin","x64","Release",
+      "net10.0-windows7.0","SkyRoof.exe");
+    Assert.True(File.Exists(exe),$"Expected isolated rotator apphost: {exe}");
+    await using var server=new FakeGs232Bridge();
+    var config=CreateSettings(server.Port);
+    using var transport=new IsolatedRotatorTransport(config,exe);
+    await Task.Run(transport.Open);
+    Assert.True(transport.Connected);
+    int pid=Assert.IsType<int>(transport.WorkerPid);
+    Assert.NotEqual(Environment.ProcessId,pid);
+    transport.Write(Encoding.ASCII.GetBytes("C2\r"));
+    byte[] buffer=new byte[256];
+    int n=transport.Read(buffer);
+    Assert.Contains("AZ=90",Encoding.ASCII.GetString(buffer,0,n));
+
+    using(var process=System.Diagnostics.Process.GetProcessById(pid))
+      process.Kill(entireProcessTree:true);
+    for(int i=0;i<40 && transport.Connected;i++)
+      await Task.Delay(50);
+    Assert.False(transport.Connected);
+    Assert.ThrowsAny<IOException>(()=>
+      transport.Write(Encoding.ASCII.GetBytes("W100 020\r")));
+  }
+
+  [Fact]
   public async Task TrackDisabledPollsAtBoundedRateWithoutMotionOrBusyLoop()
   {
     await using var server=new FakeGs232Bridge();

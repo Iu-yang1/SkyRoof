@@ -145,6 +145,8 @@ namespace SkyRoof
       // the layout is back, so the Auto Selection panel exists again if it was open at the last shutdown
       ctx.AutoSelector.RestoreEnabledIfRequested();
 
+      if(EmbeddedSkyCatRunning)
+        ctx.CatControl.ApplySettings();
       StartSdrIfEnabled();
 
       VersionChecker = new VersionChecker(ctx.Settings.LatestVersion);
