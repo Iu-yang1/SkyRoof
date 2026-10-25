@@ -283,6 +283,13 @@ namespace VE3NEA.Dsp.Tests
         EnableCoherentDenseSeparation=true
       };
 
+      var cancellation=new DeepCwMultiLaneDecoder(metadata,model)
+      {
+        MaxLanes=2,LaneBandwidthHz=240,TargetCenterHz=800,
+        EnableCoherentDenseSeparation=true,
+        EnableCoherentNearFarCancellation=true
+      };
+
       var scenarios=new[]
       {
         new BenchmarkScenario("exp_equal_40",800,40,0,0,-2),
@@ -317,6 +324,12 @@ namespace VE3NEA.Dsp.Tests
         var improved=experimental.Decode(
           mix.Audio,SampleRate,at,tracks);
         newWatch.Stop();
+        var cancelWatch=Stopwatch.StartNew();
+        var cancelled=cancellation.Decode(
+          mix.Audio,SampleRate,at,tracks);
+        cancelWatch.Stop();
+        string CancelText(int id)=>cancelled.FirstOrDefault(
+          x=>x.TrackId==id).Text??"";
         string OldText(int id)=>old.FirstOrDefault(x=>x.TrackId==id).Text??"";
         string NewText(int id)=>improved.FirstOrDefault(x=>x.TrackId==id).Text??"";
         var row=new
@@ -330,8 +343,12 @@ namespace VE3NEA.Dsp.Tests
           oldCerB=CharacterErrorRate("CQ DE W9XYZ",OldText(2)),
           newCerA=CharacterErrorRate("CQ DE K1ABC",NewText(1)),
           newCerB=CharacterErrorRate("CQ DE W9XYZ",NewText(2)),
+          cancelA=CancelText(1),cancelB=CancelText(2),
+          cancelCerA=CharacterErrorRate("CQ DE K1ABC",CancelText(1)),
+          cancelCerB=CharacterErrorRate("CQ DE W9XYZ",CancelText(2)),
           oldMilliseconds=oldWatch.Elapsed.TotalMilliseconds,
-          newMilliseconds=newWatch.Elapsed.TotalMilliseconds
+          newMilliseconds=newWatch.Elapsed.TotalMilliseconds,
+          cancelMilliseconds=cancelWatch.Elapsed.TotalMilliseconds
         };
         output.WriteLine(JsonSerializer.Serialize(row));
         rows.Add(row);
