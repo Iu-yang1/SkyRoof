@@ -230,6 +230,10 @@ namespace SkyRoof.CW
       if (a.AssociationHintId != 0 &&
           a.AssociationHintId == b.AssociationHintId)
         return true;
+      // Inference masks have no access to independent precision peak
+      // evidence. Two simultaneously active, separately labelled stations
+      // must stay separate here; only the full frontend can merge them.
+      if (a.Active && b.Active) return false;
       if (activityA.Length != activityB.Length ||
           activityA.Length < 24)
         return false;
