@@ -104,6 +104,31 @@ namespace VE3NEA.Dsp.Tests
     }
 
 
+    [Theory]
+    [InlineData(5.0,0)]
+    [InlineData(15.0,8)]
+    public void CoherentDenseSeparator_ReconstructsBoundedModelTensor(
+      double spacingHz,double competitorDb)
+    {
+      DeepCwModelMetadata metadata =
+        DeepCwModelMetadata.Parse(MetadataJson);
+      float[] pcm=MakeKeyedAudio(
+        1.0,(800.0,0.30f,0.14,0.50),
+        (800.0+spacingHz,
+          (float)(0.30*Math.Pow(10,competitorDb/20.0)),
+          0.17,0.47));
+      CwSignalTrack target=Track(1,800,12);
+      CwSignalTrack interference=Track(2,800+spacingHz,20);
+      DeepCwTensor isolated=CwCoherentDenseSeparator.BuildLaneTensor(
+        pcm,SourceRate,metadata,target,
+        [target,interference],800);
+      isolated.FrequencyBins.Should().Be(metadata.FrequencyBins);
+      isolated.TimeSteps.Should().BeGreaterThan(25);
+      isolated.Data.Should().OnlyContain(
+        x=>float.IsFinite(x)&&x>=0);
+      isolated.Data.Max().Should().BeGreaterThan(0.1f);
+    }
+
     [Fact]
     public void RidgeSoftMask_SuppressesStrongerNeighborInWeakLane()
     {
