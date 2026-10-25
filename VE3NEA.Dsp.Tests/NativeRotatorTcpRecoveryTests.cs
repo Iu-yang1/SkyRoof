@@ -91,9 +91,12 @@ public sealed class NativeRotatorTcpRecoveryTests
     await UntilAsync(()=>driver.IsReady);
     driver.RotateTo(new SkyRoof.Bearing(100*Math.PI/180,40*Math.PI/180));
     await UntilAsync(()=>bridge.Motions>0);
-    await UntilAsync(()=>bridge.Queries>=5,7500);
-    // Two separate readings at the commanded position clear the
-    // may-still-be-moving interlock; no continuous jog was requested.
+    // Total query count also includes pre-command polls. Wait until the
+    // actual controller has processed two >=200 ms spaced readbacks of
+    // THIS target, otherwise dropping TCP races the safety interlock.
+    await UntilAsync(()=>driver.TargetSettledForReconnect,7500);
+    Assert.True(driver.TargetSettledForReconnect,
+      "Do not simulate a settled-target disconnect before the safety gate clears.");
     bridge.DropCurrentClient();
     await UntilAsync(()=>bridge.Connections>=2,9000);
     await UntilAsync(()=>driver.IsReady,9000);

@@ -73,6 +73,22 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
   public DateTime LastSuccessfulBearingReadUtc {get {lock(sync)return lastReadUtc;}}
   public DateTime LastParkTargetWriteUtc {get {lock(sync)return lastTargetWriteUtc;}}
   public DateTime LastParkStopWriteUtc {get {lock(sync)return lastStopWriteUtc;}}
+  /// <summary>
+  /// True only after two separate, sufficiently spaced protocol readbacks
+  /// at the current commanded target have cleared the reconnect STOP
+  /// interlock. Internal diagnostic for deterministic recovery tests.
+  /// This is controller-reported settling, not physical shaft verification.
+  /// </summary>
+  internal bool TargetSettledForReconnect
+  {
+    get
+    {
+      lock(sync)return requested!=null && stableTargetReads>=2 &&
+        stableTargetFirstUtc!=DateTime.MinValue &&
+        (lastReadUtc-stableTargetFirstUtc).TotalMilliseconds>=200 &&
+        !requiresStopAfterReconnect;
+    }
+  }
   public void SetParkDiagnostics(bool active)
   {
     lock(sync)parkDiagnosticsActive=active;
