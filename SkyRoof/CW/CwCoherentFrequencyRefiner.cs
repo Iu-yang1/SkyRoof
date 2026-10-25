@@ -150,24 +150,7 @@ namespace SkyRoof.CW
       double nominalMidFrequency=track.FrequencyHz+
         track.DriftHzPerSecond*midTimeToEnd;
 
-      double CoherentScore(double deltaMidHz,double deltaRate)
-      {
-        double frequency=nominalMidFrequency+deltaMidHz;
-        double drift=track.DriftHzPerSecond+deltaRate;
-        double real=0,imag=0;
-        for(int n=0;n<pcm.Length;n+=stride)
-        {
-          double t=(n-midIndex)/sampleRate;
-          double angle=2*Math.PI*(frequency*t+
-            0.5*drift*t*t);
-          double sample=pcm[n];
-          real+=sample*Math.Cos(angle);
-          imag+=sample*Math.Sin(angle);
-        }
-        return real*real+imag*imag;
-      }
-
-      double priorScore=CoherentScore(0,0);
+      double priorScore=WholeWindowScore(pcm,sampleRate,stride,midIndex,nominalMidFrequency,track.DriftHzPerSecond,0,0);
       double bestMid=0,bestRate=0,bestScore=priorScore;
       double seedMid=correctionHz+
         correctionRate*midTimeToEnd;
@@ -179,7 +162,7 @@ namespace SkyRoof.CW
                                   (Middle:seedMid,Rate:correctionRate) })
       {
         double centerHz=seed.Middle,rate=seed.Rate;
-        double quality=CoherentScore(centerHz,rate);
+        double quality=WholeWindowScore(pcm,sampleRate,stride,midIndex,nominalMidFrequency,track.DriftHzPerSecond,centerHz,rate);
         for(int iteration=0;iteration<2;iteration++)
         {
           double fStep=iteration==0 ? 0.10 : 0.05;
@@ -191,7 +174,7 @@ namespace SkyRoof.CW
           {
             double candidate=startingCenter+k*fStep;
             if(Math.Abs(candidate)>3.0)continue;
-            double score=CoherentScore(candidate,rate);
+            double score=WholeWindowScore(pcm,sampleRate,stride,midIndex,nominalMidFrequency,track.DriftHzPerSecond,candidate,rate);
             if(score>quality)
             {
               quality=score;
@@ -209,7 +192,7 @@ namespace SkyRoof.CW
           {
             double candidate=startingRate+k*rStep;
             if(Math.Abs(candidate)>0.9)continue;
-            double score=CoherentScore(centerHz,candidate);
+            double score=WholeWindowScore(pcm,sampleRate,stride,midIndex,nominalMidFrequency,track.DriftHzPerSecond,centerHz,candidate);
             if(score>quality)
             {
               quality=score;
@@ -237,6 +220,31 @@ namespace SkyRoof.CW
         FrequencyHz=track.FrequencyHz+finalEndHz,
         DriftHzPerSecond=track.DriftHzPerSecond+bestRate
       },true,observations.Count,rms);
+    }
+
+    private static double WholeWindowScore(
+      ReadOnlySpan<float> samples,
+      int sampleRate,
+      int stride,
+      double midIndex,
+      double nominalMidFrequency,
+      double nominalRate,
+      double deltaMidHz,
+      double deltaRate)
+    {
+      double frequency=nominalMidFrequency+deltaMidHz;
+      double drift=nominalRate+deltaRate;
+      double real=0,imag=0;
+      for(int n=0;n<samples.Length;n+=stride)
+      {
+        double t=(n-midIndex)/sampleRate;
+        double angle=2*Math.PI*(frequency*t+
+          0.5*drift*t*t);
+        double sample=samples[n];
+        real+=sample*Math.Cos(angle);
+        imag+=sample*Math.Sin(angle);
+      }
+      return real*real+imag*imag;
     }
   }
 }
