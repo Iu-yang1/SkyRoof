@@ -462,10 +462,26 @@ namespace VE3NEA.Dsp.Tests
             CharacterErrorRate(
               id==1?"CQ DE K1ABC":"CQ DE W9XYZ",
               decoded.FirstOrDefault(x=>x.TrackId==id).Text??"");
+          var calibratedA=CwCoherentFrequencyRefiner.Refine(
+            audio.Audio,SampleRate,tracks[0],scenario.SeparationHz);
+          var calibratedB=CwCoherentFrequencyRefiner.Refine(
+            audio.Audio,SampleRate,tracks[1],scenario.SeparationHz);
           var result=new
           {
             scenario=scenario.Name,
             perturbation=perturb.Label,
+            estimatedFrequencyCorrectionA=
+              calibratedA.Track.FrequencyHz-tracks[0].FrequencyHz,
+            estimatedFrequencyCorrectionB=
+              calibratedB.Track.FrequencyHz-tracks[1].FrequencyHz,
+            estimatedRateCorrectionA=
+              calibratedA.Track.DriftHzPerSecond-tracks[0].DriftHzPerSecond,
+            estimatedRateCorrectionB=
+              calibratedB.Track.DriftHzPerSecond-tracks[1].DriftHzPerSecond,
+            calibrationAcceptedA=calibratedA.Applied,
+            calibrationAcceptedB=calibratedB.Applied,
+            calibrationResidualA=calibratedA.ResidualRmsHz,
+            calibrationResidualB=calibratedB.ResidualRmsHz,
             freqErrorA=perturb.FrequencyA,
             freqErrorB=perturb.FrequencyB,
             driftErrorA=perturb.RateA,
