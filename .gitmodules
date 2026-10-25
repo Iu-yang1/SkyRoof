@@ -1,0 +1,3 @@
+[submodule "Vendor/SkyCAT"]
+	path = Vendor/SkyCAT
+	url = https://github.com/Iu-yang1/SkyCAT.git
