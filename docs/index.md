@@ -83,6 +83,9 @@ reliability improvements.
 - [Setting Up Remote Access to SDR](https://groups.google.com/g/skyroof/c/ru5Pc9mim0w) TNX Paolo IZ1MLL
 
 - [SkyRoof + QSSTV](https://github.com/Acuantico/QSSTV-over-SkyRoof) TNX Acuántico Power
+- [SkyRoof / ACLog plugin](https://github.com/KV5J/SkyRoof-ACLog-Plugin) TNX Keith KV5J
+- [SoapySDR driver for FUNcube pro+](https://github.com/Zl9x/SOAPYFCDPP-Windows) TNX Mark ZL3AB
+- [SoapySDR driver for FlexRadio 6600](https://github.com/ea5wa/FlexSkyBridge) TNX EA5WA
 
 ## Discussion Group
 
