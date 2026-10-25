@@ -274,6 +274,9 @@ namespace SkyRoof.CW
     /// </summary>
     public bool EnableCoherentDenseSeparation { get; set; } = false;
 
+    /// <summary>Experimental 15-20 Hz near-far strong-carrier cancellation.</summary>
+    public bool EnableCoherentNearFarCancellation { get; set; } = false;
+
     // Physical pre-decode gate. A confirmed tracker ridge is not sufficient
     // evidence that keyed CW exists: shaped noise and steady birdies can
     // produce stable ridges. Require local prominence plus real on/off keying
@@ -486,7 +489,12 @@ namespace SkyRoof.CW
             ? CwCoherentDenseSeparator.BuildLaneTensor(
                 audio,sourceSampleRate,metadata,track,
                 allDetectedTracks,TargetCenterHz,
-                widebandFeatures,activityByTrack)
+                widebandFeatures,activityByTrack,
+                EnableCoherentNearFarCancellation &&
+                allDetectedTracks.Any(peer=>peer.Id!=track.Id &&
+                  peer.SnrDb-track.SnrDb>=6 &&
+                  Math.Abs(peer.FrequencyHz-track.FrequencyHz)>=12 &&
+                  Math.Abs(peer.FrequencyHz-track.FrequencyHz)<=21))
             : widebandFeatures!.BuildLaneTensor(
                 track,allDetectedTracks,activityByTrack!,
                 TargetCenterHz,LaneBandwidthHz);
