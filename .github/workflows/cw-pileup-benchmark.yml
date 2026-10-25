@@ -80,6 +80,8 @@ jobs:
           "DEEPCW_METADATA_PATH=$metadata" | Out-File -FilePath $env:GITHUB_ENV -Append
           "DEEPCW_BENCHMARK_OUTPUT=$env:GITHUB_WORKSPACE\artifacts\cw-pileup-benchmark.json" |
             Out-File -FilePath $env:GITHUB_ENV -Append
+          "DEEPCW_DENSE_BENCHMARK_OUTPUT=$env:GITHUB_WORKSPACE\artifacts\cw-dense-coherent-experiment.json" |
+            Out-File -FilePath $env:GITHUB_ENV -Append
           "SKYROOF_RUN_DEEPCW_BENCHMARK=1" |
             Out-File -FilePath $env:GITHUB_ENV -Append
 
