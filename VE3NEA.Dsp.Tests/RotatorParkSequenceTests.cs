@@ -57,6 +57,81 @@ public sealed class RotatorParkSequenceTests
           seq.Observe(Start.AddSeconds(4), Start.AddSeconds(4), 90, 0, true));
     }
 
+    [Fact]
+    public void Rc3040sWaitsForWireCommandAndPostStopFreshFeedback()
+    {
+        var seq=new RotatorParkSequence(new[] {(0.0,0.0)},Start,true);
+        DateTime wire=Start.AddMilliseconds(400);
+        Assert.Equal(ParkSequenceProgress.Waiting,
+          seq.Observe(Start.AddSeconds(1),Start.AddMilliseconds(300),
+            0,0,true,wire));
+        Assert.Equal(ParkSequenceProgress.Waiting,
+          seq.Observe(Start.AddSeconds(1),Start.AddSeconds(1),0,0,true,wire));
+        Assert.Equal(ParkSequenceProgress.Waiting,
+          seq.Observe(Start.AddSeconds(2),Start.AddSeconds(2),0,0,true,wire));
+        Assert.Equal(ParkSequenceProgress.Waiting,
+          seq.Observe(Start.AddSeconds(3),Start.AddSeconds(3),0,0,true,wire));
+        Assert.Equal(ParkSequenceProgress.StopRequested,
+          seq.Observe(Start.AddSeconds(4),Start.AddSeconds(4),0,0,true,wire));
+        Assert.True(seq.AwaitingStopReadback);
+        Assert.False(seq.MechanicalHomeVerified);
+        DateTime stopSent=Start.AddMilliseconds(4500);
+        Assert.Equal(ParkSequenceProgress.Waiting,
+          seq.Observe(Start.AddSeconds(5),Start.AddSeconds(4),0,0,true,
+            wire,stopSent));
+        Assert.Equal(ParkSequenceProgress.Waiting,
+          seq.Observe(Start.AddSeconds(5),Start.AddSeconds(5),0,0,true,
+            wire,stopSent));
+        Assert.Equal(ParkSequenceProgress.Completed,
+          seq.Observe(Start.AddSeconds(7),Start.AddSeconds(7),0,0,true,
+            wire,stopSent));
+    }
+
+    [Fact]
+    public void Rc3040sRejectsMovingFeedbackEvenIfInsideArrivalTolerance()
+    {
+        var seq=new RotatorParkSequence(new[] {(0.0,0.0)},Start,true);
+        var wire=Start.AddMilliseconds(100);
+        for(int i=1;i<=6;i++)
+        {
+            double pos=i%2==0?0.8:0.0;
+            Assert.Equal(ParkSequenceProgress.Waiting,
+              seq.Observe(Start.AddSeconds(i),Start.AddSeconds(i),
+                pos,0,true,wire));
+        }
+        Assert.False(seq.AwaitingStopReadback);
+    }
+
+    [Fact]
+    public void Rc3040sStopWithoutFreshReplyAbortsAndCannotComplete()
+    {
+        var seq=new RotatorParkSequence(new[] {(0.0,0.0)},Start,true);
+        var wire=Start.AddMilliseconds(100);
+        for(int i=1;i<=4;i++)
+          seq.Observe(Start.AddSeconds(i),Start.AddSeconds(i),0,0,true,wire);
+        Assert.True(seq.AwaitingStopReadback);
+        Assert.Equal(ParkSequenceProgress.Aborted,
+          seq.Observe(Start.AddSeconds(14),Start.AddSeconds(4),
+            0,0,true,wire));
+        Assert.Contains("STOP",seq.AbortReason);
+    }
+
+    [Fact]
+    public void Rc3040sAbortsWhenPositionChangesAfterStop()
+    {
+        var seq=new RotatorParkSequence(new[] {(0.0,0.0)},Start,true);
+        var wire=Start.AddMilliseconds(100);
+        for(int i=1;i<=4;i++)
+          seq.Observe(Start.AddSeconds(i),Start.AddSeconds(i),0,0,true,wire);
+        var stop=Start.AddMilliseconds(4300);
+        Assert.Equal(ParkSequenceProgress.Waiting,
+          seq.Observe(Start.AddSeconds(5),Start.AddSeconds(5),0,0,true,
+            wire,stop));
+        Assert.Equal(ParkSequenceProgress.Aborted,
+          seq.Observe(Start.AddSeconds(6),Start.AddSeconds(6),3,0,true,
+            wire,stop));
+    }
+
     [Theory]
     [InlineData(false, 1, 1)]
     [InlineData(true, 30, 1)]
