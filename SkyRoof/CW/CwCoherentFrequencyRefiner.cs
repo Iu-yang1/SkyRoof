@@ -132,18 +132,104 @@ namespace SkyRoof.CW
           correctionRate*item.Time,2));
       double rms=Math.Sqrt(rss/sw);
 
-      // A consistent trajectory is needed before phase-coherent
-      // cancellation; otherwise retain the unmodified original estimate.
+      // Use local observations only as a starting point. Their finite
+      // 2 s time resolution can systematically bias the end-frequency
+      // extrapolation by ~0.5 Hz even when the input track is exact.
+      // A physically coherent whole-window likelihood MUST improve before
+      // any private oscillator estimate is accepted.
       if(!double.IsFinite(correctionHz) ||
          !double.IsFinite(correctionRate) ||
-         Math.Abs(correctionHz)>2.25 ||
-         Math.Abs(correctionRate)>0.8 ||
-         rms>0.85)
+         Math.Abs(correctionHz)>2.5 ||
+         Math.Abs(correctionRate)>0.9 ||
+         rms>1.1)
+        return new(track,false,observations.Count,rms);
+
+      double midIndex=(pcm.Length-1)/2.0;
+      double midTimeToEnd=
+        (midIndex-(pcm.Length-1))/sampleRate;
+      double nominalMidFrequency=track.FrequencyHz+
+        track.DriftHzPerSecond*midTimeToEnd;
+
+      double CoherentScore(double deltaMidHz,double deltaRate)
+      {
+        double frequency=nominalMidFrequency+deltaMidHz;
+        double drift=track.DriftHzPerSecond+deltaRate;
+        double real=0,imag=0;
+        for(int n=0;n<pcm.Length;n+=stride)
+        {
+          double t=(n-midIndex)/sampleRate;
+          double angle=2*Math.PI*(frequency*t+
+            0.5*drift*t*t);
+          double sample=pcm[n];
+          real+=sample*Math.Cos(angle);
+          imag+=sample*Math.Sin(angle);
+        }
+        return real*real+imag*imag;
+      }
+
+      double priorScore=CoherentScore(0,0);
+      double bestMid=0,bestRate=0,bestScore=priorScore;
+      double seedMid=correctionHz+
+        correctionRate*midTimeToEnd;
+
+      // Two well-defined starting points (original Kalman prediction and
+      // robust local line fit), with a short bounded coordinate search.
+      // Recenter phase at the midpoint to reduce frequency/rate coupling.
+      foreach(var seed in new[] { (Middle:0.0,Rate:0.0),
+                                  (Middle:seedMid,Rate:correctionRate) })
+      {
+        double centerHz=seed.Middle,rate=seed.Rate;
+        double quality=CoherentScore(centerHz,rate);
+        for(int iteration=0;iteration<2;iteration++)
+        {
+          double fStep=iteration==0 ? 0.10 : 0.05;
+          double fRange=iteration==0 ? 0.80 : 0.20;
+          int fSteps=(int)Math.Round(fRange/fStep);
+          for(int k=-fSteps;k<=fSteps;k++)
+          {
+            double candidate=centerHz+k*fStep;
+            if(Math.Abs(candidate)>3.0)continue;
+            double score=CoherentScore(candidate,rate);
+            if(score>quality)
+            {
+              quality=score;
+              centerHz=candidate;
+            }
+          }
+
+          double rStep=iteration==0 ? 0.025 : 0.0125;
+          double rRange=iteration==0 ? 0.20 : 0.05;
+          int rSteps=(int)Math.Round(rRange/rStep);
+          for(int k=-rSteps;k<=rSteps;k++)
+          {
+            double candidate=rate+k*rStep;
+            if(Math.Abs(candidate)>0.9)continue;
+            double score=CoherentScore(centerHz,candidate);
+            if(score>quality)
+            {
+              quality=score;
+              rate=candidate;
+            }
+          }
+        }
+        if(quality>bestScore)
+        {
+          bestScore=quality;
+          bestMid=centerHz;
+          bestRate=rate;
+        }
+      }
+
+      double finalEndHz=bestMid-bestRate*midTimeToEnd;
+      if(bestScore < 1.25*Math.Max(priorScore,1e-15) ||
+         !double.IsFinite(finalEndHz) ||
+         Math.Abs(finalEndHz)>2.25 ||
+         Math.Abs(bestRate)>0.8)
         return new(track,false,observations.Count,rms);
 
       return new(track with {
-        FrequencyHz=track.FrequencyHz+correctionHz,
-        DriftHzPerSecond=track.DriftHzPerSecond+correctionRate
+        FrequencyHz=track.FrequencyHz+finalEndHz,
+        DriftHzPerSecond=track.DriftHzPerSecond+bestRate
       },true,observations.Count,rms);
     }
   }
