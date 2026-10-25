@@ -22,7 +22,6 @@ internal sealed class IsolatedRotatorTransport : IRotatorTransport
   private readonly object sync=new();
   private Process? child;
   private NamedPipeServerStream? pipe;
-  private BinaryReader? input;
   private BinaryWriter? output;
   private bool disposed;
   private int abortRequested;
@@ -76,18 +75,12 @@ internal sealed class IsolatedRotatorTransport : IRotatorTransport
         throw new IOException("Rotator worker launch failed");
       using var wait=new CancellationTokenSource(TimeSpan.FromSeconds(7));
       endpoint.WaitForConnectionAsync(wait.Token).GetAwaiter().GetResult();
-      // Asynchronous NamedPipeServerStream does not support ReadTimeout.
-      // Never configure Stream.ReadTimeout here; it throws on Windows.
-      // Failures are surfaced by the OS pipe or subprocess death.
-      var reader=new BinaryReader(endpoint);
       var writer=new BinaryWriter(endpoint);
-      // OPEN happens entirely within child; a stuck vendor Open() cannot
-      // occupy the parent WinForms process or crash its native heap.
-      ReadStatus(reader);
+      ReadStatus(endpoint,6500);
       lock(sync)
       {
         if(disposed)throw new ObjectDisposedException(nameof(IsolatedRotatorTransport));
-        pipe=endpoint;child=spawned;input=reader;output=writer;
+        pipe=endpoint;child=spawned;output=writer;
       }
       Log.Information("Native rotator I/O isolated in child PID {Pid}",spawned.Id);
     }
@@ -110,7 +103,7 @@ internal sealed class IsolatedRotatorTransport : IRotatorTransport
       output.Write(bytes.Length);
       output.Write(bytes);
       output.Flush();
-      ReadStatus(input!);
+      ReadStatus(pipe!,Math.Clamp(settings.SendTimeout+1500,1500,7000));
     }
   }
 
@@ -121,17 +114,13 @@ internal sealed class IsolatedRotatorTransport : IRotatorTransport
       EnsureReady();
       output!.Write((byte)2);
       output.Flush();
-      ReadStatus(input!);
-      int count=input!.ReadInt32();
+      int timeout=Math.Clamp(settings.NativeReadTimeout+1500,1500,8000);
+      ReadStatus(pipe!,timeout);
+      int count=System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(
+        ReadExactly(pipe!,4,timeout));
       if(count<0 || count>buffer.Length || count>65536)
         throw new InvalidDataException("Motor child returned invalid frame size");
-      int offset=0;
-      while(offset<count)
-      {
-        int n=input.Read(buffer,offset,count-offset);
-        if(n==0)throw new EndOfStreamException("Motor child pipe disconnected");
-        offset+=n;
-      }
+      if(count!=0)ReadExactly(pipe!,buffer.AsMemory(0,count),timeout);
       return count;
     }
   }
@@ -142,12 +131,40 @@ internal sealed class IsolatedRotatorTransport : IRotatorTransport
       "Isolated rotator I/O process disconnected. New movement requires verified feedback.");
   }
 
-  private static void ReadStatus(BinaryReader reader)
+  private static byte[] ReadExactly(NamedPipeServerStream stream,int count,int timeout)
   {
-    byte code=reader.ReadByte();
+    var data=new byte[count];
+    ReadExactly(stream,data.AsMemory(),timeout);
+    return data;
+  }
+  private static void ReadExactly(NamedPipeServerStream stream,
+    Memory<byte> data,int timeout)
+  {
+    using var cts=new CancellationTokenSource(timeout);
+    try{stream.ReadExactlyAsync(data,cts.Token).AsTask().GetAwaiter().GetResult();}
+    catch(OperationCanceledException ex)
+    {
+      throw new IOException("Rotator IPC response timed out; movement must remain interlocked",ex);
+    }
+  }
+  private static void ReadStatus(NamedPipeServerStream stream,int timeout)
+  {
+    byte code=ReadExactly(stream,1,timeout)[0];
     if(code==0)return;
     if(code!=1)throw new InvalidDataException("Unexpected motor child response");
-    throw new IOException("Rotator child I/O error: "+reader.ReadString());
+    int length=0;
+    bool complete=false;
+    for(int i=0;i<5;i++)
+    {
+      int b=ReadExactly(stream,1,timeout)[0];
+      length|=(b&127)<<(i*7);
+      if((b&128)==0){complete=true;break;}
+    }
+    if(!complete || length<0 || length>2048)
+      throw new InvalidDataException("Invalid motor IPC error message");
+    string message=System.Text.Encoding.UTF8.GetString(
+      ReadExactly(stream,length,timeout));
+    throw new IOException("Rotator child I/O error: "+message);
   }
 
   public void Abort()
