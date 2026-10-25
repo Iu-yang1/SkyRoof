@@ -42,6 +42,9 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
   private IRotatorTransport? transport;
   private Bearing? requested,lastRead,lastWritten;
   private DateTime lastReadUtc = DateTime.MinValue;
+  private DateTime lastTargetWriteUtc = DateTime.MinValue;
+  private DateTime lastStopWriteUtc = DateTime.MinValue;
+  private bool parkDiagnosticsActive;
   private volatile bool stopping,stopRequested;
   private bool connected,safetyLatched,requiresStopAfterReconnect,managementHeld,managementReviewRequired;
   private int? manualDirection,appliedDirection;
@@ -68,6 +71,12 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
   public Bearing? LastReadBearing {get {lock(sync)return lastRead;}}
   public Bearing? LastWrittenBearing {get {lock(sync)return lastWritten;}}
   public DateTime LastSuccessfulBearingReadUtc {get {lock(sync)return lastReadUtc;}}
+  internal DateTime LastParkTargetWriteUtc {get {lock(sync)return lastTargetWriteUtc;}}
+  internal DateTime LastParkStopWriteUtc {get {lock(sync)return lastStopWriteUtc;}}
+  internal void SetParkDiagnostics(bool active)
+  {
+    lock(sync)parkDiagnosticsActive=active;
+  }
   public bool PositionFaulted {get {lock(sync)return safetyLatched;}}
   internal bool ManagementReviewRequired {get {lock(sync)return managementReviewRequired;}}
   public bool IsRunning {get {lock(sync)return connected;}}
@@ -341,6 +350,13 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
       stopCompleted.Set();StateChanged();return;
     }
     transport!.Write(frame);
+    lock(sync)
+    {
+      lastStopWriteUtc=DateTime.UtcNow;
+      if(parkDiagnosticsActive && settings.NativeProtocol==RotatorProtocolKind.Rc3040sLan)
+        Log.Information("RC-3040S PARK TX STOP S; transmittedUtc={SentUtc:O}; STOP delivery is not a motor brake ACK",
+          lastStopWriteUtc);
+    }
     if(settings.NativeProtocol==RotatorProtocolKind.Rotctld)
     {
       // Hamlib STOP is the only wire protocol here with an actual ACK.
@@ -395,6 +411,17 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
       settings.NativeReadTimeout);
     if(!NativeRotatorCodec.TryParse(protocol,b,out var position,settings.NativeResponseTemplate))
       throw new InvalidDataException("Invalid rotator position");
+    bool logPark;
+    lock(sync)logPark=parkDiagnosticsActive &&
+      protocol==RotatorProtocolKind.Rc3040sLan;
+    if(logPark)
+    {
+      string raw=Encoding.ASCII.GetString(b);
+      raw=raw.Replace("\r","\\r").Replace("\n","\\n");
+      if(raw.Length>160)raw=raw[..160];
+      Log.Information("RC-3040S PARK RX raw C2={Raw}; reported AZ={Az:F2} EL={El:F2}; raw telemetry is not independent physical zero",
+        raw,position.Azimuth,position.Elevation);
+    }
     return position;
   }
   private void PublishPosition(RotatorPosition p)
@@ -506,8 +533,8 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
         spidAzResolution = spidElResolution = 0;
         lock(sync)
         {
-          // Invalidate old connection's feedback; it must not authorize a
-          // fresh motion command after a reconnect.
+          // Invalidate old connection's feedback and wire timestamps.
+          lastTargetWriteUtc=lastStopWriteUtc=DateTime.MinValue;
           lastRead = null;
           lastReadUtc = DateTime.MinValue;
           lastSuccessfulSessionFeedbackUtc=DateTime.MinValue;
@@ -636,6 +663,13 @@ internal sealed class NativeRotatorControlEngine : IRotatorEngine
                 continue; // STOP superseded target or live feedback expired
               lock(sync)requiresStopAfterReconnect=true;
               device.Write(frame);
+              lock(sync)
+              {
+                lastTargetWriteUtc=DateTime.UtcNow;
+                if(parkDiagnosticsActive && settings.NativeProtocol==RotatorProtocolKind.Rc3040sLan)
+                  Log.Information("RC-3040S PARK TX W target AZ={Az:F1} EL={El:F1}; transmittedUtc={Utc:O}",
+                    p.Azimuth,p.Elevation,lastTargetWriteUtc);
+              }
               if(settings.NativeProtocol==RotatorProtocolKind.Rotctld)
               {
                 var ack=ReadReply(b=>Regex.IsMatch(Encoding.ASCII.GetString(b),@"RPRT\s+-?\d+"),
