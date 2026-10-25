@@ -75,6 +75,50 @@ namespace SkyRoof.CW
         }
       }
 
+      // Estimate a stable absolute phase for every oscillator over the
+      // full contiguous window. CW envelopes change, but a keyed carrier's
+      // phase is approximately coherent while the oscillator and Doppler
+      // prediction remain correct. Globally estimated phase removes one
+      // quadrature nuisance parameter per source in each short frame.
+      int quadratures=basis.Length;
+      var phaseGram=new double[quadratures,quadratures];
+      var phaseRhs=new double[quadratures];
+      var phaseSolution=new double[quadratures];
+      for(int k=0;k<sampledCount;k++)
+      {
+        double sample=input[k*stride];
+        for(int i=0;i<quadratures;i++)
+        {
+          phaseRhs[i]+=basis[i][k]*sample;
+          for(int j=0;j<=i;j++)
+            phaseGram[i,j]+=basis[i][k]*basis[j][k];
+        }
+      }
+      for(int i=0;i<quadratures;i++)
+      {
+        for(int j=0;j<i;j++)phaseGram[j,i]=phaseGram[i,j];
+        phaseGram[i,i]+=sampledCount*0.0003;
+      }
+      if(!SolvePositiveDefinite(
+          phaseGram,phaseRhs,phaseSolution))
+        throw new InvalidOperationException(
+          "CW phase-locked fit was not positive definite.");
+
+      var locked=new double[sources.Length][];
+      for(int j=0;j<sources.Length;j++)
+      {
+        double cosine=phaseSolution[2*j];
+        double sine=phaseSolution[2*j+1];
+        double scale=Math.Sqrt(cosine*cosine+sine*sine);
+        if(scale<1e-9)scale=1.0;
+        cosine/=scale;
+        sine/=scale;
+        locked[j]=new double[sampledCount];
+        for(int k=0;k<sampledCount;k++)
+          locked[j][k]=cosine*basis[2*j][k]+
+            sine*basis[2*j+1][k];
+      }
+
       double nearest=sources.Skip(1)
         .Select(x=>Math.Abs(x.FrequencyHz-target.FrequencyHz))
         .DefaultIfEmpty(double.PositiveInfinity).Min();
@@ -82,7 +126,7 @@ namespace SkyRoof.CW
         nearest <= 17 ? 0.100 : 0.080;
       int halfWindowSamples = Math.Max(16,
         (int)Math.Round(windowSeconds*sourceSampleRate/(2*stride)));
-      int size=basis.Length;
+      int size=locked.Length;
       var amplitudes=new double[frameCount];
       var gram=new double[size,size];
       var rhs=new double[size];
@@ -108,10 +152,10 @@ namespace SkyRoof.CW
           totalWeight+=weight;
           for(int i=0;i<size;i++)
           {
-            double wi=weight*basis[i][k];
+            double wi=weight*locked[i][k];
             rhs[i]+=wi*sample;
             for(int j=0;j<=i;j++)
-              gram[i,j]+=wi*basis[j][k];
+              gram[i,j]+=wi*locked[j][k];
           }
         }
         for(int i=0;i<size;i++)
@@ -134,9 +178,9 @@ namespace SkyRoof.CW
           amplitudes[frame]=0;
           continue;
         }
-        amplitudes[frame]=Math.Clamp(
-          Math.Sqrt(solution[0]*solution[0]+
-            solution[1]*solution[1]),0,2.0);
+        // A phase-locked carrier has one signed physical amplitude; do
+        // not rectifiy negative noise into a fictitious CW key-down.
+        amplitudes[frame]=Math.Clamp(solution[0],0,2.0);
       }
 
       // Construct a single model-centred CW waveform from the recovered
