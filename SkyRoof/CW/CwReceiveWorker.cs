@@ -12,6 +12,7 @@ namespace SkyRoof.CW
     public int MaxDecodeLanes { get; init; } = 8;
     public double LaneBandwidthHz { get; init; } = 240;
     public double TargetCenterHz { get; init; } = 800;
+    public bool EnhancedDenseSeparation { get; init; } = false;
     public TimeSpan ModelRetryInterval { get; init; } =
       TimeSpan.FromSeconds(5);
   }
@@ -101,7 +102,11 @@ namespace SkyRoof.CW
           LaneBandwidthHz =
             options.LaneBandwidthHz,
           TargetCenterHz =
-            options.TargetCenterHz
+            options.TargetCenterHz,
+          EnableCoherentDenseSeparation =
+            options.EnhancedDenseSeparation,
+          EnableCoherentNearFarCancellation =
+            options.EnhancedDenseSeparation
         };
 
       // Consecutive 6 s / 1 s ONNX windows are highly correlated.
