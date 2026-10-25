@@ -34,6 +34,10 @@ if ($p.ExitCode -ne 0) {
   throw "SkyRoofSetup.exe failed with exit code $($p.ExitCode)"
 }
 
+if (-not (Test-Path -LiteralPath (Join-Path $target 'licenses\SkyCAT-MIT.txt'))) {
+  throw 'Installer omitted required SkyCAT MIT attribution.'
+}
+
 # SkyCAT reads rig command definitions at runtime, not as resources.
 # Missing Rigs/*.json would make embedded startup fail despite passing compilation.
 $rig = 'Rigs\IC-9700.json'
