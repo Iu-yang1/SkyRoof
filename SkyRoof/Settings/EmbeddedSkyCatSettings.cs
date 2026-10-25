@@ -19,12 +19,14 @@ namespace SkyRoof
 
     [DefaultValue("3081")]
     [DisplayName("Radio Model")]
-    [Description("SkyCAT radio name or numeric ID, e.g. 3081 for IC-9700.")]
+    [TypeConverter(typeof(EmbeddedSkyCatModelConverter))]
+    [Description("Select a model from the SkyCAT rig definitions (e.g. IC-9700 / 3081). Custom model IDs and names can still be entered.")]
     public string Model { get; set; } = "3081";
 
     [DefaultValue("")]
     [DisplayName("CI-V Serial Port")]
-    [Description("Windows serial port provided by your IC-9700 connection (for example COM8). Never open the same port in two CAT servers.")]
+    [TypeConverter(typeof(EmbeddedSkyCatSerialPortConverter))]
+    [Description("Select a detected Windows COM port. Reopen the dropdown to scan again; disconnected saved ports and manual entries are supported. Never open a port in two CAT servers.")]
     public string SerialPort { get; set; } = "";
 
     [DefaultValue(115200)]
@@ -106,6 +108,6 @@ namespace SkyRoof
         SwitchEnabled,SwitchPort,CwEnabled,CwPort);
 
     public override string ToString() =>
-      Enabled ? $"{Model} / {SerialPort} (in process)" : "Off";
+      Enabled ? $"{EmbeddedSkyCatModelConverter.GetDisplayName(Model)} / {SerialPort} (child process)" : "Off";
   }
 }
