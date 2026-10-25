@@ -96,6 +96,9 @@ jobs:
           Write-Host "WinDivert DLL: $($dll.FullName)"
           Write-Host "WinDivert driver: $($sys.FullName)"
 
+      - name: Restore pinned SkyCAT submodule project assets
+        run: dotnet restore Vendor/SkyCAT/skycatd/skycatd.csproj --locked-mode
+
       - name: Restore NuGet packages
         run: nuget restore SkyRoof.sln -LockedMode
 
