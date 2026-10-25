@@ -204,3 +204,33 @@ joint demodulation for the suppression of adjacent channel
 interference", IEEE WCNC 1999, DOI
 `10.1109/WCNC.1999.796846`. The implementation is a constrained
 CW-specific experiment, not a reproduction of that receiver.
+
+
+### 2026-10-25: experimental coherent separation for dense Pileup (PR #102)
+
+A longer STFT alone cannot guarantee 5 Hz CW separation: the CW keying
+transitions (24–27 WPM in the pinned benchmark) limit the available
+coherent observation interval. An **off-by-default**, windowed multi-carrier
+least-squares experiment now coexists with the existing DeepCW
+spectrogram, Kalman track IDs and inference worker.
+
+Independent real-ONNX A/B paths compare the original activity-aware mask,
+coherent activity on the *original* calibrated spectrogram, and targeted
+strong-carrier subtraction (SIC) for near/far pairs separated by 12–21 Hz
+and >=6 dB. A short-window frequency/Doppler estimator proposes oscillator
+corrections, but each proposed correction must improve coherent
+whole-window matching before it can replace a local oscillator copy.
+The live Kalman state and the public lane identities are never mutated.
+
+In a deterministic synthetic known-track benchmark spanning ten injected
+frequency/rate errors per scenario, 15 Hz / 8 dB weak-station mean CER
+improved from 0.800 to about 0.573, with strong-station CER remaining 0.
+On the Windows CI machine the corresponding 8 s input windows required
+roughly 0.3–0.4 s for the experimental two-lane decode. These are *not*
+measured eight-lane UI latency guarantees or off-air character error rates.
+
+**Unresolved**: 5 Hz near/far SIC regressed CER and was removed from the
+experimental gate; 5 Hz balanced Pileup has not shown a robust mean
+gain. Nothing in this PR makes the experiment a production default.
+A labelled IC-9700 raw PCM corpus with QSB, keying edges, Doppler drift,
+candidate-ID errors and authentic noise is required before enabling it.
