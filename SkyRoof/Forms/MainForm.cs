@@ -36,6 +36,7 @@ namespace SkyRoof
       ConfigureOnvifCameraMenu();
       ConfigureGitHubThemeMenuItems();
       AddOrbitSourceMenuItems();
+      AddLogArchiveMenuItem();
 
       Text = Utils.GetVersionString();
       ctx.MainForm = this;
@@ -974,6 +975,36 @@ namespace SkyRoof
           "Custom TLE Sources",
           MessageBoxButtons.OK,
           MessageBoxIcon.Error);
+      }
+    }
+
+    private void AddLogArchiveMenuItem()
+    {
+      var openLogs = new ToolStripMenuItem("Open &Log Archive Folder");
+      openLogs.Click += (_, _) => OpenLogArchiveFolder();
+      toolsToolStripMenuItem.DropDownItems.Add(new ToolStripSeparator());
+      toolsToolStripMenuItem.DropDownItems.Add(openLogs);
+    }
+
+    private void OpenLogArchiveFolder()
+    {
+      try
+      {
+        string folder = Utils.GetLogArchiveFolder();
+        Directory.CreateDirectory(folder);
+        var start = new ProcessStartInfo("explorer.exe")
+        {
+          UseShellExecute = true
+        };
+        start.ArgumentList.Add(folder);
+        Process.Start(start);
+      }
+      catch(Exception ex)
+      {
+        Log.Error(ex, "Unable to open SkyRoof log archive folder");
+        MessageBox.Show(this,
+          "Unable to open the log archive folder.\n\n" + ex.Message,
+          "Log Archive", MessageBoxButtons.OK, MessageBoxIcon.Warning);
       }
     }
 

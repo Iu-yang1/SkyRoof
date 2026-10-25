@@ -26,7 +26,7 @@ namespace VE3NEA
     public static void Initialize()
     {
       string appName = AppDomain.CurrentDomain.FriendlyName ?? "log";
-      string fileName = Path.Combine(Utils.GetUserDataFolder(), "Logs", $"{appName}_.txt");
+      string fileName = Path.Combine(Utils.GetLogArchiveFolder(), $"{appName}_.txt");
       // the system log is timestamped in UTC regardless of the time display mode, so that logs
       // from different users, and from different sides of a DST change, can be compared directly
       Log.Logger = new LoggerConfiguration().MinimumLevel.Debug()

@@ -25,6 +25,9 @@ namespace VE3NEA
       return path;
     }
 
+    internal static string GetLogArchiveFolder() =>
+      Path.Combine(GetUserDataFolder(), "Logs");
+
     internal static string GetReferenceDataFolder()
     {
       string path = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
