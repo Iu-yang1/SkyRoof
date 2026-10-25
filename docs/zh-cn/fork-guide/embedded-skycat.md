@@ -4,7 +4,7 @@ SkyRoof 可直接托管审查后的 [Iu-yang1/SkyCAT](https://github.com/Iu-yang
 
 ## 配置
 
-进入 **Settings → CAT → Embedded SkyCAT**，填写 Windows CI-V 串口（例如 `COM9`），IC-9700 型号为 `3081`，波特率按电台实际设置。开启 **Enable Embedded SkyCAT**。在 **RX CAT**、**TX CAT** 的属性中勾选 **Use Embedded SkyCAT** 和 **Enabled**，SkyRoof 即经由内嵌 TCP CAT 服务完成频率、模式、PTT 等指令操作。
+进入 **Settings → CAT → Embedded SkyCAT**，在 **Radio Model** 下拉框中选择电台（例如 **IC-9700 (3081)**），在 **CI-V Serial Port** 下拉框中选择扫描到的 Windows COM 端口（例如 `COM9`），波特率按电台实际设置。每次打开串口下拉框都会重新枚举本机端口；拔掉的设备仍保留已保存的端口名，也支持手动输入。型号和端口在配置文件中继续保存原始值（例如 `3081` 与 `COM9`），不会保存界面显示文本。开启 **Enable Embedded SkyCAT**。在 **RX CAT**、**TX CAT** 的属性中勾选 **Use Embedded SkyCAT** 和 **Enabled**，SkyRoof 即经由内嵌 TCP CAT 服务完成频率、模式、PTT 等指令操作。
 
 服务默认仅监听 `127.0.0.1`，各端口如下：
 
