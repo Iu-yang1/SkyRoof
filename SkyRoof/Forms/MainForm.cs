@@ -120,7 +120,13 @@ namespace SkyRoof
       ctx.CwAudio = new CwAudioSourceController(ctx);
       ctx.CwAudio.ApplySettings();
       ctx.CwReceiveWorker =
-        new CwReceiveWorker(ctx.CwAudio.Ingress);
+        new CwReceiveWorker(
+          ctx.CwAudio.Ingress,
+          new CwReceiveWorkerOptions
+          {
+            EnhancedDenseSeparation =
+              ctx.Settings.CwConsole.EnhancedDenseSeparation
+          });
       ctx.CwReceiveWorker.Start();
       ctx.CwTransmit =
         new CwTransmitController(
