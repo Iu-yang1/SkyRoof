@@ -504,6 +504,8 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
       // Lease verification can take several seconds. Never await it on
       // the pipe reader, or STOP/jog-release will be blocked behind it.
       Task managementTail=Task.CompletedTask;
+      var motionGate=new object();
+      long motionEpoch=0;
       void ScheduleManagement(Func<Task> operation)
       {
         var previous=managementTail;
@@ -514,6 +516,41 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
           await operation().ConfigureAwait(false);
         });
       }
+      void DispatchMotion(Action motion)
+      {
+        long epoch=Interlocked.Read(ref motionEpoch);
+        void Perform()
+        {
+          lock(motionGate)
+          {
+            if(epoch!=Interlocked.Read(ref motionEpoch) ||
+               clock.IsCancellationRequested)return;
+            motion();
+          }
+        }
+        // In normal tracking the management tail is complete; move/jog
+        // dispatch is immediate. After a lease/verify/release, defer the
+        // motion until management ownership has actually been released.
+        if(managementTail.IsCompleted)Perform();
+        else ScheduleManagement(()=>
+        {
+          Perform();
+          return Task.CompletedTask;
+        });
+      }
+      void ImmediateStop(bool latch=false)
+      {
+        // The STOP invalidates previously deferred movement generations.
+        // This lock also prevents a deferred move from slipping between
+        // generation validation and STOP transmission.
+        lock(motionGate)
+        {
+          Interlocked.Increment(ref motionEpoch);
+          engine.StopRotation();
+          if(latch)engine.LatchAfterManagementChange();
+        }
+      }
+
       var states=Task.Run(async ()=>
       {
         try
@@ -555,15 +592,23 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
           {
             case "move":
               if(cmd.Az.HasValue&&cmd.El.HasValue)
-                engine.RotateTo(new Bearing(cmd.Az.Value*Math.PI/180,
-                  cmd.El.Value*Math.PI/180));
+              {
+                var az=cmd.Az.Value;
+                var el=cmd.El.Value;
+                DispatchMotion(() => engine.RotateTo(
+                  new Bearing(az*Math.PI/180,el*Math.PI/180)));
+              }
               break;
-            case "jog":engine.StartContinuousMove(
-              (RotatorContinuousDirection)cmd.Direction);break;
+            case "jog":
+            {
+              var direction=(RotatorContinuousDirection)cmd.Direction;
+              DispatchMotion(() => engine.StartContinuousMove(direction));
+              break;
+            }
             case "stop":
-              // Always process STOP immediately, even if a pending lease
-              // is awaiting a slow controller write/readback.
-              engine.StopRotation();break;
+              // STOP never waits on the management task; it invalidates
+              // all deferred moves from before this operator STOP.
+              ImmediateStop();break;
             case "retry":engine.Retry();break;
             case "diagnostics":engine.SetParkDiagnostics(cmd.Flag);break;
             case "lease":
@@ -615,7 +660,7 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
               });
               break;
             }
-            case "latch":engine.LatchAfterManagementChange();break;
+            case "latch":ImmediateStop(latch:true);break;
           }
         }
       }
@@ -624,7 +669,7 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
         clock.Cancel();
         // Initiate STOP before awaiting any unfinished management operation.
         // The motion worker handles the STOP request independently.
-        engine.StopRotation();
+        ImmediateStop();
         try{await managementTail.WaitAsync(TimeSpan.FromSeconds(2));}catch(Exception){}
         try{await states.WaitAsync(TimeSpan.FromSeconds(1));}catch(Exception){}
       }
