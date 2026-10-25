@@ -104,11 +104,13 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
   {get {lock(sync)return !disposed && connected && ready && !child.HasExited;}}
   public bool HasLiveConnection => IsRunning && IsReady;
   public bool PositionFaulted
-  {get {lock(sync)return faulted || disposed;}}
+  {get {lock(sync)return faulted || disposed || child.HasExited;}}
   public bool ManagementReviewRequired
   {get {lock(sync)return review;}}
   public string GetStatusString()
-  {lock(sync)return status;}
+  {lock(sync)return child.HasExited
+    ? "Rotator worker exited; STOP unverified. Reapply settings."
+    : status;}
 
   private static Bearing? ToBearing(double? az,double? el) =>
     az.HasValue && el.HasValue
@@ -119,7 +121,7 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
     if(!double.IsFinite(bearing.AzDeg)||!double.IsFinite(bearing.ElDeg))return;
     lock(sync)
     {
-      if(disposed || faulted || !ready || !connected)return;
+      if(disposed || child.HasExited || faulted || !ready || !connected)return;
       requestAz=bearing.AzDeg;requestEl=bearing.ElDeg;
       newestTarget=new RotatorWireMessage{
         Type="move",Az=bearing.AzDeg,El=bearing.ElDeg};
