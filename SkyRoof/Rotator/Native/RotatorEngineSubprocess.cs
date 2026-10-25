@@ -501,6 +501,19 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
       };
       var engine=native;
       using var clock=new CancellationTokenSource();
+      // Lease verification can take several seconds. Never await it on
+      // the pipe reader, or STOP/jog-release will be blocked behind it.
+      Task managementTail=Task.CompletedTask;
+      void ScheduleManagement(Func<Task> operation)
+      {
+        var previous=managementTail;
+        managementTail=Task.Run(async ()=>
+        {
+          try{await previous.ConfigureAwait(false);}
+          catch(Exception ex){Log.Warning(ex,"Previous rotator management operation failed");}
+          await operation().ConfigureAwait(false);
+        });
+      }
       var states=Task.Run(async ()=>
       {
         try
@@ -538,7 +551,6 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
           if(line==null)break;
           var cmd=JsonSerializer.Deserialize<RotatorWireMessage>(line);
           if(cmd==null)continue;
-          bool reply=false;
           switch(cmd.Type)
           {
             case "move":
@@ -546,27 +558,74 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
                 engine.RotateTo(new Bearing(cmd.Az.Value*Math.PI/180,
                   cmd.El.Value*Math.PI/180));
               break;
-            case "jog": engine.StartContinuousMove(
+            case "jog":engine.StartContinuousMove(
               (RotatorContinuousDirection)cmd.Direction);break;
-            case "stop":engine.StopRotation();break;
+            case "stop":
+              // Always process STOP immediately, even if a pending lease
+              // is awaiting a slow controller write/readback.
+              engine.StopRotation();break;
             case "retry":engine.Retry();break;
             case "diagnostics":engine.SetParkDiagnostics(cmd.Flag);break;
             case "lease":
-              lease?.Dispose();lease=null;
-              lease=await engine.AcquireManagementLeaseAsync();
-              reply=lease!=null;break;
-            case "release":lease?.Dispose();lease=null;break;
-            case "verify":reply=await engine.VerifyPostManagementFeedbackAsync();break;
+            {
+              long id=cmd.Id;
+              ScheduleManagement(async ()=>
+              {
+                bool success=false;
+                try
+                {
+                  lease?.Dispose();lease=null;
+                  lease=await engine.AcquireManagementLeaseAsync(clock.Token)
+                    .ConfigureAwait(false);
+                  success=lease!=null;
+                }
+                catch(Exception ex)
+                {
+                  Log.Warning(ex,"Rotator management lease acquisition failed");
+                }
+                await Publish(new RotatorWireMessage{
+                  Type="reply",Id=id,Flag=success});
+              });
+              break;
+            }
+            case "release":
+              ScheduleManagement(()=>
+              {
+                lease?.Dispose();lease=null;
+                return Task.CompletedTask;
+              });
+              break;
+            case "verify":
+            {
+              long id=cmd.Id;
+              ScheduleManagement(async ()=>
+              {
+                bool success=false;
+                try
+                {
+                  success=await engine.VerifyPostManagementFeedbackAsync(clock.Token)
+                    .ConfigureAwait(false);
+                }
+                catch(Exception ex)
+                {
+                  Log.Warning(ex,"Rotator management feedback verification failed");
+                }
+                await Publish(new RotatorWireMessage{
+                  Type="reply",Id=id,Flag=success});
+              });
+              break;
+            }
             case "latch":engine.LatchAfterManagementChange();break;
           }
-          if(cmd.Type is "lease" or "verify")
-            await Publish(new RotatorWireMessage{
-              Type="reply",Id=cmd.Id,Flag=reply});
         }
       }
       finally
       {
         clock.Cancel();
+        // Initiate STOP before awaiting any unfinished management operation.
+        // The motion worker handles the STOP request independently.
+        engine.StopRotation();
+        try{await managementTail.WaitAsync(TimeSpan.FromSeconds(2));}catch(Exception){}
         try{await states.WaitAsync(TimeSpan.FromSeconds(1));}catch(Exception){}
       }
     }
