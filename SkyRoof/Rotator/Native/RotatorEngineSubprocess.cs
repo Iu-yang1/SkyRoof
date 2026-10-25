@@ -106,7 +106,6 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
     {
       try{return child.HasExited;}
       catch(InvalidOperationException){return true;}
-      catch(ObjectDisposedException){return true;}
     }
   }
   public bool IsRunning
