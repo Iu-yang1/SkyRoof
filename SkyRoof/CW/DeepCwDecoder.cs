@@ -277,6 +277,12 @@ namespace SkyRoof.CW
     /// <summary>Experimental 15-20 Hz near-far strong-carrier cancellation.</summary>
     public bool EnableCoherentNearFarCancellation { get; set; } = false;
 
+    /// <summary>
+    /// Experimental short-window carrier frequency/rate recalibration.
+    /// Default off; never modifies the Kalman state or the public track IDs.
+    /// </summary>
+    public bool EnableCoherentTrackRefinement { get; set; } = false;
+
     // Physical pre-decode gate. A confirmed tracker ridge is not sufficient
     // evidence that keyed CW exists: shaped noise and steady birdies can
     // produce stable ridges. Require local prominence plus real on/off keying
@@ -505,7 +511,8 @@ namespace SkyRoof.CW
                 audio,sourceSampleRate,metadata,track,
                 allDetectedTracks,TargetCenterHz,
                 widebandFeatures,activityByTrack,
-                EnableCoherentNearFarCancellation && weakerNearFar)
+                EnableCoherentNearFarCancellation && weakerNearFar,
+                EnableCoherentTrackRefinement)
             : widebandFeatures!.BuildLaneTensor(
                 track,allDetectedTracks,activityByTrack!,
                 TargetCenterHz,LaneBandwidthHz);
