@@ -12,13 +12,19 @@ namespace SkyRoof
     private OptimizedRotationPath? Path;
     private Bearing? SatBearing;
     private RotatorParkSequence? ParkSequence;
+    private bool parkControllerReportedHome;
+    private string? lastParkFailure;
+    internal bool ParkControllerReportedHome => parkControllerReportedHome;
+    internal string? LastParkFailure => lastParkFailure;
     internal NativeRotatorControlEngine? EngineForRc3040s =>
       ctx?.Settings.Rotator.NativeProtocol == SkyRoof.NativeRotator.RotatorProtocolKind.Rc3040sLan
         ? engine as NativeRotatorControlEngine : null;
 
     internal bool IsParking => ParkSequence != null;
     internal string ParkProgressText => ParkSequence == null
-      ? "PARK"
+      ? parkControllerReportedHome ? "PARK C2 OK" : "PARK"
+      : ParkSequence.AwaitingStopReadback ? "PARK STOP CHECK"
+      : ParkSequence.IsSettling ? "PARK SETTLING"
       : $"PARK {ParkSequence.Index + 1}/{ParkSequence.Count}";
 
     // set while auto-selection programmatically engages tracking for a specific pass, so the checkbox
@@ -179,6 +185,8 @@ namespace SkyRoof
     public void RotateTo(Bearing? bearing)
     {
       if (engine == null || bearing == null) return;
+      parkControllerReportedHome = false;
+      lastParkFailure = null;
 
       // Satellite tracking or other commands supersede an active PARK route.
       CancelParkSequence(stopMotor: false);
@@ -212,6 +220,7 @@ namespace SkyRoof
     public void StopRotation()
     {
       CancelParkSequence(stopMotor: false);
+      parkControllerReportedHome = false;
       TrackCheckbox.Checked = false;
       engine?.StopRotation();
     }
@@ -388,7 +397,8 @@ namespace SkyRoof
 
     internal void ManualPark()
     {
-      if (engine == null || !engine.IsRunning || IsManualControlLocked)
+      if (engine == null || !engine.IsRunning || IsManualControlLocked ||
+          PositionSafetyTripped || EngineForRc3040s is { IsReady: false })
         return;
 
       var actual = GetManualActualBearing();
@@ -417,7 +427,15 @@ namespace SkyRoof
       if (TrackCheckbox.Checked)
         TrackCheckbox.Checked = false;
 
-      ParkSequence = new RotatorParkSequence(waypoints, DateTime.UtcNow);
+      bool rc3040s=EngineForRc3040s!=null;
+      parkControllerReportedHome=false;
+      lastParkFailure=null;
+      ParkSequence=new RotatorParkSequence(waypoints,DateTime.UtcNow,rc3040s);
+      EngineForRc3040s?.SetParkDiagnostics(true);
+      Serilog.Log.Information(
+        "PARK START: RC3040S={Rc3040s}; points={Count}; first user target AZ={Az:F2} EL={El:F2}; AZ offset={AzOffset} EL offset={ElOffset}; physical home NOT verified",
+        rc3040s,waypoints.Count,waypoints[0].Item1,waypoints[0].Item2,
+        settings.AzimuthOffset,settings.ElevationOffset);
       IssueParkWaypoint();
     }
 
@@ -428,6 +446,7 @@ namespace SkyRoof
       ParkSequence = null;
       if (stopMotor)
         engine?.StopRotation();
+      EngineForRc3040s?.SetParkDiagnostics(false);
     }
 
     private void IssueParkWaypoint()
@@ -435,9 +454,16 @@ namespace SkyRoof
       if (engine == null || ParkSequence == null)
         return;
       var target = ParkSequence.Current;
-      engine.RotateTo(Sanitize(new Bearing(
-        target.Az * Trig.RinD,
-        target.El * Trig.RinD)));
+      Bearing wireTarget=Sanitize(new Bearing(
+        target.Az * Trig.RinD,target.El * Trig.RinD));
+      Serilog.Log.Information(
+        "PARK WAYPOINT {Index}/{Count}: UI AZ={Az:F2} EL={El:F2}; wire target AZ={WireAz:F2} EL={WireEl:F2}",
+        ParkSequence.Index+1,ParkSequence.Count,target.Az,target.El,
+        wireTarget.AzDeg,wireTarget.ElDeg);
+      // Force a fresh, distinguishable W target for every RC-3040S waypoint.
+      // STOP is processed by the single motor I/O worker before the new W.
+      if(EngineForRc3040s!=null)engine.StopRotation();
+      engine.RotateTo(wireTarget);
     }
 
     private void AdvanceParkSequence()
@@ -449,19 +475,45 @@ namespace SkyRoof
       var actual = GetManualActualBearing();
       DateTime readUtc = engine?.LastSuccessfulBearingReadUtc ?? DateTime.MinValue;
 
-      ParkSequenceProgress result = sequence.Observe(
-        DateTime.UtcNow,
-        readUtc,
+      NativeRotatorControlEngine? native=EngineForRc3040s;
+      ParkSequenceProgress result=sequence.Observe(
+        DateTime.UtcNow,readUtc,
         actual?.AzDeg ?? double.NaN,
         actual?.ElDeg ?? double.NaN,
-        engine?.IsRunning == true && !TrackCheckbox.Checked);
+        engine?.IsRunning == true && !TrackCheckbox.Checked &&
+          !PositionSafetyTripped && (native==null || native.IsReady),
+        native?.LastParkTargetWriteUtc ?? default,
+        native?.LastParkStopWriteUtc ?? default);
 
-      if (result == ParkSequenceProgress.NextWaypoint)
-        IssueParkWaypoint();
-      else if (result == ParkSequenceProgress.Completed ||
-               result == ParkSequenceProgress.Aborted)
+      if(result==ParkSequenceProgress.NextWaypoint)
       {
-        CancelParkSequence(stopMotor: true);
+        Serilog.Log.Information("PARK waypoint arrived: subsequent W will be issued only after prior telemetry settled");
+        IssueParkWaypoint();
+      }
+      else if(result==ParkSequenceProgress.StopRequested)
+      {
+        Serilog.Log.Information(
+          "PARK settling complete: sending STOP, then waiting for independently fresh post-STOP C2. This does not verify mechanical home");
+        engine?.StopRotation();
+      }
+      else if(result==ParkSequenceProgress.Completed)
+      {
+        parkControllerReportedHome=native!=null;
+        Serilog.Log.Information(
+          "PARK COMPLETE: controller C2 confirmed after STOP; AZ={Az:F2} EL={El:F2}; mechanical home NOT verified",
+          actual?.AzDeg,actual?.ElDeg);
+        // Final RC-3040S STOP was already transmitted and post-STOP checked.
+        // Generic rotators retain their legacy STOP on completion.
+        CancelParkSequence(stopMotor:native==null);
+      }
+      else if(result==ParkSequenceProgress.Aborted)
+      {
+        lastParkFailure=sequence.AbortReason;
+        parkControllerReportedHome=false;
+        Serilog.Log.Warning(
+          "PARK ABORTED: {Reason}; last C2 UI AZ={Az:F2} EL={El:F2}; issuing safety STOP",
+          lastParkFailure,actual?.AzDeg,actual?.ElDeg);
+        CancelParkSequence(stopMotor:true);
       }
     }
 
@@ -513,7 +565,11 @@ namespace SkyRoof
       {
         string status=native.GetStatusString();
         return status=="Ready"
-          ? TrackCheckbox.Checked ? "Ready and tracking" : "Ready, tracking disabled"
+          ? ParkSequence!=null ? "PARK in progress; controller feedback under verification"
+          : parkControllerReportedHome ?
+            "Controller PARK confirmed by C2; mechanical home NOT verified"
+          : lastParkFailure!=null ? $"PARK aborted: {lastParkFailure}"
+          : TrackCheckbox.Checked ? "Ready and tracking" : "Ready, tracking disabled"
           : status;
       }
       if (!IsRunning()) return "No connection";
