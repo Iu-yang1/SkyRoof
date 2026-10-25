@@ -2,10 +2,10 @@
 
 ## English
 
-SkyRoof can host the pinned, upstream-synchronized SkyCAT 1.8 CAT server **inside the SkyRoof process**. The existing external rigctld and separately launched skycatd options remain supported.
+SkyRoof can host the pinned, upstream-synchronized SkyCAT 1.8 CAT server **in an isolated SkyRoof child process**. The existing external rigctld and separately launched skycatd options remain supported.
 
-1. Open **Settings → CAT → Embedded SkyCAT**. Set **CI-V Serial Port** to the Windows port used by your radio, choose the radio model (for IC-9700 use **3081**), and configure the baud rate. Set **Enable Embedded SkyCAT** to True.
-2. Under **RX CAT** and/or **TX CAT**, turn on **Use Embedded SkyCAT** and set **Enabled** as needed. This routes SkyRoof's existing Doppler and PTT engines through the in-process loopback server; the external Host/Port fields are ignored for those selected radios.
+1. Open **Settings → CAT → Embedded SkyCAT**. Set **CI-V Serial Port** to the Windows port used by your radio, select a friendly **Radio Model** entry (for example, **IC-9700 (3081)**) and pick a detected **CI-V Serial Port** (for example, **COM6**) from its dropdown. The COM list is scanned again each time the dropdown opens. Manual COM names and disconnected saved values remain editable; only the original model ID (for example, `3081`) and port name are persisted. Configure the baud rate. Set **Enable Embedded SkyCAT** to True.
+2. Under **RX CAT** and/or **TX CAT**, turn on **Use Embedded SkyCAT** and set **Enabled** as needed. This routes SkyRoof's existing Doppler and PTT engines through the isolated loopback SkyCAT worker; the external Host/Port fields are ignored for those selected radios.
 3. The standard loopback endpoints are **4532 main CAT**, **4534 WSJT-X**, **4535 IC-9700 scope stream**, **4537 Switch**, and **4538 CW Keyer**. The main CAT server is loopback-only, not open to the LAN.
 4. Open **Tools → Embedded SkyCAT Status** for service state, or **Tools → Open Log Archive Folder** for connection/protocol logs.
 
@@ -17,9 +17,9 @@ This mode reuses the reviewed **Iu-yang1/SkyCAT** Git submodule at a fixed commi
 
 ## 中文
 
-SkyRoof 支持将经上游同步的 SkyCAT 1.8 **直接运行在 SkyRoof 进程内**，无需手动启动独立 skycatd。默认关闭，不影响原有外部 rigctld/SkyCAT 使用方式。
+SkyRoof 支持将经上游同步的 SkyCAT 1.8 **运行在独立的 SkyRoof 子进程内**，无需手动启动独立 skycatd。默认关闭，不影响原有外部 rigctld/SkyCAT 使用方式。
 
-1. 进入 **设置 → CAT → Embedded SkyCAT**，指定 IC-9700 对应的 Windows CI-V 串口、型号 **3081** 与波特率，然后打开 **Enable Embedded SkyCAT**。
+1. 进入 **设置 → CAT → Embedded SkyCAT**，从下拉框选择机型（例如 **IC-9700 (3081)**），选择扫描到的 Windows CI-V 串口（也可手动输入或保留未连接的已保存端口），并指定波特率，然后打开 **Enable Embedded SkyCAT**。
 2. 在 **RX CAT**、**TX CAT** 中按需勾选 **Use Embedded SkyCAT** 和 **Enabled**，多普勒、PTT 等继续走 SkyRoof 原有 CAT 控制引擎。
 3. 默认回环端口为 **4532 主 CAT、4534 WSJT-X、4535 频谱、4537 Switch、4538 CW Keyer**，不会绑定公网接口。
 4. 使用 **Tools → Embedded SkyCAT Status** 查看服务状态，**Tools → Open Log Archive Folder** 检查日志。
