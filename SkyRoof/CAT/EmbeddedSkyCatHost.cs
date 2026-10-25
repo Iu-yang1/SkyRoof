@@ -1,82 +1,144 @@
 using System;
-using System.Threading.Tasks;
+using System.Diagnostics;
+using System.IO;
+using System.IO.Pipes;
 using System.Net;
 using System.Net.Sockets;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using Serilog;
-using Serilog.Extensions.Logging;
-using skycatd;
 
 namespace SkyRoof
 {
   /// <summary>
-  /// In-process SkyCAT service with strictly ordered shutdown:
-  /// CW/PTT SkyRoof consumers leave first, then this host releases its
-  /// owner-specific leases and the single shared CI-V serial port.
+  /// The entire SkyCAT CI-V and TCP server lives in a distinct SkyRoof.exe
+  /// worker process. No third-party serial/CI-V/CW library is executed on
+  /// the WinForms process. All lifecycle I/O is asynchronous and bounded.
   /// </summary>
   internal sealed class EmbeddedSkyCatHost : IDisposable
   {
-    private CatServer? server;
-    private Task? runTask;
-    private SerilogLoggerFactory? logFactory;
+    private readonly object gate=new();
+    private Process? child;
+    private NamedPipeServerStream? pipe;
     private string? activeKey;
-    private bool disposed;
-    internal bool IsRunning => runTask is { IsCompleted: false };
+    private bool ready,disposed,expectedExit;
+    internal event EventHandler? ReadinessChanged;
+
+    internal bool IsRunning
+    {
+      get { lock(gate) return ready && child is { HasExited:false }; }
+    }
 
     internal void Apply(EmbeddedSkyCatSettings settings)
     {
       if(disposed)return;
-      if(!settings.Enabled)
+      if(!settings.Enabled || settings.Validate()!=null)
       {
-        Stop();
-        return;
-      }
-      string? error=settings.Validate();
-      if(error!=null)
-      {
-        Log.Warning("Embedded SkyCAT disabled: {Reason}",error);
+        if(settings.Enabled)
+          Log.Warning("Embedded SkyCAT worker not launched: {Reason}",settings.Validate());
         Stop();
         return;
       }
       string key=settings.ConfigurationKey();
-      if(activeKey==key && IsRunning)return;
-      if(!Stop())return;
-      // Fail closed if another process already owns any required endpoint.
-      // Otherwise SkyRoof might connect to an unrelated rigctld/skycatd
-      // while its own in-process server cannot bind the port.
+      lock(gate) if(activeKey==key && child is { HasExited:false })return;
+      Stop();
+      lock(gate)
+      {
+        // Never start a second owner of the serial port while a previous
+        // worker remains alive. It must terminate before a new launch.
+        if(child is { HasExited:false })
+        {
+          Log.Warning("Old SkyCAT child still exiting; refusing a second CI-V serial owner.");
+          return;
+        }
+      }
       foreach(int port in ActivePorts(settings))
         if(!PortAvailable(port))
         {
-          Log.Warning("Embedded SkyCAT not started: loopback port {Port} is already in use. Stop the external server or choose a different port.",port);
+          Log.Warning("Embedded SkyCAT cannot bind loopback port {Port}; not connecting to a foreign CAT server.",port);
           return;
         }
+
+      NamedPipeServerStream? created=null;
+      Process? process=null;
       try
       {
-        var factory=new SerilogLoggerFactory(Log.Logger);
-        var candidate=new CatServer(settings.BuildOptions(),
-          factory.CreateLogger("SkyRoof.EmbeddedSkyCAT"));
-        logFactory=factory;
-        server=candidate;
-        activeKey=key;
-        runTask=Task.Run(() =>
+        string pipeName="SkyRoof-SkyCAT-"+Guid.NewGuid().ToString("N");
+        created=new NamedPipeServerStream(pipeName,PipeDirection.InOut,1,
+          PipeTransmissionMode.Byte,PipeOptions.Asynchronous);
+        string encoded=Convert.ToBase64String(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(settings));
+        var start=new ProcessStartInfo(Environment.ProcessPath ??
+          throw new InvalidOperationException("Executable path not resolved"))
         {
-          try { candidate.Run(); }
-          catch(Exception ex)
-          {
-            Log.Error(ex,"Embedded SkyCAT server stopped unexpectedly.");
-          }
-        });
-        Log.Information(
-          "Embedded SkyCAT started: {Model}, serial {Port}; CAT 127.0.0.1:{CatPort}; WSJT-X {Wsjt}; Scope {Scope}; Switch {Switch}; CW {Cw}",
-          settings.Model,settings.SerialPort,settings.CatPort,
-          settings.WsjtXEnabled?settings.WsjtXPort:0,
-          settings.SpectrumPort,settings.SwitchEnabled?settings.SwitchPort:0,
-          settings.CwEnabled?settings.CwPort:0);
+          UseShellExecute=false,CreateNoWindow=true,WindowStyle=ProcessWindowStyle.Hidden
+        };
+        start.ArgumentList.Add("--skycat-worker");
+        start.ArgumentList.Add(pipeName);
+        start.ArgumentList.Add(encoded);
+        process=Process.Start(start) ?? throw new IOException("SkyCAT worker process failed to launch");
+        lock(gate)
+        {
+          child=process;pipe=created;activeKey=key;expectedExit=false;ready=false;
+        }
+        _=MonitorAsync(process,created);
+        Log.Information("Started isolated SkyCAT child PID={Pid}. CAT and CI-V are no longer in SkyRoof's UI process.",process.Id);
       }
       catch(Exception ex)
       {
-        Log.Error(ex,"Unable to start embedded SkyCAT.");
-        Stop();
+        created?.Dispose();
+        if(process is { HasExited:false })try{process.Kill();}catch{}
+        Log.Error(ex,"SkyCAT process launch failed");
+      }
+    }
+
+    private async Task MonitorAsync(Process process,NamedPipeServerStream connection)
+    {
+      bool unexpected=false;
+      try
+      {
+        using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(6));
+        await connection.WaitForConnectionAsync(deadline.Token).ConfigureAwait(false);
+        var code=new byte[1];
+        int n=await connection.ReadAsync(code,deadline.Token).ConfigureAwait(false);
+        if(n!=1 || code[0]!=(byte)'R')
+          throw new IOException("SkyCAT child rejected startup handshake");
+        lock(gate)
+        {
+          if(ReferenceEquals(process,child) && !expectedExit)ready=true;
+        }
+        ReadinessChanged?.Invoke(this,EventArgs.Empty);
+        await process.WaitForExitAsync().ConfigureAwait(false);
+      }
+      catch(Exception ex)
+      {
+        Log.Warning(ex,"SkyCAT child control channel closed before normal shutdown");
+        unexpected=true;
+      }
+      finally
+      {
+        bool wasExpected;
+        lock(gate)
+        {
+          wasExpected=expectedExit;
+          if(ReferenceEquals(process,child))
+          {
+            ready=false;
+            activeKey=null;
+            if(process.HasExited){child=null;pipe=null;}
+          }
+        }
+        if(!process.HasExited)
+        {
+          try{process.Kill(entireProcessTree:true);}catch{}
+        }
+        connection.Dispose();
+        process.Dispose();
+        if(!wasExpected)
+        {
+          Log.Warning("SkyCAT child exited. CAT controls are disabled until the operator reapplies settings; verify PTT before reconnecting.");
+          ReadinessChanged?.Invoke(this,EventArgs.Empty);
+        }
       }
     }
 
@@ -93,46 +155,52 @@ namespace SkyRoof
     {
       if(port<=0 || port>65535)return false;
       TcpListener? probe=null;
-      try
-      {
-        probe=new TcpListener(IPAddress.Loopback,port);
-        probe.Start();
-        return true;
-      }
+      try {probe=new TcpListener(IPAddress.Loopback,port);probe.Start();return true;}
       catch(SocketException){return false;}
       catch(System.Security.SecurityException){return false;}
-      finally {probe?.Stop();}
+      finally{probe?.Stop();}
     }
 
-    private bool Stop()
+    private void Stop()
     {
-      if(server==null && runTask==null)return true;
+      Process? process;
+      NamedPipeServerStream? connection;
+      lock(gate)
+      {
+        process=child;connection=pipe;expectedExit=true;ready=false;
+        activeKey=null;
+      }
+      if(process==null)return;
       try
       {
-        server?.Stop();
-        if(runTask!=null && !runTask.Wait(TimeSpan.FromSeconds(10)))
+        if(connection?.IsConnected==true)
         {
-          Log.Warning("Embedded SkyCAT shutdown is incomplete; refusing to start a second serial owner.");
-          return false;
+          // A graceful EOF lets the child release SkyCAT-owned PTT/CW,
+          // restore CI-V configuration, and close the serial port.
+          connection.WriteByte((byte)'S');
+          connection.Flush();
         }
       }
-      catch(Exception ex)
+      catch(IOException){}
+      catch(ObjectDisposedException){}
+      // Never Wait/Join on a WinForms callback, including FormClosing.
+      _=Task.Run(async () =>
       {
-        Log.Warning(ex,"Embedded SkyCAT shutdown encountered an exception.");
-        if(runTask is { IsCompleted: false })return false;
-      }
-      finally
-      {
-        if(runTask==null || runTask.IsCompleted)
+        try
         {
-          server=null;
-          runTask=null;
-          activeKey=null;
-          logFactory?.Dispose();
-          logFactory=null;
+          if(!process.HasExited)
+          {
+            using var cts=new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            try{await process.WaitForExitAsync(cts.Token).ConfigureAwait(false);}
+            catch(OperationCanceledException)
+            {
+              Log.Error("SkyCAT child did not safely stop within 5s. Forcibly terminating; radio PTT must be checked.");
+              try{process.Kill(entireProcessTree:true);}catch{}
+            }
+          }
         }
-      }
-      return true;
+        catch(InvalidOperationException){}
+      });
     }
 
     public void Dispose()

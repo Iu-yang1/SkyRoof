@@ -6,8 +6,18 @@ namespace SkyRoof
   internal static class Program
   {
     [STAThread]
-    static void Main()
+    static void Main(string[] args)
     {
+      if(args.Length>0 && args[0]=="--skycat-worker")
+      {
+        SkyCatSubprocess.Run(args);
+        return;
+      }
+      if(args.Length>0 && args[0]=="--rotator-transport-worker")
+      {
+        SkyRoof.NativeRotator.IsolatedRotatorTransport.RunChild(args);
+        return;
+      }
       using (new SingleInstanceEnforcer())
       {
         try
