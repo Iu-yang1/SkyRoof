@@ -24,8 +24,11 @@ namespace SkyRoof
     {
       var link = ctx.FrequencyControl.RadioLink;
       bool crossband = link.IsCrossBand;
-      bool wantRx = ctx.Settings.Cat.RxCat.Enabled;
-      bool wantTx = ctx.Settings.Cat.TxCat.Enabled && link.HasUplink;
+      bool embeddedEnabled=ctx.Settings.Cat.Embedded.Enabled;
+      bool wantRx = ctx.Settings.Cat.RxCat.Enabled &&
+        (!ctx.Settings.Cat.RxCat.UseEmbeddedSkyCat || embeddedEnabled);
+      bool wantTx = ctx.Settings.Cat.TxCat.Enabled && link.HasUplink &&
+        (!ctx.Settings.Cat.TxCat.UseEmbeddedSkyCat || embeddedEnabled);
       bool wantShare = wantTx && wantRx && IsSameEngine(ctx.Settings.Cat.TxCat, ctx.Settings.Cat.RxCat);
       bool rxAlsoTx = wantShare; // wantShare already implies wantTx
 
@@ -38,6 +41,9 @@ namespace SkyRoof
     internal void ApplySettings()
     {
       DestroyAllEngines();
+      // The old CAT clients must release their own PTT leases before
+      // the embedded host changes or closes the shared CI-V serial session.
+      ctx.MainForm.ApplyEmbeddedSkyCatSettings();
       ApplyTune();
     }
 
@@ -349,7 +355,7 @@ namespace SkyRoof
 
     private CatControlEngine CreateRxEngine()
     {
-      var engine = new CatControlEngine(ctx.Settings.Cat.RxCat, ctx.Settings.Cat);
+      var engine = new CatControlEngine(ResolveRadioSettings(ctx.Settings.Cat.RxCat), ctx.Settings.Cat);
       engine.RxTuned += (s, e) => ctx.FrequencyControl.RxTuned();
       // when this engine is shared (Tx == Rx) it also drives the uplink, so wire TxTuned too;
       // an RX-only engine never fires it, so the extra subscription is harmless there
@@ -370,7 +376,7 @@ namespace SkyRoof
 
     private CatControlEngine CreateTxEngine()
     {
-      var engine = new CatControlEngine(ctx.Settings.Cat.TxCat, ctx.Settings.Cat);
+      var engine = new CatControlEngine(ResolveRadioSettings(ctx.Settings.Cat.TxCat), ctx.Settings.Cat);
       engine.TxTuned += (s, e) => ctx.FrequencyControl.TxTuned();
       engine.StatusChanged += (s, e) => ctx.MainForm.ShowCatStatus();
       engine.IcomRfGainReadbackReceived +=
@@ -386,6 +392,19 @@ namespace SkyRoof
       return engine;
     }
 
+    private CatRadioSettings ResolveRadioSettings(CatRadioSettings source)
+    {
+      if(!source.UseEmbeddedSkyCat)return source;
+      return new CatRadioSettings
+      {
+        Host="127.0.0.1",
+        Port=(ushort)ctx.Settings.Cat.Embedded.CatPort,
+        Enabled=source.Enabled,
+        UseEmbeddedSkyCat=true,
+        ShowCorrectedFrequency=source.ShowCorrectedFrequency
+      };
+    }
+
     private static bool IsSameEngine(CatRadioSettings txCat, CatRadioSettings rxCat)
     {
       return rxCat.Enabled
@@ -396,6 +415,8 @@ namespace SkyRoof
 
     public static bool IsSameHostPort(CatRadioSettings txCat, CatRadioSettings rxCat)
     {
+      if(rxCat.UseEmbeddedSkyCat != txCat.UseEmbeddedSkyCat)return false;
+      if(rxCat.UseEmbeddedSkyCat)return true;
       if (rxCat.Port != txCat.Port) return false;
       if (string.IsNullOrEmpty(rxCat.Host) || string.IsNullOrEmpty(txCat.Host))
         return false;

@@ -330,7 +330,8 @@ namespace SkyRoof
         ctx.Announcer.RebuildQueue();
 
       if (ChangedFields.Exists(s => s.StartsWith("SkyRoof.CatSettings.")) ||
-        ChangedFields.Exists(s => s.StartsWith("SkyRoof.CatRadioSettings")))
+        ChangedFields.Exists(s => s.StartsWith("SkyRoof.CatRadioSettings")) ||
+        ChangedFields.Exists(s => s.StartsWith("SkyRoof.EmbeddedSkyCatSettings.")))
       {
         ctx.CatControl.ApplySettings();
         ctx.MainForm.ShowCatStatus();

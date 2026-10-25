@@ -344,4 +344,12 @@
     <InternalsVisibleTo Include="VE3NEA.Dsp.Tests" />
   </ItemGroup>
 
+  <!-- In-process SkyCAT server, pinned to a reviewed Git submodule revision. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Vendor\SkyCAT\skycatd\skycatd.csproj" />
+    <Content Include="..\Vendor\SkyCAT\Rigs\*.json"
+             Link="Rigs\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

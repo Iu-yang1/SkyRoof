@@ -19,6 +19,10 @@ namespace SkyRoof
     private ToolStripDropDown? RotatorControlPopup;
     private MouseButtons LastRotatorStatusMouseButton;
     private ToolStripProfessionalRenderer? ThemeRenderer;
+    private readonly EmbeddedSkyCatHost EmbeddedSkyCat = new();
+    internal void ApplyEmbeddedSkyCatSettings() =>
+      EmbeddedSkyCat.Apply(ctx.Settings.Cat.Embedded);
+    internal bool EmbeddedSkyCatRunning => EmbeddedSkyCat.IsRunning;
     private readonly ToolStripSeparator ThemeGitHubSeparator =
       new();
     private readonly ToolStripMenuItem ThemeGitHubLightMNU =
@@ -181,6 +185,9 @@ namespace SkyRoof
       // engine releases PTT here only if SkyRoof itself successfully asserted it;
       // externally owned PTT (for example from WSJT-X) is left untouched.
       ctx.CatControl.Shutdown();
+      // All CAT/CW client leases must be released before the in-process
+      // serial owner is shut down and restores CI-V transceive settings.
+      EmbeddedSkyCat.Dispose();
 
       // save settings
       ctx.Settings.Ui.StoreDockingLayout(DockHost);
