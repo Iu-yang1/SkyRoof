@@ -336,8 +336,10 @@ namespace VE3NEA.Dsp.Tests
         output.WriteLine(JsonSerializer.Serialize(row));
         rows.Add(row);
       }
-      string path=Path.Combine(Directory.GetCurrentDirectory(),
-        "artifacts","cw-dense-coherent-experiment.json");
+      string path=Environment.GetEnvironmentVariable(
+        "DEEPCW_DENSE_BENCHMARK_OUTPUT")??
+        Path.Combine(Directory.GetCurrentDirectory(),
+          "artifacts","cw-dense-coherent-experiment.json");
       Directory.CreateDirectory(Path.GetDirectoryName(path)!);
       File.WriteAllText(path,JsonSerializer.Serialize(rows,
         new JsonSerializerOptions { WriteIndented=true }));
