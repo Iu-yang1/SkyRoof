@@ -167,30 +167,43 @@ namespace SkyRoof
       UpdateLabel.Visible = true;
     }
 
-    private bool cwShutdownCompleted;
+    private bool radioShutdownCompleted;
     private async void MainForm_FormClosing(object sender, FormClosingEventArgs e)
     {
-      // First phase returns control to the message pump during asynchronous
-      // CW STOP, rather than synchronously waiting on a hung serial/CAT path.
-      if(!cwShutdownCompleted && ctx.CwTransmit!=null)
+      // CAT/CW radio release is deliberately asynchronous: an unreachable
+      // SkyCAT worker or a stuck USB/serial port must not block WinForms.
+      if(!radioShutdownCompleted)
       {
         e.Cancel=true;
         timer.Enabled=false;
+        if(ctx.Slicer!=null)ctx.Slicer.Enabled=false;
         ctx.AutoSelector.Shutdown();
         ctx.PttHotkey?.Dispose();
         ctx.PttHotkey=null;
         var cw=ctx.CwTransmit;
         ctx.CwTransmit=null;
+        if(cw!=null)
+        {
+          try{await cw.DisposeAsync().AsTask()
+            .WaitAsync(TimeSpan.FromSeconds(3));}
+          catch(Exception ex)
+          {
+            Log.Warning(ex,"CW STOP timed out during asynchronous shutdown");
+          }
+        }
+
+        // Preserve the CAT owner's PTT-release ordering, but perform the
+        // potentially 4-second PTT verification and thread shutdown OFF UI.
         try
         {
-          await cw.DisposeAsync().AsTask()
-            .WaitAsync(TimeSpan.FromSeconds(3));
+          await Task.Run(()=>ctx.CatControl.Shutdown())
+            .WaitAsync(TimeSpan.FromSeconds(6));
         }
         catch(Exception ex)
         {
-          Log.Warning(ex,"CW shutdown exceeded bounded asynchronous timeout");
+          Log.Error(ex,"CAT shutdown timed out: verify actual radio PTT; SkyCAT child will attempt owner cleanup");
         }
-        cwShutdownCompleted=true;
+        radioShutdownCompleted=true;
         if(!IsDisposed && !Disposing)BeginInvoke((Action)Close);
         return;
       }
@@ -210,12 +223,9 @@ namespace SkyRoof
       // FormClosing pass; the SkyCAT worker independently owns fail-safe
       // cleanup if that endpoint becomes unresponsive.
 
-      // Dispose CAT engines while the UI and TCP path are still alive. A CAT
-      // engine releases PTT here only if SkyRoof itself successfully asserted it;
-      // externally owned PTT (for example from WSJT-X) is left untouched.
-      ctx.CatControl.Shutdown();
-      // All CAT/CW client leases must be released before the in-process
-      // serial owner is shut down and restores CI-V transceive settings.
+      // CAT ownership release was awaited asynchronously above; now the
+      // separate SkyCAT worker may restore CI-V state and close its own port.
+      // An unresolved PTT release requires an operator hardware check.
       EmbeddedSkyCat.Dispose();
 
       // save settings
