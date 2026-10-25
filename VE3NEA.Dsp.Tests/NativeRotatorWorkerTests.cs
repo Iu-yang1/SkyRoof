@@ -46,6 +46,56 @@ public sealed class NativeRotatorWorkerTests
   }
 
   [Fact]
+  public async Task FullRotatorEngineProcessIsolatesMotionAndFailClosesAfterCrash()
+  {
+    string? root=Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
+    if(string.IsNullOrWhiteSpace(root))return;
+    string executable=Path.Combine(root,"SkyRoof","bin","x64","Release",
+      "net10.0-windows7.0","SkyRoof.exe");
+    Assert.True(File.Exists(executable));
+    await using var server=new FakeGs232Bridge();
+    using var proxy=new RotatorEngineSubprocess(CreateSettings(server.Port),executable);
+    Assert.NotEqual(Environment.ProcessId,proxy.WorkerPid);
+    for(int i=0;i<120 && !proxy.IsReady;i++)await Task.Delay(50);
+    Assert.True(proxy.IsReady,"Separate motion engine must publish real telemetry");
+    Assert.NotNull(proxy.LastReadBearing);
+    proxy.RotateTo(new SkyRoof.Bearing(Math.PI/2,Math.PI/6));
+    await UntilAsync(()=>server.Count("W090 030")>0);
+    int childPid=proxy.WorkerPid;
+    using(var child=System.Diagnostics.Process.GetProcessById(childPid))
+      child.Kill(entireProcessTree:true);
+    for(int i=0;i<120 && proxy.IsRunning;i++)await Task.Delay(50);
+    Assert.False(proxy.IsRunning);
+    Assert.True(proxy.PositionFaulted);
+    proxy.RotateTo(new SkyRoof.Bearing(120*Math.PI/180,30*Math.PI/180));
+    await Task.Delay(350);
+    Assert.Equal(0,server.Count("W120 030"));
+  }
+
+  [Fact]
+  public async Task FullEngineManagementLeasePreservesStopAndFeedbackInterlocks()
+  {
+    string? root=Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
+    if(string.IsNullOrWhiteSpace(root))return;
+    string executable=Path.Combine(root,"SkyRoof","bin","x64","Release",
+      "net10.0-windows7.0","SkyRoof.exe");
+    await using var server=new FakeGs232Bridge();
+    using var proxy=new RotatorEngineSubprocess(CreateSettings(server.Port),executable);
+    for(int i=0;i<120 && !proxy.IsReady;i++)await Task.Delay(50);
+    Assert.True(proxy.IsReady);
+    using(var lease=await proxy.AcquireManagementLeaseAsync())
+    {
+      Assert.NotNull(lease);
+      Assert.True(await proxy.VerifyPostManagementFeedbackAsync());
+      proxy.RotateTo(new SkyRoof.Bearing(120*Math.PI/180,30*Math.PI/180));
+      await Task.Delay(300);
+      Assert.Equal(0,server.Count("W120 030"));
+    }
+    proxy.RotateTo(new SkyRoof.Bearing(90*Math.PI/180,30*Math.PI/180));
+    await UntilAsync(()=>server.Count("W090 030")>=1);
+  }
+
+  [Fact]
   public async Task TrackDisabledPollsAtBoundedRateWithoutMotionOrBusyLoop()
   {
     await using var server=new FakeGs232Bridge();

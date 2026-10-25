@@ -21,6 +21,7 @@ namespace SkyRoof;
 internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
 {
   internal static bool InChildEngine {get;private set;}
+  internal int WorkerPid => child.Id;
   internal static bool ShouldHostWorker() =>
     !InChildEngine && string.Equals(
       System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name,
