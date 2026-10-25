@@ -15,3 +15,29 @@ NRL2 UDP's former numeric protocol ID was **10**. Rc3040sLan has ID **11**, and 
 ### Motion planning status
 
 The Motion Settings window offers Direct, Precision Stop, Trapezoidal and S-curve modes. A profile can only control the rotator after explicitly enabling it and completing hardware checks; Direct remains the default. No AT speed writes occur during tracking.
+
+
+### RC-3040S PARK / Home verification safety (P0–P2)
+
+- PARK is an absolute GS-232 target route, **not** a firmware encoder-reset,
+  end-stop seek, or mechanical home calibration. Do not issue AT+INIT/RESET or
+  undocumented firmware home commands as part of PARK.
+- Each waypoint must have a freshly transmitted W frame and new C2 samples;
+  RC-3040S waits for >=3 distinct position reads within 1 degree with a
+  2.5-second settling dwell and <=0.5 degree sample-to-sample change.
+- The last waypoint then requests S (STOP) through the existing single TCP
+  motor I/O worker. PARK is confirmed only after the S frame is actually
+  transmitted and >=2 subsequent distinct C2 readings over >=1 second remain
+  stable and in tolerance. Loss of feedback, STOP timeout or unexpected
+  post-STOP position changes aborts the route and requests STOP again.
+- The UI deliberately says **PARK C2 OK** rather than **Home calibrated**.
+  Zero has *not* been checked by any independent physical sensor: the
+  operator must compare a mechanical reference before relying on it.
+- PARK diagnostics record the UI and wire target coordinates, configured
+  azimuth/elevation offsets, actual W/S transmission timestamps and the
+  raw TCP/60020 C2 replies. The log archive is accessible via
+  **Tools > Open Log Archive Folder**; logs use the existing Serilog
+  rotating files under the product's AppData/Logs directory.
+- This improves early-stop safety but cannot correct step loss, backlash,
+  a controller-side internal-counter zero error, or an invalid physical
+  limit/home calibration. Test at a safe middle-of-travel target first.

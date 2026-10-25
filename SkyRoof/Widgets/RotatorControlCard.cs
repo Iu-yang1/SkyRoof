@@ -362,6 +362,10 @@ namespace SkyRoof
       ManualHintLabel.Text =
         rotator.IsParking
           ? "PARK ACTIVE\n\nSTOP cancels\nthe route."
+          : rotator.ParkControllerReportedHome
+          ? "C2 PARK REACHED\n\nMechanical home\nNOT verified."
+          : rotator.LastParkFailure != null
+          ? "PARK ABORTED\n\nCheck Logs\nand actual angle."
           : manualLocked
           ? "LIVE TRACK\n\nManual locked.\nClear TRACK first."
           : rotator.IsTracking

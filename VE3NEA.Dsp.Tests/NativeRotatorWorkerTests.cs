@@ -45,6 +45,31 @@ public sealed class NativeRotatorWorkerTests
   }
 
   [Fact]
+  public async Task Rc3040sExposesActualParkWireTimestampsOnlyAfterIo()
+  {
+    await using var server=new FakeGs232Bridge();
+    var settings=CreateSettings(server.Port);
+    settings.NativeProtocol=RotatorProtocolKind.Rc3040sLan;
+    using var engine=new NativeRotatorControlEngine(settings);
+    await UntilAsync(()=>engine.IsReady && engine.LastReadBearing!=null);
+    Assert.Equal(DateTime.MinValue,engine.LastParkTargetWriteUtc);
+    DateTime begun=DateTime.UtcNow;
+    engine.SetParkDiagnostics(true);
+    engine.StopRotation();
+    engine.RotateTo(new SkyRoof.Bearing(Math.PI/2,Math.PI/6));
+    await UntilAsync(()=>server.Count("W090 030")>0 &&
+      engine.LastParkTargetWriteUtc>=begun);
+    int firstStops=server.Count("S");
+    DateTime targetSent=engine.LastParkTargetWriteUtc;
+    engine.StopRotation();
+    await UntilAsync(()=>server.Count("S")>firstStops &&
+      engine.LastParkStopWriteUtc>targetSent);
+    Assert.True(engine.LastParkStopWriteUtc>targetSent);
+    Assert.Null(engine.RequestedBearing);
+    engine.SetParkDiagnostics(false);
+  }
+
+  [Fact]
   public async Task TrackOffDoesNotRepeatAcceptedTargetDuringFeedbackPolling()
   {
     await using var server=new FakeGs232Bridge();
