@@ -29,6 +29,18 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void EmbeddedAndExternalCatEndpointsNeverShareAnEngine()
+    {
+      var external=new CatRadioSettings
+      {Enabled=true,Host="localhost",Port=4532};
+      var internalCat=new CatRadioSettings
+      {Enabled=true,Host="127.0.0.1",Port=4532,UseEmbeddedSkyCat=true};
+      Assert.False(CatControl.IsSameHostPort(external,internalCat));
+      Assert.True(CatControl.IsSameHostPort(internalCat,new CatRadioSettings
+      {Enabled=true,UseEmbeddedSkyCat=true,Host="other-host",Port=4321}));
+    }
+
+    [Fact]
     public void EnabledServiceRequiresExplicitSerialPort()
     {
       var settings=new EmbeddedSkyCatSettings {Enabled=true};

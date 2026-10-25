@@ -6,6 +6,8 @@ items:
     href: satellite-data-and-tuning.md
   - name: CAT、FT4 与电台集成
     href: radio-and-ft4.md
+  - name: 内嵌 SkyCAT 串口、频谱和 CW 服务
+    href: embedded-skycat.md
   - name: IC-9700 频谱
     href: spectrum.md
   - name: ONVIF 摄像机（GPU）
