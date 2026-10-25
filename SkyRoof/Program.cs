@@ -13,6 +13,11 @@ namespace SkyRoof
         SkyCatSubprocess.Run(args);
         return;
       }
+      if(args.Length>0 && args[0]=="--rotator-engine-worker")
+      {
+        RotatorEngineSubprocess.RunChild(args);
+        return;
+      }
       if(args.Length>0 && args[0]=="--rotator-transport-worker")
       {
         SkyRoof.NativeRotator.IsolatedRotatorTransport.RunChild(args);

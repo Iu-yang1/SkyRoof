@@ -16,9 +16,9 @@ namespace SkyRoof
     private string? lastParkFailure;
     internal bool ParkControllerReportedHome => parkControllerReportedHome;
     internal string? LastParkFailure => lastParkFailure;
-    internal NativeRotatorControlEngine? EngineForRc3040s =>
+    internal INativeRotatorEngine? EngineForRc3040s =>
       ctx?.Settings.Rotator.NativeProtocol == SkyRoof.NativeRotator.RotatorProtocolKind.Rc3040sLan
-        ? engine as NativeRotatorControlEngine : null;
+        ? engine as INativeRotatorEngine : null;
 
     internal bool IsParking => ParkSequence != null;
     internal string ParkProgressText => ParkSequence == null
@@ -34,9 +34,9 @@ namespace SkyRoof
     public Bearing? SatelliteBearing => SatBearing;
     public bool PositionSafetyTripped => engine?.PositionFaulted == true;
     internal bool ManagementReviewRequired =>
-      engine is NativeRotatorControlEngine native && native.ManagementReviewRequired;
+      engine is INativeRotatorEngine native && native.ManagementReviewRequired;
     internal bool NativeTelemetryConnected =>
-      engine is NativeRotatorControlEngine native && native.HasLiveConnection;
+      engine is INativeRotatorEngine native && native.HasLiveConnection;
 
     // PathOptimizerForm instance is created once and reused
     private PathOptimizerForm dialog = new();
@@ -69,7 +69,9 @@ namespace SkyRoof
       if (ctx.Settings.Rotator.Enabled)
       {
         engine = ctx.Settings.Rotator.ResolveUseNativeDriver()
-          ? new NativeRotatorControlEngine(ctx.Settings.Rotator)
+          ? (RotatorEngineSubprocess.ShouldHostWorker()
+              ? new RotatorEngineSubprocess(ctx.Settings.Rotator)
+              : new NativeRotatorControlEngine(ctx.Settings.Rotator))
           : new RotatorControlEngine(ctx.Settings.Rotator);
         engine.StatusChanged += Engine_StatusChanged;
         engine.BearingChanged += Engine_BearingChanged;
@@ -159,7 +161,7 @@ namespace SkyRoof
     {
       // TCP connect alone does not mean the device is answering queries.
       // Native control becomes operational only after a valid position reply.
-      return engine is NativeRotatorControlEngine native
+      return engine is INativeRotatorEngine native
         ? native.IsReady && !native.PositionFaulted
         : engine != null && engine.IsRunning;
     }
@@ -479,7 +481,7 @@ namespace SkyRoof
       var actual = GetManualActualBearing();
       DateTime readUtc = engine?.LastSuccessfulBearingReadUtc ?? DateTime.MinValue;
 
-      NativeRotatorControlEngine? native=EngineForRc3040s;
+      INativeRotatorEngine? native=EngineForRc3040s;
       ParkSequenceProgress result=sequence.Observe(
         DateTime.UtcNow,readUtc,
         actual?.AzDeg ?? double.NaN,
@@ -565,7 +567,7 @@ namespace SkyRoof
           ? "Management safety lock; position telemetry connected. Inspect and reapply settings."
           : "Management safety lock; position telemetry unavailable. Inspect controller.";
       if (PositionSafetyTripped) return "Position feedback fault: STOP requested; inspect actual rotor angle";
-      if (engine is NativeRotatorControlEngine native)
+      if (engine is INativeRotatorEngine native)
       {
         string status=native.GetStatusString();
         return status=="Ready"
