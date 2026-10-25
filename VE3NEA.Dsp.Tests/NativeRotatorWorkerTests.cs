@@ -138,7 +138,10 @@ public sealed class NativeRotatorWorkerTests
     for(int i=0;i<120 && !first.IsReady;i++)await Task.Delay(50);
     Assert.True(first.IsReady);
     using var second=new RotatorEngineSubprocess(cfg,exe);
-    await Task.Delay(1250);
+    for(int i=0;i<100 && !second.WorkerExited;i++)
+      await Task.Delay(50);
+    Assert.True(second.WorkerExited,
+      "A second SkyRoof rotator process must exit without opening the existing hardware endpoint");
     Assert.False(second.IsReady);
     Assert.True(first.IsReady);
     first.RotateTo(new SkyRoof.Bearing(Math.PI/2,Math.PI/6));
