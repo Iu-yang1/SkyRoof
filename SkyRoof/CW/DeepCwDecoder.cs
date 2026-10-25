@@ -500,7 +500,10 @@ namespace SkyRoof.CW
           bool weakerNearFar=allDetectedTracks.Any(peer=>
             peer.Id!=track.Id &&
             peer.SnrDb-track.SnrDb>=6 &&
-            Math.Abs(peer.FrequencyHz-track.FrequencyHz)>=12 &&
+            (Math.Abs(peer.FrequencyHz-track.FrequencyHz)>=12 ||
+              (EnableCoherentTrackRefinement &&
+               EnableCoherentNearFarCancellation &&
+               Math.Abs(peer.FrequencyHz-track.FrequencyHz)>=4)) &&
             Math.Abs(peer.FrequencyHz-track.FrequencyHz)<=21 &&
             Math.Abs(peer.DriftHzPerSecond)<3 &&
             Math.Abs(track.DriftHzPerSecond)<3);
