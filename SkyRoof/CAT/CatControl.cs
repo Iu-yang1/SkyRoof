@@ -340,6 +340,42 @@ namespace SkyRoof
         Tx = null;
     }
 
+    /// <summary>
+    /// Unexpected SkyCAT child death must NEVER synchronously dispose CAT
+    /// sockets on the WinForms message pump. Detach their UI-facing handles
+    /// first, then let owner-aware PTT release and thread joins happen on a
+    /// background worker. External/legacy rigctld endpoints are preserved.
+    /// </summary>
+    internal void OnEmbeddedSkyCatExited()
+    {
+      var detached=new HashSet<CatControlEngine>();
+      if(ctx.Settings.Cat.RxCat.UseEmbeddedSkyCat && Rx!=null)
+      {
+        detached.Add(Rx);
+        if(ReferenceEquals(Rx,Tx))Tx=null;
+        Rx=null;
+      }
+      if(ctx.Settings.Cat.TxCat.UseEmbeddedSkyCat && Tx!=null)
+      {
+        detached.Add(Tx);
+        Tx=null;
+      }
+      if(detached.Count==0)return;
+      rxEngineIncludesTx=false;rxEngineCrossband=false;
+      ctx.MainForm.ShowCatStatus();
+      _=Task.Run(()=>
+      {
+        foreach(CatControlEngine engine in detached)
+        {
+          try{engine.Dispose();}
+          catch(Exception ex)
+          {
+            Serilog.Log.Warning(ex,"CAT shutdown after child exit failed");
+          }
+        }
+      });
+    }
+
     internal void Shutdown()
     {
       DestroyAllEngines();

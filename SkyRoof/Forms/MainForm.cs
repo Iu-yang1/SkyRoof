@@ -50,7 +50,12 @@ namespace SkyRoof
           BeginInvoke((Action)(()=>
           {
             if(!IsDisposed && !Disposing)
-              ctx.CatControl.ApplySettings();
+            {
+              if(EmbeddedSkyCatRunning)
+                ctx.CatControl.ApplySettings();
+              else
+                ctx.CatControl.OnEmbeddedSkyCatExited();
+            }
           }));
         }
         catch(InvalidOperationException){}
