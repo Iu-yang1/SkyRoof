@@ -268,6 +268,12 @@ namespace SkyRoof.CW
     public double LaneBandwidthHz { get; set; } = 240;
     public double TargetCenterHz { get; set; } = 800;
 
+    /// <summary>
+    /// Experimental coherent least-squares lane separation. Not enabled in
+    /// production until compared against the pinned real ONNX baseline.
+    /// </summary>
+    public bool EnableCoherentDenseSeparation { get; set; } = false;
+
     // Physical pre-decode gate. A confirmed tracker ridge is not sufficient
     // evidence that keyed CW exists: shaped noise and steady birdies can
     // produce stable ridges. Require local prominence plus real on/off keying
@@ -473,15 +479,18 @@ namespace SkyRoof.CW
 
         if (LaneDenoiser == null)
         {
-          tensor =
-            widebandFeatures!.BuildLaneTensor(
-              track,
-              allDetectedTracks,
-              activityByTrack!,
-              TargetCenterHz,
-              LaneBandwidthHz);
+          bool coherentDense = EnableCoherentDenseSeparation &&
+            WindowDenoiser == null &&
+            CwCoherentDenseSeparator.HasNearNeighbor(track,allDetectedTracks);
+          tensor = coherentDense
+            ? CwCoherentDenseSeparator.BuildLaneTensor(
+                audio,sourceSampleRate,metadata,track,
+                allDetectedTracks,TargetCenterHz)
+            : widebandFeatures!.BuildLaneTensor(
+                track,allDetectedTracks,activityByTrack!,
+                TargetCenterHz,LaneBandwidthHz);
           durationSeconds =
-            widebandFeatures.DurationSeconds;
+            widebandFeatures!.DurationSeconds;
         }
         else
         {
