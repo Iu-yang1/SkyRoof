@@ -24,7 +24,10 @@ namespace SkyRoof
     {
       var link = ctx.FrequencyControl.RadioLink;
       bool crossband = link.IsCrossBand;
-      bool embeddedEnabled=ctx.Settings.Cat.Embedded.Enabled;
+      // Refuse to connect to a different process listening on the configured
+      // loopback port if the embedded serial owner failed to start.
+      bool embeddedEnabled=ctx.Settings.Cat.Embedded.Enabled &&
+        ctx.MainForm.EmbeddedSkyCatRunning;
       bool wantRx = ctx.Settings.Cat.RxCat.Enabled &&
         (!ctx.Settings.Cat.RxCat.UseEmbeddedSkyCat || embeddedEnabled);
       bool wantTx = ctx.Settings.Cat.TxCat.Enabled && link.HasUplink &&
