@@ -325,6 +325,11 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
     }
     finally
     {
+      // ReadLineAsync can throw instead of returning EOF; always stop the
+      // heartbeat watchdog and pipe writer so neither leaks a live task
+      // after child failure.
+      cancel.Cancel();
+      SignalWriter();
       lock(sync)
       {
         connected=ready=false;
