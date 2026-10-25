@@ -482,19 +482,30 @@ namespace SkyRoof.CW
 
         if (LaneDenoiser == null)
         {
-          bool coherentDense = EnableCoherentDenseSeparation &&
-            WindowDenoiser == null &&
-            CwCoherentDenseSeparator.HasNearNeighbor(track,allDetectedTracks);
-          tensor = coherentDense
+          // Keep already-correct 15–40 Hz two-station decodes on the
+          // original path. Coherent activity is used only for close,
+          // similarly strong carriers, and waveform cancellation is
+          // reserved for the weaker member of a clear near-far doublet.
+          bool balancedClose=allDetectedTracks.Any(peer=>
+            peer.Id!=track.Id &&
+            Math.Abs(peer.SnrDb-track.SnrDb)<=3 &&
+            Math.Abs(peer.FrequencyHz-track.FrequencyHz)>=3 &&
+            Math.Abs(peer.FrequencyHz-track.FrequencyHz)<=11);
+          bool weakerNearFar=allDetectedTracks.Any(peer=>
+            peer.Id!=track.Id &&
+            peer.SnrDb-track.SnrDb>=6 &&
+            Math.Abs(peer.FrequencyHz-track.FrequencyHz)>=12 &&
+            Math.Abs(peer.FrequencyHz-track.FrequencyHz)<=21 &&
+            Math.Abs(peer.DriftHzPerSecond)<3 &&
+            Math.Abs(track.DriftHzPerSecond)<3);
+          bool coherentDense=EnableCoherentDenseSeparation &&
+            WindowDenoiser==null && (balancedClose||weakerNearFar);
+          tensor=coherentDense
             ? CwCoherentDenseSeparator.BuildLaneTensor(
                 audio,sourceSampleRate,metadata,track,
                 allDetectedTracks,TargetCenterHz,
                 widebandFeatures,activityByTrack,
-                EnableCoherentNearFarCancellation &&
-                allDetectedTracks.Any(peer=>peer.Id!=track.Id &&
-                  peer.SnrDb-track.SnrDb>=6 &&
-                  Math.Abs(peer.FrequencyHz-track.FrequencyHz)>=12 &&
-                  Math.Abs(peer.FrequencyHz-track.FrequencyHz)<=21))
+                EnableCoherentNearFarCancellation && weakerNearFar)
             : widebandFeatures!.BuildLaneTensor(
                 track,allDetectedTracks,activityByTrack!,
                 TargetCenterHz,LaneBandwidthHz);
