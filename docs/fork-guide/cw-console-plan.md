@@ -224,7 +224,7 @@ The live Kalman state and the public lane identities are never mutated.
 
 In a deterministic synthetic known-track benchmark spanning ten injected
 frequency/rate errors per scenario, 15 Hz / 8 dB weak-station mean CER
-improved from 0.800 to about 0.573, with strong-station CER remaining 0.
+improved from 0.800 to about 0.591 in the latest CI run (0.573 in a preceding run), with strong-station CER remaining 0.
 On the Windows CI machine the corresponding 8 s input windows required
 roughly 0.3–0.4 s for the experimental two-lane decode. These are *not*
 measured eight-lane UI latency guarantees or off-air character error rates.
