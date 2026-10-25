@@ -371,6 +371,118 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void RealDeepCw_DenseFrequencyErrorStress()
+    {
+      if (Environment.GetEnvironmentVariable(
+        "SKYROOF_RUN_DEEPCW_BENCHMARK") != "1")
+        return;
+
+      DeepCwModelMetadata metadata=DeepCwModelMetadata.Load(
+        RequiredEnvironment("DEEPCW_METADATA_PATH"));
+      using var model=new DeepCwOnnxDecoder(
+        RequiredEnvironment("DEEPCW_MODEL_PATH"),metadata);
+      var oldDecoder=new DeepCwMultiLaneDecoder(metadata,model)
+      {
+        MaxLanes=2,LaneBandwidthHz=240,TargetCenterHz=800
+      };
+      var activityDecoder=new DeepCwMultiLaneDecoder(metadata,model)
+      {
+        MaxLanes=2,LaneBandwidthHz=240,TargetCenterHz=800,
+        EnableCoherentDenseSeparation=true
+      };
+      var cancelDecoder=new DeepCwMultiLaneDecoder(metadata,model)
+      {
+        MaxLanes=2,LaneBandwidthHz=240,TargetCenterHz=800,
+        EnableCoherentDenseSeparation=true,
+        EnableCoherentNearFarCancellation=true
+      };
+      var cases=new[]
+      {
+        new BenchmarkScenario("exp_8db_15",800,15,8,0,-2),
+        new BenchmarkScenario("exp_equal_5",800,5,0,0,-2),
+        new BenchmarkScenario("exp_8db_5",800,5,8,0,-2)
+      };
+      var perturbations=new (string Label,double FrequencyA,
+        double FrequencyB,double RateA,double RateB)[]
+      {
+        ("ideal",0,0,0,0),
+        ("common_plus_0p5",0.5,0.5,0,0),
+        ("opposite_0p25",0.25,-0.25,0,0),
+        ("opposite_0p5",0.5,-0.5,0,0),
+        ("opposite_1",1,-1,0,0),
+        ("opposite_2",2,-2,0,0),
+        ("rate_opposite_0p2",0,0,0.2,-0.2),
+        ("rate_opposite_0p5",0,0,0.5,-0.5),
+        ("rate_common_0p5",0,0,0.5,0.5),
+        ("combined",0.5,-0.5,0.2,-0.2)
+      };
+      var at=new DateTime(2026,10,9,0,0,0,DateTimeKind.Utc);
+      var results=new List<object>();
+
+      foreach(var scenario in cases)
+      {
+        GeneratedMix audio=GenerateMix(scenario,
+          "CQ DE K1ABC","CQ DE W9XYZ",24,27);
+        foreach(var perturb in perturbations)
+        {
+          CwSignalTrack[] tracks=
+          [
+            MakeTrack(1,audio.EndFrequencyA+perturb.FrequencyA,14,
+              scenario.DriftHzPerSecond+perturb.RateA),
+            MakeTrack(2,audio.EndFrequencyB+perturb.FrequencyB,22,
+              -scenario.DriftHzPerSecond+perturb.RateB)
+          ];
+          if(scenario.PowerDeltaDb == 0)
+            tracks[1]=tracks[1] with { SnrDb=14 };
+
+          IReadOnlyList<DeepCwLaneResult> Run(
+            DeepCwMultiLaneDecoder decoder)=>
+            decoder.Decode(audio.Audio,SampleRate,at,tracks);
+          var sw=Stopwatch.StartNew();
+          var old=Run(oldDecoder);
+          var oldMs=sw.Elapsed.TotalMilliseconds;
+          sw.Restart();
+          var activity=Run(activityDecoder);
+          var activityMs=sw.Elapsed.TotalMilliseconds;
+          sw.Restart();
+          var cancelled=Run(cancelDecoder);
+          var cancelMs=sw.Elapsed.TotalMilliseconds;
+
+          double Error(IReadOnlyList<DeepCwLaneResult> decoded,int id)=>
+            CharacterErrorRate(
+              id==1?"CQ DE K1ABC":"CQ DE W9XYZ",
+              decoded.FirstOrDefault(x=>x.TrackId==id).Text??"");
+          var result=new
+          {
+            scenario=scenario.Name,
+            perturbation=perturb.Label,
+            freqErrorA=perturb.FrequencyA,
+            freqErrorB=perturb.FrequencyB,
+            driftErrorA=perturb.RateA,
+            driftErrorB=perturb.RateB,
+            oldCerA=Error(old,1),oldCerB=Error(old,2),
+            activityCerA=Error(activity,1),
+            activityCerB=Error(activity,2),
+            cancelCerA=Error(cancelled,1),
+            cancelCerB=Error(cancelled,2),
+            oldMs,activityMs,cancelMs
+          };
+          results.Add(result);
+          output.WriteLine(JsonSerializer.Serialize(result));
+        }
+      }
+
+      Assert.Equal(cases.Length*perturbations.Length,results.Count);
+      string path=Environment.GetEnvironmentVariable(
+        "DEEPCW_DENSE_STRESS_OUTPUT") ??
+        Path.Combine(Directory.GetCurrentDirectory(),"artifacts",
+          "cw-dense-frequency-stress.json");
+      Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+      File.WriteAllText(path,JsonSerializer.Serialize(results,
+        new JsonSerializerOptions { WriteIndented=true }));
+    }
+
+    [Fact]
     public void RealDeepCw_HamNoiseClassicV2_AB()
     {
       if (!string.Equals(
