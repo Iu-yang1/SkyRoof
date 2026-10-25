@@ -34,7 +34,8 @@ namespace SkyRoof.CW
       double targetCenterHz,
       DeepCwWidebandFeatureWindow? originalFeatures = null,
       IReadOnlyDictionary<int,float[]>? originalActivities = null,
-      bool cancelStrongerInterference = false)
+      bool cancelStrongerInterference = false,
+      bool refineCarrierEstimates = false)
     {
       if (sourceSampleRate < 6000 ||
           metadata.SampleRate < 1000 ||
@@ -52,6 +53,26 @@ namespace SkyRoof.CW
           .OrderBy(t=>Math.Abs(t.FrequencyHz-target.FrequencyHz))
           .Take(MaximumSources-1))
         .ToArray();
+
+      if(refineCarrierEstimates)
+      {
+        // Refine PRIVATE oscillator copies; do not mutate the Kalman
+        // tracker, CW lane IDs, station frequencies or UI state.
+        for(int j=0;j<sources.Length;j++)
+        {
+          double nearestGap=sources.Where((t,i)=>i!=j)
+            .Select(t=>Math.Abs(t.FrequencyHz-sources[j].FrequencyHz))
+            .DefaultIfEmpty(double.PositiveInfinity).Min();
+          var corrected=CwCoherentFrequencyRefiner.Refine(
+            input,sourceSampleRate,sources[j],nearestGap);
+          if(corrected.Applied)
+            sources[j]=corrected.Track;
+        }
+        target=sources[0];
+        allTracks=allTracks.Select(original=>
+          sources.FirstOrDefault(s=>s.Id==original.Id) is var matched &&
+            matched.Id!=0 ? matched : original).ToArray();
+      }
 
       int outputSamples = checked((int)Math.Round(
         (double)input.Length * metadata.SampleRate/sourceSampleRate));
