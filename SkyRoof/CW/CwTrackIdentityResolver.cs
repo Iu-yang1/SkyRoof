@@ -27,11 +27,13 @@ namespace SkyRoof.CW
       IReadOnlyList<CwSignalTrack> tracks,
       CwFrameRidgeScanResult scan,
       int sampleRate,
-      long snapshotEndSampleIndex)
+      long snapshotEndSampleIndex,
+      int fastHopSamples)
     {
       ArgumentNullException.ThrowIfNull(tracks);
       ArgumentNullException.ThrowIfNull(scan);
       if (sampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(sampleRate));
+      if (fastHopSamples <= 0) throw new ArgumentOutOfRangeException(nameof(fastHopSamples));
 
       // Keep the active, older labelled identity where possible, so an
       // ephemeral re-birth does not replace a confirmed transcript/slot.
@@ -49,7 +51,8 @@ namespace SkyRoof.CW
       foreach (CwSignalTrack track in prioritized)
       {
         bool alias = kept.Any(existing => SamePhysicalCarrier(
-          existing, track, scan, sampleRate, snapshotEndSampleIndex));
+          existing, track, scan, sampleRate, snapshotEndSampleIndex,
+          fastHopSamples));
         if (alias) retired.Add(track.Id);
         else kept.Add(track);
       }
@@ -64,7 +67,8 @@ namespace SkyRoof.CW
       CwSignalTrack b,
       CwFrameRidgeScanResult scan,
       int sampleRate,
-      long endSample)
+      long endSample,
+      int fastHopSamples)
     {
       if (!double.IsFinite(a.FrequencyHz) ||
           !double.IsFinite(b.FrequencyHz) ||
@@ -93,7 +97,7 @@ namespace SkyRoof.CW
         return false;
 
       return CorrelatedFastKeying(a, b, scan.FastObservations,
-        sampleRate, endSample);
+        sampleRate, endSample, fastHopSamples);
     }
 
     private static bool HasIndependentPrecisionRidges(
@@ -143,14 +147,20 @@ namespace SkyRoof.CW
       CwSignalTrack b,
       IReadOnlyList<CwRidgeObservation> observations,
       int sampleRate,
-      long endSample)
+      long endSample,
+      int fastHopSamples)
     {
       // A shared source should have the SAME ON/OFF shape over time. Use
       // all fast frame times including missing peaks (key-up); using only
       // frames where both are ON would inflate unrelated correlations.
-      long[] times = observations.Select(x => x.CenterSampleIndex)
-        .Distinct().OrderBy(x => x).ToArray();
-      if (times.Length < 24) return false;
+      if (observations.Count == 0) return false;
+      long first = observations.Min(x => x.CenterSampleIndex);
+      long last = observations.Max(x => x.CenterSampleIndex);
+      long frames = (last - first) / fastHopSamples + 1;
+      if (frames < 24 || frames > 5000) return false;
+      long[] times = Enumerable.Range(0, (int)frames)
+        .Select(i => first + (long)i * fastHopSamples)
+        .ToArray();
 
       var aByFrame = BestSnr(a, observations, sampleRate, endSample);
       var bByFrame = BestSnr(b, observations, sampleRate, endSample);
