@@ -27,7 +27,7 @@ namespace SkyRoof
       try
       {
         foreach (string file in Directory.EnumerateFiles(rigsDirectory, "*.json")
-          .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
+          .OrderBy(file => Path.GetFileName(file), StringComparer.OrdinalIgnoreCase))
         {
           try
           {
