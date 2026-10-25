@@ -40,7 +40,7 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
   private int writerWakePending;
   private readonly ConcurrentDictionary<long,TaskCompletionSource<bool>> pending=new();
   private RotatorWireMessage? newestTarget;
-  private bool disposed,connected,ready,faulted=true,review;
+  private bool disposed,connected,ready,faulted=true,review,localSafetyLatched;
   private long nextId,readTicks,targetTicks,stopTicks,rateTicks;
   private double? az,el,requestAz,requestEl,writtenAz,writtenEl,rateAz,rateEl;
   private string status="Starting isolated rotator controller";
@@ -155,7 +155,10 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
   public void SetParkDiagnostics(bool active)=>Enqueue("diagnostics",flag:active);
   public void LatchAfterManagementChange()
   {
-    lock(sync){faulted=true;review=true;newestTarget=null;}
+    lock(sync)
+    {
+      faulted=true;review=true;localSafetyLatched=true;newestTarget=null;
+    }
     Enqueue("latch");NotifyStatus();
   }
 
@@ -244,7 +247,7 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
           controlQueue.Clear();
           newestTarget=null;
           requestAz=requestEl=null;
-          faulted=true;review=true;
+          faulted=true;review=true;localSafetyLatched=true;
           status="Rotator IPC overload: STOP requested; reapply settings after inspection.";
           controlQueue.Enqueue(new RotatorWireMessage{Type="stop"});
           controlQueue.Enqueue(new RotatorWireMessage{Type="latch"});
@@ -308,6 +311,7 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
         connected=ready=false;
         faulted=true;
         review=true;
+        localSafetyLatched=true;
         status="Rotator control child offline; hardware STOP unverified. Reapply settings after inspecting rotor.";
         newestTarget=null;
       }
@@ -367,7 +371,10 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
       posChanged=az!=m.Az||el!=m.El;
       changed=connected!=m.Running || ready!=m.Ready ||
         faulted!=m.Faulted || review!=m.Review;
-      connected=m.Running;ready=m.Ready;faulted=m.Faulted;review=m.Review;
+      connected=m.Running;
+      ready=m.Ready && !localSafetyLatched;
+      faulted=m.Faulted || localSafetyLatched;
+      review=m.Review || localSafetyLatched;
       az=m.Az;el=m.El;requestAz=m.RequestAz;requestEl=m.RequestEl;
       writtenAz=m.WrittenAz;writtenEl=m.WrittenEl;
       rateAz=m.RateAz;rateEl=m.RateEl;rateTicks=m.RateTicks;
@@ -382,7 +389,10 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
 
   private void ApplyFault(RotatorWireMessage m)
   {
-    lock(sync){faulted=true;ready=false;}
+    lock(sync)
+    {
+      faulted=true;ready=false;review=true;localSafetyLatched=true;
+    }
     var prev=ToBearing(m.Az,m.El);
     var reported=ToBearing(m.Az2,m.El2);
     if(prev!=null && reported!=null)
