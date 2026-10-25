@@ -260,8 +260,10 @@ namespace VE3NEA.Dsp.Tests
       var window=DeepCwWidebandFeatureWindow.Create(
         audio,SourceRate,metadata);
 
-      CwSignalTrack target=Track(1,800,18);
-      CwSignalTrack alias=Track(2,803,15);
+      CwSignalTrack target=Track(1,800,18) with
+        { AssociationHintId=100 };
+      CwSignalTrack alias=Track(2,803,15) with
+        { AssociationHintId=100 };
       int frames=window.FrameCount;
       float[] keyed=Enumerable.Range(0,frames)
         .Select(i=>i%12<6?0.95f:0.05f).ToArray();
