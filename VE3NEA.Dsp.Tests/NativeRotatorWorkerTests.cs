@@ -46,6 +46,22 @@ public sealed class NativeRotatorWorkerTests
   }
 
   [Fact]
+  public void RotatorHeartbeatUsesMonotonicTimeAndFailsClosedOnStaleChild()
+  {
+    long frequency=System.Diagnostics.Stopwatch.Frequency;
+    long now=System.Diagnostics.Stopwatch.GetTimestamp();
+    Assert.False(RotatorEngineSubprocess.IsHeartbeatExpired(0,now,frequency));
+    Assert.False(RotatorEngineSubprocess.IsHeartbeatExpired(
+      now-4*frequency,now,frequency));
+    Assert.True(RotatorEngineSubprocess.IsHeartbeatExpired(
+      now-6*frequency,now,frequency));
+    Assert.False(RotatorEngineSubprocess.IsHeartbeatExpired(
+      now+1,now,frequency)); // impossible future timestamp: do not underflow
+    Assert.False(RotatorEngineSubprocess.IsHeartbeatExpired(
+      now-10*frequency,now,0));
+  }
+
+  [Fact]
   public async Task FullRotatorEngineProcessIsolatesMotionAndFailClosesAfterCrash()
   {
     string? root=Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
