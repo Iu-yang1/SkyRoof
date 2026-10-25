@@ -24,6 +24,7 @@ internal sealed class IsolatedRotatorTransport : IRotatorTransport
   private BinaryReader? input;
   private BinaryWriter? output;
   private bool disposed;
+  private int abortRequested;
   internal IsolatedRotatorTransport(RotatorSettings settings)=>this.settings=settings;
   internal static bool ShouldIsolateThisProcess() =>
     string.Equals(Path.GetFileName(Environment.ProcessPath),
@@ -141,14 +142,12 @@ internal sealed class IsolatedRotatorTransport : IRotatorTransport
 
   public void Abort()
   {
-    NamedPipeServerStream? endpoint; Process? process;
-    lock(sync)
-    {
-      if(disposed)return;
-      disposed=true;
-      endpoint=pipe;process=child;pipe=null;child=null;
-      input=null;output=null;
-    }
+    if(Interlocked.Exchange(ref abortRequested,1)!=0)return;
+    disposed=true;
+    // Close the OS pipe WITHOUT acquiring sync: the I/O thread can be
+    // blocked inside Read/Write holding it while WinForms requests shutdown.
+    NamedPipeServerStream? endpoint=Interlocked.Exchange(ref pipe,null);
+    Process? process=Interlocked.Exchange(ref child,null);
     try{endpoint?.Dispose();}catch{}
     // Never synchronously wait for a native serial driver in the UI process.
     if(process!=null)

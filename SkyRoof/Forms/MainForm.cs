@@ -160,8 +160,33 @@ namespace SkyRoof
       UpdateLabel.Visible = true;
     }
 
-    private void MainForm_FormClosing(object sender, EventArgs e)
+    private bool cwShutdownCompleted;
+    private async void MainForm_FormClosing(object sender, FormClosingEventArgs e)
     {
+      // First phase returns control to the message pump during asynchronous
+      // CW STOP, rather than synchronously waiting on a hung serial/CAT path.
+      if(!cwShutdownCompleted && ctx.CwTransmit!=null)
+      {
+        e.Cancel=true;
+        timer.Enabled=false;
+        ctx.AutoSelector.Shutdown();
+        ctx.PttHotkey?.Dispose();
+        ctx.PttHotkey=null;
+        var cw=ctx.CwTransmit;
+        ctx.CwTransmit=null;
+        try
+        {
+          await cw.DisposeAsync().AsTask()
+            .WaitAsync(TimeSpan.FromSeconds(3));
+        }
+        catch(Exception ex)
+        {
+          Log.Warning(ex,"CW shutdown exceeded bounded asynchronous timeout");
+        }
+        cwShutdownCompleted=true;
+        if(!IsDisposed && !Disposing)BeginInvoke((Action)Close);
+        return;
+      }
       timer.Enabled = false;
       if (ctx.Slicer != null) ctx.Slicer.Enabled = false;
 
@@ -174,26 +199,9 @@ namespace SkyRoof
       ctx.PttHotkey?.Dispose();
       ctx.PttHotkey = null;
 
-      // Stop any Command-17 CW message while SkyCAT/CI-V is still available.
-      // The controller sends STOP and closes its lease connection; SkyCAT then
-      // performs its own disconnect fail-safe if STOP cannot be confirmed.
-      if (ctx.CwTransmit != null)
-      {
-        try
-        {
-          ctx.CwTransmit.DisposeAsync()
-            .AsTask()
-            .GetAwaiter()
-            .GetResult();
-        }
-        catch (Exception ex)
-        {
-          Log.Warning(
-            ex,
-            "CW transmit shutdown failed.");
-        }
-        ctx.CwTransmit = null;
-      }
+      // CW STOP has already been attempted on the asynchronous first
+      // FormClosing pass; the SkyCAT worker independently owns fail-safe
+      // cleanup if that endpoint becomes unresponsive.
 
       // Dispose CAT engines while the UI and TCP path are still alive. A CAT
       // engine releases PTT here only if SkyRoof itself successfully asserted it;

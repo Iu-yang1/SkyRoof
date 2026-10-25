@@ -39,10 +39,12 @@ namespace SkyRoof
         Task runner=Task.Run(()=>server.Run());
         parent.WriteByte((byte)'R');
         parent.Flush();
-        // The pipe is owned by the parent. EOF, intentional stop, or parent
-        // crash always causes a bounded attempt to release the radio.
-        int signal=parent.ReadByte();
-        Log.Information("SkyCAT parent control signal: {Signal}",signal);
+        // Either the CAT server fails, or the parent disappears/stops.
+        // Both terminate this process; a failed CAT worker must not leave
+        // an apparently healthy but nonfunctional child process alive.
+        Task channel=Task.Run(()=>parent.ReadByte());
+        Task.WhenAny(runner,channel).GetAwaiter().GetResult();
+        if(runner.IsFaulted)Log.Error(runner.Exception,"SkyCAT child CAT loop crashed");
         server.Stop();
         try{runner.Wait(TimeSpan.FromSeconds(4));}
         catch(AggregateException ex){Log.Warning(ex,"SkyCAT shutdown exception");}
