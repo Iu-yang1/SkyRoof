@@ -34,8 +34,10 @@ internal sealed class IsolatedRotatorTransport : IRotatorTransport
   }
   internal int? WorkerPid => child?.Id;
   internal static bool ShouldIsolateThisProcess() =>
-    string.Equals(Path.GetFileName(Environment.ProcessPath),
-      "SkyRoof.exe",StringComparison.OrdinalIgnoreCase);
+    // Derive from the managed entry assembly, not the EXE filename.
+    // Renaming SkyRoof.exe must not silently disable process isolation.
+    string.Equals(System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name,
+      "SkyRoof",StringComparison.OrdinalIgnoreCase);
 
   public bool Connected
   {
