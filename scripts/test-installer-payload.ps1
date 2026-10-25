@@ -8,7 +8,8 @@ $setup = (Resolve-Path 'install/Output/SkyRoofSetup.exe').Path
 $target = Join-Path $env:RUNNER_TEMP "SkyRoof-Installer-Smoke-$env:GITHUB_RUN_ID"
 
 $mandatory = @('SkyRoof.exe', 'SkyRoof.dll', 'SkyRoof.deps.json',
-  'SkyRoof.runtimeconfig.json', 'System.IO.Ports.dll')
+  'SkyRoof.runtimeconfig.json', 'System.IO.Ports.dll',
+  'SkyCat.dll', 'skycatd.dll')
 foreach ($name in $mandatory) {
   if (-not (Test-Path -LiteralPath (Join-Path $build $name))) {
     throw "Build output missing required runtime file: $name"
@@ -31,6 +32,20 @@ Write-Host "Installing smoke build to $target"
 $p = Start-Process -FilePath $setup -ArgumentList $arguments -PassThru -Wait
 if ($p.ExitCode -ne 0) {
   throw "SkyRoofSetup.exe failed with exit code $($p.ExitCode)"
+}
+
+# SkyCAT reads rig command definitions at runtime, not as resources.
+# Missing Rigs/*.json would make embedded startup fail despite passing compilation.
+$rig = 'Rigs\IC-9700.json'
+if (-not (Test-Path -LiteralPath (Join-Path $build $rig))) {
+  throw "Build output missing SkyCAT rig commands: $rig"
+}
+if (-not (Test-Path -LiteralPath (Join-Path $target $rig))) {
+  throw "Installer omitted SkyCAT rig commands: $rig"
+}
+$rigJson = Get-Content -LiteralPath (Join-Path $target $rig) -Raw | ConvertFrom-Json
+if ($rigJson.id -ne 3081) {
+  throw "Installed IC-9700 SkyCAT command file has unexpected model ID."
 }
 
 # Every top-level application .dll must survive packaging and installation.

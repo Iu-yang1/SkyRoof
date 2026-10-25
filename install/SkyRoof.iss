@@ -37,6 +37,9 @@ Name: english; MessagesFile: compiler:Default.isl
 Name: desktopicon; Description: {cm:CreateDesktopIcon}; GroupDescription: {cm:AdditionalIcons}; Flags: unchecked
 
 [Files]
+; The in-process SkyCAT command engine loads its rig definitions from
+; AppContext.BaseDirectory/Rigs, so these are required application data.
+Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\Rigs\*.json; DestDir: {app}\Rigs; Flags: overwritereadonly ignoreversion
 ; Include every managed/native DLL copied into the application output root.
 ; Avoid maintaining a brittle explicit DLL allowlist: new .NET runtime NuGet
 ; dependencies such as System.IO.Ports.dll must ship with SkyRoof.exe.
