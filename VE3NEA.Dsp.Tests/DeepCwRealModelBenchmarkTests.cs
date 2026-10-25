@@ -261,6 +261,90 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void RealDeepCw_CoherentDenseExperiment()
+    {
+      if (!string.Equals(Environment.GetEnvironmentVariable(
+        "SKYROOF_RUN_DEEPCW_BENCHMARK"),"1",
+        StringComparison.Ordinal))
+        return;
+
+      DeepCwModelMetadata metadata=DeepCwModelMetadata.Load(
+        RequiredEnvironment("DEEPCW_METADATA_PATH"));
+      using var model=new DeepCwOnnxDecoder(
+        RequiredEnvironment("DEEPCW_MODEL_PATH"),metadata);
+
+      var baseline=new DeepCwMultiLaneDecoder(metadata,model)
+      {
+        MaxLanes=2,LaneBandwidthHz=240,TargetCenterHz=800
+      };
+      var experimental=new DeepCwMultiLaneDecoder(metadata,model)
+      {
+        MaxLanes=2,LaneBandwidthHz=240,TargetCenterHz=800,
+        EnableCoherentDenseSeparation=true
+      };
+
+      var scenarios=new[]
+      {
+        new BenchmarkScenario("exp_equal_40",800,40,0,0,-2),
+        new BenchmarkScenario("exp_equal_25",800,25,0,0,-2),
+        new BenchmarkScenario("exp_equal_15",800,15,0,0,-2),
+        new BenchmarkScenario("exp_equal_10",800,10,0,0,-2),
+        new BenchmarkScenario("exp_equal_5",800,5,0,0,-2),
+        new BenchmarkScenario("exp_8db_25",800,25,8,0,-2),
+        new BenchmarkScenario("exp_8db_15",800,15,8,0,-2),
+        new BenchmarkScenario("exp_8db_10",800,10,8,0,-2),
+        new BenchmarkScenario("exp_8db_5",800,5,8,0,-2),
+        new BenchmarkScenario("exp_doppler_15",800,15,8,10,-2)
+      };
+      var rows=new List<object>();
+      var at=new DateTime(2026,10,9,0,0,0,DateTimeKind.Utc);
+      foreach(var scenario in scenarios)
+      {
+        GeneratedMix mix=GenerateMix(scenario,
+          "CQ DE K1ABC","CQ DE W9XYZ",24,27);
+        CwSignalTrack[] tracks=
+        [
+          MakeTrack(1,mix.EndFrequencyA,14,
+            scenario.DriftHzPerSecond),
+          MakeTrack(2,mix.EndFrequencyB,14+
+            scenario.PowerDeltaDb,-scenario.DriftHzPerSecond)
+        ];
+
+        var oldWatch=Stopwatch.StartNew();
+        var old=baseline.Decode(mix.Audio,SampleRate,at,tracks);
+        oldWatch.Stop();
+        var newWatch=Stopwatch.StartNew();
+        var improved=experimental.Decode(
+          mix.Audio,SampleRate,at,tracks);
+        newWatch.Stop();
+        string OldText(int id)=>old.FirstOrDefault(x=>x.TrackId==id).Text??"";
+        string NewText(int id)=>improved.FirstOrDefault(x=>x.TrackId==id).Text??"";
+        var row=new
+        {
+          scenario=scenario.Name,
+          separationHz=scenario.SeparationHz,
+          powerDeltaDb=scenario.PowerDeltaDb,
+          oldA=OldText(1),oldB=OldText(2),
+          newA=NewText(1),newB=NewText(2),
+          oldCerA=CharacterErrorRate("CQ DE K1ABC",OldText(1)),
+          oldCerB=CharacterErrorRate("CQ DE W9XYZ",OldText(2)),
+          newCerA=CharacterErrorRate("CQ DE K1ABC",NewText(1)),
+          newCerB=CharacterErrorRate("CQ DE W9XYZ",NewText(2)),
+          oldMilliseconds=oldWatch.Elapsed.TotalMilliseconds,
+          newMilliseconds=newWatch.Elapsed.TotalMilliseconds
+        };
+        output.WriteLine(JsonSerializer.Serialize(row));
+        rows.Add(row);
+      }
+      string path=Path.Combine(Directory.GetCurrentDirectory(),
+        "artifacts","cw-dense-coherent-experiment.json");
+      Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+      File.WriteAllText(path,JsonSerializer.Serialize(rows,
+        new JsonSerializerOptions { WriteIndented=true }));
+      Assert.Equal(scenarios.Length,rows.Count);
+    }
+
+    [Fact]
     public void RealDeepCw_HamNoiseClassicV2_AB()
     {
       if (!string.Equals(
