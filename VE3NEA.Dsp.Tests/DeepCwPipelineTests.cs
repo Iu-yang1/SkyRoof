@@ -251,6 +251,59 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void SoftMask_DuplicateIdentityDoesNotStealItsOwnCarrier()
+    {
+      DeepCwModelMetadata metadata =
+        DeepCwModelMetadata.Parse(MetadataJson);
+      float[] audio = MakeKeyedAudio(
+        2.0,(800,0.30f,0.14,0.50));
+      var window=DeepCwWidebandFeatureWindow.Create(
+        audio,SourceRate,metadata);
+
+      CwSignalTrack target=Track(1,800,18) with
+        { AssociationHintId=100 };
+      CwSignalTrack alias=Track(2,803,15) with
+        { AssociationHintId=100 };
+      int frames=window.FrameCount;
+      float[] keyed=Enumerable.Range(0,frames)
+        .Select(i=>i%12<6?0.95f:0.05f).ToArray();
+
+      var single=window.BuildLaneTensor(target,[target],
+        new Dictionary<int,float[]> { [target.Id]=keyed });
+      var duplicated=window.BuildLaneTensor(target,[target,alias],
+        new Dictionary<int,float[]> {
+          [target.Id]=keyed,[alias.Id]=keyed
+        });
+      duplicated.Data.Should().Equal(single.Data);
+    }
+
+    [Fact]
+    public void SoftMask_IndependentNearFrequencyStationStillCompetes()
+    {
+      DeepCwModelMetadata metadata =
+        DeepCwModelMetadata.Parse(MetadataJson);
+      float[] audio=MakeKeyedAudio(
+        2.0,(800,0.30f,0.14,0.50),
+            (815,0.27f,0.18,0.45));
+      var window=DeepCwWidebandFeatureWindow.Create(
+        audio,SourceRate,metadata);
+      CwSignalTrack target=Track(1,800,18);
+      CwSignalTrack other=Track(2,815,15);
+      float[] on=Enumerable.Repeat(0.95f,window.FrameCount).ToArray();
+      var single=window.BuildLaneTensor(target,[target],
+        new Dictionary<int,float[]> { [target.Id]=on });
+      var separated=window.BuildLaneTensor(target,[target,other],
+        new Dictionary<int,float[]> {
+          [target.Id]=on,[other.Id]=on
+        });
+      int neighborBin=(int)Math.Round(
+        (815-metadata.MinFrequencyHz)/
+        (metadata.SampleRate/(double)metadata.FftLength));
+      MeanBin(separated,neighborBin).Should()
+        .BeLessThan(MeanBin(single,neighborBin));
+    }
+
+    [Fact]
     public void UnselectedTrack_StillParticipatesInInterferenceMask()
     {
       DeepCwModelMetadata metadata =

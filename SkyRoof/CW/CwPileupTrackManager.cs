@@ -174,6 +174,16 @@ namespace SkyRoof.CW
       nextMergeGroupId = 1;
     }
 
+    // Called only AFTER the frontend has compared co-keyed fast envelopes
+    // and independently-resolved precision maxima. Do not infer aliases by
+    // frequency alone: genuine near-frequency Pileup must remain possible.
+    internal void RetireAliases(IReadOnlyList<int> retiredTrackIds)
+    {
+      if(retiredTrackIds.Count==0)return;
+      var retired=retiredTrackIds.ToHashSet();
+      tracks.RemoveAll(track=>retired.Contains(track.Id));
+    }
+
     public IReadOnlyList<CwSignalTrack> Update(
       DateTime utc,
       IEnumerable<CwSignalCandidate> candidates)

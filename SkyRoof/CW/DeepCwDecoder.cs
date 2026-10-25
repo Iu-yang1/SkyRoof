@@ -415,9 +415,11 @@ namespace SkyRoof.CW
                 activityByTrack[track.Id]));
 
         CwSignalTrack[] physicallyAccepted =
-          allDetectedTracks.Where(track =>
-            IsPlausibleKeyedCarrier(physicalEvidence[track.Id]))
-          .ToArray();
+          CwTrackIdentityResolver.DeduplicateInferenceLanes(
+            allDetectedTracks.Where(track =>
+              IsPlausibleKeyedCarrier(physicalEvidence[track.Id]))
+              .ToArray(),
+            activityByTrack).ToArray();
         // The interference mask must not be contaminated by tracks already
         // rejected as non-CW. Keep every *valid* competing lane, even if the
         // inference budget selects fewer than MaxLanes.
@@ -441,10 +443,11 @@ namespace SkyRoof.CW
         var rawActivities = evidenceWindow.EstimateActivities(
           allDetectedTracks,activityEstimator);
         decodeSelectedTracks =
-          allDetectedTracks
-            .Where(t=>IsPlausibleKeyedCarrier(
+          CwTrackIdentityResolver.DeduplicateInferenceLanes(
+            allDetectedTracks.Where(t=>IsPlausibleKeyedCarrier(
               evidenceWindow.EvaluatePhysicalEvidence(
-                t,rawActivities[t.Id])))
+                t,rawActivities[t.Id]))).ToArray(),
+            rawActivities)
             .OrderByDescending(t => t.Active)
             .ThenByDescending(t => t.SnrDb)
             .ThenBy(t => t.FrequencyHz)

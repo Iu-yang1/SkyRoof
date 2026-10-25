@@ -135,3 +135,34 @@ Use synthetic and recorded simultaneous CW WAV at 10/20/30/40 WPM; 3/5/8 carrier
 - Explicitly evaluate false CW acceptance, false characters per minute,
   near/far doublets, weak CW recall and realtime factor before tuning
   receiver-specific thresholds.
+
+
+### 2026-10-25: live CW identity reconciliation and soft-mask protection
+
+The live receive frontend now tests nearly coincident labelled tracks against
+three kinds of evidence before retiring an alias: frequency and Doppler-rate
+agreement (default tolerances 6 Hz and 12 Hz/s), correlated fast-STFT ON/OFF
+envelopes across **key-up** as well as key-down frames, and independent
+simultaneous precision-STFT peaks. A resolved two-peak observation has priority:
+a true close doublet must not be collapsed just because its keying is similar.
+Retired aliases are removed from the tracker, not merely hidden in the UI.
+
+DeepCW additionally de-duplicates strongly coherent activity tracks at its
+inference boundary and in the time-frequency mask competitor set. Independent
+near-frequency stations remain competitors, with a narrower Gaussian assignment
+kernel in dense regions; the 240 Hz feature support is unchanged. These are
+conservative heuristics, not proof of source identity.
+
+The new tests cover one-carrier re-birth, independently resolved 5 Hz doublets,
+15 Hz doublets, divergent frequency drift, flat vs keyed activity, and mask
+self-cancellation. Windows CI tests are synthetic: **actual weak-signal
+decoding, channel-selectivity and character-error-rate changes still require
+recorded IC-9700 PCM and manual listening/QSO annotation**. Compare accepted
+carriers, duplicate-ID rate, decoded text accuracy, and ONNX latency on the
+same fixed audio corpus before claiming improved real-world performance.
+
+The alias/close-target distinction is informed by IEEE work on
+multi-target track coalescence/repulsion (DOI
+`10.1109/OJSP.2024.3451167`) and merged measurements (DOI
+`10.1109/TSP.2015.2393843`); it does not directly implement the full
+Bayesian trackers in those papers.

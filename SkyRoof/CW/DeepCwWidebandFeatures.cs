@@ -407,12 +407,48 @@ namespace SkyRoof.CW
       if (maskSigmaHz < 4 || maskSigmaHz > halfSupport)
         throw new ArgumentOutOfRangeException(nameof(maskSigmaHz));
 
+      // Never count two descriptions of the same keyed carrier as two
+      // independent sources. Otherwise each alias steals a share of its own
+      // signal in the normalized time-frequency mask.
+      var independentTracks = new List<CwSignalTrack> { target };
+      foreach (CwSignalTrack other in allTracks
+        .Where(t => t.Id != target.Id)
+        .OrderByDescending(t => t.Active)
+        .ThenByDescending(t => t.IdentityConfidence))
+      {
+        if (!activityByTrack.TryGetValue(other.Id, out float[]? otherActivity) ||
+            otherActivity.Length != FrameCount)
+          continue;
+        bool alias = independentTracks.Any(existing =>
+          activityByTrack.TryGetValue(existing.Id, out float[]? existingActivity) &&
+          CwTrackIdentityResolver.SameActivityAlias(
+            existing, other, existingActivity, otherActivity));
+        if (!alias) independentTracks.Add(other);
+      }
+
+      // Narrow the Gaussian assignment kernel ONLY when there is a resolved,
+      // independent close-frequency station. The 240 Hz model input support
+      // remains unchanged; this is a soft mask, not a narrow FIR passband.
+      double KernelWidth(CwSignalTrack lane)
+      {
+        double nearest = independentTracks
+          .Where(other => other.Id != lane.Id && other.Confirmed)
+          .Select(other => Math.Abs(other.FrequencyHz - lane.FrequencyHz))
+          .DefaultIfEmpty(double.PositiveInfinity)
+          .Min();
+        double baseSigma = Math.Min(maskSigmaHz,
+          Math.Max(15.0, 0.45 * nearest));
+        return Math.Clamp(
+          Math.Sqrt(baseSigma * baseSigma +
+            4 * lane.FrequencySigmaHz * lane.FrequencySigmaHz),
+          6, halfSupport);
+      }
+
+      var kernelWidths = independentTracks.ToDictionary(
+        lane => lane.Id, KernelWidth);
       float[] data =
         new float[checked(FrameCount * metadata.FrequencyBins)];
-      double targetSigma = Math.Clamp(
-        Math.Sqrt(maskSigmaHz * maskSigmaHz +
-          4 * target.FrequencySigmaHz * target.FrequencySigmaHz),
-        6, halfSupport);
+      double targetSigma = kernelWidths[target.Id];
 
       for (int frame = 0; frame < FrameCount; frame++)
       {
@@ -443,7 +479,7 @@ namespace SkyRoof.CW
             GaussianWeight(modelOffset, targetSigma);
           double denominator = maskFloor;
 
-          foreach (CwSignalTrack competitor in allTracks)
+          foreach (CwSignalTrack competitor in independentTracks)
           {
             if (!competitor.Confirmed) continue;
             if (!activityByTrack.TryGetValue(
@@ -455,11 +491,7 @@ namespace SkyRoof.CW
             double competitorRidge =
               competitor.FrequencyHz +
               competitor.DriftHzPerSecond * relativeToEnd;
-            double competitorSigma = Math.Clamp(
-              Math.Sqrt(maskSigmaHz * maskSigmaHz +
-                4 * competitor.FrequencySigmaHz *
-                competitor.FrequencySigmaHz),
-              6, halfSupport);
+            double competitorSigma = kernelWidths[competitor.Id];
             double pOn = Math.Clamp(
               competitorActivity[frame], 0, 1);
             denominator += pOn * GaussianWeight(
