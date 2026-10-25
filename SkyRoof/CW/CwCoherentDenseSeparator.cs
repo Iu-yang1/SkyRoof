@@ -31,7 +31,9 @@ namespace SkyRoof.CW
       DeepCwModelMetadata metadata,
       CwSignalTrack target,
       IReadOnlyList<CwSignalTrack> allTracks,
-      double targetCenterHz)
+      double targetCenterHz,
+      DeepCwWidebandFeatureWindow? originalFeatures = null,
+      IReadOnlyDictionary<int,float[]>? originalActivities = null)
     {
       if (sourceSampleRate < 6000 ||
           metadata.SampleRate < 1000 ||
@@ -128,6 +130,9 @@ namespace SkyRoof.CW
         (int)Math.Round(windowSeconds*sourceSampleRate/(2*stride)));
       int size=locked.Length;
       var amplitudes=new double[frameCount];
+      var otherAmplitudes=new double[sources.Length][];
+      for(int j=0;j<sources.Length;j++)
+        otherAmplitudes[j]=new double[frameCount];
       var gram=new double[size,size];
       var rhs=new double[size];
       var solution=new double[size];
@@ -181,6 +186,44 @@ namespace SkyRoof.CW
         // A phase-locked carrier has one signed physical amplitude; do
         // not rectifiy negative noise into a fictitious CW key-down.
         amplitudes[frame]=Math.Clamp(solution[0],0,2.0);
+        for(int j=0;j<sources.Length;j++)
+          otherAmplitudes[j][frame]=Math.Clamp(solution[j],0,2.0);
+      }
+
+      if(originalFeatures != null && originalActivities != null)
+      {
+        if(originalFeatures.FrameCount != frameCount)
+          throw new ArgumentException(
+            "CW coherent activity does not match the model frame axis.");
+
+        var activity=new Dictionary<int,float[]>(originalActivities);
+        for(int source=0;source<sources.Length;source++)
+        {
+          CwSignalTrack station=sources[source];
+          if(!originalActivities.TryGetValue(station.Id,
+              out float[]? original) ||
+             original.Length != frameCount)
+            continue;
+          double[] values=otherAmplitudes[source].ToArray();
+          Array.Sort(values);
+          double lo=values[(int)(0.15*(values.Length-1))];
+          double hi=values[(int)(0.85*(values.Length-1))];
+          double span=hi-lo;
+          if(span < 1e-5)continue;
+          var blended=new float[frameCount];
+          for(int f=0;f<frameCount;f++)
+          {
+            double fitted=Math.Clamp(
+              (otherAmplitudes[source][f]-lo)/(span*0.82),0,1);
+            // Keep original HMM evidence: coherent fit is an additional
+            // physical cue, not an unverified hard ON/OFF gate.
+            blended[f]=(float)(0.55*fitted+
+              0.45*Math.Clamp(original[f],0,1));
+          }
+          activity[station.Id]=blended;
+        }
+        return originalFeatures.BuildLaneTensor(
+          target,allTracks,activity,targetCenterHz);
       }
 
       // Construct a single model-centred CW waveform from the recovered
