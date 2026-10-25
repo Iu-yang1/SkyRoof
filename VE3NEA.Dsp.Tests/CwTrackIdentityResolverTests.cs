@@ -115,7 +115,7 @@ namespace VE3NEA.Dsp.Tests
     public void InferenceMasksCollapseOnlyCoherentNonFlatAliases()
     {
       var a=Track(1,990);
-      var b=Track(2,993);
+      var b=Track(2,993) with { Active=false };
       var independent=Track(3,1005);
       float[] keyed=Enumerable.Range(0,120)
         .Select(i=>i%12<6?0.95f:0.05f).ToArray();
@@ -123,6 +123,8 @@ namespace VE3NEA.Dsp.Tests
         .Select(i=>i%12<6?0.05f:0.95f).ToArray();
       Assert.True(CwTrackIdentityResolver.SameActivityAlias(
         a,b,keyed,keyed));
+      Assert.False(CwTrackIdentityResolver.SameActivityAlias(
+        a,b with {Active=true},keyed,keyed));
       Assert.False(CwTrackIdentityResolver.SameActivityAlias(
         a,b,keyed,alternate));
       Assert.False(CwTrackIdentityResolver.SameActivityAlias(
