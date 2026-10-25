@@ -425,6 +425,8 @@ namespace VE3NEA.Dsp.Tests
       };
       var at=new DateTime(2026,10,9,0,0,0,DateTimeKind.Utc);
       var results=new List<object>();
+      var nearFarFifteen=new List<(double OldWeak,double NewWeak,double NewStrong)>();
+      var nearFarFive=new List<(double OldWeak,double NewWeak)>();
 
       foreach(var scenario in cases)
       {
@@ -500,11 +502,28 @@ namespace VE3NEA.Dsp.Tests
             oldMs,activityMs,cancelMs,refinedMs
           };
           results.Add(result);
+          if(scenario.Name=="exp_8db_15")
+            nearFarFifteen.Add((
+              Error(old,1),Error(refined,1),Error(refined,2)));
+          if(scenario.Name=="exp_8db_5")
+            nearFarFive.Add((Error(old,1),Error(refined,1)));
           output.WriteLine(JsonSerializer.Serialize(result));
         }
       }
 
       Assert.Equal(cases.Length*perturbations.Length,results.Count);
+      Assert.Equal(perturbations.Length,nearFarFifteen.Count);
+      Assert.Equal(perturbations.Length,nearFarFive.Count);
+      // Pinned synthetic / known-track regression gates; real off-air
+      // performance must be assessed independently. Never trade strong
+      // station decoding for an apparent weak-station improvement.
+      Assert.True(nearFarFifteen.Average(x=>x.NewWeak) <=
+        nearFarFifteen.Average(x=>x.OldWeak)-0.12,
+        "15 Hz/8 dB weak CER did not improve across tracker errors.");
+      Assert.All(nearFarFifteen,x=>Assert.Equal(0,x.NewStrong));
+      Assert.True(nearFarFive.Average(x=>x.NewWeak) <=
+        nearFarFive.Average(x=>x.OldWeak)+0.01,
+        "5 Hz/8 dB must not regress when SIC is disabled.");
       string path=Environment.GetEnvironmentVariable(
         "DEEPCW_DENSE_STRESS_OUTPUT") ??
         Path.Combine(Directory.GetCurrentDirectory(),"artifacts",
