@@ -414,7 +414,8 @@ namespace SkyRoof.CW
       // Only identities with corroborating fast/precision evidence retire.
       CwIdentityResolution resolution =
         CwTrackIdentityResolver.Resolve(
-          vetted,scan,snapshot.SampleRate,snapshot.EndSampleIndex);
+          vetted,scan,snapshot.SampleRate,snapshot.EndSampleIndex,
+          FrameScanner.FastHopSamples);
       Tracks.RetireAliases(resolution.RetiredTrackIds);
       foreach(int id in resolution.RetiredTrackIds)
         verifiedUntil.Remove(id);
