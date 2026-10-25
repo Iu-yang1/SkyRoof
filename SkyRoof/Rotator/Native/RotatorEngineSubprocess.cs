@@ -6,7 +6,7 @@ using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
-using System.Threading.Channels;
+using System.Linq;
 using System.Threading.Tasks;
 using Serilog;
 using SkyRoof.NativeRotator;
@@ -33,9 +33,11 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
   private readonly NamedPipeServerStream pipe;
   private readonly CancellationTokenSource cancel=new();
   private readonly SemaphoreSlim commandsAvailable=new(0);
-  private readonly Channel<RotatorWireMessage> highPriority=
-    Channel.CreateUnbounded<RotatorWireMessage>(
-      new UnboundedChannelOptions{SingleReader=true,SingleWriter=false});
+  // Motion commands are coalesced; administrative commands have a strict
+  // upper bound. STOP is inserted at the FRONT, never behind buffered jogs.
+  private readonly Queue<RotatorWireMessage> controlQueue=new();
+  private const int MaxQueuedControls=64;
+  private int writerWakePending;
   private readonly ConcurrentDictionary<long,TaskCompletionSource<bool>> pending=new();
   private RotatorWireMessage? newestTarget;
   private bool disposed,connected,ready,faulted=true,review;
@@ -98,17 +100,26 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
         : null;
     }
   }
+  private bool ChildExited
+  {
+    get
+    {
+      try{return child.HasExited;}
+      catch(InvalidOperationException){return true;}
+      catch(ObjectDisposedException){return true;}
+    }
+  }
   public bool IsRunning
-  {get {lock(sync)return !disposed && connected && !child.HasExited;}}
+  {get {lock(sync)return !disposed && connected && !ChildExited;}}
   public bool IsReady
-  {get {lock(sync)return !disposed && connected && ready && !child.HasExited;}}
+  {get {lock(sync)return !disposed && connected && ready && !ChildExited;}}
   public bool HasLiveConnection => IsRunning && IsReady;
   public bool PositionFaulted
-  {get {lock(sync)return faulted || disposed || child.HasExited;}}
+  {get {lock(sync)return faulted || disposed || ChildExited;}}
   public bool ManagementReviewRequired
   {get {lock(sync)return review;}}
   public string GetStatusString()
-  {lock(sync)return child.HasExited
+  {lock(sync)return ChildExited
     ? "Rotator worker exited; STOP unverified. Reapply settings."
     : status;}
 
@@ -121,7 +132,7 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
     if(!double.IsFinite(bearing.AzDeg)||!double.IsFinite(bearing.ElDeg))return;
     lock(sync)
     {
-      if(disposed || child.HasExited || faulted || !ready || !connected)return;
+      if(disposed || ChildExited || faulted || !ready || !connected)return;
       requestAz=bearing.AzDeg;requestEl=bearing.ElDeg;
       newestTarget=new RotatorWireMessage{
         Type="move",Az=bearing.AzDeg,El=bearing.ElDeg};
@@ -136,7 +147,8 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
   }
   public void StopRotation()
   {
-    lock(sync){requestAz=requestEl=null;newestTarget=null;}
+    // Collapse buffered manual/jog/retry commands before queueing STOP.
+    // A stopped motor must never be restarted by stale operator input.
     Enqueue("stop");
   }
   public void Retry(){if(!IsReady)Enqueue("retry");}
@@ -187,15 +199,75 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
     finally{pending.TryRemove(id,out _);}
   }
 
+  internal int PendingControlCommands
+  {get{lock(sync)return controlQueue.Count;}}
+
   private void Enqueue(string type,long id=0,bool flag=false,int direction=0)
   {
-    if(disposed)return;
-    if(highPriority.Writer.TryWrite(new RotatorWireMessage{
-      Type=type,Id=id,Flag=flag,Direction=direction}))
-      SignalWriter();
+    bool overflow=false;
+    lock(sync)
+    {
+      if(disposed)return;
+      var item=new RotatorWireMessage{
+        Type=type,Id=id,Flag=flag,Direction=direction};
+      if(type is "stop" or "latch")
+      {
+        requestAz=requestEl=null;
+        newestTarget=null;
+        // An emergency stop gets ahead of *all* queued management
+        // requests, but retains release/verify/lease transactions so
+        // their owners can fail or complete in a defined order.
+        var retained=controlQueue
+          .Where(m=>m.Type is "lease" or "release" or "verify" or "latch")
+          .Take(MaxQueuedControls-2).ToArray();
+        controlQueue.Clear();
+        controlQueue.Enqueue(new RotatorWireMessage{Type="stop"});
+        if(type=="latch")controlQueue.Enqueue(item);
+        foreach(var saved in retained)
+          if(saved.Type!="latch" || type!="latch")
+            controlQueue.Enqueue(saved);
+      }
+      else
+      {
+        if(type is "jog" or "retry" or "diagnostics")
+        {
+          // Wheel hold/retry/diagnostics updates are state, not a backlog.
+          var keep=controlQueue.Where(m=>m.Type!=type).ToArray();
+          controlQueue.Clear();
+          foreach(var m in keep)controlQueue.Enqueue(m);
+          if(type=="jog")newestTarget=null;
+        }
+        if(controlQueue.Count>=MaxQueuedControls)
+        {
+          // Any queue overflow makes motion unsafe. Latch and send STOP;
+          // never allow the IPC queue to consume unbounded memory.
+          controlQueue.Clear();
+          newestTarget=null;
+          requestAz=requestEl=null;
+          faulted=true;review=true;
+          status="Rotator IPC overload: STOP requested; reapply settings after inspection.";
+          controlQueue.Enqueue(new RotatorWireMessage{Type="stop"});
+          controlQueue.Enqueue(new RotatorWireMessage{Type="latch"});
+          overflow=true;
+        }
+        else controlQueue.Enqueue(item);
+      }
+    }
+    SignalWriter();
+    if(overflow)
+    {
+      Log.Error("Rotator control queue overflow; no further motion allowed");
+      NotifyStatus();
+      foreach(var result in pending.Values)result.TrySetResult(false);
+    }
   }
+
   private void SignalWriter()
-  {try{commandsAvailable.Release();}catch(SemaphoreFullException){}}
+  {
+    // One wake means "queue changed", not one semaphore permit per message.
+    if(Interlocked.Exchange(ref writerWakePending,1)==0)
+      commandsAvailable.Release();
+  }
 
   private async Task SuperviseAsync()
   {
@@ -267,12 +339,16 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
     while(!cancel.IsCancellationRequested)
     {
       await commandsAvailable.WaitAsync(cancel.Token).ConfigureAwait(false);
-      RotatorWireMessage? command;
+      Interlocked.Exchange(ref writerWakePending,0);
       while(!cancel.IsCancellationRequested)
       {
-        if(!highPriority.Reader.TryRead(out command))
+        RotatorWireMessage? command;
+        lock(sync)
         {
-          lock(sync){command=newestTarget;newestTarget=null;}
+          // Controls (including STOP/latch) always precede track targets.
+          command=controlQueue.Count>0 ? controlQueue.Dequeue() : newestTarget;
+          if(controlQueue.Count==0 && ReferenceEquals(command,newestTarget))
+            newestTarget=null;
         }
         if(command==null)break;
         await writer.WriteLineAsync(JsonSerializer.Serialize(command))
