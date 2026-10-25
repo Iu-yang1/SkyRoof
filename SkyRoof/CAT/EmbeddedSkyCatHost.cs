@@ -27,9 +27,15 @@ namespace SkyRoof
     private readonly HashSet<Process> requestedStops=new();
     internal event EventHandler? ReadinessChanged;
 
+    private static bool ProcessAlive(Process? process)
+    {
+      try{return process!=null && !process.HasExited;}
+      catch(InvalidOperationException){return false;}
+    }
+
     internal bool IsRunning
     {
-      get { lock(gate) return ready && child is { HasExited:false }; }
+      get {lock(gate)return ready && ProcessAlive(child);}
     }
 
     internal void Apply(EmbeddedSkyCatSettings settings)
@@ -47,14 +53,14 @@ namespace SkyRoof
       lock(gate)
       {
         if(restartBlocked)return;
-        if(activeKey==key && child is { HasExited:false })return;
+        if(activeKey==key && ProcessAlive(child))return;
       }
       Stop();
       lock(gate)
       {
         // Never start a second owner of the serial port while a previous
         // worker remains alive. It must terminate before a new launch.
-        if(child is { HasExited:false })
+        if(ProcessAlive(child))
         {
           Log.Warning("Old SkyCAT child still exiting; refusing a second CI-V serial owner.");
           return;
@@ -94,7 +100,7 @@ namespace SkyRoof
       catch(Exception ex)
       {
         created?.Dispose();
-        if(process is { HasExited:false })try{process.Kill();}catch{}
+        if(ProcessAlive(process))try{process!.Kill();}catch{}
         Log.Error(ex,"SkyCAT process launch failed");
       }
     }
