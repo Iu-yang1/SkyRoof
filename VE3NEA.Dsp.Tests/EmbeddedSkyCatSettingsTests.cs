@@ -1,4 +1,6 @@
 using SkyRoof;
+using System.Net;
+using System.Net.Sockets;
 using Xunit;
 
 namespace VE3NEA.Dsp.Tests
@@ -13,6 +15,17 @@ namespace VE3NEA.Dsp.Tests
       Assert.False(settings.RxCat.UseEmbeddedSkyCat);
       Assert.False(settings.TxCat.UseEmbeddedSkyCat);
       Assert.Null(settings.Embedded.Validate());
+    }
+
+    [Fact]
+    public void EmbeddedCatRefusesToShareLoopbackListenerWithExternalServer()
+    {
+      using var listener=new TcpListener(IPAddress.Loopback,0);
+      listener.Start();
+      int port=((IPEndPoint)listener.LocalEndpoint).Port;
+      Assert.False(EmbeddedSkyCatHost.PortAvailable(port));
+      Assert.False(EmbeddedSkyCatHost.PortAvailable(0));
+      Assert.False(EmbeddedSkyCatHost.PortAvailable(65536));
     }
 
     [Fact]

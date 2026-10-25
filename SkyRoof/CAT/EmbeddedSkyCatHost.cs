@@ -1,5 +1,8 @@
 using System;
 using System.Threading.Tasks;
+using System.Net;
+using System.Net.Sockets;
+using System.Collections.Generic;
 using Serilog;
 using Serilog.Extensions.Logging;
 using skycatd;
@@ -38,6 +41,15 @@ namespace SkyRoof
       string key=settings.ConfigurationKey();
       if(activeKey==key && IsRunning)return;
       if(!Stop())return;
+      // Fail closed if another process already owns any required endpoint.
+      // Otherwise SkyRoof might connect to an unrelated rigctld/skycatd
+      // while its own in-process server cannot bind the port.
+      foreach(int port in ActivePorts(settings))
+        if(!PortAvailable(port))
+        {
+          Log.Warning("Embedded SkyCAT not started: loopback port {Port} is already in use. Stop the external server or choose a different port.",port);
+          return;
+        }
       try
       {
         var factory=new SerilogLoggerFactory(Log.Logger);
@@ -66,6 +78,30 @@ namespace SkyRoof
         Log.Error(ex,"Unable to start embedded SkyCAT.");
         Stop();
       }
+    }
+
+    internal static IEnumerable<int> ActivePorts(EmbeddedSkyCatSettings s)
+    {
+      yield return s.CatPort;
+      yield return s.SpectrumPort;
+      if(s.WsjtXEnabled)yield return s.WsjtXPort;
+      if(s.SwitchEnabled)yield return s.SwitchPort;
+      if(s.CwEnabled)yield return s.CwPort;
+    }
+
+    internal static bool PortAvailable(int port)
+    {
+      if(port<=0 || port>65535)return false;
+      TcpListener? probe=null;
+      try
+      {
+        probe=new TcpListener(IPAddress.Loopback,port);
+        probe.Start();
+        return true;
+      }
+      catch(SocketException){return false;}
+      catch(System.Security.SecurityException){return false;}
+      finally {probe?.Stop();}
     }
 
     private bool Stop()
