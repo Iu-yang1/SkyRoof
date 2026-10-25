@@ -42,6 +42,19 @@ namespace SkyRoof
       AddOrbitSourceMenuItems();
       AddLogArchiveMenuItem();
       AddEmbeddedSkyCatMenuItem();
+      EmbeddedSkyCat.ReadinessChanged += (_,_) =>
+      {
+        if(!IsHandleCreated || IsDisposed || Disposing)return;
+        try
+        {
+          BeginInvoke((Action)(()=>
+          {
+            if(!IsDisposed && !Disposing)
+              ctx.CatControl.ApplySettings();
+          }));
+        }
+        catch(InvalidOperationException){}
+      };
 
       Text = Utils.GetVersionString();
       ctx.MainForm = this;

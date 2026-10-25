@@ -22,7 +22,7 @@ namespace SkyRoof
     private Process? child;
     private NamedPipeServerStream? pipe;
     private string? activeKey;
-    private bool ready,disposed,expectedExit;
+    private bool ready,disposed,expectedExit,restartBlocked;
     internal event EventHandler? ReadinessChanged;
 
     internal bool IsRunning
@@ -35,13 +35,18 @@ namespace SkyRoof
       if(disposed)return;
       if(!settings.Enabled || settings.Validate()!=null)
       {
+        if(!settings.Enabled)lock(gate)restartBlocked=false;
         if(settings.Enabled)
           Log.Warning("Embedded SkyCAT worker not launched: {Reason}",settings.Validate());
         Stop();
         return;
       }
       string key=settings.ConfigurationKey();
-      lock(gate) if(activeKey==key && child is { HasExited:false })return;
+      lock(gate)
+      {
+        if(restartBlocked)return;
+        if(activeKey==key && child is { HasExited:false })return;
+      }
       Stop();
       lock(gate)
       {
@@ -105,7 +110,11 @@ namespace SkyRoof
           throw new IOException("SkyCAT child rejected startup handshake");
         lock(gate)
         {
-          if(ReferenceEquals(process,child) && !expectedExit)ready=true;
+          if(ReferenceEquals(process,child) && !expectedExit)
+          {
+            ready=true;
+            restartBlocked=false;
+          }
         }
         ReadinessChanged?.Invoke(this,EventArgs.Empty);
         await process.WaitForExitAsync().ConfigureAwait(false);
@@ -121,6 +130,7 @@ namespace SkyRoof
         lock(gate)
         {
           wasExpected=expectedExit;
+          if(!wasExpected)restartBlocked=true;
           if(ReferenceEquals(process,child))
           {
             ready=false;
@@ -136,7 +146,7 @@ namespace SkyRoof
         process.Dispose();
         if(!wasExpected)
         {
-          Log.Warning("SkyCAT child exited. CAT controls are disabled until the operator reapplies settings; verify PTT before reconnecting.");
+          Log.Warning("SkyCAT child exited. CAT controls remain disabled. Turn Embedded SkyCAT off then on to recover after verifying radio PTT.");
           ReadinessChanged?.Invoke(this,EventArgs.Empty);
         }
       }
