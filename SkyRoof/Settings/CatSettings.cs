@@ -64,8 +64,13 @@ namespace SkyRoof
     [Description("Prevent the bound physical PTT key from also being delivered to the foreground application.")]
     public bool SuppressPttHotkey { get; set; } = true;
 
+    [DisplayName("Embedded SkyCAT")]
+    [Description("Run the pinned SkyCAT 1.8 engine inside SkyRoof, using one shared serial CI-V owner.")]
+    [TypeConverter(typeof(ExpandableObjectConverter))]
+    public EmbeddedSkyCatSettings Embedded { get; set; } = new();
+
     [DisplayName("RX CAT")]
-    [Description("RX CAT Control via rigctld.exe")]
+    [Description("RX CAT via rigctld or embedded SkyCAT")]
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public CatRadioSettings RxCat { get; set; } = new();
 
@@ -90,6 +95,11 @@ namespace SkyRoof
 
     [DefaultValue(false)]
     public bool Enabled { get; set; }
+
+    [DisplayName("Use Embedded SkyCAT")]
+    [Description("Connect this radio to the embedded SkyCAT service, ignoring the external Host/Port fields. Enable and configure Embedded SkyCAT first.")]
+    [DefaultValue(false)]
+    public bool UseEmbeddedSkyCat { get; set; }
 
     [DisplayName("Show Corrected Frequency")]
     [Description("Show the frequency with all corrections (True) or the nominal frequency (False)")]

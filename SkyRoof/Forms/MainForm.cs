@@ -19,6 +19,10 @@ namespace SkyRoof
     private ToolStripDropDown? RotatorControlPopup;
     private MouseButtons LastRotatorStatusMouseButton;
     private ToolStripProfessionalRenderer? ThemeRenderer;
+    private readonly EmbeddedSkyCatHost EmbeddedSkyCat = new();
+    internal void ApplyEmbeddedSkyCatSettings() =>
+      EmbeddedSkyCat.Apply(ctx.Settings.Cat.Embedded);
+    internal bool EmbeddedSkyCatRunning => EmbeddedSkyCat.IsRunning;
     private readonly ToolStripSeparator ThemeGitHubSeparator =
       new();
     private readonly ToolStripMenuItem ThemeGitHubLightMNU =
@@ -37,6 +41,7 @@ namespace SkyRoof
       ConfigureGitHubThemeMenuItems();
       AddOrbitSourceMenuItems();
       AddLogArchiveMenuItem();
+      AddEmbeddedSkyCatMenuItem();
 
       Text = Utils.GetVersionString();
       ctx.MainForm = this;
@@ -181,6 +186,9 @@ namespace SkyRoof
       // engine releases PTT here only if SkyRoof itself successfully asserted it;
       // externally owned PTT (for example from WSJT-X) is left untouched.
       ctx.CatControl.Shutdown();
+      // All CAT/CW client leases must be released before the in-process
+      // serial owner is shut down and restores CI-V transceive settings.
+      EmbeddedSkyCat.Dispose();
 
       // save settings
       ctx.Settings.Ui.StoreDockingLayout(DockHost);
@@ -976,6 +984,23 @@ namespace SkyRoof
           MessageBoxButtons.OK,
           MessageBoxIcon.Error);
       }
+    }
+
+    private void AddEmbeddedSkyCatMenuItem()
+    {
+      var item=new ToolStripMenuItem("Embedded SkyCAT Status");
+      item.Click += (_,_) =>
+      {
+        var config=ctx.Settings.Cat.Embedded;
+        string message=!config.Enabled ? "Embedded SkyCAT is disabled in CAT settings."
+          : EmbeddedSkyCatRunning
+            ? $"Embedded SkyCAT worker is active.\nModel: {config.Model}\nSerial: {config.SerialPort}\nMain CAT: 127.0.0.1:{config.CatPort}\nScope: 127.0.0.1:{config.SpectrumPort}\n\nAn active worker does not prove the radio serial port is open; consult Tools > Open Log Archive Folder."
+            : $"Embedded SkyCAT is not running.\n{config.Validate() ?? "Inspect the log archive for the startup error."}";
+        MessageBox.Show(this,message,"Embedded SkyCAT",MessageBoxButtons.OK,
+          config.Enabled && !EmbeddedSkyCatRunning ?
+            MessageBoxIcon.Warning : MessageBoxIcon.Information);
+      };
+      toolsToolStripMenuItem.DropDownItems.Add(item);
     }
 
     private void AddLogArchiveMenuItem()

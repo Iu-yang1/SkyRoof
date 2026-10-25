@@ -37,6 +37,9 @@ Name: english; MessagesFile: compiler:Default.isl
 Name: desktopicon; Description: {cm:CreateDesktopIcon}; GroupDescription: {cm:AdditionalIcons}; Flags: unchecked
 
 [Files]
+; The in-process SkyCAT command engine loads its rig definitions from
+; AppContext.BaseDirectory/Rigs, so these are required application data.
+Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\Rigs\*.json; DestDir: {app}\Rigs; Flags: overwritereadonly ignoreversion
 ; Include every managed/native DLL copied into the application output root.
 ; Avoid maintaining a brittle explicit DLL allowlist: new .NET runtime NuGet
 ; dependencies such as System.IO.Ports.dll must ship with SkyRoof.exe.
@@ -68,6 +71,7 @@ Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\lib\SoapySDR\modules0.8\LM
 ; during SkyRoof startup even when {app}\System.IO.Ports.dll is present.
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\runtimes\win\lib\net10.0\*.dll; DestDir: {app}\runtimes\win\lib\net10.0; Flags: overwritereadonly ignoreversion
 Source: ..\licenses\*; DestDir: {app}\licenses; Flags: overwritereadonly ignoreversion recursesubdirs createallsubdirs
+Source: ..\Vendor\SkyCAT\LICENSE.txt; DestDir: {app}\licenses; DestName: SkyCAT-MIT.txt; Flags: overwritereadonly ignoreversion
 Source: ..\LICENSE; DestDir: {app}; DestName: LICENSE.txt; Flags: overwritereadonly ignoreversion
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\fa-solid-900.ttf; DestDir: {app}; Flags: overwritereadonly ignoreversion
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\runtimes\win-x64\native\onnxruntime*.dll; DestDir: {app}\runtimes\win-x64\native; Flags: overwritereadonly ignoreversion
