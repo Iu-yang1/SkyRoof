@@ -105,7 +105,7 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
     ManagementReviewRequired ? "Management safety lock; inspect and reapply settings" :
     PositionFaulted ? "Position safety fault" :
     plannerRequiresIndependentCalibration
-      ? "Motion planning disabled: verify actual shaft AZ/EL vs C2 and STOP"
+      ? "Motion planning disabled: verify shaft AZ/EL, STOP and integer-degree limits"
       : "Ready";
   public NativeRotatorControlEngine(RotatorSettings settings)
   {
@@ -125,14 +125,14 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
       plannerProfileAtEngineStart!=Rc3040sMotionProfile.Direct &&
       (!settings.Rc3040sMotionHardwareValidated ||
        !settings.Rc3040sIndependentAngleVerified ||
-       !Rc3040sMotionPlanner.ValidLimits(plannerLimitsAtEngineStart));
+       !Rc3040sPlannerFeedbackGuard.ValidQuantizedLimits(plannerLimitsAtEngineStart));
     plannerAuthorizedAtEngineStart=
       settings.NativeProtocol==RotatorProtocolKind.Rc3040sLan &&
       settings.Rc3040sPlannerEnabled &&
       settings.Rc3040sMotionHardwareValidated &&
       settings.Rc3040sIndependentAngleVerified &&
       plannerProfileAtEngineStart!=Rc3040sMotionProfile.Direct &&
-      Rc3040sMotionPlanner.ValidLimits(plannerLimitsAtEngineStart);
+      Rc3040sPlannerFeedbackGuard.ValidQuantizedLimits(plannerLimitsAtEngineStart);
     if (!NativeRotatorCodec.Supports(settings.NativeProtocol,settings.NativeTransport))
       throw new ArgumentException("This protocol cannot use selected transport");
     if (settings.NativeProtocol==RotatorProtocolKind.CustomTemplate &&
@@ -715,7 +715,8 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
                     destination.Azimuth,destination.Elevation,
                     dt,plannerProfileAtEngineStart,plannerLimitsAtEngineStart);
                   p=plannerFeedback.BoundSetpoint(observed,
-                    new RotatorPosition(next.Azimuth,next.Elevation));
+                    new RotatorPosition(next.Azimuth,next.Elevation),
+                    plannerLimitsAtEngineStart);
                 }
               }
             }
