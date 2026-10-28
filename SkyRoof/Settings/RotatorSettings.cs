@@ -149,8 +149,9 @@ namespace SkyRoof
     public int NativePollMs { get; set; } = 1000;
 
     [DisplayName("Native Response Timeout (ms)")]
-    [DefaultValue(600)]
-    public int NativeReadTimeout { get; set; } = 600;
+    [Description("Maximum wait for a native position reply. 1500 ms is the default for noisy RF / TCP-to-serial installations. Existing explicitly saved values are retained. Missing replies pause motion; persistent loss eventually reconnects.")]
+    [DefaultValue(1500)]
+    public int NativeReadTimeout { get; set; } = 1500;
 
     [DisplayName("Allow Open Loop Motion")]
     [Description("Explicit opt-in for protocols with no feedback or STOP. Never enable without checking real mechanical safety.")]
