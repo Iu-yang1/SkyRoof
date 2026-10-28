@@ -66,8 +66,12 @@ public sealed class NativeRotatorEnduranceTests
     Assert.Equal(0,moves);
     Assert.True(cpuSeconds < elapsed * 0.30,
       $"Unexpected >30% of one core CPU during idle: {cpuSeconds:F2}s/{elapsed:F2}s");
-    Assert.InRange(threadDelta,-10,12);
-    Assert.InRange(handleDelta,-30,35);
+    // Other testhost/.NET worker threads and handles may be RELEASED
+    // during a 20-second soak. Only positive growth indicates a leak.
+    Assert.True(threadDelta <= 12,
+      $"Unexpected native rotator thread growth: {threadDelta}");
+    Assert.True(handleDelta <= 35,
+      $"Unexpected native rotator handle growth: {handleDelta}");
   }
 
   private static async Task UntilAsync(Func<bool> condition)

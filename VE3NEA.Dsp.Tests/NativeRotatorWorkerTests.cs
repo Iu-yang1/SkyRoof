@@ -193,6 +193,49 @@ public sealed class NativeRotatorWorkerTests
   }
 
   [Fact]
+  public async Task CleanWorkerShutdownReapsOldPidBeforeReplacementCanOwnDevice()
+  {
+    string? root=Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
+    if(string.IsNullOrWhiteSpace(root))return;
+    string exe=Path.Combine(root,"SkyRoof","bin","x64","Release",
+      "net10.0-windows7.0","SkyRoof.exe");
+    await using var server=new FakeGs232Bridge();
+    var settings=CreateSettings(server.Port);
+    using var old=new RotatorEngineSubprocess(settings,exe);
+    await UntilAsync(()=>old.IsReady);
+    int firstPid=old.WorkerPid;
+    // This is the path used by the non-blocking settings reapply. The
+    // replacement must never be created before the prior lease is reaped.
+    await old.ShutdownAsync().WaitAsync(TimeSpan.FromSeconds(12));
+    Assert.True(old.WorkerExited);
+    using var replacement=new RotatorEngineSubprocess(settings,exe);
+    Assert.NotEqual(firstPid,replacement.WorkerPid);
+    for(int i=0;i<120 && !replacement.IsReady;i++)
+      await Task.Delay(50);
+    Assert.True(replacement.IsReady,
+      "Replacement must acquire exclusive device ownership after old PID exits.");
+    replacement.RotateTo(new SkyRoof.Bearing(100*Math.PI/180,30*Math.PI/180));
+    await UntilAsync(()=>server.Count("W100 030")>=1);
+  }
+
+  [Fact]
+  public async Task ConcurrentShutdownCallsShareOneWorkerReap()
+  {
+    string? root=Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
+    if(string.IsNullOrWhiteSpace(root))return;
+    string exe=Path.Combine(root,"SkyRoof","bin","x64","Release",
+      "net10.0-windows7.0","SkyRoof.exe");
+    await using var server=new FakeGs232Bridge();
+    using var worker=new RotatorEngineSubprocess(CreateSettings(server.Port),exe);
+    await UntilAsync(()=>worker.IsReady);
+    Task first=worker.ShutdownAsync();
+    Task second=worker.ShutdownAsync();
+    Assert.Same(first,second);
+    await Task.WhenAll(first,second).WaitAsync(TimeSpan.FromSeconds(12));
+    Assert.True(worker.WorkerExited);
+  }
+
+  [Fact]
   public async Task TrackDisabledPollsAtBoundedRateWithoutMotionOrBusyLoop()
   {
     await using var server=new FakeGs232Bridge();
@@ -552,6 +595,42 @@ public sealed class NativeRotatorWorkerTests
     Assert.InRange(driver.LastReadBearing!.AzDeg,89.99,90.01);
     Assert.InRange(driver.LastReadBearing.ElDeg,59.99,60.01);
     Assert.False(driver.PositionFaulted);
+  }
+
+  [Fact]
+  public async Task PlannedRc3040sLatchesStopOnTransmitCorrelatedFeedbackBlackout()
+  {
+    int txBlackout=0;
+    await using var bridge=new FakeGs232Bridge(_=>
+      Volatile.Read(ref txBlackout)!=0 ? Array.Empty<byte>() :
+      Encoding.ASCII.GetBytes("AZ=90 EL=30\r"));
+    var settings=CreateSettings(bridge.Port);
+    settings.NativeProtocol=RotatorProtocolKind.Rc3040sLan;
+    settings.NativePollMs=250;
+    settings.NativeReadTimeout=180;
+    settings.NativeFeedbackReconnectGraceMs=5500;
+    settings.Rc3040sPlannerEnabled=true;
+    settings.Rc3040sMotionHardwareValidated=true;
+    settings.Rc3040sIndependentAngleVerified=true;
+    settings.Rc3040sMotionMode=Rc3040sMotionProfile.Trapezoidal;
+
+    using var engine=new NativeRotatorControlEngine(settings);
+    await UntilAsync(()=>engine.IsReady && engine.LastReadBearing!=null);
+    engine.RotateTo(new SkyRoof.Bearing(120*Math.PI/180,50*Math.PI/180));
+    await UntilAsync(()=>bridge.Commands.Any(s=>s.StartsWith("W",StringComparison.Ordinal)));
+    Volatile.Write(ref txBlackout,1);
+    var watch=System.Diagnostics.Stopwatch.StartNew();
+    while(!engine.PositionFaulted && watch.ElapsedMilliseconds<8500)
+      await Task.Delay(50);
+    Assert.True(engine.PositionFaulted,
+      "Active planned W with lost C2 must latch STOP without waiting for long reconnect grace.");
+    await UntilAsync(()=>bridge.Count("S")>0);
+    int sent=bridge.Commands.Count(s=>s.StartsWith("W",StringComparison.Ordinal));
+    Volatile.Write(ref txBlackout,0);
+    await UntilAsync(()=>engine.IsReady);
+    await Task.Delay(800);
+    Assert.Equal(sent,bridge.Commands.Count(s=>s.StartsWith("W",StringComparison.Ordinal)));
+    Assert.True(engine.PositionFaulted);
   }
 
   private static RotatorSettings CreateSettings(int port)=>new()

@@ -87,7 +87,15 @@ internal sealed class TcpTransport : IRotatorTransport
     try
     {
       using var timeout = new CancellationTokenSource(Math.Clamp(options.SendTimeout,200,30000));
-      c.ConnectAsync(options.Host,options.Port,timeout.Token).AsTask().GetAwaiter().GetResult();
+      try
+      {
+        c.ConnectAsync(options.Host,options.Port,timeout.Token).AsTask().GetAwaiter().GetResult();
+      }
+      catch(OperationCanceledException ex) when(timeout.IsCancellationRequested)
+      {
+        throw new TimeoutException(
+          $"TCP connection to {options.Host}:{options.Port} timed out after {Math.Clamp(options.SendTimeout,200,30000)} ms",ex);
+      }
       // KeepAlive is supplementary to application-layer position polling.
       // TCP's .Connected property must not be used as a health probe.
       c.Client.SetSocketOption(SocketOptionLevel.Socket,SocketOptionName.KeepAlive,true);
