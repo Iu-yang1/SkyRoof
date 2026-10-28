@@ -688,6 +688,14 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
                   wake.Set();
                   StateChanged();
                 }
+                else if(plannerFeedback.HasInFlightSetpoint)
+                {
+                  // C2 may progress toward a previous W but that is NOT
+                  // permission to retarget a firmware-driven stepper.
+                  // Preserve the in-flight waypoint until two C2 samples
+                  // confirm its endpoint; the no-progress STOP remains live.
+                  plannerBlocked=true;
+                }
                 else
                 {
                   long tick=Environment.TickCount64;
