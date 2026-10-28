@@ -159,6 +159,9 @@ public sealed class NativeRotatorTcpRecoveryTests
     Port=(ushort)port,
     NativePollMs=250,
     NativeReadTimeout=180,
+    // Shorter grace is intentional for a deterministic CI reconnect test;
+    // the production default is 15000 ms.
+    NativeFeedbackReconnectGraceMs=5500,
     SendTimeout=800,
     ReconnectDelay=1000,
     PositionJumpLimitDegrees=30
