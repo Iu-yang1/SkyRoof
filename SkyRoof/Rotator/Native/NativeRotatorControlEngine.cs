@@ -522,6 +522,7 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
     int retryFailures=0;
     bool hadConnection=false;
     var motionPlanner=new Rc3040sMotionPlanner();
+    var plannerFeedback=new Rc3040sPlannerFeedbackGuard();
     long lastPlanTick=0,lastPlannerCommandTick=0;
     while(!stopping)
     {
@@ -541,6 +542,7 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
           connectWatch.ElapsedMilliseconds);
         replyBacklog.Clear();
         motionPlanner.Reset();
+        plannerFeedback.Reset();
         lastPlanTick=lastPlannerCommandTick=0;
         consecutiveFeedbackMisses=0;
         stableTargetReads=0;
@@ -591,14 +593,14 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
           }
           if(stopNow)
           {
-            motionPlanner.Reset();lastPlanTick=0;
+            motionPlanner.Reset();plannerFeedback.Reset();lastPlanTick=0;
             SendStop();
             continue;
           }
 
           if(jog.HasValue && !PositionFaulted)
           {
-            motionPlanner.Reset();lastPlanTick=0;
+            motionPlanner.Reset();plannerFeedback.Reset();lastPlanTick=0;
             bool shouldSend;
             lock(sync){shouldSend=appliedDirection!=jog;}
             if(shouldSend)
@@ -637,14 +639,50 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
                 plannerBlocked=true;
               else
               {
-                long tick=Environment.TickCount64;
-                double dt=lastPlanTick==0 ? 0.20 :
-                  Math.Clamp((tick-lastPlanTick)/1000.0,0.02,0.5);
-                lastPlanTick=tick;
-                var next=motionPlanner.Step(actual.AzDeg,actual.ElDeg,
-                  target.AzDeg,target.ElDeg,dt,plannerProfileAtEngineStart,
-                  plannerLimitsAtEngineStart);
-                p=new RotatorPosition(next.Azimuth,next.Elevation);
+                var observed=new RotatorPosition(
+                  actual.AzDeg,actual.ElDeg);
+                var destination=new RotatorPosition(
+                  target.AzDeg,target.ElDeg);
+                bool stalled;
+                // Process each valid C2 frame only ONCE. Previously the
+                // planner advanced on every 20-450 ms scheduling cycle
+                // even when feedback was still from the SAME poll.
+                if(!plannerFeedback.TryConsumeFreshFeedback(
+                    readUtc,observed,destination,out stalled))
+                  plannerBlocked=true;
+                else if(stalled)
+                {
+                  lock(sync)
+                  {
+                    safetyLatched=true;
+                    requiresStopAfterReconnect=true;
+                    stopRequested=true;
+                    commandVersion++;
+                    requested=null;
+                    manualDirection=null;
+                    lastWire=null;
+                    error="RC-3040S planned motion: no measured position progress; STOP requested";
+                  }
+                  Log.Error("RC-3040S planned motion stalled: C2 AZ={Az:F1} EL={El:F1}; requested AZ={TargetAz:F1} EL={TargetEl:F1}. STOP requested, controller-reported angle is not independent physical shaft evidence.",
+                    observed.Azimuth,observed.Elevation,
+                    destination.Azimuth,destination.Elevation);
+                  plannerBlocked=true;
+                  wake.Set();
+                  StateChanged();
+                }
+                else
+                {
+                  long tick=Environment.TickCount64;
+                  double dt=lastPlanTick==0 ? 0.20 :
+                    Math.Clamp((tick-lastPlanTick)/1000.0,0.02,0.5);
+                  lastPlanTick=tick;
+                  var next=motionPlanner.Step(
+                    observed.Azimuth,observed.Elevation,
+                    destination.Azimuth,destination.Elevation,
+                    dt,plannerProfileAtEngineStart,plannerLimitsAtEngineStart);
+                  p=plannerFeedback.BoundSetpoint(observed,
+                    new RotatorPosition(next.Azimuth,next.Elevation));
+                }
               }
             }
             else if(lastPlanTick!=0)
@@ -693,7 +731,22 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
                 if(!Encoding.ASCII.GetString(ack).Contains("RPRT 0"))
                   throw new IOException("rotctld rejected position");
               }
-              if(planning)lastPlannerCommandTick=Environment.TickCount64;
+              if(planning)
+              {
+                lastPlannerCommandTick=Environment.TickCount64;
+                Bearing? reported;
+                lock(sync)reported=lastRead;
+                if(reported!=null)
+                {
+                  var observed=new RotatorPosition(
+                    reported.AzDeg,reported.ElDeg);
+                  plannerFeedback.MarkTransmitted(
+                    DateTime.UtcNow,observed,p);
+                  Log.Information("RC-3040S planned W endpoint AZ={CommandAz:F0} EL={CommandEl:F0}, last C2 AZ={FeedbackAz:F1} EL={FeedbackEl:F1}, profile={Profile}; endpoint is not measured shaft position",
+                    p.Azimuth,p.Elevation,observed.Azimuth,
+                    observed.Elevation,plannerProfileAtEngineStart);
+                }
+              }
               lock(sync)
               {
                 lastWritten=planning ?
@@ -769,7 +822,7 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
             }
             requested=lastWritten=null;manualDirection=null;appliedDirection=null;lastWire=null;
           }
-          motionPlanner.Reset();lastPlanTick=lastPlannerCommandTick=0;
+          motionPlanner.Reset();plannerFeedback.Reset();lastPlanTick=lastPlannerCommandTick=0;
         }
       }
       finally
