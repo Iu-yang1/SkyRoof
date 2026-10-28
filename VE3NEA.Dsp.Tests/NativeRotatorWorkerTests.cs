@@ -431,6 +431,52 @@ public sealed class NativeRotatorWorkerTests
     Assert.Equal(1,server.Count("W120 030")); // baseline direct path
   }
 
+  [Theory]
+  [InlineData(Rc3040sMotionProfile.PrecisionStop)]
+  [InlineData(Rc3040sMotionProfile.Trapezoidal)]
+  [InlineData(Rc3040sMotionProfile.SCurve)]
+  public async Task PlannedRc3040sNeverChasesStalledFeedbackWithUnboundedW(
+    Rc3040sMotionProfile mode)
+  {
+    // The bridge can acknowledge C2 polls yet never register motion.
+    // This simulates a stalled motor, wrong encoder scaling, or badly
+    // delayed movement rather than an idealized servo.
+    await using var server=new FakeGs232Bridge();
+    var config=CreateSettings(server.Port);
+    config.NativeProtocol=RotatorProtocolKind.Rc3040sLan;
+    config.Rc3040sPlannerEnabled=true;
+    config.Rc3040sMotionHardwareValidated=true;
+    config.Rc3040sMotionMode=mode;
+    config.Rc3040sPlanAzSpeed=3;
+    config.Rc3040sPlanElSpeed=3;
+    using var engine=new NativeRotatorControlEngine(config);
+    await UntilAsync(()=>engine.IsReady && engine.LastReadBearing!=null);
+    engine.RotateTo(new SkyRoof.Bearing(
+      120*Math.PI/180,65*Math.PI/180));
+
+    var until=System.Diagnostics.Stopwatch.StartNew();
+    while(!engine.PositionFaulted && until.ElapsedMilliseconds<13500)
+      await Task.Delay(50);
+    Assert.True(engine.PositionFaulted,
+      "Stalled C2 feedback must latch and STOP planned movement.");
+    await UntilAsync(()=>server.Count("S")>0);
+    var history=server.Commands.ToArray();
+    var writes=history.Where(x=>x.StartsWith("W",StringComparison.Ordinal))
+      .ToArray();
+    Assert.NotEmpty(writes);
+    foreach(var wire in writes)
+    {
+      Assert.True(wire.Length>=8,$"Invalid planned wire command: {wire}");
+      int az=int.Parse(wire.Substring(1,3));
+      int el=int.Parse(wire.Substring(5,3));
+      Assert.InRange(az,88,92);
+      Assert.InRange(el,28,32);
+    }
+    int lastStop=Array.FindLastIndex(history,x=>x=="S");
+    Assert.DoesNotContain(history.Skip(lastStop+1),
+      x=>x.StartsWith("W",StringComparison.Ordinal));
+  }
+
   private static RotatorSettings CreateSettings(int port)=>new()
   {
     Enabled=true,
