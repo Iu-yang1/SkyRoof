@@ -12,8 +12,9 @@ public sealed class NativeRotatorFeedbackPolicyTests
   [InlineData(4,4000,false,true)]
   [InlineData(3,4500,true,false)]
   [InlineData(6,6999,true,false)]
-  [InlineData(6,7000,true,true)]
-  [InlineData(9,9000,true,true)]
+  [InlineData(6,7000,true,false)]
+  [InlineData(9,14999,true,false)]
+  [InlineData(9,15000,true,true)]
   public void FeedbackSilenceSeparatesTransientRfiAndPersistentLoss(
     int misses,long ageMs,bool alreadySynchronized,bool reconnect)
   {
