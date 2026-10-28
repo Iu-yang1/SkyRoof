@@ -93,7 +93,9 @@ public sealed class Rc3040sPlannerFeedbackGuardTests
     Assert.True(guard.HasInFlightSetpoint);
     for(int tick=1;tick<=8;tick++)
     {
-      var moving=new RotatorPosition(30+tick*0.20,20+tick*0.1);
+      // Stay at least 0.5 degree outside the previous W endpoint:
+      // otherwise the firmware's arrived-at-setpoint condition applies.
+      var moving=new RotatorPosition(30+tick*0.17,20+tick*0.08);
       Assert.True(guard.TryConsumeFreshFeedback(
         Started.AddMilliseconds(tick*300),moving,FinalPoint,out bool stalled));
       Assert.False(stalled);
