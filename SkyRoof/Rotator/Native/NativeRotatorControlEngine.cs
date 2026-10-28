@@ -107,7 +107,7 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
       ? $"Position feedback delayed ({Volatile.Read(ref consecutiveFeedbackMisses)} missed); motion paused"
       : !IsReady ? "Synchronizing" :
     plannerRequiresIndependentCalibration
-      ? "Motion planning disabled: verify shaft AZ/EL, STOP and integer-degree limits"
+      ? "Motion planning disabled: verify actual shaft AZ/EL vs C2, STOP and integer-degree limits"
       : "Ready";
   public NativeRotatorControlEngine(RotatorSettings settings)
   {
