@@ -32,6 +32,7 @@ namespace SkyRoof.CW
       var output=tracks.ToDictionary(t=>t.Id,_=>new float[sampleCount]);
       int dimensions=tracks.Count*2;
       const double twoPi=2*Math.PI;
+      double pcmDuration=pcm.Length/(double)sampleRate;
       double totalInput=0,totalResidual=0;
       for(int start=0;start<pcm.Length;start+=block)
       {
@@ -48,8 +49,9 @@ namespace SkyRoof.CW
           double weight=0.5-0.5*Math.Cos(twoPi*(n+0.5)/len);
           for(int k=0;k<tracks.Count;k++)
           {
+            double sinceEnd=time-pcmDuration;
             double phase=twoPi*(f[k]*time+
-              0.5*tracks[k].DriftHzPerSecond*time*time);
+              0.5*tracks[k].DriftHzPerSecond*sinceEnd*sinceEnd);
             basis[2*k]=Math.Cos(phase);
             basis[2*k+1]=Math.Sin(phase);
           }
@@ -74,8 +76,9 @@ namespace SkyRoof.CW
           double combined=0;
           for(int k=0;k<tracks.Count;k++)
           {
+            double sinceEnd=time-pcmDuration;
             double phase=twoPi*(f[k]*time+
-              0.5*tracks[k].DriftHzPerSecond*time*time);
+              0.5*tracks[k].DriftHzPerSecond*sinceEnd*sinceEnd);
             double y=coeff[2*k]*Math.Cos(phase)+
               coeff[2*k+1]*Math.Sin(phase);
             output[tracks[k].Id][start+n]=(float)y;
