@@ -554,6 +554,42 @@ public sealed class NativeRotatorWorkerTests
     Assert.False(driver.PositionFaulted);
   }
 
+  [Fact]
+  public async Task PlannedRc3040sLatchesStopOnTransmitCorrelatedFeedbackBlackout()
+  {
+    int txBlackout=0;
+    await using var bridge=new FakeGs232Bridge(_=>
+      Volatile.Read(ref txBlackout)!=0 ? Array.Empty<byte>() :
+      Encoding.ASCII.GetBytes("AZ=90 EL=30\r"));
+    var settings=CreateSettings(bridge.Port);
+    settings.NativeProtocol=RotatorProtocolKind.Rc3040sLan;
+    settings.NativePollMs=250;
+    settings.NativeReadTimeout=180;
+    settings.NativeFeedbackReconnectGraceMs=5500;
+    settings.Rc3040sPlannerEnabled=true;
+    settings.Rc3040sMotionHardwareValidated=true;
+    settings.Rc3040sIndependentAngleVerified=true;
+    settings.Rc3040sMotionMode=Rc3040sMotionProfile.Trapezoidal;
+
+    using var engine=new NativeRotatorControlEngine(settings);
+    await UntilAsync(()=>engine.IsReady && engine.LastReadBearing!=null);
+    engine.RotateTo(new SkyRoof.Bearing(120*Math.PI/180,50*Math.PI/180));
+    await UntilAsync(()=>bridge.Commands.Any(s=>s.StartsWith("W",StringComparison.Ordinal)));
+    Volatile.Write(ref txBlackout,1);
+    var watch=System.Diagnostics.Stopwatch.StartNew();
+    while(!engine.PositionFaulted && watch.ElapsedMilliseconds<8500)
+      await Task.Delay(50);
+    Assert.True(engine.PositionFaulted,
+      "Active planned W with lost C2 must latch STOP without waiting for long reconnect grace.");
+    await UntilAsync(()=>bridge.Count("S")>0);
+    int sent=bridge.Commands.Count(s=>s.StartsWith("W",StringComparison.Ordinal));
+    Volatile.Write(ref txBlackout,0);
+    await UntilAsync(()=>engine.IsReady);
+    await Task.Delay(800);
+    Assert.Equal(sent,bridge.Commands.Count(s=>s.StartsWith("W",StringComparison.Ordinal)));
+    Assert.True(engine.PositionFaulted);
+  }
+
   private static RotatorSettings CreateSettings(int port)=>new()
   {
     Enabled=true,
