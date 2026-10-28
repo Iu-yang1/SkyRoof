@@ -505,6 +505,40 @@ public sealed class NativeRotatorWorkerTests
       x=>x.StartsWith("W",StringComparison.Ordinal));
   }
 
+  [Theory]
+  [InlineData(Rc3040sMotionProfile.PrecisionStop)]
+  [InlineData(Rc3040sMotionProfile.Trapezoidal)]
+  [InlineData(Rc3040sMotionProfile.SCurve)]
+  public async Task HardwareOwnedWaypointMotionNeverOverwritesInFlightTarget(
+    Rc3040sMotionProfile mode)
+  {
+    // Simulated RC-3040S takes multiple C2 polls to complete each
+    // absolute W command; a second W before arrival is a protocol risk.
+    await using var server=new FakeGs232Bridge(simulateSlowFeedback:true);
+    var settings=CreateSettings(server.Port);
+    settings.NativeProtocol=RotatorProtocolKind.Rc3040sLan;
+    settings.NativePollMs=300;
+    settings.Rc3040sPlannerEnabled=true;
+    settings.Rc3040sMotionHardwareValidated=true;
+    settings.Rc3040sIndependentAngleVerified=true;
+    settings.Rc3040sMotionMode=mode;
+    settings.Rc3040sPlanAzSpeed=4;
+    settings.Rc3040sPlanElSpeed=3;
+    using var engine=new NativeRotatorControlEngine(settings);
+    await UntilAsync(()=>engine.IsReady && engine.LastReadBearing!=null);
+    engine.RotateTo(new SkyRoof.Bearing(
+      120*Math.PI/180,45*Math.PI/180));
+    var deadline=System.Diagnostics.Stopwatch.StartNew();
+    while(server.PlannedWrites<3 && deadline.ElapsedMilliseconds<16000)
+      await Task.Delay(50);
+    Assert.True(server.PlannedWrites>=3,
+      $"Unexpected planner starvation in {mode}: W count={server.PlannedWrites}");
+    Assert.Equal(0,server.OverlappingWaypoints);
+    Assert.False(engine.PositionFaulted);
+    engine.StopRotation();
+    await UntilAsync(()=>server.Count("S")>=1);
+  }
+
   private static RotatorSettings CreateSettings(int port)=>new()
   {
     Enabled=true,
@@ -537,13 +571,19 @@ public sealed class NativeRotatorWorkerTests
     internal ConcurrentQueue<string> Commands {get;}=new();
     private readonly Func<string,byte[]>? response;
     private readonly bool dropFirstMove;
-    private int dropped,connections;
+    private readonly bool simulateSlowFeedback;
+    private int dropped,connections,overlappingWaypoints,plannedWrites;
+    private int simulatedAz=90,simulatedEl=30,waypointAz=90,waypointEl=30,pollCounter;
+    internal int OverlappingWaypoints=>Volatile.Read(ref overlappingWaypoints);
+    internal int PlannedWrites=>Volatile.Read(ref plannedWrites);
     internal int ConnectionCount => Volatile.Read(ref connections);
     internal int Port {get;}
-    internal FakeGs232Bridge(Func<string,byte[]>? response=null,bool dropFirstMove=false)
+    internal FakeGs232Bridge(Func<string,byte[]>? response=null,bool dropFirstMove=false,
+      bool simulateSlowFeedback=false)
     {
       this.response=response;
       this.dropFirstMove=dropFirstMove;
+      this.simulateSlowFeedback=simulateSlowFeedback;
       listener.Start();
       Port=((IPEndPoint)listener.LocalEndpoint).Port;
       worker=Task.Run(RunAsync);
@@ -576,9 +616,37 @@ public sealed class NativeRotatorWorkerTests
                 if(dropFirstMove && line.StartsWith("W",StringComparison.Ordinal) &&
                    Interlocked.CompareExchange(ref dropped,1,0)==0)
                   disconnect=true;
+                if(simulateSlowFeedback &&
+                   line.StartsWith("W",StringComparison.Ordinal) &&
+                   line.Length>=8 &&
+                   int.TryParse(line.Substring(1,3),out int goalAz) &&
+                   int.TryParse(line.Substring(5,3),out int goalEl))
+                {
+                  if(simulatedAz!=waypointAz || simulatedEl!=waypointEl)
+                    Interlocked.Increment(ref overlappingWaypoints);
+                  waypointAz=goalAz;
+                  waypointEl=goalEl;
+                  Interlocked.Increment(ref plannedWrites);
+                }
+                if(simulateSlowFeedback && line=="S")
+                {
+                  waypointAz=simulatedAz;
+                  waypointEl=simulatedEl;
+                }
                 if(line=="C2")
                 {
-                  var reply=response?.Invoke(line) ??
+                  byte[] reply;
+                  if(simulateSlowFeedback)
+                  {
+                    if(++pollCounter%2==0)
+                    {
+                      simulatedAz+=Math.Sign(waypointAz-simulatedAz);
+                      simulatedEl+=Math.Sign(waypointEl-simulatedEl);
+                    }
+                    reply=Encoding.ASCII.GetBytes(
+                      $"AZ={simulatedAz} EL={simulatedEl}\r");
+                  }
+                  else reply=response?.Invoke(line) ??
                     Encoding.ASCII.GetBytes("AZ=90 EL=30\r");
                   if(reply.Length>0)
                     await stream.WriteAsync(reply,cancel.Token);
