@@ -158,8 +158,14 @@ namespace SkyRoof
     public int NativePollMs { get; set; } = 1000;
 
     [DisplayName("Native Response Timeout (ms)")]
-    [DefaultValue(600)]
-    public int NativeReadTimeout { get; set; } = 600;
+    [Description("Maximum wait for a native position reply. 1500 ms is the default for noisy RF / TCP-to-serial installations. Existing explicitly saved values are retained. Missing replies pause motion; persistent loss eventually reconnects.")]
+    [DefaultValue(1500)]
+    public int NativeReadTimeout { get; set; } = 1500;
+
+    [DisplayName("Native Feedback Reconnect Grace (ms)")]
+    [Description("How long a previously synchronized native TCP/serial controller may remain silent before the transport is reconnected. Default 15000 ms covers brief TX/RFI blackouts. Does NOT extend STOP or motion-safety interlocks. Allowed 5000–30000 ms.")]
+    [DefaultValue(15000)]
+    public int NativeFeedbackReconnectGraceMs { get; set; } = 15000;
 
     [DisplayName("Allow Open Loop Motion")]
     [Description("Explicit opt-in for protocols with no feedback or STOP. Never enable without checking real mechanical safety.")]
