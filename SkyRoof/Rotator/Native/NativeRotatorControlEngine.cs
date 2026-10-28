@@ -490,7 +490,15 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
       if(!fault && requested!=null && !manualDirection.HasValue &&
          !appliedDirection.HasValue && lastWire!=null &&
          Math.Abs(current.AzDeg-requested.AzDeg)<=1.5 &&
-         Math.Abs(current.ElDeg-requested.ElDeg)<=1.5)
+         Math.Abs(current.ElDeg-requested.ElDeg)<=1.5 &&
+         // A changing Track target can coincide with old C2 while the
+         // controller still executes its previous W; never treat that as
+         // confirmed STOP. Compare with the actual last wire endpoint.
+         Rc3040sPlannerFeedbackGuard.IsLastWireAtReportedPosition(
+           p,
+           lastWritten==null ? null :
+             new RotatorPosition(lastWritten.AzDeg,lastWritten.ElDeg),
+           plannerAuthorizedAtEngineStart))
       {
         if(stableTargetReads==0)stableTargetFirstUtc=lastReadUtc;
         stableTargetReads++;
