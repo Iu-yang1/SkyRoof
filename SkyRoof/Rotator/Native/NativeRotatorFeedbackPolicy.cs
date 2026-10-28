@@ -14,15 +14,17 @@ internal static class NativeRotatorFeedbackPolicy
   internal const int InitialMinimumMisses = 4;
   internal const int EstablishedMinimumMisses = 6;
   internal const int InitialSilenceMs = 4000;
-  internal const int EstablishedSilenceMs = 7000;
+  internal const int EstablishedSilenceMs = 15000;
 
   internal static bool ShouldReconnect(
     int consecutiveMisses, long elapsedWithoutReplyMs,
-    bool hadValidSessionFeedback) =>
+    bool hadValidSessionFeedback,
+    int configuredEstablishedGraceMs = EstablishedSilenceMs) =>
     consecutiveMisses >= (hadValidSessionFeedback
       ? EstablishedMinimumMisses : InitialMinimumMisses) &&
     elapsedWithoutReplyMs >= (hadValidSessionFeedback
-      ? EstablishedSilenceMs : InitialSilenceMs);
+      ? Math.Clamp(configuredEstablishedGraceMs,5000,30000)
+      : InitialSilenceMs);
 
   // A confirmed target / continuous jog may still be physically active.
   // A few noisy polls should not force a TCP reconnect, but the first
