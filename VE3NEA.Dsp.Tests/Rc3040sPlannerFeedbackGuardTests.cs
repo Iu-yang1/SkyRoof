@@ -11,6 +11,8 @@ public sealed class Rc3040sPlannerFeedbackGuardTests
     new(2026,10,28,7,0,0,DateTimeKind.Utc);
   private static readonly RotatorPosition StartingPoint=new(30,20);
   private static readonly RotatorPosition FinalPoint=new(120,65);
+  private static readonly Rc3040sMotionPlanner.Limits WireLimits=
+    new(2,2,0.8,1.5,0,450,0,180);
 
   [Fact]
   public void SmallQuantizedWStillRequiresTwoPositionConfirmations()
@@ -73,12 +75,52 @@ public sealed class Rc3040sPlannerFeedbackGuardTests
   {
     var guard=new Rc3040sPlannerFeedbackGuard();
     var bounded=guard.BoundSetpoint(
-      new(actual,20),new(desired,65));
+      new(actual,20),new(desired,65),WireLimits);
     Assert.Equal(expected,bounded.Azimuth,5);
     Assert.InRange(Math.Abs(bounded.Azimuth-actual),
       0,Rc3040sPlannerFeedbackGuard.MaximumLeadDegrees);
     Assert.InRange(Math.Abs(bounded.Elevation-20),
       0,Rc3040sPlannerFeedbackGuard.MaximumLeadDegrees);
+  }
+
+  [Theory]
+  [InlineData(60.6,60.1,60.6,60)]
+  [InlineData(60.0,59.7,60.0,60)]
+  [InlineData(35.4,35.6,35.4,36)]
+  public void FractionalSoftwareLimitNeverRoundsWireTargetOutsideLimit(
+    double bound,double actual,double desired,double expected)
+  {
+    var limits=bound>50 ?
+      WireLimits with { MaxAz=bound } :
+      WireLimits with { MinAz=bound };
+    var guard=new Rc3040sPlannerFeedbackGuard();
+    Assert.True(Rc3040sPlannerFeedbackGuard.ValidQuantizedLimits(limits));
+    var command=guard.BoundSetpoint(
+      new(actual,20),new(desired,21),limits);
+    Assert.Equal(expected,command.Azimuth);
+    Assert.InRange(command.Azimuth,limits.MinAz,limits.MaxAz);
+    Assert.InRange(Math.Abs(command.Azimuth-actual),
+      0,Rc3040sPlannerFeedbackGuard.MaximumLeadDegrees);
+  }
+
+  [Fact]
+  public void RejectsWireLimitsWithNoRepresentableIntegerAngle()
+  {
+    var invalid=WireLimits with { MinAz=30.1,MaxAz=30.9 };
+    Assert.False(Rc3040sPlannerFeedbackGuard.ValidQuantizedLimits(invalid));
+    Assert.Throws<ArgumentOutOfRangeException>(()=>
+      new Rc3040sPlannerFeedbackGuard().BoundSetpoint(
+        new(30.5,20),new(30.6,21),invalid));
+  }
+
+  [Theory]
+  [InlineData(-10,360)]
+  [InlineData(0,451)]
+  public void RejectsLimitsOutsideRc3040sWireAzRange(
+    double min,double max)
+  {
+    Assert.False(Rc3040sPlannerFeedbackGuard.ValidQuantizedLimits(
+      WireLimits with { MinAz=min,MaxAz=max }));
   }
 
   [Fact]
