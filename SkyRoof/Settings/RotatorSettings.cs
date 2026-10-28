@@ -106,6 +106,15 @@ namespace SkyRoof
     [DefaultValue(false)]
     public bool Rc3040sMotionHardwareValidated { get; set; } = false;
 
+    // New safety verification: a previously checked generic hardware
+    // checkbox is not evidence that C2 agrees with measured shaft angle.
+    // Existing settings intentionally migrate to FALSE until explicitly
+    // revalidated for BOTH axes after this planner fix.
+    [DisplayName("RC-3040S Independent Angle Verification")]
+    [Description("Required before enabling non-Direct motion. Compare the independently measured actual AZ and EL with controller C2 at more than one angle; verify STOP. Do not infer this from C2 alone.")]
+    [DefaultValue(false)]
+    public bool Rc3040sIndependentAngleVerified { get; set; } = false;
+
     [DisplayName("RC-3040S AT Readback")]
     [Description("Allow device speed readback and manual management.")]
     [DefaultValue(true)]
