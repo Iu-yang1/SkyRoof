@@ -69,11 +69,26 @@ namespace VE3NEA.Dsp.Tests
       archive.Append(10,[new CwTranscriptSnapshot(1,3,"TEST","?",
         [],Now)]);
       string destination=Path.Combine(root,"cw-2026-10-29.jsonl");
-      for(int i=0;i<100 && (!File.Exists(destination) ||
-         new FileInfo(destination).Length==0);i++)
+      string text="";
+      // Windows File.AppendAllTextAsync briefly holds an exclusive writer
+      // handle. The reader must wait for an entire committed JSONL line,
+      // not race an open file immediately after it first appears.
+      for(int i=0;i<150;i++)
+      {
+        try
+        {
+          if(File.Exists(destination))
+            text=File.ReadAllText(destination);
+          if(text.Contains("TEST",StringComparison.Ordinal))
+            break;
+        }
+        catch(IOException)
+        {
+          // The asynchronous writer is still flushing this JSONL entry.
+        }
         await Task.Delay(20);
+      }
       File.Exists(destination).Should().BeTrue();
-      string text=File.ReadAllText(destination);
       text.Should().Contain("TEST");
       text.Should().Contain("SessionId");
     }
