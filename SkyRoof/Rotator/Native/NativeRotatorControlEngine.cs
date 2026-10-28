@@ -124,7 +124,8 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
       settings.Rc3040sPlannerEnabled &&
       plannerProfileAtEngineStart!=Rc3040sMotionProfile.Direct &&
       (!settings.Rc3040sMotionHardwareValidated ||
-       !settings.Rc3040sIndependentAngleVerified);
+       !settings.Rc3040sIndependentAngleVerified ||
+       !Rc3040sMotionPlanner.ValidLimits(plannerLimitsAtEngineStart));
     plannerAuthorizedAtEngineStart=
       settings.NativeProtocol==RotatorProtocolKind.Rc3040sLan &&
       settings.Rc3040sPlannerEnabled &&
@@ -636,8 +637,11 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
           else if(target!=null && !PositionFaulted)
           {
             var p=new RotatorPosition(target.AzDeg,target.ElDeg);
-            bool planning=plannerAuthorizedAtEngineStart &&
-              settings.Rc3040sPlannerEnabled && settings.Rc3040sMotionHardwareValidated;
+            // Motion authorization/profile/limits are immutable for this
+            // worker lifetime. Reading mutable UI settings here used to
+            // silently switch a live planned route to an unrestricted
+            // Direct W command if a checkbox changed mid-movement.
+            bool planning=plannerAuthorizedAtEngineStart;
             bool plannerBlocked=false;
             if(planning)
             {
