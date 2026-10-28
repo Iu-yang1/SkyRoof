@@ -23,6 +23,13 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
   internal static bool InChildEngine {get;private set;}
   internal int WorkerPid => child.Id;
   internal bool WorkerExited => ChildExited;
+  // Serializes replacement workers without blocking WinForms. Completion
+  // means the old PID has actually exited and released the OS device lock.
+  internal Task ShutdownAsync()
+  {
+    Dispose();
+    return shutdownCompleted.Task;
+  }
   internal static bool ShouldHostWorker() =>
     !InChildEngine && string.Equals(
       System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name,
@@ -33,6 +40,8 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
   private readonly Process child;
   private readonly NamedPipeServerStream pipe;
   private readonly CancellationTokenSource cancel=new();
+  private readonly TaskCompletionSource<bool> shutdownCompleted=new(
+    TaskCreationOptions.RunContinuationsAsynchronously);
   private readonly SemaphoreSlim commandsAvailable=new(0);
   // Motion commands are coalesced; administrative commands have a strict
   // upper bound. STOP is inserted at the FRONT, never behind buffered jogs.
@@ -81,7 +90,7 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
         JsonSerializer.SerializeToUtf8Bytes(settings)));
       child=Process.Start(start) ?? throw new IOException("Rotator engine subprocess launch failed");
       _=SuperviseAsync();
-      Log.Information("Full rotator motion/safety controller runs in PID {Pid}",child.Id);
+      Log.Information("Full rotator motion/safety controller started; workerPID={Pid}, pipe={Pipe}",child.Id,name);
     }
     catch
     {
@@ -343,22 +352,47 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
       pending.Clear();
       NotifyStatus();
       try{pipe.Dispose();}catch{}
-      // Unexpected child death cannot safely trigger automatic reconnect.
-      // No new motion can be queued until explicit driver reinitialization.
-      _=Task.Run(async ()=>
+      // Wait for the old process to release the endpoint lock BEFORE a new
+      // generation is allowed to open the hardware. Never block WinForms:
+      // callers await ShutdownAsync, and this supervisor owns the reap task.
+      bool forceKilled=false;
+      try
       {
-        try
+        if(!ChildExited)
         {
-          if(!child.HasExited)
+          using var wait=new CancellationTokenSource(TimeSpan.FromSeconds(4));
+          try{await child.WaitForExitAsync(wait.Token).ConfigureAwait(false);}
+          catch(OperationCanceledException)
           {
-            using var wait=new CancellationTokenSource(TimeSpan.FromSeconds(4));
-            try{await child.WaitForExitAsync(wait.Token);}catch(OperationCanceledException)
-            {if(!child.HasExited)child.Kill(entireProcessTree:true);}
+            if(!ChildExited)
+            {
+              forceKilled=true;
+              Log.Error("Rotator worker PID {Pid} did not exit after pipe close; terminating process tree. Physical STOP unverified.",child.Id);
+              child.Kill(entireProcessTree:true);
+            }
+          }
+          if(!ChildExited)
+          {
+            using var reaped=new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            await child.WaitForExitAsync(reaped.Token).ConfigureAwait(false);
           }
         }
-        catch(Exception ex){Log.Warning(ex,"Failed to terminate rotator child");}
-        finally{child.Dispose();}
-      });
+        if(forceKilled)
+          shutdownCompleted.TrySetException(new IOException(
+            "Old rotator worker required force termination; physical STOP is unverified. Refusing automatic replacement."));
+        else
+        {
+          Log.Information("Rotator worker PID {Pid} exited and released endpoint ownership",child.Id);
+          shutdownCompleted.TrySetResult(true);
+        }
+      }
+      catch(Exception ex)
+      {
+        Log.Error(ex,"Rotator worker PID {Pid} could not be reaped; do not start a second hardware controller",child.Id);
+        shutdownCompleted.TrySetException(new IOException(
+          "Previous rotator worker exit could not be confirmed; device lock may remain held.",ex));
+      }
+      finally{child.Dispose();}
     }
   }
 
@@ -518,11 +552,13 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
     // parent WinForms exception handler or global radio/UI resources.
     Directory.CreateDirectory(Utils.GetLogArchiveFolder());
     Log.Logger=new LoggerConfiguration().MinimumLevel.Debug()
+      .Enrich.WithProperty("WorkerPid",Environment.ProcessId)
       .WriteTo.File(Path.Combine(Utils.GetLogArchiveFolder(),
         "RotatorEngine-Worker_.txt"),
         rollingInterval:RollingInterval.Day,
         fileSizeLimitBytes:3_000_000,rollOnFileSizeLimit:true,
-        retainedFileCountLimit:10,shared:true).CreateLogger();
+        retainedFileCountLimit:10,shared:true,
+        outputTemplate:"{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] [PID {WorkerPid}] {Message:lj}{NewLine}{Exception}").CreateLogger();
     NativeRotatorControlEngine? native=null;
     IDisposable? lease=null;
     try
@@ -534,6 +570,8 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
       // hardware simultaneously, even if a user changes settings quickly.
       // The OS releases this cross-process file lock after a process crash.
       using var hardwareOwner=AcquireExclusiveDeviceOwner(settings);
+      Log.Information("Rotator worker PID {Pid} acquired endpoint {Transport} {Host}:{Port}, protocol={Protocol}",
+        Environment.ProcessId,settings.NativeTransport,settings.Host,settings.Port,settings.NativeProtocol);
       using var connection=new NamedPipeClientStream(".",args[1],
         PipeDirection.InOut,PipeOptions.Asynchronous);
       connection.Connect(4500);
@@ -731,9 +769,14 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
         try{await states.WaitAsync(TimeSpan.FromSeconds(1));}catch(Exception){}
       }
     }
+    catch(IOException ex) when(ex.Message.Contains("Pipe is broken",StringComparison.OrdinalIgnoreCase) ||
+      ex.Message.Contains("pipe has been ended",StringComparison.OrdinalIgnoreCase))
+    {
+      try{Log.Warning("Rotator worker PID {Pid}: control pipe closed; requesting fail-safe STOP. Cause may be parent shutdown or IPC failure.",Environment.ProcessId);}catch{}
+    }
     catch(Exception ex)
     {
-      try{Log.Warning(ex,"Rotator engine child failure");}catch{}
+      try{Log.Warning(ex,"Rotator engine child failure, PID {Pid}",Environment.ProcessId);}catch{}
     }
     finally
     {
@@ -742,6 +785,7 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
       try{native?.StopRotation();}catch{}
       try{lease?.Dispose();}catch{}
       try{native?.Dispose();}catch{}
+      Log.Information("Rotator worker PID {Pid} exiting; STOP delivery is not a hardware ACK",Environment.ProcessId);
       Log.CloseAndFlush();
       InChildEngine=false;
     }
