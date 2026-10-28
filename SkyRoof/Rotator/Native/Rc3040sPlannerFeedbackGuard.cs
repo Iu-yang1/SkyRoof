@@ -156,10 +156,10 @@ internal sealed class Rc3040sPlannerFeedbackGuard
   {
     if(timeUtc.Kind!=DateTimeKind.Utc)
       throw new ArgumentException("UTC required",nameof(timeUtc));
-    // Ignore a zero-distance initial W caused by integer rounding.
-    if(Math.Abs(commanded.Azimuth-actual.Azimuth)<0.75 &&
-       Math.Abs(commanded.Elevation-actual.Elevation)<0.75)
-      return;
+    // Track EVERY W actually transmitted, including a quantized W
+    // only 0.5° from C2. Such a command can still start a physical step
+    // or reset the controller ramp. A no-op W will be acknowledged by
+    // two stable C2 reads and does not warrant an optimistic bypass.
     if(inFlightSetpoint.HasValue)
       throw new InvalidOperationException(
         "Previous RC-3040S W command is still awaiting endpoint confirmation.");
