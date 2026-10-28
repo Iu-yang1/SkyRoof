@@ -31,6 +31,7 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
 {
   private readonly RotatorSettings settings;
   private readonly bool plannerAuthorizedAtEngineStart;
+  private readonly bool plannerRequiresIndependentCalibration;
   private readonly Rc3040sMotionProfile plannerProfileAtEngineStart;
   private readonly Rc3040sMotionPlanner.Limits plannerLimitsAtEngineStart;
   private readonly SynchronizationContext ui;
@@ -102,7 +103,10 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
     !IsRunning ? "Reconnecting" :
     !IsReady ? "Synchronizing" :
     ManagementReviewRequired ? "Management safety lock; inspect and reapply settings" :
-    PositionFaulted ? "Position safety fault" : "Ready";
+    PositionFaulted ? "Position safety fault" :
+    plannerRequiresIndependentCalibration
+      ? "Motion planning disabled: verify actual shaft AZ/EL vs C2 and STOP"
+      : "Ready";
   public NativeRotatorControlEngine(RotatorSettings settings)
   {
     this.settings=settings;
@@ -115,8 +119,17 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
       settings.Rc3040sPlanAcceleration,settings.Rc3040sPlanJerk,
       settings.MinAzimuth,settings.MaxAzimuth,
       settings.MinElevation,settings.MaxElevation);
-    plannerAuthorizedAtEngineStart=settings.NativeProtocol==RotatorProtocolKind.Rc3040sLan &&
-      settings.Rc3040sPlannerEnabled && settings.Rc3040sMotionHardwareValidated &&
+    plannerRequiresIndependentCalibration=
+      settings.NativeProtocol==RotatorProtocolKind.Rc3040sLan &&
+      settings.Rc3040sPlannerEnabled &&
+      plannerProfileAtEngineStart!=Rc3040sMotionProfile.Direct &&
+      (!settings.Rc3040sMotionHardwareValidated ||
+       !settings.Rc3040sIndependentAngleVerified);
+    plannerAuthorizedAtEngineStart=
+      settings.NativeProtocol==RotatorProtocolKind.Rc3040sLan &&
+      settings.Rc3040sPlannerEnabled &&
+      settings.Rc3040sMotionHardwareValidated &&
+      settings.Rc3040sIndependentAngleVerified &&
       plannerProfileAtEngineStart!=Rc3040sMotionProfile.Direct &&
       Rc3040sMotionPlanner.ValidLimits(plannerLimitsAtEngineStart);
     if (!NativeRotatorCodec.Supports(settings.NativeProtocol,settings.NativeTransport))
@@ -148,7 +161,8 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
        bearing.ElDeg<settings.MinElevation||bearing.ElDeg>settings.MaxElevation)return;
     lock(sync)
     {
-      if(stopping || safetyLatched || managementHeld)return;
+      if(stopping || safetyLatched || managementHeld ||
+         plannerRequiresIndependentCalibration)return;
       // Never send a new target before the first real position observation,
       // or after feedback becomes stale. Open-loop protocols need a separate
       // explicit user opt-in.
