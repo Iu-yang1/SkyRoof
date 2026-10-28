@@ -128,18 +128,28 @@ namespace SkyRoof.CW
       int count=pcm.Length<window ? 0 :
         1+(pcm.Length-window)/hop;
       if(count==0)return [];
+      // One oscillator setup per frame rather than a transcendental per
+      // sample (important when testing eight CW lanes on a 6-core host).
+      var weights=new double[window];
+      for(int n=0;n<window;n++)
+        weights[n]=0.5-0.5*Math.Cos(2*Math.PI*n/(window-1));
+      double step=2*Math.PI*frequencyHz/sampleRate;
+      double cs=Math.Cos(step),sn=Math.Sin(step);
       var power=new double[count];
       for(int frame=0;frame<count;frame++)
       {
         int start=frame*hop;
+        double angle=step*start;
+        double cos=Math.Cos(angle),sin=Math.Sin(angle);
         double real=0,imag=0;
         for(int n=0;n<window;n++)
         {
-          double angle=2*Math.PI*frequencyHz*(start+n)/sampleRate;
-          double weight=0.5-0.5*Math.Cos(2*Math.PI*n/(window-1));
-          double value=pcm[start+n]*weight;
-          real+=value*Math.Cos(angle);
-          imag+=value*Math.Sin(angle);
+          double value=pcm[start+n]*weights[n];
+          real+=value*cos;
+          imag+=value*sin;
+          double nextCos=cos*cs-sin*sn;
+          sin=sin*cs+cos*sn;
+          cos=nextCos;
         }
         power[frame]=real*real+imag*imag;
       }
