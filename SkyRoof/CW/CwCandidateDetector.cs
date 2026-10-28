@@ -247,6 +247,8 @@ namespace SkyRoof.CW
     public CwFixedLagAssociator Associations { get; }
     public CwPileupTrackManager Tracks { get; }
     public double AnalysisSeconds { get; }
+    private readonly CwStationHypothesisManager stationHypotheses=new();
+    public bool EnableExperimentalStationGate {get;set;}
 
     public CwPileupFrontEnd(
       int sampleRate = SdrConst.AUDIO_SAMPLING_RATE,
@@ -402,7 +404,10 @@ namespace SkyRoof.CW
         CwSignalTrack track=latestTracks[i];
         CwKeyingAssessment evidence=
           CwKeyingGate.AssessRidge(track,scan,snapshot,FrameScanner);
-        if(evidence.IsKeyed)
+        bool keyed=evidence.IsKeyed &&
+          (!EnableExperimentalStationGate ||
+           stationHypotheses.Update(track,evidence,now));
+        if(keyed)
           verifiedUntil[track.Id]=now.AddSeconds(3);
         bool verified=verifiedUntil.TryGetValue(track.Id,out DateTime until) &&
           until>=now;
@@ -432,6 +437,7 @@ namespace SkyRoof.CW
       FrameScanner.ResetCache();
       Associations.Reset();
       Tracks.Reset();
+      stationHypotheses.Reset();
       verifiedUntil.Clear();
       lastPrecisionSampleIndex = long.MinValue;
       lastCommittedSampleIndex = long.MinValue;
