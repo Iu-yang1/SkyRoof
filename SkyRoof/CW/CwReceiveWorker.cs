@@ -729,12 +729,19 @@ namespace SkyRoof.CW
       if (disposed)
         return;
 
-      StopAsync()
-        .GetAwaiter()
-        .GetResult();
-      History.Dispose();
-
-      disposed = true;
+      // MainForm may call Dispose on the WinForms thread while ONNX/CTC
+      // inference is in native code. Cancellation is immediate, but waiting
+      // for the outstanding native window is not safe on the UI thread.
+      disposed=true;
+      Task completion=StopAsync();
+      _=completion.ContinueWith(task=>
+      {
+        if(task.Exception!=null)
+          Serilog.Log.Error(task.Exception,
+            "CW receive worker delayed shutdown failed");
+        History.Dispose();
+      },CancellationToken.None,
+      TaskContinuationOptions.ExecuteSynchronously,TaskScheduler.Default);
       GC.SuppressFinalize(this);
     }
   }
