@@ -773,7 +773,8 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
                 settings.NativeTransport,settings.NativeProtocol,misses,ageMs,
                 settings.NativeReadTimeout,PositionFaulted,attempt);
               if(NativeRotatorFeedbackPolicy.ShouldReconnect(
-                   misses,ageMs,hadFeedback))
+                   misses,ageMs,hadFeedback,
+                   settings.NativeFeedbackReconnectGraceMs))
                 throw new TimeoutException(
                   $"Native rotator feedback unavailable for {ageMs} ms ({misses} consecutive timeouts); reconnect required",ex);
               continue;
