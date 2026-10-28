@@ -67,7 +67,7 @@ public sealed class Rc3040sPlannerFeedbackGuardTests
   {
     var guard=new Rc3040sPlannerFeedbackGuard();
     guard.TryConsumeFreshFeedback(Started,StartingPoint,FinalPoint,out _);
-    guard.MarkTransmitted(Started,StartingPoint,new(31,20));
+    guard.MarkTransmitted(Started,StartingPoint,new(32,20));
     Assert.True(guard.TryConsumeFreshFeedback(
       Started.AddSeconds(3),new(31,20),FinalPoint,out bool stall));
     Assert.False(stall);
@@ -84,16 +84,61 @@ public sealed class Rc3040sPlannerFeedbackGuardTests
   }
 
   [Fact]
-  public void ReachingFinalTargetDoesNotTripNoProgressFault()
+  public void FreshC2BeforePreviousWaypointSettlesNeverAuthorizesNextW()
+  {
+    var guard=new Rc3040sPlannerFeedbackGuard();
+    Assert.True(guard.TryConsumeFreshFeedback(
+      Started,StartingPoint,FinalPoint,out _));
+    guard.MarkTransmitted(Started,StartingPoint,new(32,21));
+    Assert.True(guard.HasInFlightSetpoint);
+    for(int tick=1;tick<=8;tick++)
+    {
+      var moving=new RotatorPosition(30+tick*0.20,20+tick*0.1);
+      Assert.True(guard.TryConsumeFreshFeedback(
+        Started.AddMilliseconds(tick*300),moving,FinalPoint,out bool stalled));
+      Assert.False(stalled);
+      Assert.True(guard.HasInFlightSetpoint);
+      Assert.Throws<InvalidOperationException>(()=>
+        guard.MarkTransmitted(Started.AddMilliseconds(tick*300),
+          moving,new(33,22)));
+    }
+    // One C2 at the waypoint is insufficient, even if target equals.
+    Assert.True(guard.TryConsumeFreshFeedback(
+      Started.AddSeconds(3),new(32,21),FinalPoint,out _));
+    Assert.True(guard.HasInFlightSetpoint);
+    Assert.True(guard.TryConsumeFreshFeedback(
+      Started.AddMilliseconds(3400),new(32,21),FinalPoint,out _));
+    Assert.False(guard.HasInFlightSetpoint);
+    guard.MarkTransmitted(Started.AddMilliseconds(3500),
+      new(32,21),new(33,22));
+    Assert.True(guard.HasInFlightSetpoint);
+  }
+
+  [Fact]
+  public void STOPReleasesPendingSetpointWithoutSendingAnotherW()
   {
     var guard=new Rc3040sPlannerFeedbackGuard();
     guard.TryConsumeFreshFeedback(Started,StartingPoint,FinalPoint,out _);
-    guard.MarkTransmitted(Started,StartingPoint,new(31,20));
+    guard.MarkTransmitted(Started,StartingPoint,new(31,21));
+    Assert.True(guard.HasInFlightSetpoint);
+    guard.Reset();
+    Assert.False(guard.HasInFlightSetpoint);
+    Assert.True(guard.TryConsumeFreshFeedback(
+      Started.AddSeconds(1),StartingPoint,FinalPoint,out _));
+  }
+
+  [Fact]
+  public void ReachingFinalTargetDoesNotTripNoProgressFault()
+  {
+    var guard=new Rc3040sPlannerFeedbackGuard();
+    var nearbyGoal=new RotatorPosition(31,20);
+    guard.TryConsumeFreshFeedback(Started,StartingPoint,nearbyGoal,out _);
+    guard.MarkTransmitted(Started,StartingPoint,nearbyGoal);
     guard.TryConsumeFreshFeedback(
-      Started.AddSeconds(1),FinalPoint,FinalPoint,out bool stalled);
+      Started.AddSeconds(1),nearbyGoal,nearbyGoal,out bool stalled);
     Assert.False(stalled);
     guard.TryConsumeFreshFeedback(
-      Started.AddSeconds(20),FinalPoint,FinalPoint,out stalled);
+      Started.AddSeconds(20),nearbyGoal,nearbyGoal,out stalled);
     Assert.False(stalled);
   }
 }
