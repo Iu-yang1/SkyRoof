@@ -28,7 +28,8 @@ namespace SkyRoof.CW
       int block=Math.Clamp(
         (int)Math.Round(sampleRate*Math.Clamp(3.0/spacing,0.25,1)),
         sampleRate/4,sampleRate);
-      var output=tracks.ToDictionary(t=>t.Id,_=>new float[pcm.Length]);
+      int sampleCount=pcm.Length; // do not capture a ReadOnlySpan in a lambda
+      var output=tracks.ToDictionary(t=>t.Id,_=>new float[sampleCount]);
       int dimensions=tracks.Count*2;
       const double twoPi=2*Math.PI;
       double totalInput=0,totalResidual=0;
