@@ -50,6 +50,23 @@ namespace SkyRoof
     public CwDenoiseMode SpectrumDenoiseMode { get; set; } =
       CwDenoiseMode.Bypass;
 
+    // New inference paths are intentionally OFF until real labelled
+    // IC-9700 PCM A/B tests establish no regression.
+    [DisplayName("Experimental CW Multi-Hypothesis Gate")]
+    [Description("Require sustained independent CW keying evidence before assigning an RX lane. A/B experiment; disabled by default.")]
+    [DefaultValue(false)]
+    public bool ExperimentalStationGate {get;set;} = false;
+
+    [DisplayName("Experimental Coherent CW Separation")]
+    [Description("Try bounded joint multi-tone real-I/Q least-squares separation on nearby CW signals; fallback on bad residual. Not yet validated for 5 Hz / 8 dB pileups.")]
+    [DefaultValue(false)]
+    public bool ExperimentalCoherentSeparation {get;set;} = false;
+
+    [DisplayName("Experimental Bayesian Morse HSMM")]
+    [Description("Cross-check neural CTC with an independent soft-keying duration decoder. Neural remains primary; test on labelled recordings first.")]
+    [DefaultValue(false)]
+    public bool ExperimentalHsmmArbitration {get;set;} = false;
+
     // Compatibility field for older SkyRoof settings files. Manual CW
     // transmission no longer requires or consults a separate software
     // enable gate; the real radio/SkyCAT status is verified on Send.
