@@ -13,6 +13,23 @@ public sealed class Rc3040sPlannerFeedbackGuardTests
   private static readonly RotatorPosition FinalPoint=new(120,65);
 
   [Fact]
+  public void SmallQuantizedWStillRequiresTwoPositionConfirmations()
+  {
+    var guard=new Rc3040sPlannerFeedbackGuard();
+    var actual=new RotatorPosition(30.4,20);
+    var endpoint=new RotatorPosition(31,20);
+    guard.TryConsumeFreshFeedback(Started,actual,FinalPoint,out _);
+    guard.MarkTransmitted(Started,actual,endpoint);
+    Assert.True(guard.HasInFlightSetpoint); // 0.6° may still move
+    guard.TryConsumeFreshFeedback(
+      Started.AddMilliseconds(500),endpoint,FinalPoint,out _);
+    Assert.True(guard.HasInFlightSetpoint);
+    guard.TryConsumeFreshFeedback(
+      Started.AddMilliseconds(850),endpoint,FinalPoint,out _);
+    Assert.False(guard.HasInFlightSetpoint);
+  }
+
+  [Fact]
   public void NewRequestedTargetMatchingC2DoesNotClearOutstandingMotion()
   {
     // A moving motor was ordered to W032 021, while target tracking
