@@ -153,6 +153,11 @@ namespace SkyRoof
     [DefaultValue(1500)]
     public int NativeReadTimeout { get; set; } = 1500;
 
+    [DisplayName("Native Feedback Reconnect Grace (ms)")]
+    [Description("How long a previously synchronized native TCP/serial controller may remain silent before the transport is reconnected. Default 15000 ms covers brief TX/RFI blackouts. Does NOT extend STOP or motion-safety interlocks. Allowed 5000–30000 ms.")]
+    [DefaultValue(15000)]
+    public int NativeFeedbackReconnectGraceMs { get; set; } = 15000;
+
     [DisplayName("Allow Open Loop Motion")]
     [Description("Explicit opt-in for protocols with no feedback or STOP. Never enable without checking real mechanical safety.")]
     [DefaultValue(false)]
