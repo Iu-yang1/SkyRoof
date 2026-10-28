@@ -193,6 +193,49 @@ public sealed class NativeRotatorWorkerTests
   }
 
   [Fact]
+  public async Task CleanWorkerShutdownReapsOldPidBeforeReplacementCanOwnDevice()
+  {
+    string? root=Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
+    if(string.IsNullOrWhiteSpace(root))return;
+    string exe=Path.Combine(root,"SkyRoof","bin","x64","Release",
+      "net10.0-windows7.0","SkyRoof.exe");
+    await using var server=new FakeGs232Bridge();
+    var settings=CreateSettings(server.Port);
+    using var old=new RotatorEngineSubprocess(settings,exe);
+    await UntilAsync(()=>old.IsReady);
+    int firstPid=old.WorkerPid;
+    // This is the path used by the non-blocking settings reapply. The
+    // replacement must never be created before the prior lease is reaped.
+    await old.ShutdownAsync().WaitAsync(TimeSpan.FromSeconds(12));
+    Assert.True(old.WorkerExited);
+    using var replacement=new RotatorEngineSubprocess(settings,exe);
+    Assert.NotEqual(firstPid,replacement.WorkerPid);
+    for(int i=0;i<120 && !replacement.IsReady;i++)
+      await Task.Delay(50);
+    Assert.True(replacement.IsReady,
+      "Replacement must acquire exclusive device ownership after old PID exits.");
+    replacement.RotateTo(new SkyRoof.Bearing(100*Math.PI/180,30*Math.PI/180));
+    await UntilAsync(()=>server.Count("W100 030")>=1);
+  }
+
+  [Fact]
+  public async Task ConcurrentShutdownCallsShareOneWorkerReap()
+  {
+    string? root=Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
+    if(string.IsNullOrWhiteSpace(root))return;
+    string exe=Path.Combine(root,"SkyRoof","bin","x64","Release",
+      "net10.0-windows7.0","SkyRoof.exe");
+    await using var server=new FakeGs232Bridge();
+    using var worker=new RotatorEngineSubprocess(CreateSettings(server.Port),exe);
+    await UntilAsync(()=>worker.IsReady);
+    Task first=worker.ShutdownAsync();
+    Task second=worker.ShutdownAsync();
+    Assert.Same(first,second);
+    await Task.WhenAll(first,second).WaitAsync(TimeSpan.FromSeconds(12));
+    Assert.True(worker.WorkerExited);
+  }
+
+  [Fact]
   public async Task TrackDisabledPollsAtBoundedRateWithoutMotionOrBusyLoop()
   {
     await using var server=new FakeGs232Bridge();
@@ -427,8 +470,167 @@ public sealed class NativeRotatorWorkerTests
     using var engine=new NativeRotatorControlEngine(config);
     await UntilAsync(()=>engine.IsReady && engine.LastReadBearing!=null);
     engine.RotateTo(new SkyRoof.Bearing(120*Math.PI/180,30*Math.PI/180));
-    await UntilAsync(()=>server.Count("W120 030")>0);
-    Assert.Equal(1,server.Count("W120 030")); // baseline direct path
+    await Task.Delay(700);
+    Assert.DoesNotContain(server.Commands,
+      x=>x.StartsWith("W",StringComparison.Ordinal));
+    Assert.Contains("verify actual shaft",engine.GetStatusString());
+  }
+
+  [Fact]
+  public async Task SavedLegacyHardwareValidationDoesNotAuthorizeNewPlanner()
+  {
+    await using var server=new FakeGs232Bridge();
+    var settings=CreateSettings(server.Port);
+    settings.NativeProtocol=RotatorProtocolKind.Rc3040sLan;
+    settings.Rc3040sPlannerEnabled=true;
+    settings.Rc3040sMotionHardwareValidated=true;
+    settings.Rc3040sMotionMode=Rc3040sMotionProfile.Trapezoidal;
+    Assert.False(settings.Rc3040sIndependentAngleVerified);
+
+    using var engine=new NativeRotatorControlEngine(settings);
+    await UntilAsync(()=>engine.IsReady && engine.LastReadBearing!=null);
+    engine.RotateTo(new SkyRoof.Bearing(120*Math.PI/180,65*Math.PI/180));
+    await Task.Delay(850);
+    Assert.DoesNotContain(server.Commands,
+      x=>x.StartsWith("W",StringComparison.Ordinal));
+    Assert.Contains("verify actual shaft",engine.GetStatusString());
+  }
+
+  [Theory]
+  [InlineData(Rc3040sMotionProfile.PrecisionStop)]
+  [InlineData(Rc3040sMotionProfile.Trapezoidal)]
+  [InlineData(Rc3040sMotionProfile.SCurve)]
+  public async Task PlannedRc3040sNeverChasesStalledFeedbackWithUnboundedW(
+    Rc3040sMotionProfile mode)
+  {
+    // The bridge can acknowledge C2 polls yet never register motion.
+    // This simulates a stalled motor, wrong encoder scaling, or badly
+    // delayed movement rather than an idealized servo.
+    await using var server=new FakeGs232Bridge();
+    var config=CreateSettings(server.Port);
+    config.NativeProtocol=RotatorProtocolKind.Rc3040sLan;
+    config.Rc3040sPlannerEnabled=true;
+    config.Rc3040sMotionHardwareValidated=true;
+    config.Rc3040sMotionMode=mode;
+    config.Rc3040sPlanAzSpeed=3;
+    config.Rc3040sPlanElSpeed=3;
+    config.Rc3040sIndependentAngleVerified=true;
+    using var engine=new NativeRotatorControlEngine(config);
+    await UntilAsync(()=>engine.IsReady && engine.LastReadBearing!=null);
+    // The UI model is mutable: changing it without reapplying settings
+    // must NOT silently replace an already-authorized planned route
+    // with the unbounded Direct W120 endpoint.
+    config.Rc3040sPlannerEnabled=false;
+    config.Rc3040sMotionHardwareValidated=false;
+    engine.RotateTo(new SkyRoof.Bearing(
+      120*Math.PI/180,65*Math.PI/180));
+
+    var until=System.Diagnostics.Stopwatch.StartNew();
+    while(!engine.PositionFaulted && until.ElapsedMilliseconds<13500)
+      await Task.Delay(50);
+    Assert.True(engine.PositionFaulted,
+      "Stalled C2 feedback must latch and STOP planned movement.");
+    await UntilAsync(()=>server.Count("S")>0);
+    var history=server.Commands.ToArray();
+    var writes=history.Where(x=>x.StartsWith("W",StringComparison.Ordinal))
+      .ToArray();
+    Assert.NotEmpty(writes);
+    foreach(var wire in writes)
+    {
+      Assert.True(wire.Length>=8,$"Invalid planned wire command: {wire}");
+      int az=int.Parse(wire.Substring(1,3));
+      int el=int.Parse(wire.Substring(5,3));
+      Assert.InRange(az,88,92);
+      Assert.InRange(el,28,32);
+    }
+    int lastStop=Array.FindLastIndex(history,x=>x=="S");
+    Assert.DoesNotContain(history.Skip(lastStop+1),
+      x=>x.StartsWith("W",StringComparison.Ordinal));
+  }
+
+  [Theory]
+  [InlineData(Rc3040sMotionProfile.PrecisionStop)]
+  [InlineData(Rc3040sMotionProfile.Trapezoidal)]
+  [InlineData(Rc3040sMotionProfile.SCurve)]
+  public async Task HardwareOwnedWaypointMotionNeverOverwritesInFlightTarget(
+    Rc3040sMotionProfile mode)
+  {
+    // Simulated RC-3040S takes multiple C2 polls to complete each
+    // absolute W command; a second W before arrival is a protocol risk.
+    await using var server=new FakeGs232Bridge(simulateSlowFeedback:true);
+    var settings=CreateSettings(server.Port);
+    settings.NativeProtocol=RotatorProtocolKind.Rc3040sLan;
+    settings.NativePollMs=300;
+    settings.Rc3040sPlannerEnabled=true;
+    settings.Rc3040sMotionHardwareValidated=true;
+    settings.Rc3040sIndependentAngleVerified=true;
+    settings.Rc3040sMotionMode=mode;
+    settings.Rc3040sPlanAzSpeed=4;
+    settings.Rc3040sPlanElSpeed=3;
+    using var engine=new NativeRotatorControlEngine(settings);
+    await UntilAsync(()=>engine.IsReady && engine.LastReadBearing!=null);
+    engine.RotateTo(new SkyRoof.Bearing(
+      120*Math.PI/180,45*Math.PI/180));
+    var deadline=System.Diagnostics.Stopwatch.StartNew();
+    while(server.PlannedWrites<3 && deadline.ElapsedMilliseconds<16000)
+      await Task.Delay(50);
+    Assert.True(server.PlannedWrites>=3,
+      $"Unexpected planner starvation in {mode}: W count={server.PlannedWrites}");
+    Assert.Equal(0,server.OverlappingWaypoints);
+    Assert.False(engine.PositionFaulted);
+    engine.StopRotation();
+    await UntilAsync(()=>server.Count("S")>=1);
+  }
+
+  [Fact]
+  public async Task FragmentedC2PacketCannotPublishIncompleteElevation()
+  {
+    await using var bridge=new FakeGs232Bridge(
+      response:_=>Encoding.ASCII.GetBytes("AZ=90 EL=60\r"),
+      fragmentC2Response:true);
+    var config=CreateSettings(bridge.Port);
+    config.NativeProtocol=RotatorProtocolKind.Rc3040sLan;
+    using var driver=new NativeRotatorControlEngine(config);
+    await UntilAsync(()=>driver.IsReady && driver.LastReadBearing!=null);
+    Assert.InRange(driver.LastReadBearing!.AzDeg,89.99,90.01);
+    Assert.InRange(driver.LastReadBearing.ElDeg,59.99,60.01);
+    Assert.False(driver.PositionFaulted);
+  }
+
+  [Fact]
+  public async Task PlannedRc3040sLatchesStopOnTransmitCorrelatedFeedbackBlackout()
+  {
+    int txBlackout=0;
+    await using var bridge=new FakeGs232Bridge(_=>
+      Volatile.Read(ref txBlackout)!=0 ? Array.Empty<byte>() :
+      Encoding.ASCII.GetBytes("AZ=90 EL=30\r"));
+    var settings=CreateSettings(bridge.Port);
+    settings.NativeProtocol=RotatorProtocolKind.Rc3040sLan;
+    settings.NativePollMs=250;
+    settings.NativeReadTimeout=180;
+    settings.NativeFeedbackReconnectGraceMs=5500;
+    settings.Rc3040sPlannerEnabled=true;
+    settings.Rc3040sMotionHardwareValidated=true;
+    settings.Rc3040sIndependentAngleVerified=true;
+    settings.Rc3040sMotionMode=Rc3040sMotionProfile.Trapezoidal;
+
+    using var engine=new NativeRotatorControlEngine(settings);
+    await UntilAsync(()=>engine.IsReady && engine.LastReadBearing!=null);
+    engine.RotateTo(new SkyRoof.Bearing(120*Math.PI/180,50*Math.PI/180));
+    await UntilAsync(()=>bridge.Commands.Any(s=>s.StartsWith("W",StringComparison.Ordinal)));
+    Volatile.Write(ref txBlackout,1);
+    var watch=System.Diagnostics.Stopwatch.StartNew();
+    while(!engine.PositionFaulted && watch.ElapsedMilliseconds<8500)
+      await Task.Delay(50);
+    Assert.True(engine.PositionFaulted,
+      "Active planned W with lost C2 must latch STOP without waiting for long reconnect grace.");
+    await UntilAsync(()=>bridge.Count("S")>0);
+    int sent=bridge.Commands.Count(s=>s.StartsWith("W",StringComparison.Ordinal));
+    Volatile.Write(ref txBlackout,0);
+    await UntilAsync(()=>engine.IsReady);
+    await Task.Delay(800);
+    Assert.Equal(sent,bridge.Commands.Count(s=>s.StartsWith("W",StringComparison.Ordinal)));
+    Assert.True(engine.PositionFaulted);
   }
 
   private static RotatorSettings CreateSettings(int port)=>new()
@@ -463,13 +665,21 @@ public sealed class NativeRotatorWorkerTests
     internal ConcurrentQueue<string> Commands {get;}=new();
     private readonly Func<string,byte[]>? response;
     private readonly bool dropFirstMove;
-    private int dropped,connections;
+    private readonly bool simulateSlowFeedback;
+    private readonly bool fragmentC2Response;
+    private int dropped,connections,overlappingWaypoints,plannedWrites;
+    private int simulatedAz=90,simulatedEl=30,waypointAz=90,waypointEl=30,pollCounter;
+    internal int OverlappingWaypoints=>Volatile.Read(ref overlappingWaypoints);
+    internal int PlannedWrites=>Volatile.Read(ref plannedWrites);
     internal int ConnectionCount => Volatile.Read(ref connections);
     internal int Port {get;}
-    internal FakeGs232Bridge(Func<string,byte[]>? response=null,bool dropFirstMove=false)
+    internal FakeGs232Bridge(Func<string,byte[]>? response=null,bool dropFirstMove=false,
+      bool simulateSlowFeedback=false,bool fragmentC2Response=false)
     {
       this.response=response;
       this.dropFirstMove=dropFirstMove;
+      this.simulateSlowFeedback=simulateSlowFeedback;
+      this.fragmentC2Response=fragmentC2Response;
       listener.Start();
       Port=((IPEndPoint)listener.LocalEndpoint).Port;
       worker=Task.Run(RunAsync);
@@ -502,11 +712,50 @@ public sealed class NativeRotatorWorkerTests
                 if(dropFirstMove && line.StartsWith("W",StringComparison.Ordinal) &&
                    Interlocked.CompareExchange(ref dropped,1,0)==0)
                   disconnect=true;
+                if(simulateSlowFeedback &&
+                   line.StartsWith("W",StringComparison.Ordinal) &&
+                   line.Length>=8 &&
+                   int.TryParse(line.Substring(1,3),out int goalAz) &&
+                   int.TryParse(line.Substring(5,3),out int goalEl))
+                {
+                  if(simulatedAz!=waypointAz || simulatedEl!=waypointEl)
+                    Interlocked.Increment(ref overlappingWaypoints);
+                  waypointAz=goalAz;
+                  waypointEl=goalEl;
+                  Interlocked.Increment(ref plannedWrites);
+                }
+                if(simulateSlowFeedback && line=="S")
+                {
+                  waypointAz=simulatedAz;
+                  waypointEl=simulatedEl;
+                }
                 if(line=="C2")
                 {
-                  var reply=response?.Invoke(line) ??
+                  byte[] reply;
+                  if(simulateSlowFeedback)
+                  {
+                    if(++pollCounter%2==0)
+                    {
+                      simulatedAz+=Math.Sign(waypointAz-simulatedAz);
+                      simulatedEl+=Math.Sign(waypointEl-simulatedEl);
+                    }
+                    reply=Encoding.ASCII.GetBytes(
+                      $"AZ={simulatedAz} EL={simulatedEl}\r");
+                  }
+                  else reply=response?.Invoke(line) ??
                     Encoding.ASCII.GetBytes("AZ=90 EL=30\r");
-                  if(reply.Length>0)
+                  if(reply.Length>2 && fragmentC2Response)
+                  {
+                    // First TCP segment ends in the first EL digit;
+                    // C2 must not complete before the numeric field
+                    // and the CR frame terminator actually arrive.
+                    await stream.WriteAsync(
+                      reply.AsMemory(0,reply.Length-2),cancel.Token);
+                    await Task.Delay(60,cancel.Token);
+                    await stream.WriteAsync(
+                      reply.AsMemory(reply.Length-2),cancel.Token);
+                  }
+                  else if(reply.Length>0)
                     await stream.WriteAsync(reply,cancel.Token);
                 }
               }

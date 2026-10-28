@@ -50,8 +50,9 @@ internal sealed class Rc3040sMotionSettingsDialog : Form
     enabled.SetBounds(16,23,428,24);
     enabled.Text="Enable motion planning";enabled.Checked=settings.Rc3040sPlannerEnabled;
     tested.SetBounds(16,51,428,25);
-    tested.Text="Hardware speed, limits and STOP tested";
-    tested.Checked=settings.Rc3040sMotionHardwareValidated;
+    tested.Text="Actual shaft AZ/EL independently match C2; STOP tested";
+    tested.Checked=settings.Rc3040sMotionHardwareValidated &&
+      settings.Rc3040sIndependentAngleVerified;
     enabled.CheckedChanged+=(_,_)=>UpdateUi();
     tested.CheckedChanged+=(_,_)=>UpdateUi();
     enableGroup.Controls.AddRange(new Control[]{enabled,tested});
@@ -102,7 +103,7 @@ internal sealed class Rc3040sMotionSettingsDialog : Form
     tested.Enabled=!direct && enabled.Checked;
     availability.Text=direct?"Direct positioning":
       !enabled.Checked?"Planner disabled":
-      needsVerification?"Complete hardware check":"Planner ready after reapply";
+      needsVerification?"Verify real AZ/EL angles independently, then STOP":"Planner ready after reapply";
     availability.ForeColor=needsVerification?Color.DarkOrange:SystemColors.GrayText;
     save.Enabled=!needsVerification;
   }
@@ -120,6 +121,7 @@ internal sealed class Rc3040sMotionSettingsDialog : Form
     settings.Rc3040sMotionMode=SelectedMode;
     settings.Rc3040sPlannerEnabled=enabled.Checked && SelectedMode!=Rc3040sMotionProfile.Direct;
     settings.Rc3040sMotionHardwareValidated=tested.Checked;
+    settings.Rc3040sIndependentAngleVerified=tested.Checked;
     settings.Rc3040sPlanAzSpeed=(double)az.Value;
     settings.Rc3040sPlanElSpeed=(double)el.Value;
     settings.Rc3040sPlanAcceleration=(double)acceleration.Value;

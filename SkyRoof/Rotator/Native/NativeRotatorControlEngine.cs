@@ -31,6 +31,7 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
 {
   private readonly RotatorSettings settings;
   private readonly bool plannerAuthorizedAtEngineStart;
+  private readonly bool plannerRequiresIndependentCalibration;
   private readonly Rc3040sMotionProfile plannerProfileAtEngineStart;
   private readonly Rc3040sMotionPlanner.Limits plannerLimitsAtEngineStart;
   private readonly SynchronizationContext ui;
@@ -100,9 +101,14 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
   public bool HasLiveConnection => IsRunning && IsReady;
   public string GetStatusString() =>
     !IsRunning ? "Reconnecting" :
-    !IsReady ? "Synchronizing" :
     ManagementReviewRequired ? "Management safety lock; inspect and reapply settings" :
-    PositionFaulted ? "Position safety fault" : "Ready";
+    PositionFaulted ? "Position safety fault; STOP requested" :
+    !IsReady && Volatile.Read(ref consecutiveFeedbackMisses)>0
+      ? $"Position feedback delayed ({Volatile.Read(ref consecutiveFeedbackMisses)} missed); motion paused"
+      : !IsReady ? "Synchronizing" :
+    plannerRequiresIndependentCalibration
+      ? "Motion planning disabled: verify actual shaft AZ/EL vs C2, STOP and integer-degree limits"
+      : "Ready";
   public NativeRotatorControlEngine(RotatorSettings settings)
   {
     this.settings=settings;
@@ -115,10 +121,20 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
       settings.Rc3040sPlanAcceleration,settings.Rc3040sPlanJerk,
       settings.MinAzimuth,settings.MaxAzimuth,
       settings.MinElevation,settings.MaxElevation);
-    plannerAuthorizedAtEngineStart=settings.NativeProtocol==RotatorProtocolKind.Rc3040sLan &&
-      settings.Rc3040sPlannerEnabled && settings.Rc3040sMotionHardwareValidated &&
+    plannerRequiresIndependentCalibration=
+      settings.NativeProtocol==RotatorProtocolKind.Rc3040sLan &&
+      settings.Rc3040sPlannerEnabled &&
       plannerProfileAtEngineStart!=Rc3040sMotionProfile.Direct &&
-      Rc3040sMotionPlanner.ValidLimits(plannerLimitsAtEngineStart);
+      (!settings.Rc3040sMotionHardwareValidated ||
+       !settings.Rc3040sIndependentAngleVerified ||
+       !Rc3040sPlannerFeedbackGuard.ValidQuantizedLimits(plannerLimitsAtEngineStart));
+    plannerAuthorizedAtEngineStart=
+      settings.NativeProtocol==RotatorProtocolKind.Rc3040sLan &&
+      settings.Rc3040sPlannerEnabled &&
+      settings.Rc3040sMotionHardwareValidated &&
+      settings.Rc3040sIndependentAngleVerified &&
+      plannerProfileAtEngineStart!=Rc3040sMotionProfile.Direct &&
+      Rc3040sPlannerFeedbackGuard.ValidQuantizedLimits(plannerLimitsAtEngineStart);
     if (!NativeRotatorCodec.Supports(settings.NativeProtocol,settings.NativeTransport))
       throw new ArgumentException("This protocol cannot use selected transport");
     if (settings.NativeProtocol==RotatorProtocolKind.CustomTemplate &&
@@ -148,7 +164,8 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
        bearing.ElDeg<settings.MinElevation||bearing.ElDeg>settings.MaxElevation)return;
     lock(sync)
     {
-      if(stopping || safetyLatched || managementHeld)return;
+      if(stopping || safetyLatched || managementHeld ||
+         plannerRequiresIndependentCalibration)return;
       // Never send a new target before the first real position observation,
       // or after feedback becomes stale. Open-loop protocols need a separate
       // explicit user opt-in.
@@ -346,7 +363,7 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
 
   private bool HasFreshPositionLocked() =>
     connected && Volatile.Read(ref ready)==1 &&
-    consecutiveFeedbackMisses==0 &&
+    Volatile.Read(ref consecutiveFeedbackMisses)==0 &&
     lastReadUtc != DateTime.MinValue &&
     (DateTime.UtcNow-lastReadUtc).TotalMilliseconds <=
       Math.Max(2500,3L*Math.Clamp(settings.NativePollMs,200,30000));
@@ -475,7 +492,15 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
       if(!fault && requested!=null && !manualDirection.HasValue &&
          !appliedDirection.HasValue && lastWire!=null &&
          Math.Abs(current.AzDeg-requested.AzDeg)<=1.5 &&
-         Math.Abs(current.ElDeg-requested.ElDeg)<=1.5)
+         Math.Abs(current.ElDeg-requested.ElDeg)<=1.5 &&
+         // A changing Track target can coincide with old C2 while the
+         // controller still executes its previous W; never treat that as
+         // confirmed STOP. Compare with the actual last wire endpoint.
+         Rc3040sPlannerFeedbackGuard.IsLastWireAtReportedPosition(
+           p,
+           lastWritten==null ? null :
+             new RotatorPosition(lastWritten.AzDeg,lastWritten.ElDeg),
+           plannerAuthorizedAtEngineStart))
       {
         if(stableTargetReads==0)stableTargetFirstUtc=lastReadUtc;
         stableTargetReads++;
@@ -522,9 +547,11 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
     int retryFailures=0;
     bool hadConnection=false;
     var motionPlanner=new Rc3040sMotionPlanner();
+    var plannerFeedback=new Rc3040sPlannerFeedbackGuard();
     long lastPlanTick=0,lastPlannerCommandTick=0;
     while(!stopping)
     {
+      bool transportEstablished=false;
       try
       {
         using var device=NativeTransportFactory.Create(settings);
@@ -537,12 +564,14 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
           settings.NativeTransport==RotatorTransportKind.Serial ? 0 : settings.Port,
           settings.NativeProtocol);
         device.Open();
-        Log.Information("Native rotator transport established after {ElapsedMs} ms; synchronizing controller feedback",
-          connectWatch.ElapsedMilliseconds);
+        transportEstablished=true;
+        Log.Information("Native rotator transport established after {ElapsedMs} ms; workerPID={WorkerPid}, session={Session}; synchronizing controller feedback",
+          connectWatch.ElapsedMilliseconds,Environment.ProcessId,attempt);
         replyBacklog.Clear();
         motionPlanner.Reset();
+        plannerFeedback.Reset();
         lastPlanTick=lastPlannerCommandTick=0;
-        consecutiveFeedbackMisses=0;
+        Volatile.Write(ref consecutiveFeedbackMisses,0);
         stableTargetReads=0;
         stableTargetFirstUtc=DateTime.MinValue;
         Volatile.Write(ref ready,CanFeedback ? 0 : 1);
@@ -578,6 +607,7 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
         hadConnection=true;
         if(!CanFeedback)retryFailures=0;
         long nextQuery=0;
+        var sessionConnectedUtc=DateTime.UtcNow;
         while(!stopping && device.Connected)
         {
           try
@@ -591,14 +621,14 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
           }
           if(stopNow)
           {
-            motionPlanner.Reset();lastPlanTick=0;
+            motionPlanner.Reset();plannerFeedback.Reset();lastPlanTick=0;
             SendStop();
             continue;
           }
 
           if(jog.HasValue && !PositionFaulted)
           {
-            motionPlanner.Reset();lastPlanTick=0;
+            motionPlanner.Reset();plannerFeedback.Reset();lastPlanTick=0;
             bool shouldSend;
             lock(sync){shouldSend=appliedDirection!=jog;}
             if(shouldSend)
@@ -620,8 +650,11 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
           else if(target!=null && !PositionFaulted)
           {
             var p=new RotatorPosition(target.AzDeg,target.ElDeg);
-            bool planning=plannerAuthorizedAtEngineStart &&
-              settings.Rc3040sPlannerEnabled && settings.Rc3040sMotionHardwareValidated;
+            // Motion authorization/profile/limits are immutable for this
+            // worker lifetime. Reading mutable UI settings here used to
+            // silently switch a live planned route to an unrestricted
+            // Direct W command if a checkbox changed mid-movement.
+            bool planning=plannerAuthorizedAtEngineStart;
             bool plannerBlocked=false;
             if(planning)
             {
@@ -637,14 +670,59 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
                 plannerBlocked=true;
               else
               {
-                long tick=Environment.TickCount64;
-                double dt=lastPlanTick==0 ? 0.20 :
-                  Math.Clamp((tick-lastPlanTick)/1000.0,0.02,0.5);
-                lastPlanTick=tick;
-                var next=motionPlanner.Step(actual.AzDeg,actual.ElDeg,
-                  target.AzDeg,target.ElDeg,dt,plannerProfileAtEngineStart,
-                  plannerLimitsAtEngineStart);
-                p=new RotatorPosition(next.Azimuth,next.Elevation);
+                var observed=new RotatorPosition(
+                  actual.AzDeg,actual.ElDeg);
+                var destination=new RotatorPosition(
+                  target.AzDeg,target.ElDeg);
+                bool stalled;
+                // Process each valid C2 frame only ONCE. Previously the
+                // planner advanced on every 20-450 ms scheduling cycle
+                // even when feedback was still from the SAME poll.
+                if(!plannerFeedback.TryConsumeFreshFeedback(
+                    readUtc,observed,destination,out stalled))
+                  plannerBlocked=true;
+                else if(stalled)
+                {
+                  lock(sync)
+                  {
+                    safetyLatched=true;
+                    requiresStopAfterReconnect=true;
+                    stopRequested=true;
+                    commandVersion++;
+                    requested=null;
+                    manualDirection=null;
+                    lastWire=null;
+                    error="RC-3040S planned motion: no measured position progress; STOP requested";
+                  }
+                  Log.Error("RC-3040S planned motion stalled: C2 AZ={Az:F1} EL={El:F1}; requested AZ={TargetAz:F1} EL={TargetEl:F1}. STOP requested, controller-reported angle is not independent physical shaft evidence.",
+                    observed.Azimuth,observed.Elevation,
+                    destination.Azimuth,destination.Elevation);
+                  plannerBlocked=true;
+                  wake.Set();
+                  StateChanged();
+                }
+                else if(plannerFeedback.HasInFlightSetpoint)
+                {
+                  // C2 may progress toward a previous W but that is NOT
+                  // permission to retarget a firmware-driven stepper.
+                  // Preserve the in-flight waypoint until two C2 samples
+                  // confirm its endpoint; the no-progress STOP remains live.
+                  plannerBlocked=true;
+                }
+                else
+                {
+                  long tick=Environment.TickCount64;
+                  double dt=lastPlanTick==0 ? 0.20 :
+                    Math.Clamp((tick-lastPlanTick)/1000.0,0.02,0.5);
+                  lastPlanTick=tick;
+                  var next=motionPlanner.Step(
+                    observed.Azimuth,observed.Elevation,
+                    destination.Azimuth,destination.Elevation,
+                    dt,plannerProfileAtEngineStart,plannerLimitsAtEngineStart);
+                  p=plannerFeedback.BoundSetpoint(observed,
+                    new RotatorPosition(next.Azimuth,next.Elevation),
+                    plannerLimitsAtEngineStart);
+                }
               }
             }
             else if(lastPlanTick!=0)
@@ -693,7 +771,22 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
                 if(!Encoding.ASCII.GetString(ack).Contains("RPRT 0"))
                   throw new IOException("rotctld rejected position");
               }
-              if(planning)lastPlannerCommandTick=Environment.TickCount64;
+              if(planning)
+              {
+                lastPlannerCommandTick=Environment.TickCount64;
+                Bearing? reported;
+                lock(sync)reported=lastRead;
+                if(reported!=null)
+                {
+                  var observed=new RotatorPosition(
+                    reported.AzDeg,reported.ElDeg);
+                  plannerFeedback.MarkTransmitted(
+                    DateTime.UtcNow,observed,p);
+                  Log.Information("RC-3040S planned W endpoint AZ={CommandAz:F0} EL={CommandEl:F0}, last C2 AZ={FeedbackAz:F1} EL={FeedbackEl:F1}, profile={Profile}; endpoint is not measured shaft position",
+                    p.Azimuth,p.Elevation,observed.Azimuth,
+                    observed.Elevation,plannerProfileAtEngineStart);
+                }
+              }
               lock(sync)
               {
                 lastWritten=planning ?
@@ -709,10 +802,10 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
             try
             {
               PublishPosition(Query());
-              if(consecutiveFeedbackMisses>0)
-                Log.Information("Native rotator: feedback recovered after {Misses} missed replies",
-                  consecutiveFeedbackMisses);
-              consecutiveFeedbackMisses=0;
+              int previousMisses=Interlocked.Exchange(ref consecutiveFeedbackMisses,0);
+              if(previousMisses>0)
+                Log.Information("Native rotator: position feedback recovered after {Misses} missed replies without replacing connection; {Transport} {Host}:{Port}",
+                  previousMisses,settings.NativeTransport,settings.Host,settings.Port);
               lastSuccessfulSessionFeedbackUtc=DateTime.UtcNow;
               if(Interlocked.Exchange(ref ready,1)==0)StateChanged();
               retryFailures=0;
@@ -725,18 +818,55 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
               // PST is passive UDP: no packet does not indicate a broken connection.
               continue;
             }
-            catch(TimeoutException ex) when(settings.NativeTransport==RotatorTransportKind.Tcp)
+            catch(TimeoutException ex) when(settings.NativeTransport is RotatorTransportKind.Tcp or RotatorTransportKind.Serial)
             {
-              ++consecutiveFeedbackMisses;
-              // A healthy TCP socket is not sufficient to authorize new
-              // movement while a protocol reply is missing.
+              // A TX/RFI burst may suppress several controller replies
+              // without actually closing TCP or detaching the COM device.
+              // Keep the transport while motion is interlocked, then
+              // reconnect only after a sustained period of missing feedback.
+              int misses=Interlocked.Increment(ref consecutiveFeedbackMisses);
               if(Interlocked.Exchange(ref ready,0)!=0)StateChanged();
-              Log.Warning("Native rotator: TCP feedback timeout {Misses}/3 from {Host}:{Port}; last valid feedback {AgeMs} ms ago. Keeping socket for recovery.",
-                consecutiveFeedbackMisses,settings.Host,settings.Port,
-                lastSuccessfulSessionFeedbackUtc==DateTime.MinValue ? -1 :
-                  (long)(DateTime.UtcNow-lastSuccessfulSessionFeedbackUtc).TotalMilliseconds);
-              if(consecutiveFeedbackMisses>=3)
-                throw new TimeoutException("Native TCP rotator: 3 consecutive protocol feedback timeouts",ex);
+              DateTime nowUtc=DateTime.UtcNow;
+              bool hadFeedback=lastSuccessfulSessionFeedbackUtc!=DateTime.MinValue;
+              long ageMs=(long)(nowUtc-(hadFeedback ?
+                lastSuccessfulSessionFeedbackUtc : sessionConnectedUtc)).TotalMilliseconds;
+
+              bool needStop=false;
+              lock(sync)
+              {
+                bool potentiallyMoving=requiresStopAfterReconnect ||
+                  appliedDirection.HasValue;
+                if(!safetyLatched &&
+                   NativeRotatorFeedbackPolicy.MustStopPossibleMotion(
+                     misses,ageMs,settings.NativePollMs,potentiallyMoving))
+                {
+                  // A moving controller with stale feedback cannot be
+                  // guaranteed safe. STOP takes priority over every new
+                  // target; do not silently resume after RF recovers.
+                  safetyLatched=true;
+                  stopRequested=true;
+                  requested=null;
+                  manualDirection=null;
+                  lastWire=null;
+                  commandVersion++;
+                  needStop=true;
+                }
+              }
+              if(needStop)
+              {
+                Log.Error("Rotator feedback lost while movement may be active; STOP requested and motion latched. Physical STOP delivery remains unverified.");
+                StateChanged();
+                wake.Set();
+              }
+
+              Log.Warning("Native rotator position reply timeout: transport={Transport}, protocol={Protocol}, misses={Misses}, feedbackAgeMs={AgeMs}, responseTimeoutMs={ResponseTimeoutMs}, motorInterlocked={SafetyLatched}, session={Attempt}; retaining connection during transient silence.",
+                settings.NativeTransport,settings.NativeProtocol,misses,ageMs,
+                settings.NativeReadTimeout,PositionFaulted,attempt);
+              if(NativeRotatorFeedbackPolicy.ShouldReconnect(
+                   misses,ageMs,hadFeedback,
+                   settings.NativeFeedbackReconnectGraceMs))
+                throw new TimeoutException(
+                  $"Native rotator feedback unavailable for {ageMs} ms ({misses} consecutive timeouts); reconnect required",ex);
               continue;
             }
           }
@@ -757,8 +887,14 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
       {
         if(!stopping)
         {
-          Log.Warning(ex,"Native rotator I/O failure ({Transport}, {Protocol}) after attempt {Attempt}. Reconnecting.",
-            settings.NativeTransport,settings.NativeProtocol,Interlocked.Read(ref connectionAttemptNumber));
+          Exception root=ex;
+          while(root.InnerException!=null)root=root.InnerException;
+          var socketError=root is System.Net.Sockets.SocketException se
+            ? se.SocketErrorCode.ToString() : "none";
+          Log.Warning(ex,"Native rotator I/O failure, phase={Phase}, workerPID={Pid}, session={Session}, socketError={SocketError}, exceptionType={ExceptionType}, transport={Transport}, protocol={Protocol}, endpoint={Host}:{Port}. Reconnecting.",
+            transportEstablished ? "established-I/O" : "TCP-connect",
+            Environment.ProcessId,Interlocked.Read(ref connectionAttemptNumber),
+            socketError,ex.GetType().Name,settings.NativeTransport,settings.NativeProtocol,settings.Host,settings.Port);
           lock(sync)
           {
             error=ex.Message;
@@ -769,7 +905,7 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
             }
             requested=lastWritten=null;manualDirection=null;appliedDirection=null;lastWire=null;
           }
-          motionPlanner.Reset();lastPlanTick=lastPlannerCommandTick=0;
+          motionPlanner.Reset();plannerFeedback.Reset();lastPlanTick=lastPlannerCommandTick=0;
         }
       }
       finally
@@ -785,16 +921,10 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
           retryFailures++,settings.ReconnectDelay);
         Log.Information("Native rotator: reconnect backoff {DelayMs} ms (failure streak {Failures})",
           delay,retryFailures);
-        // Retry() is called once per second by MainForm. It may wake the
-        // reconnect gate, but never permit attempts more frequently than
-        // this minimum interval after the last failure.
-        int waitResult=WaitHandle.WaitAny(new WaitHandle[]{stop,wake},delay);
-        if(waitResult==0)break;
-        if(waitResult==1 && !stop.WaitOne(0))
-        {
-          int minimumDelay=Math.Min(750,delay);
-          if(stop.WaitOne(minimumDelay))break;
-        }
+        // Retry() is ticked once per second by MainForm, but must NOT
+        // shrink 2s/4s/5s backoff into ~750ms. STOP/shutdown remains
+        // interruptible; ordinary UI wake events are ignored here.
+        if(NativeRotatorReconnectPolicy.WaitForRetryOrShutdown(stop,delay))break;
       }
     }
   }

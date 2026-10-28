@@ -107,3 +107,22 @@ This eliminates redundant motion commands but is **not a proven explanation for 
 ## RC-3040S direct LAN replaces the former NRL2 UDP driver
 
 The former experimental DTrac NRL2 UDP driver and its RotorID/SID settings are **removed from SkyRoof**. The protocol source and historical settings schema were archived in [DTracNRL2.NET](https://github.com/Iu-yang1/DTracNRL2.NET/tree/main/docs/archive/skyroof-nrl2). The active protocol is **Native / Rc3040sLan** using TCP/60020 for GS-232 motion and WebSocket/60030 for on-demand AT management. Existing NRL2 protocol ID 10 is reserved and cannot start an alternative LAN connection. See [RC-3040S LAN guide](rc3040s-lan.md).
+
+
+### 2026-10-28: RC-3040S non-Direct planner telemetry/shaft divergence
+
+**C2 reports are not independent proof of physical shaft position.** The RC-3040S accepts GS-232B integer-degree W endpoints. SkyRoof's PrecisionStop, Trapezoidal and SCurve profiles generate software reference endpoints; they do not command native stepper velocity, jerk or microstep counts.
+
+The previous scheduling path advanced the reference even without a new C2 report, then issued a revised W setpoint approximately every 450 ms. **More importantly, even a new C2 report only proved movement, not completion of the previous firmware target. The repaired sequencer waits for two fresh C2 samples at the last integer-degree W endpoint (at least 200 ms apart) before sending any subsequent planned W.** This prevents overlapping firmware-owned moves or target replacement while RC-3040S is still accelerating/decelerating. The fix now advances at most once per **new valid C2 sample**, clamps every *quantized* W target to **1.5°** ahead of each axis' last observed position, and requests STOP / latches automatic movement if 4 seconds of commanded travel produce less than 0.5° of observed C2 progress. STOP delivery is not an independent physical halt acknowledgement.
+
+Planner profile, safety authorization and bounds are snapshotted when the I/O worker starts; changing a shared settings object can no longer unexpectedly downgrade an active planner into an unrestricted Direct command. Previously saved hardware-validation flags do not satisfy the new **independent AZ/EL shaft-angle verification** requirement. Compare independently measured AZ and EL at multiple mechanical positions to controller C2 before re-enabling any advanced profile, and verify STOP operation.
+
+If the controller reads 30° but the shaft is near 60°, firmware step-to-angle/gear ratio, homing/calibration, genuine motor step loss and human angle estimation must be distinguished. SkyRoof cannot detect a 2:1 mechanical-to-C2 mismatch using C2 alone. Validate off-air with adequate mechanical clearance; do not disable STOP safety or assume a passing simulator proves physical accuracy.
+
+### 2026-10-29: isolated worker handoff, IPC failures and TCP reconnect pacing (hardware validation pending)
+
+A real RC-3040S log showed three distinct failure classes: `Pipe is broken` (host/worker IPC loss), `hardware endpoint is already owned` (two child generations competing for the exclusive device lock), and `SocketException (10054)` (an established TCP connection reset by the peer or network intermediary). These are not interchangeable with a missing C2 reply and cannot alone establish RF interference.
+
+Apply Settings now serializes worker generations asynchronously: STOP is requested, the old worker must actually exit and release the OS-held endpoint lock, and only then may the replacement start. A failed or forced child reap blocks automatic replacement; physical motor STOP remains unverified. The UI thread is not blocked. Periodic `Retry()` wakeups can no longer truncate the 0.5/1/2/4-second TCP retry backoff; shutdown may still interrupt it immediately. Diagnostic logs identify the PID, session, connect phase and socket error.
+
+Keep the exclusive lock and STOP interlocks enabled. Perform attended, low-speed, limited-angle testing, including repeated settings reapply, idle polling, network disconnect/reconnect and simultaneous PTT timestamp collection. A Wireshark capture of `ip.addr == 192.168.1.9 && tcp.port == 60020` (adapt to your controller address) can show which side sends TCP RST. Independent physical AZ/EL measurements versus C2 are still required; this patch does not validate or correct any mechanical scaling discrepancy.
