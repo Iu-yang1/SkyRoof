@@ -551,6 +551,7 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
     long lastPlanTick=0,lastPlannerCommandTick=0;
     while(!stopping)
     {
+      bool transportEstablished=false;
       try
       {
         using var device=NativeTransportFactory.Create(settings);
@@ -563,8 +564,9 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
           settings.NativeTransport==RotatorTransportKind.Serial ? 0 : settings.Port,
           settings.NativeProtocol);
         device.Open();
-        Log.Information("Native rotator transport established after {ElapsedMs} ms; synchronizing controller feedback",
-          connectWatch.ElapsedMilliseconds);
+        transportEstablished=true;
+        Log.Information("Native rotator transport established after {ElapsedMs} ms; workerPID={WorkerPid}, session={Session}; synchronizing controller feedback",
+          connectWatch.ElapsedMilliseconds,Environment.ProcessId,attempt);
         replyBacklog.Clear();
         motionPlanner.Reset();
         plannerFeedback.Reset();
@@ -885,8 +887,14 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
       {
         if(!stopping)
         {
-          Log.Warning(ex,"Native rotator I/O failure ({Transport}, {Protocol}) after attempt {Attempt}. Reconnecting.",
-            settings.NativeTransport,settings.NativeProtocol,Interlocked.Read(ref connectionAttemptNumber));
+          Exception root=ex;
+          while(root.InnerException!=null)root=root.InnerException;
+          var socketError=root is System.Net.Sockets.SocketException se
+            ? se.SocketErrorCode.ToString() : "none";
+          Log.Warning(ex,"Native rotator I/O failure, phase={Phase}, workerPID={Pid}, session={Session}, socketError={SocketError}, exceptionType={ExceptionType}, transport={Transport}, protocol={Protocol}, endpoint={Host}:{Port}. Reconnecting.",
+            transportEstablished ? "established-I/O" : "TCP-connect",
+            Environment.ProcessId,Interlocked.Read(ref connectionAttemptNumber),
+            socketError,ex.GetType().Name,settings.NativeTransport,settings.NativeProtocol,settings.Host,settings.Port);
           lock(sync)
           {
             error=ex.Message;
@@ -913,16 +921,10 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
           retryFailures++,settings.ReconnectDelay);
         Log.Information("Native rotator: reconnect backoff {DelayMs} ms (failure streak {Failures})",
           delay,retryFailures);
-        // Retry() is called once per second by MainForm. It may wake the
-        // reconnect gate, but never permit attempts more frequently than
-        // this minimum interval after the last failure.
-        int waitResult=WaitHandle.WaitAny(new WaitHandle[]{stop,wake},delay);
-        if(waitResult==0)break;
-        if(waitResult==1 && !stop.WaitOne(0))
-        {
-          int minimumDelay=Math.Min(750,delay);
-          if(stop.WaitOne(minimumDelay))break;
-        }
+        // Retry() is ticked once per second by MainForm, but must NOT
+        // shrink 2s/4s/5s backoff into ~750ms. STOP/shutdown remains
+        // interruptible; ordinary UI wake events are ignored here.
+        if(NativeRotatorReconnectPolicy.WaitForRetryOrShutdown(stop,delay))break;
       }
     }
   }
