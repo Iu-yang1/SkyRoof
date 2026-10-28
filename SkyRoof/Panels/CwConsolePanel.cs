@@ -1787,10 +1787,8 @@ namespace SkyRoof
              sendRequestInProgress))
           {
             Task disarm=tx.DisarmAsync();
-            Task timeout=Task.Delay(TimeSpan.FromSeconds(5));
-            if(await Task.WhenAny(disarm,timeout)==disarm)
-              await disarm; // observe fault on the UI continuation
-            else
+            if(!await CwCloseStopPolicy.AwaitVerifiedStopAsync(
+               disarm,TimeSpan.FromSeconds(5)))
               throw new TimeoutException(
                 "SkyCAT CW STOP has not completed within 5 seconds.");
           }
