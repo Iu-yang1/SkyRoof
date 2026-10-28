@@ -45,6 +45,8 @@ namespace SkyRoof.CW
     private readonly int maximumEntries;
     private bool disposed;
     private long droppedEvents;
+    private long version;
+    public long Version => Interlocked.Read(ref version);
     public long DroppedDiskEvents => Interlocked.Read(ref droppedEvents);
     public string? LastWriteError { get; private set; }
     public string ArchiveFolder => folder;
@@ -102,6 +104,7 @@ namespace SkyRoof.CW
           entry.PreviousWindowCommitted=incoming;
           if(delta.Length==0)continue;
           entry.Committed.Append(delta);
+          Interlocked.Increment(ref version);
           if(!pending.Writer.TryWrite(
             new CwArchiveEvent(snapshot.LastWindowEndUtc,generation,hint,id,delta,sessionId)))
             Interlocked.Increment(ref droppedEvents);
