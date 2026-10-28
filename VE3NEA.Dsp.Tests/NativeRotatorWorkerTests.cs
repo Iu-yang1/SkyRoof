@@ -431,6 +431,26 @@ public sealed class NativeRotatorWorkerTests
     Assert.Equal(1,server.Count("W120 030")); // baseline direct path
   }
 
+  [Fact]
+  public async Task SavedLegacyHardwareValidationDoesNotAuthorizeNewPlanner()
+  {
+    await using var server=new FakeGs232Bridge();
+    var settings=CreateSettings(server.Port);
+    settings.NativeProtocol=RotatorProtocolKind.Rc3040sLan;
+    settings.Rc3040sPlannerEnabled=true;
+    settings.Rc3040sMotionHardwareValidated=true;
+    settings.Rc3040sMotionMode=Rc3040sMotionProfile.Trapezoidal;
+    Assert.False(settings.Rc3040sIndependentAngleVerified);
+
+    using var engine=new NativeRotatorControlEngine(settings);
+    await UntilAsync(()=>engine.IsReady && engine.LastReadBearing!=null);
+    engine.RotateTo(new SkyRoof.Bearing(120*Math.PI/180,65*Math.PI/180));
+    await Task.Delay(850);
+    Assert.DoesNotContain(server.Commands,
+      x=>x.StartsWith("W",StringComparison.Ordinal));
+    Assert.Contains("verify actual shaft",engine.GetStatusString());
+  }
+
   [Theory]
   [InlineData(Rc3040sMotionProfile.PrecisionStop)]
   [InlineData(Rc3040sMotionProfile.Trapezoidal)]
