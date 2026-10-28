@@ -10,6 +10,8 @@ namespace SkyRoof.CW
     // Decode all eight instead of silently leaving the last three
     // displayed lanes without ONNX inference.
     public int MaxDecodeLanes { get; init; } = 8;
+    public bool ExperimentalCoherentSeparation {get;init;}
+    public bool ExperimentalHsmmArbitration {get;init;}
     public double LaneBandwidthHz { get; init; } = 240;
     public double TargetCenterHz { get; init; } = 800;
     public TimeSpan ModelRetryInterval { get; init; } =
@@ -98,6 +100,8 @@ namespace SkyRoof.CW
           onnx)
         {
           MaxLanes = options.MaxDecodeLanes,
+          ExperimentalCoherentSeparation=options.ExperimentalCoherentSeparation,
+          ExperimentalHsmmArbitration=options.ExperimentalHsmmArbitration,
           LaneBandwidthHz =
             options.LaneBandwidthHz,
           TargetCenterHz =
