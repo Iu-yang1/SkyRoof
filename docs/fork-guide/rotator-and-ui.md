@@ -107,3 +107,14 @@ This eliminates redundant motion commands but is **not a proven explanation for 
 ## RC-3040S direct LAN replaces the former NRL2 UDP driver
 
 The former experimental DTrac NRL2 UDP driver and its RotorID/SID settings are **removed from SkyRoof**. The protocol source and historical settings schema were archived in [DTracNRL2.NET](https://github.com/Iu-yang1/DTracNRL2.NET/tree/main/docs/archive/skyroof-nrl2). The active protocol is **Native / Rc3040sLan** using TCP/60020 for GS-232 motion and WebSocket/60030 for on-demand AT management. Existing NRL2 protocol ID 10 is reserved and cannot start an alternative LAN connection. See [RC-3040S LAN guide](rc3040s-lan.md).
+
+
+### 2026-10-28: RC-3040S non-Direct planner telemetry/shaft divergence
+
+**C2 reports are not independent proof of physical shaft position.** The RC-3040S accepts GS-232B integer-degree W endpoints. SkyRoof's PrecisionStop, Trapezoidal and SCurve profiles generate software reference endpoints; they do not command native stepper velocity, jerk or microstep counts.
+
+The previous scheduling path advanced the reference even without a new C2 report, then issued a revised W setpoint approximately every 450 ms. The fix now advances at most once per **new valid C2 sample**, clamps every *quantized* W target to **1.5°** ahead of each axis' last observed position, and requests STOP / latches automatic movement if 4 seconds of commanded travel produce less than 0.5° of observed C2 progress. STOP delivery is not an independent physical halt acknowledgement.
+
+Planner profile, safety authorization and bounds are snapshotted when the I/O worker starts; changing a shared settings object can no longer unexpectedly downgrade an active planner into an unrestricted Direct command. Previously saved hardware-validation flags do not satisfy the new **independent AZ/EL shaft-angle verification** requirement. Compare independently measured AZ and EL at multiple mechanical positions to controller C2 before re-enabling any advanced profile, and verify STOP operation.
+
+If the controller reads 30° but the shaft is near 60°, firmware step-to-angle/gear ratio, homing/calibration, genuine motor step loss and human angle estimation must be distinguished. SkyRoof cannot detect a 2:1 mechanical-to-C2 mismatch using C2 alone. Validate off-air with adequate mechanical clearance; do not disable STOP safety or assume a passing simulator proves physical accuracy.
