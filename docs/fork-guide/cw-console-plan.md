@@ -166,3 +166,15 @@ multi-target track coalescence/repulsion (DOI
 `10.1109/OJSP.2024.3451167`) and merged measurements (DOI
 `10.1109/TSP.2015.2393843`); it does not directly implement the full
 Bayesian trackers in those papers.
+
+## 2026-10-29 CW-MHT implementation: P0–P4 (experimental)
+
+This work is an independent implementation, **not a reverse-engineering or reimplementation of proprietary CW Skimmer code**. The existing DeepCW/CTC decoder remains the production baseline.
+
+- **P0:** The WinForms `FormClosing` handler no longer blocks on `DisarmAsync().GetAwaiter().GetResult()`. It cancels pending sends and waits asynchronously up to 5 s for a verified STOP. On timeout/fault, RF STOP is explicitly **unverified**; the operator decides whether to close the display while the independent keyer/watchdog retains responsibility. CI can test the bounded waiter.
+- **P1:** A process-session GUID + audio generation + stable association-hint/track-id key is used by `CwTranscriptArchive`, owned by `CwReceiveWorker`. Only committed deltas are appended. The optional history window reads this archive independently from live 8-slot tracking. The async bounded channel persists JSONL under `%LOCALAPPDATA%/SkyRoof/CW/History`; a 16-MiB/day limit and 512-entry memory ceiling guard resource usage. JSONL writes are not transactional, so hard power loss remains an open durability test.
+- **P2:** `ExperimentalStationGate` accumulates multi-frame keyed-carrier evidence after the existing fast/precision STFT + Kalman/GNN tracker; uncalibrated score, not a posterior probability. Birdies remain detector candidates but do not automatically occupy decode lanes.
+- **P3:** `ExperimentalCoherentSeparation` attempts a bounded, joint real sine/cosine least-squares fit with frequency/drift priors from 2–4 tracks and short 0.25–1 s windows. A minimum spacing and residual gate enforce fallback to the existing wideband soft-mask path. This is not a proven 5-Hz keyed-pileup solution.
+- **P4:** `ExperimentalHsmmArbitration` derives a 10-ms soft keyed-envelope and evaluates explicit Morse dot/dash/inter-symbol/character/word duration priors over WPM candidates. DeepCW output always wins when non-empty; a sufficiently strong non-empty HSMM alternative may fill a neural blank before standard overlapping-window transcript voting. Evidence scores are uncalibrated.
+
+All three experiments ship **disabled by default**. Production validation requires source-labelled IC-9700 recordings, 15-Hz/5-Hz pair scenarios with both equal power and 8-dB imbalance, QSB, drift, and separate strong/weak CER/WER, false stations, identity swaps, latency and CPU/RSS. A passing synthetic unit test is not evidence of real-world decoding improvement.
