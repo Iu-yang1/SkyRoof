@@ -360,7 +360,9 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
       {
         if(!ChildExited)
         {
-          using var wait=new CancellationTokenSource(TimeSpan.FromSeconds(4));
+          // Management tail (2s) + STOP/read timeout (1s) + I/O worker join
+          // (2.5s) can exceed 4s on an orderly shutdown. Allow 9s off-UI.
+          using var wait=new CancellationTokenSource(TimeSpan.FromSeconds(9));
           try{await child.WaitForExitAsync(wait.Token).ConfigureAwait(false);}
           catch(OperationCanceledException)
           {
