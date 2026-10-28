@@ -13,6 +13,23 @@ public sealed class Rc3040sPlannerFeedbackGuardTests
   private static readonly RotatorPosition FinalPoint=new(120,65);
 
   [Fact]
+  public void NewRequestedTargetMatchingC2DoesNotClearOutstandingMotion()
+  {
+    // A moving motor was ordered to W032 021, while target tracking
+    // changes back to the still-reported C2=30/20. The old code could
+    // clear requiresStopAfterReconnect on two samples at 30/20 even
+    // though W032 021 had not been completed.
+    Assert.False(Rc3040sPlannerFeedbackGuard.IsLastWireAtReportedPosition(
+      new(30,20),new RotatorPosition(32,21),true));
+    Assert.False(Rc3040sPlannerFeedbackGuard.IsLastWireAtReportedPosition(
+      new(30,20),null,true));
+    Assert.True(Rc3040sPlannerFeedbackGuard.IsLastWireAtReportedPosition(
+      new(32,21),new RotatorPosition(32,21),true));
+    Assert.True(Rc3040sPlannerFeedbackGuard.IsLastWireAtReportedPosition(
+      new(30,20),new RotatorPosition(32,21),false));
+  }
+
+  [Fact]
   public void PlannerCannotAdvanceMoreThanOncePerC2Feedback()
   {
     var guard=new Rc3040sPlannerFeedbackGuard();
