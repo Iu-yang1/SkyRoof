@@ -44,19 +44,54 @@ public sealed class NativeRotatorTcpRecoveryTests
   }
 
   [Fact]
-  public async Task ThreeConsecutiveMissingRepliesReconnectAutomatically()
+  public async Task SeveralTransmitLikeLostRepliesDoNotReconnectOrMove()
+  {
+    // Suppress three position replies but keep the transport healthy.
+    await using var bridge=new Bridge((session,poll) =>
+      poll is >=2 and <=4 ? null : "AZ=90 EL=30\r");
+    using var driver=new NativeRotatorControlEngine(Settings(bridge.Port));
+    await UntilAsync(()=>driver.IsReady);
+    await UntilAsync(()=>bridge.Queries>=6,7500);
+    await UntilAsync(()=>driver.IsReady,7500);
+    Assert.Equal(1,bridge.Connections);
+    Assert.False(driver.PositionFaulted);
+    Assert.Equal(0,bridge.Motions);
+  }
+
+  [Fact]
+  public async Task PersistentSilentTcpBridgeEventuallyReconnects()
   {
     await using var bridge=new Bridge((session,poll) =>
       session==1 && poll>=2 ? null : "AZ=90 EL=30\r");
     using var driver=new NativeRotatorControlEngine(Settings(bridge.Port));
     await UntilAsync(()=>driver.IsReady);
-    var watch=Stopwatch.StartNew();
-    await UntilAsync(()=>bridge.Connections>=2,9000);
-    await UntilAsync(()=>driver.IsReady && driver.LastReadBearing!=null,9000);
-    Assert.True(watch.ElapsedMilliseconds<9000,
-      $"Recovery exceeded budget: {watch.ElapsedMilliseconds}ms");
+    await UntilAsync(()=>bridge.Queries>=4,5000);
+    Assert.Equal(1,bridge.Connections);
+    await UntilAsync(()=>bridge.Connections>=2,16000);
+    await UntilAsync(()=>driver.IsReady && driver.LastReadBearing!=null,5000);
     Assert.False(driver.PositionFaulted);
     Assert.Equal(0,bridge.Motions);
+  }
+
+  [Fact]
+  public async Task TransmitOutageWhileMovingRequestsStopAndLatchesTracking()
+  {
+    int ptt=0;
+    await using var bridge=new Bridge((session,poll)=>
+      Volatile.Read(ref ptt)!=0 ? null : "AZ=90 EL=30\r");
+    using var driver=new NativeRotatorControlEngine(Settings(bridge.Port));
+    await UntilAsync(()=>driver.IsReady);
+    driver.RotateTo(new SkyRoof.Bearing(100*Math.PI/180,40*Math.PI/180));
+    await UntilAsync(()=>bridge.Motions>0);
+    Volatile.Write(ref ptt,1);
+    await UntilAsync(()=>driver.PositionFaulted && bridge.Stops>0,8500);
+    int motions=bridge.Motions;
+    // Feedback recovery must NOT automatically replay a stale Track target.
+    Volatile.Write(ref ptt,0);
+    await UntilAsync(()=>driver.IsReady,7000);
+    await Task.Delay(550);
+    Assert.Equal(motions,bridge.Motions);
+    Assert.True(driver.PositionFaulted);
   }
 
   [Fact]
