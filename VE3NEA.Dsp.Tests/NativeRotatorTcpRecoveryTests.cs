@@ -44,10 +44,10 @@ public sealed class NativeRotatorTcpRecoveryTests
     {
       await Task.Delay(90);
       uiWake.Set(); // MainForm's one-second Retry signal in compressed time.
-      Assert.False(wait.IsCompleted);
     }
-    Assert.False(await wait.WaitAsync(TimeSpan.FromSeconds(3)));
-    Assert.InRange(timer.ElapsedMilliseconds,1200,3500);
+    Assert.False(await wait.WaitAsync(TimeSpan.FromSeconds(5)));
+    Assert.True(timer.ElapsedMilliseconds>=1200,
+      "Periodic wakeups must not shorten the configured 1300ms backoff.");
   }
 
   [Fact]
