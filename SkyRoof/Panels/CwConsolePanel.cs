@@ -198,38 +198,86 @@ namespace SkyRoof
         CwConsolePanel_FormClosing;
     }
 
+    private Form? rxHistoryForm;
     private void ShowRxHistory()
     {
+      if(rxHistoryForm is Form active && !active.IsDisposed)
+      {
+        active.BringToFront();
+        active.Activate();
+        return;
+      }
       CwReceiveWorker? worker=ctx.CwReceiveWorker;
       if(worker==null)return;
-      IReadOnlyList<CwArchivedTranscript> events=worker.History.GetAll();
-      using var dialog=new Form
+      var dialog=new Form
       {
-        Text="CW RX History (committed, UTC)",
+        Text="CW RX History (committed · UTC)",
         StartPosition=FormStartPosition.CenterParent,
         Width=880,Height=560,MinimumSize=new Size(520,320)
       };
-      using var display=new RichTextBox
+      rxHistoryForm=dialog;
+      var search=new TextBox
+      {
+        Dock=DockStyle.Top,
+        PlaceholderText="Filter text, frequency-lane identity or UTC…",
+        Height=30
+      };
+      var display=new RichTextBox
       {
         Dock=DockStyle.Fill,ReadOnly=true,WordWrap=true,
         Font=new Font(FontFamily.GenericMonospace,10),
         ScrollBars=RichTextBoxScrollBars.Vertical
       };
-      var lines=new System.Text.StringBuilder();
-      foreach(CwArchivedTranscript item in events)
+      long renderedVersion=-1;
+      void Render()
       {
-        lines.AppendLine(
-          $"{item.LastWindowEndUtc:yyyy-MM-dd HH:mm:ss}Z · "+
-          $"G{item.TimelineGeneration} · "+
-          (item.UsesAssociationHint?"H":"T")+
-          $"{item.IdentityId}");
-        lines.AppendLine(item.CommittedText);
-        lines.AppendLine();
+        if(dialog.IsDisposed)return;
+        long revision=worker.History.Version;
+        if(renderedVersion==revision)return;
+        renderedVersion=revision;
+        IReadOnlyList<CwArchivedTranscript> entries=
+          worker.History.GetAll();
+        string filter=search.Text.Trim();
+        var lines=new System.Text.StringBuilder();
+        foreach(CwArchivedTranscript item in entries.Take(256))
+        {
+          string identity=(item.UsesAssociationHint?"H":"T")+
+            item.IdentityId;
+          string header=$"{item.LastWindowEndUtc:yyyy-MM-dd HH:mm:ss}Z · "+
+            $"S{item.SessionId.ToString("N")[..8]} · "+
+            $"G{item.TimelineGeneration} · {identity}";
+          if(filter.Length>0 &&
+             !header.Contains(filter,StringComparison.OrdinalIgnoreCase) &&
+             !item.CommittedText.Contains(filter,
+               StringComparison.OrdinalIgnoreCase))continue;
+          lines.AppendLine(header);
+          lines.AppendLine(item.CommittedText);
+          lines.AppendLine();
+        }
+        string next=lines.Length>0?lines.ToString():
+          "No committed CW messages for this filter.";
+        if(display.Text==next)return;
+        bool follow=display.SelectionStart>=Math.Max(0,display.TextLength-2);
+        int selection=display.SelectionStart;
+        display.Text=next;
+        display.SelectionStart=follow?display.TextLength:
+          Math.Min(selection,display.TextLength);
+        display.SelectionLength=0;
+        if(follow)display.ScrollToCaret();
       }
-      display.Text=lines.Length>0 ? lines.ToString() :
-        "No committed CW text yet.";
+      var timer=new System.Windows.Forms.Timer{Interval=750};
+      timer.Tick+=(_,_)=>Render();
+      search.TextChanged+=(_,_)=>{renderedVersion=-1;Render();};
+      dialog.FormClosed+=(_,_)=>
+      {
+        timer.Stop();timer.Dispose();
+        if(ReferenceEquals(rxHistoryForm,dialog))rxHistoryForm=null;
+      };
       dialog.Controls.Add(display);
-      dialog.ShowDialog(this);
+      dialog.Controls.Add(search);
+      Render();
+      timer.Start();
+      dialog.Show(this); // modeless: RX and TX UI stay responsive
     }
 
     private void BuildUi()
