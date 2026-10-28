@@ -1,0 +1,99 @@
+using System;
+using SkyRoof;
+using SkyRoof.NativeRotator;
+using Xunit;
+
+namespace VE3NEA.Dsp.Tests;
+
+public sealed class Rc3040sPlannerFeedbackGuardTests
+{
+  private static readonly DateTime Started =
+    new(2026,10,28,7,0,0,DateTimeKind.Utc);
+  private static readonly RotatorPosition StartingPoint=new(30,20);
+  private static readonly RotatorPosition FinalPoint=new(120,65);
+
+  [Fact]
+  public void PlannerCannotAdvanceMoreThanOncePerC2Feedback()
+  {
+    var guard=new Rc3040sPlannerFeedbackGuard();
+    Assert.True(guard.TryConsumeFreshFeedback(Started,StartingPoint,
+      FinalPoint,out bool stalled));
+    Assert.False(stalled);
+    for(int i=0;i<20;i++)
+      Assert.False(guard.TryConsumeFreshFeedback(Started,StartingPoint,
+        FinalPoint,out _));
+    Assert.True(guard.TryConsumeFreshFeedback(
+      Started.AddMilliseconds(500),StartingPoint,FinalPoint,out _));
+    Assert.False(guard.TryConsumeFreshFeedback(
+      Started.AddMilliseconds(100),StartingPoint,FinalPoint,out _));
+  }
+
+  [Theory]
+  [InlineData(30,120,31)]
+  [InlineData(30,0,29)]
+  [InlineData(30.4,120,31)]
+  [InlineData(30.8,120,32)]
+  [InlineData(30.8,0,30)]
+  public void RoundedWEndpointRemainsWithinMeasuredLead(
+    double actual,double desired,double expected)
+  {
+    var guard=new Rc3040sPlannerFeedbackGuard();
+    var bounded=guard.BoundSetpoint(
+      new(actual,20),new(desired,65));
+    Assert.Equal(expected,bounded.Azimuth,5);
+    Assert.InRange(Math.Abs(bounded.Azimuth-actual),
+      0,Rc3040sPlannerFeedbackGuard.MaximumLeadDegrees);
+    Assert.InRange(Math.Abs(bounded.Elevation-20),
+      0,Rc3040sPlannerFeedbackGuard.MaximumLeadDegrees);
+  }
+
+  [Fact]
+  public void NoC2PositionProgressAfterRepeatedSetpointsRequestsStop()
+  {
+    var guard=new Rc3040sPlannerFeedbackGuard();
+    Assert.True(guard.TryConsumeFreshFeedback(Started,
+      StartingPoint,FinalPoint,out _));
+    guard.MarkTransmitted(Started,StartingPoint,new(31,21));
+    Assert.True(guard.TryConsumeFreshFeedback(
+      Started.AddSeconds(3),StartingPoint,FinalPoint,out bool before));
+    Assert.False(before);
+    Assert.True(guard.TryConsumeFreshFeedback(
+      Started.AddMilliseconds(4200),StartingPoint,FinalPoint,out bool after));
+    Assert.True(after);
+  }
+
+  [Fact]
+  public void ActualProgressExtendsWatchdogButNeverUsesReferenceAsFeedback()
+  {
+    var guard=new Rc3040sPlannerFeedbackGuard();
+    guard.TryConsumeFreshFeedback(Started,StartingPoint,FinalPoint,out _);
+    guard.MarkTransmitted(Started,StartingPoint,new(31,20));
+    Assert.True(guard.TryConsumeFreshFeedback(
+      Started.AddSeconds(3),new(31,20),FinalPoint,out bool stall));
+    Assert.False(stall);
+    Assert.True(guard.TryConsumeFreshFeedback(
+      Started.AddSeconds(6),new(31,20),FinalPoint,out stall));
+    Assert.False(stall);
+    Assert.True(guard.TryConsumeFreshFeedback(
+      Started.AddSeconds(8),new(31,20),FinalPoint,out stall));
+    Assert.True(stall);
+    guard.Reset();
+    Assert.True(guard.TryConsumeFreshFeedback(
+      Started.AddSeconds(10),new(31,20),FinalPoint,out stall));
+    Assert.False(stall);
+  }
+
+  [Fact]
+  public void ReachingFinalTargetDoesNotTripNoProgressFault()
+  {
+    var guard=new Rc3040sPlannerFeedbackGuard();
+    guard.TryConsumeFreshFeedback(Started,StartingPoint,FinalPoint,out _);
+    guard.MarkTransmitted(Started,StartingPoint,new(31,20));
+    guard.TryConsumeFreshFeedback(
+      Started.AddSeconds(1),FinalPoint,FinalPoint,out bool stalled);
+    Assert.False(stalled);
+    guard.TryConsumeFreshFeedback(
+      Started.AddSeconds(20),FinalPoint,FinalPoint,out stalled);
+    Assert.False(stalled);
+  }
+}
