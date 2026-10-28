@@ -10,11 +10,12 @@ namespace SkyRoof.CW
   /// </summary>
   public sealed record CwArchivedTranscript(
     long TimelineGeneration, bool UsesAssociationHint, int IdentityId,
-    string CommittedText, DateTime LastWindowEndUtc);
+    string CommittedText, DateTime LastWindowEndUtc,
+    Guid SessionId = default);
 
   public sealed record CwArchiveEvent(
     DateTime Utc, long TimelineGeneration, bool UsesAssociationHint,
-    int IdentityId, string Delta);
+    int IdentityId, string Delta, Guid SessionId = default);
 
   /// <summary>
   /// Independent receive text lifetime: survives short QSB, slot recycling,
@@ -26,6 +27,7 @@ namespace SkyRoof.CW
   {
     private sealed class Entry
     {
+      public required Guid SessionId;
       public required long Generation;
       public required bool UsesHint;
       public required int Id;
@@ -35,7 +37,8 @@ namespace SkyRoof.CW
     }
 
     private readonly object sync = new();
-    private readonly Dictionary<(long, bool, int), Entry> entries = new();
+    private readonly Guid sessionId=Guid.NewGuid();
+    private readonly Dictionary<(Guid, long, bool, int), Entry> entries = new();
     private readonly Channel<CwArchiveEvent> pending;
     private readonly Task writer;
     private readonly string folder;
@@ -59,7 +62,7 @@ namespace SkyRoof.CW
         {
           SingleReader = true,
           SingleWriter = false,
-          FullMode = BoundedChannelFullMode.DropWrite
+          FullMode = BoundedChannelFullMode.Wait
         });
       LoadRecentEvents();
       writer = Task.Run(PersistAsync);
@@ -77,10 +80,11 @@ namespace SkyRoof.CW
             continue;
           bool hint = snapshot.AssociationHintId != 0;
           int id = hint ? snapshot.AssociationHintId : snapshot.TrackId;
-          var key = (generation, hint, id);
+          var key = (sessionId,generation, hint, id);
           if(!entries.TryGetValue(key, out Entry? entry))
           {
-            entry = new Entry { Generation=generation, UsesHint=hint, Id=id };
+            entry = new Entry { SessionId=sessionId,
+              Generation=generation, UsesHint=hint, Id=id };
             entries.Add(key,entry);
           }
           if(snapshot.LastWindowEndUtc < entry.LastUtc)continue;
@@ -99,7 +103,7 @@ namespace SkyRoof.CW
           if(delta.Length==0)continue;
           entry.Committed.Append(delta);
           if(!pending.Writer.TryWrite(
-            new CwArchiveEvent(snapshot.LastWindowEndUtc,generation,hint,id,delta)))
+            new CwArchiveEvent(snapshot.LastWindowEndUtc,generation,hint,id,delta,sessionId)))
             Interlocked.Increment(ref droppedEvents);
         }
         while(entries.Count>maximumEntries)
@@ -116,7 +120,7 @@ namespace SkyRoof.CW
         return entries.Values
           .OrderByDescending(x=>x.LastUtc)
           .Select(x=>new CwArchivedTranscript(
-            x.Generation,x.UsesHint,x.Id,x.Committed.ToString(),x.LastUtc))
+            x.Generation,x.UsesHint,x.Id,x.Committed.ToString(),x.LastUtc,x.SessionId))
           .ToArray();
     }
 
@@ -132,10 +136,11 @@ namespace SkyRoof.CW
           {
             CwArchiveEvent? item=JsonSerializer.Deserialize<CwArchiveEvent>(line);
             if(item==null || item.Utc.Kind!=DateTimeKind.Utc)continue;
-            var key=(item.TimelineGeneration,item.UsesAssociationHint,item.IdentityId);
+            var key=(item.SessionId,item.TimelineGeneration,item.UsesAssociationHint,item.IdentityId);
             if(!entries.TryGetValue(key,out Entry? entry))
             {
-              entry=new Entry {Generation=item.TimelineGeneration,
+              entry=new Entry {SessionId=item.SessionId,
+                Generation=item.TimelineGeneration,
                 UsesHint=item.UsesAssociationHint,Id=item.IdentityId};
               entries.Add(key,entry);
             }
@@ -143,6 +148,8 @@ namespace SkyRoof.CW
             entry.Committed.Append(item.Delta);
           }
         }
+        foreach(Entry entry in entries.Values)
+          entry.PreviousWindowCommitted=entry.Committed.ToString();
       }
       catch(Exception ex)
       {
