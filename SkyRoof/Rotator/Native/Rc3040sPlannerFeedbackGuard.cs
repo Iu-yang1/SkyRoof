@@ -96,7 +96,8 @@ internal sealed class Rc3040sPlannerFeedbackGuard
 
     // Already reached the final target: an idle C2 sequence is not
     // evidence that a motor has stalled.
-    if(Math.Abs(requested.Azimuth-measured.Azimuth)<=1.5 &&
+    if(!inFlightSetpoint.HasValue &&
+       Math.Abs(requested.Azimuth-measured.Azimuth)<=1.5 &&
        Math.Abs(requested.Elevation-measured.Elevation)<=1.5)
     {
       awaitingPhysicalProgress=false;
