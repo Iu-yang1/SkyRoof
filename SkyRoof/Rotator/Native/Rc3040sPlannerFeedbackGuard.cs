@@ -126,28 +126,42 @@ internal sealed class Rc3040sPlannerFeedbackGuard
     return true;
   }
 
+  internal static bool ValidQuantizedLimits(Rc3040sMotionPlanner.Limits limits) =>
+    Rc3040sMotionPlanner.ValidLimits(limits) &&
+    // GS-232B RC-3040S W encodes integer AZ=000..450, EL=000..180.
+    // Non-Direct must fail closed when user limits cannot be represented.
+    limits.MinAz>=0 && limits.MaxAz<=450 &&
+    limits.MinEl>=0 && limits.MaxEl<=180 &&
+    Math.Ceiling(limits.MinAz)<=Math.Floor(limits.MaxAz) &&
+    Math.Ceiling(limits.MinEl)<=Math.Floor(limits.MaxEl);
+
   internal RotatorPosition BoundSetpoint(
-    RotatorPosition actual,RotatorPosition desired)
+    RotatorPosition actual,RotatorPosition desired,
+    Rc3040sMotionPlanner.Limits limits)
   {
     if(!NativeRotatorCodec.Valid(actual) ||
-       !NativeRotatorCodec.Valid(desired))
-      throw new ArgumentOutOfRangeException(nameof(actual));
+       !NativeRotatorCodec.Valid(desired) ||
+       !ValidQuantizedLimits(limits))
+      throw new ArgumentOutOfRangeException(nameof(limits));
     return new RotatorPosition(
-      BoundIntegerAxis(actual.Azimuth,desired.Azimuth),
-      BoundIntegerAxis(actual.Elevation,desired.Elevation));
+      BoundIntegerAxis(actual.Azimuth,desired.Azimuth,
+        limits.MinAz,limits.MaxAz),
+      BoundIntegerAxis(actual.Elevation,desired.Elevation,
+        limits.MinEl,limits.MaxEl));
   }
 
-  private static double BoundIntegerAxis(double actual,double desired)
+  private static double BoundIntegerAxis(
+    double actual,double desired,double min,double max)
   {
-    double low=actual-MaximumLeadDegrees;
-    double high=actual+MaximumLeadDegrees;
-    double bounded=Math.Clamp(desired,low,high);
-    // RC-3040S GS-232B W is integer degrees. Clamp AFTER quantization
-    // too: 31.5 rounds to W032, exceeding a 1.5-degree lead from 30.
-    double rounded=Math.Round(bounded,MidpointRounding.AwayFromZero);
-    if(rounded>high)rounded=Math.Floor(high);
-    if(rounded<low)rounded=Math.Ceiling(low);
-    return rounded;
+    double low=Math.Max(Math.Ceiling(min),Math.Ceiling(actual-MaximumLeadDegrees));
+    double high=Math.Min(Math.Floor(max),Math.Floor(actual+MaximumLeadDegrees));
+    if(low>high)
+      throw new InvalidOperationException(
+        "RC-3040S has no safe integer-degree waypoint within feedback lead and software limits");
+    // Both limits are integer-degree wire endpoints, so the final W
+    // cannot cross a fractional mechanical software limit after rounding.
+    return Math.Clamp(Math.Round(desired,MidpointRounding.AwayFromZero),
+      low,high);
   }
 
   internal void MarkTransmitted(
