@@ -75,12 +75,21 @@ internal sealed class Rc3040sPlannerFeedbackGuard
        !NativeRotatorCodec.Valid(desired))
       throw new ArgumentOutOfRangeException(nameof(actual));
     return new RotatorPosition(
-      Math.Clamp(desired.Azimuth,
-        actual.Azimuth-MaximumLeadDegrees,
-        actual.Azimuth+MaximumLeadDegrees),
-      Math.Clamp(desired.Elevation,
-        actual.Elevation-MaximumLeadDegrees,
-        actual.Elevation+MaximumLeadDegrees));
+      BoundIntegerAxis(actual.Azimuth,desired.Azimuth),
+      BoundIntegerAxis(actual.Elevation,desired.Elevation));
+  }
+
+  private static double BoundIntegerAxis(double actual,double desired)
+  {
+    double low=actual-MaximumLeadDegrees;
+    double high=actual+MaximumLeadDegrees;
+    double bounded=Math.Clamp(desired,low,high);
+    // RC-3040S GS-232B W is integer degrees. Clamp AFTER quantization
+    // too: 31.5 rounds to W032, exceeding a 1.5-degree lead from 30.
+    double rounded=Math.Round(bounded,MidpointRounding.AwayFromZero);
+    if(rounded>high)rounded=Math.Floor(high);
+    if(rounded<low)rounded=Math.Ceiling(low);
+    return rounded;
   }
 
   internal void MarkTransmitted(
