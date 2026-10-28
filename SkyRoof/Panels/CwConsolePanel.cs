@@ -1826,6 +1826,10 @@ namespace SkyRoof
         e.Cancel=true;
         if(closeStopInProgress)return;
         closeStopInProgress=true;
+        Serilog.Log.Information(
+          "CW Console close requested: armed={Armed}, sending={Sending}, pendingSend={Pending}",
+          ctx.CwTransmit?.State.Armed,ctx.CwTransmit?.State.Sending,
+          sendRequestInProgress);
         sendRequestStop?.Cancel();
         var stopwatch=Stopwatch.StartNew();
         try
@@ -1864,7 +1868,11 @@ namespace SkyRoof
           closeStopInProgress=false;
         }
         if(closeStopChecked && !IsDisposed && !Disposing)
-          Close();
+        {
+          // Avoid nested FormClosing invocation in the same WinForms stack.
+          if(IsHandleCreated)BeginInvoke(new Action(Close));
+          else Close();
+        }
         return;
       }
       Serilog.Log.Information("CW console closing: teardown begins");
