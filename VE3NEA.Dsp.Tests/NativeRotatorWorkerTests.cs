@@ -471,8 +471,14 @@ public sealed class NativeRotatorWorkerTests
     config.Rc3040sMotionMode=mode;
     config.Rc3040sPlanAzSpeed=3;
     config.Rc3040sPlanElSpeed=3;
+    config.Rc3040sIndependentAngleVerified=true;
     using var engine=new NativeRotatorControlEngine(config);
     await UntilAsync(()=>engine.IsReady && engine.LastReadBearing!=null);
+    // The UI model is mutable: changing it without reapplying settings
+    // must NOT silently replace an already-authorized planned route
+    // with the unbounded Direct W120 endpoint.
+    config.Rc3040sPlannerEnabled=false;
+    config.Rc3040sMotionHardwareValidated=false;
     engine.RotateTo(new SkyRoof.Bearing(
       120*Math.PI/180,65*Math.PI/180));
 
