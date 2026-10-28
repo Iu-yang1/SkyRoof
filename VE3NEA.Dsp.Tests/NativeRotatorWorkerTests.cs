@@ -539,6 +539,21 @@ public sealed class NativeRotatorWorkerTests
     await UntilAsync(()=>server.Count("S")>=1);
   }
 
+  [Fact]
+  public async Task FragmentedC2PacketCannotPublishIncompleteElevation()
+  {
+    await using var bridge=new FakeGs232Bridge(
+      response:_=>Encoding.ASCII.GetBytes("AZ=90 EL=60\r"),
+      fragmentC2Response:true);
+    var config=CreateSettings(bridge.Port);
+    config.NativeProtocol=RotatorProtocolKind.Rc3040sLan;
+    using var driver=new NativeRotatorControlEngine(config);
+    await UntilAsync(()=>driver.IsReady && driver.LastReadBearing!=null);
+    Assert.InRange(driver.LastReadBearing!.AzDeg,89.99,90.01);
+    Assert.InRange(driver.LastReadBearing.ElDeg,59.99,60.01);
+    Assert.False(driver.PositionFaulted);
+  }
+
   private static RotatorSettings CreateSettings(int port)=>new()
   {
     Enabled=true,
@@ -572,6 +587,7 @@ public sealed class NativeRotatorWorkerTests
     private readonly Func<string,byte[]>? response;
     private readonly bool dropFirstMove;
     private readonly bool simulateSlowFeedback;
+    private readonly bool fragmentC2Response;
     private int dropped,connections,overlappingWaypoints,plannedWrites;
     private int simulatedAz=90,simulatedEl=30,waypointAz=90,waypointEl=30,pollCounter;
     internal int OverlappingWaypoints=>Volatile.Read(ref overlappingWaypoints);
@@ -579,11 +595,12 @@ public sealed class NativeRotatorWorkerTests
     internal int ConnectionCount => Volatile.Read(ref connections);
     internal int Port {get;}
     internal FakeGs232Bridge(Func<string,byte[]>? response=null,bool dropFirstMove=false,
-      bool simulateSlowFeedback=false)
+      bool simulateSlowFeedback=false,bool fragmentC2Response=false)
     {
       this.response=response;
       this.dropFirstMove=dropFirstMove;
       this.simulateSlowFeedback=simulateSlowFeedback;
+      this.fragmentC2Response=fragmentC2Response;
       listener.Start();
       Port=((IPEndPoint)listener.LocalEndpoint).Port;
       worker=Task.Run(RunAsync);
@@ -648,7 +665,18 @@ public sealed class NativeRotatorWorkerTests
                   }
                   else reply=response?.Invoke(line) ??
                     Encoding.ASCII.GetBytes("AZ=90 EL=30\r");
-                  if(reply.Length>0)
+                  if(reply.Length>2 && fragmentC2Response)
+                  {
+                    // First TCP segment ends in the first EL digit;
+                    // C2 must not complete before the numeric field
+                    // and the CR frame terminator actually arrive.
+                    await stream.WriteAsync(
+                      reply.AsMemory(0,reply.Length-2),cancel.Token);
+                    await Task.Delay(60,cancel.Token);
+                    await stream.WriteAsync(
+                      reply.AsMemory(reply.Length-2),cancel.Token);
+                  }
+                  else if(reply.Length>0)
                     await stream.WriteAsync(reply,cancel.Token);
                 }
               }
