@@ -31,6 +31,39 @@ public sealed class NativeRotatorTcpRecoveryTests
   }
 
   [Fact]
+  public async Task ReconnectBackoffCannotBeShortenedByPeriodicUiWakeups()
+  {
+    // Reproduces the pre-fix 2000ms -> ~750ms attempt storm observed
+    // on 2026-10-29; the policy must watch shutdown only.
+    using var stopped=new ManualResetEvent(false);
+    using var uiWake=new AutoResetEvent(false);
+    var timer=Stopwatch.StartNew();
+    Task<bool> wait=Task.Run(()=>
+      NativeRotatorReconnectPolicy.WaitForRetryOrShutdown(stopped,1300));
+    for(int n=0;n<5;n++)
+    {
+      await Task.Delay(90);
+      uiWake.Set(); // MainForm's one-second Retry signal in compressed time.
+      Assert.False(wait.IsCompleted);
+    }
+    Assert.False(await wait.WaitAsync(TimeSpan.FromSeconds(3)));
+    Assert.InRange(timer.ElapsedMilliseconds,1200,3500);
+  }
+
+  [Fact]
+  public async Task ShutdownInterruptsReconnectBackoffImmediately()
+  {
+    using var stopped=new ManualResetEvent(false);
+    var timer=Stopwatch.StartNew();
+    Task<bool> wait=Task.Run(()=>
+      NativeRotatorReconnectPolicy.WaitForRetryOrShutdown(stopped,5000));
+    await Task.Delay(80);
+    stopped.Set();
+    Assert.True(await wait.WaitAsync(TimeSpan.FromSeconds(1)));
+    Assert.InRange(timer.ElapsedMilliseconds,0,1000);
+  }
+
+  [Fact]
   public async Task SingleDroppedPositionReplyDoesNotDestroyHealthyTcpConnection()
   {
     await using var bridge=new Bridge((session,poll) =>
