@@ -1,5 +1,7 @@
 ﻿using SkyRoof;
 using VE3NEA;
+using Serilog;
+using System.Threading.Tasks;
 
 namespace SkyRoof
 {
@@ -8,6 +10,11 @@ namespace SkyRoof
   {
     public Context ctx;
     private IRotatorEngine? engine;
+    // UI never waits synchronously for a hardware child to exit. All
+    // generations share an ordered shutdown chain, so ApplySettings cannot
+    // race an old exclusive device owner even when clicked repeatedly.
+    private Task workerShutdownChain=Task.CompletedTask;
+    private long workerGeneration;
     private AzElEntryDialog Dialog = new();
     private OptimizedRotationPath? Path;
     private Bearing? SatBearing;
@@ -60,32 +67,68 @@ namespace SkyRoof
     //----------------------------------------------------------------------------------------------
     public void ApplySettings(bool restoreTracking = false)
     {
-      bool track = restoreTracking && TrackCheckbox.Checked;
-
-      if (engine != null) StopRotation();
-      engine?.Dispose();
-      engine = null;
-
-      if (ctx.Settings.Rotator.Enabled)
-      {
-        engine = ctx.Settings.Rotator.ResolveUseNativeDriver()
-          ? (RotatorEngineSubprocess.ShouldHostWorker()
-              ? new RotatorEngineSubprocess(ctx.Settings.Rotator)
-              : new NativeRotatorControlEngine(ctx.Settings.Rotator))
-          : new RotatorControlEngine(ctx.Settings.Rotator);
-        engine.StatusChanged += Engine_StatusChanged;
-        engine.BearingChanged += Engine_BearingChanged;
-        engine.PositionFaultDetected += Engine_PositionFaultDetected;
-      }
-
-      ResetUi();
-
-      SetSatellite(ctx.SatelliteSelector.SelectedSatellite);
-
-      TrackCheckbox.Checked = track;
-      Advance();
-
+      bool track=restoreTracking && TrackCheckbox.Checked;
+      long generation=++workerGeneration;
+      var old=engine;
+      if(old!=null)StopRotation();
+      engine=null;
+      // A reapply is not a reason to continue an old automated motion.
+      TrackCheckbox.Checked=false;
+      Log.Information("Rotator settings reapply generation={Generation}, previousPID={OldPid}",
+        generation,(old as RotatorEngineSubprocess)?.WorkerPid);
+      workerShutdownChain=ShutdownPreviousAsync(workerShutdownChain,old);
+      _=StartAfterShutdownAsync(generation,track,workerShutdownChain);
       ctx.MainForm.ShowRotatorStatus();
+    }
+
+    private static async Task ShutdownPreviousAsync(Task predecessor,IRotatorEngine? old)
+    {
+      // If a previous generation could not be safely reaped, do NOT start
+      // another worker merely because the user clicked Apply again.
+      await predecessor.ConfigureAwait(false);
+      if(old is RotatorEngineSubprocess child)
+        await child.ShutdownAsync().ConfigureAwait(false);
+      else old?.Dispose();
+    }
+
+    private async Task StartAfterShutdownAsync(long generation,bool track,Task shutdown)
+    {
+      try
+      {
+        await shutdown; // Resume on WinForms synchronization context.
+        if(generation!=workerGeneration || IsDisposed)return;
+        if(ctx.Settings.Rotator.Enabled)
+        {
+          engine=ctx.Settings.Rotator.ResolveUseNativeDriver()
+            ? (RotatorEngineSubprocess.ShouldHostWorker()
+                ? new RotatorEngineSubprocess(ctx.Settings.Rotator)
+                : new NativeRotatorControlEngine(ctx.Settings.Rotator))
+            : new RotatorControlEngine(ctx.Settings.Rotator);
+          engine.StatusChanged+=Engine_StatusChanged;
+          engine.BearingChanged+=Engine_BearingChanged;
+          engine.PositionFaultDetected+=Engine_PositionFaultDetected;
+        }
+        ResetUi();
+        SetSatellite(ctx.SatelliteSelector.SelectedSatellite);
+        TrackCheckbox.Checked=track;
+        Advance();
+        Log.Information("Rotator settings generation={Generation} initialized, workerPID={Pid}",
+          generation,(engine as RotatorEngineSubprocess)?.WorkerPid);
+      }
+      catch(Exception ex)
+      {
+        Log.Error(ex,"Rotator settings generation={Generation} failed; previous worker exit unverified. No replacement hardware owner will be started.",generation);
+        if(generation==workerGeneration && !IsDisposed)
+        {
+          TrackCheckbox.Checked=false;
+          ResetUi();
+        }
+      }
+      finally
+      {
+        if(generation==workerGeneration && !IsDisposed)
+          ctx.MainForm.ShowRotatorStatus();
+      }
     }
 
     public void SetSatellite(SatnogsDbSatellite? sat)

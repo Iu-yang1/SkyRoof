@@ -193,6 +193,49 @@ public sealed class NativeRotatorWorkerTests
   }
 
   [Fact]
+  public async Task CleanWorkerShutdownReapsOldPidBeforeReplacementCanOwnDevice()
+  {
+    string? root=Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
+    if(string.IsNullOrWhiteSpace(root))return;
+    string exe=Path.Combine(root,"SkyRoof","bin","x64","Release",
+      "net10.0-windows7.0","SkyRoof.exe");
+    await using var server=new FakeGs232Bridge();
+    var settings=CreateSettings(server.Port);
+    using var old=new RotatorEngineSubprocess(settings,exe);
+    await UntilAsync(()=>old.IsReady);
+    int firstPid=old.WorkerPid;
+    // This is the path used by the non-blocking settings reapply. The
+    // replacement must never be created before the prior lease is reaped.
+    await old.ShutdownAsync().WaitAsync(TimeSpan.FromSeconds(12));
+    Assert.True(old.WorkerExited);
+    using var replacement=new RotatorEngineSubprocess(settings,exe);
+    Assert.NotEqual(firstPid,replacement.WorkerPid);
+    for(int i=0;i<120 && !replacement.IsReady;i++)
+      await Task.Delay(50);
+    Assert.True(replacement.IsReady,
+      "Replacement must acquire exclusive device ownership after old PID exits.");
+    replacement.RotateTo(new SkyRoof.Bearing(100*Math.PI/180,30*Math.PI/180));
+    await UntilAsync(()=>server.Count("W100 030")>=1);
+  }
+
+  [Fact]
+  public async Task ConcurrentShutdownCallsShareOneWorkerReap()
+  {
+    string? root=Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
+    if(string.IsNullOrWhiteSpace(root))return;
+    string exe=Path.Combine(root,"SkyRoof","bin","x64","Release",
+      "net10.0-windows7.0","SkyRoof.exe");
+    await using var server=new FakeGs232Bridge();
+    using var worker=new RotatorEngineSubprocess(CreateSettings(server.Port),exe);
+    await UntilAsync(()=>worker.IsReady);
+    Task first=worker.ShutdownAsync();
+    Task second=worker.ShutdownAsync();
+    Assert.Same(first,second);
+    await Task.WhenAll(first,second).WaitAsync(TimeSpan.FromSeconds(12));
+    Assert.True(worker.WorkerExited);
+  }
+
+  [Fact]
   public async Task TrackDisabledPollsAtBoundedRateWithoutMotionOrBusyLoop()
   {
     await using var server=new FakeGs232Bridge();
