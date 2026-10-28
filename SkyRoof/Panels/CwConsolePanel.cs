@@ -62,6 +62,8 @@ namespace SkyRoof
     private bool sendRequestInProgress;
     private CancellationTokenSource? sendRequestStop;
     private bool statusPollInProgress;
+    private bool closeStopInProgress;
+    private bool closeStopChecked;
     private DateTime nextStatusPollUtc = DateTime.MinValue;
 
     private readonly System.Windows.Forms.Timer UiTimer =
@@ -1724,10 +1726,62 @@ namespace SkyRoof
         keyData);
     }
 
-    private void CwConsolePanel_FormClosing(
+    private async void CwConsolePanel_FormClosing(
       object? sender,
       FormClosingEventArgs e)
     {
+      // Never synchronously block WinForms on SkyCAT TCP / SemaphoreSlim.
+      // A close is cancelled once and retried after bounded asynchronous
+      // STOP/disarm. A failed STOP is explicitly reported, not assumed.
+      if(!closeStopChecked)
+      {
+        e.Cancel=true;
+        if(closeStopInProgress)return;
+        closeStopInProgress=true;
+        sendRequestStop?.Cancel();
+        var stopwatch=Stopwatch.StartNew();
+        try
+        {
+          CwTransmitController? tx=ctx.CwTransmit;
+          if(tx!=null && (tx.State.Armed || tx.State.Sending ||
+             sendRequestInProgress))
+          {
+            Task disarm=tx.DisarmAsync();
+            Task timeout=Task.Delay(TimeSpan.FromSeconds(5));
+            if(await Task.WhenAny(disarm,timeout)==disarm)
+              await disarm; // observe fault on the UI continuation
+            else
+              throw new TimeoutException(
+                "SkyCAT CW STOP has not completed within 5 seconds.");
+          }
+          closeStopChecked=true;
+          Serilog.Log.Information(
+            "CW console close: CW STOP/disarm phase completed in {Ms}ms",
+            stopwatch.ElapsedMilliseconds);
+        }
+        catch(Exception ex)
+        {
+          Serilog.Log.Error(ex,
+            "CW console close: STOP not confirmed after {Ms}ms; no assumption that RF TX ceased",
+            stopwatch.ElapsedMilliseconds);
+          // The outstanding STOP task (if any) remains running. The TX
+          // controller owns its lease/watchdog after this view closes.
+          DialogResult choice=MessageBox.Show(this,
+            "CW STOP could not be confirmed. Verify the IC-9700 is not transmitting and press the radio's physical STOP if necessary.\r\n\r\n"+
+            ex.Message+"\r\n\r\nClose CW Console anyway?",
+            "CW STOP NOT VERIFIED",
+            MessageBoxButtons.YesNo,MessageBoxIcon.Warning);
+          if(choice==DialogResult.Yes)closeStopChecked=true;
+        }
+        finally
+        {
+          closeStopInProgress=false;
+        }
+        if(closeStopChecked && !IsDisposed && !Disposing)
+          Close();
+        return;
+      }
+      Serilog.Log.Information("CW console closing: teardown begins");
       UiTimer.Stop();
       UiTimer.Tick -=
         UiTimer_Tick;
@@ -1745,23 +1799,7 @@ namespace SkyRoof
 
       modelInstallStop?.Cancel();
 
-      if (ctx.CwTransmit?.State.Armed == true)
-      {
-        try
-        {
-          ctx.CwTransmit
-            .DisarmAsync()
-            .GetAwaiter()
-            .GetResult();
-        }
-        catch
-        {
-          // Closing the keyer session invokes SkyCAT's disconnect STOP even
-          // if the explicit STOP acknowledgement was lost.
-        }
-      }
-
-      CwReceiveWorker? worker =
+       CwReceiveWorker? worker =
         ctx.CwReceiveWorker;
       if (worker != null)
       {
