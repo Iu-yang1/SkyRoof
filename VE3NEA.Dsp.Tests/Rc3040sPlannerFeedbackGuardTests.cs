@@ -128,6 +128,24 @@ public sealed class Rc3040sPlannerFeedbackGuardTests
   }
 
   [Fact]
+  public void NearFinalC2MustNotClearUnconfirmedMotorMove()
+  {
+    var guard=new Rc3040sPlannerFeedbackGuard();
+    var final=new RotatorPosition(31,20);
+    guard.TryConsumeFreshFeedback(Started,StartingPoint,final,out _);
+    guard.MarkTransmitted(Started,StartingPoint,final);
+    // A controller might still report 30 while the user target is 31;
+    // 1.5-degree terminal tolerance cannot fake W completion.
+    Assert.True(guard.TryConsumeFreshFeedback(
+      Started.AddSeconds(2),StartingPoint,final,out bool stalled));
+    Assert.False(stalled);
+    Assert.True(guard.HasInFlightSetpoint);
+    Assert.True(guard.TryConsumeFreshFeedback(
+      Started.AddSeconds(5),StartingPoint,final,out stalled));
+    Assert.True(stalled);
+  }
+
+  [Fact]
   public void ReachingFinalTargetDoesNotTripNoProgressFault()
   {
     var guard=new Rc3040sPlannerFeedbackGuard();
