@@ -115,6 +115,25 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public async Task Dispose_DoesNotBlockUiWhileNativeInferenceStillRuns()
+    {
+      var ingress=ReadyIngress();
+      var session=new BlockingInferenceSession();
+      var worker=new CwReceiveWorker(
+        ingress,TestOptions(),()=>session,_=>[ConfirmedTrack()]);
+      worker.Start();
+      await WaitUntilAsync(()=>session.Started);
+      var watch=System.Diagnostics.Stopwatch.StartNew();
+      worker.Dispose();
+      watch.Stop();
+      // This is the bug behind freezing the MainForm shutdown path:
+      // never wait synchronously for non-interruptible ONNX inference.
+      watch.ElapsedMilliseconds.Should().BeLessThan(500);
+      session.Release();
+      await WaitUntilAsync(()=>!worker.GetStatus().InferenceBusy);
+    }
+
+    [Fact]
     public async Task MissingModel_IsReportedWithoutStoppingTracker()
     {
       var ingress = ReadyIngress();
