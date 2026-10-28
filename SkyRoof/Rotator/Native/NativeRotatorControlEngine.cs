@@ -105,7 +105,7 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
     ManagementReviewRequired ? "Management safety lock; inspect and reapply settings" :
     PositionFaulted ? "Position safety fault" :
     plannerRequiresIndependentCalibration
-      ? "Motion planning disabled: verify shaft AZ/EL, STOP and integer-degree limits"
+      ? "Motion planning disabled: verify actual shaft AZ/EL vs C2, STOP and integer-degree limits"
       : "Ready";
   public NativeRotatorControlEngine(RotatorSettings settings)
   {
