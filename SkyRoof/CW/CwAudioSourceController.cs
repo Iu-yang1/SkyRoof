@@ -200,6 +200,8 @@ namespace SkyRoof.CW
 
       CwConsoleSettings settings =
         ctx.Settings.CwConsole;
+      Ingress.FrontEnd.EnableExperimentalStationGate=
+        settings.ExperimentalStationGate;
 
       // Stop device callbacks before changing the timeline/source identity.
       captureInput.Enabled = false;
