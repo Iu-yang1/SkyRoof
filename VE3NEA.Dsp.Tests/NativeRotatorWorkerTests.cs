@@ -427,8 +427,10 @@ public sealed class NativeRotatorWorkerTests
     using var engine=new NativeRotatorControlEngine(config);
     await UntilAsync(()=>engine.IsReady && engine.LastReadBearing!=null);
     engine.RotateTo(new SkyRoof.Bearing(120*Math.PI/180,30*Math.PI/180));
-    await UntilAsync(()=>server.Count("W120 030")>0);
-    Assert.Equal(1,server.Count("W120 030")); // baseline direct path
+    await Task.Delay(700);
+    Assert.DoesNotContain(server.Commands,
+      x=>x.StartsWith("W",StringComparison.Ordinal));
+    Assert.Contains("verify actual shaft",engine.GetStatusString());
   }
 
   [Fact]
