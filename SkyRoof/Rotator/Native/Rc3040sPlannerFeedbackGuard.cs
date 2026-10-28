@@ -31,6 +31,23 @@ internal sealed class Rc3040sPlannerFeedbackGuard
   // a new W while an earlier W is still in flight.
   internal bool HasInFlightSetpoint=>inFlightSetpoint.HasValue;
 
+  /// <summary>
+  /// The previous W target must be reached before the engine can clear
+  /// a possible-motion STOP-after-reconnect interlock. Checking only
+  /// the latest externally requested target is insufficient: a new
+  /// satellite target could reverse or return to the current C2 angle
+  /// while the previous motor command remains in flight.
+  /// </summary>
+  internal static bool IsLastWireAtReportedPosition(
+    RotatorPosition actual, RotatorPosition? lastWritten,
+    bool advancedPlanner)
+  {
+    if(!advancedPlanner)return true;
+    return lastWritten is { } last &&
+      Math.Abs(actual.Azimuth-last.Azimuth)<=0.5 &&
+      Math.Abs(actual.Elevation-last.Elevation)<=0.5;
+  }
+
   internal void Reset()
   {
     lastConsumedReadUtc=DateTime.MinValue;
