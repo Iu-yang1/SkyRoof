@@ -22,6 +22,14 @@ internal sealed class Rc3040sPlannerFeedbackGuard
   private DateTime lastProgressUtc = DateTime.MinValue;
   private RotatorPosition lastProgressPosition;
   private bool awaitingPhysicalProgress;
+  private RotatorPosition? inFlightSetpoint;
+  private int inFlightSettledReads;
+  private DateTime firstSettledReadUtc=DateTime.MinValue;
+
+  // A new C2 sample proves that the controller responded, but not that it
+  // finished its preceding absolute target. The scheduler must never send
+  // a new W while an earlier W is still in flight.
+  internal bool HasInFlightSetpoint=>inFlightSetpoint.HasValue;
 
   internal void Reset()
   {
@@ -29,6 +37,9 @@ internal sealed class Rc3040sPlannerFeedbackGuard
     lastProgressUtc=DateTime.MinValue;
     lastProgressPosition=default;
     awaitingPhysicalProgress=false;
+    inFlightSetpoint=null;
+    inFlightSettledReads=0;
+    firstSettledReadUtc=DateTime.MinValue;
   }
 
   internal bool TryConsumeFreshFeedback(
@@ -42,6 +53,35 @@ internal sealed class Rc3040sPlannerFeedbackGuard
       return false;
 
     lastConsumedReadUtc=readUtc;
+    if(inFlightSetpoint is { } commanded)
+    {
+      // C2 is not an independent shaft encoder, but it is the only
+      // observable completion handshake on this absolute-target protocol.
+      // Require two fresh C2 reports at the LAST transmitted endpoint,
+      // separated in time, before planning another waypoint.
+      bool reached=
+        Math.Abs(measured.Azimuth-commanded.Azimuth)<=0.5 &&
+        Math.Abs(measured.Elevation-commanded.Elevation)<=0.5;
+      if(reached)
+      {
+        if(inFlightSettledReads==0)
+          firstSettledReadUtc=readUtc;
+        inFlightSettledReads++;
+        if(inFlightSettledReads>=2 &&
+           (readUtc-firstSettledReadUtc).TotalMilliseconds>=200)
+        {
+          inFlightSetpoint=null;
+          inFlightSettledReads=0;
+          firstSettledReadUtc=DateTime.MinValue;
+          awaitingPhysicalProgress=false;
+        }
+      }
+      else
+      {
+        inFlightSettledReads=0;
+        firstSettledReadUtc=DateTime.MinValue;
+      }
+    }
     if(!awaitingPhysicalProgress)
       return true;
 
@@ -102,11 +142,14 @@ internal sealed class Rc3040sPlannerFeedbackGuard
     if(Math.Abs(commanded.Azimuth-actual.Azimuth)<0.75 &&
        Math.Abs(commanded.Elevation-actual.Elevation)<0.75)
       return;
-    if(!awaitingPhysicalProgress)
-    {
-      lastProgressUtc=timeUtc;
-      lastProgressPosition=actual;
-      awaitingPhysicalProgress=true;
-    }
+    if(inFlightSetpoint.HasValue)
+      throw new InvalidOperationException(
+        "Previous RC-3040S W command is still awaiting endpoint confirmation.");
+    inFlightSetpoint=commanded;
+    inFlightSettledReads=0;
+    firstSettledReadUtc=DateTime.MinValue;
+    lastProgressUtc=timeUtc;
+    lastProgressPosition=actual;
+    awaitingPhysicalProgress=true;
   }
 }
