@@ -142,6 +142,7 @@ namespace SkyRoof.CW
   /// </summary>
   public sealed class CwReceiveWorker : IDisposable
   {
+    public CwTranscriptArchive History { get; } = new();
     private readonly object sync = new();
     private readonly CwPcmIngress ingress;
     private readonly CwReceiveWorkerOptions options;
@@ -546,6 +547,10 @@ namespace SkyRoof.CW
         lock (sync)
           latestDecode = batch;
 
+        // Archive is independent from live tracking, UI slot lifetime and
+        // decoder timeline resets. Never commit provisional hypotheses.
+        History.Append(generation,batch.Transcripts);
+
         DecodeUpdated?.Invoke(
           this,
           new CwDecodeUpdatedEventArgs(
@@ -723,6 +728,7 @@ namespace SkyRoof.CW
       StopAsync()
         .GetAwaiter()
         .GetResult();
+      History.Dispose();
 
       disposed = true;
       GC.SuppressFinalize(this);
