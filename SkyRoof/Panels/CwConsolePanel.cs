@@ -20,6 +20,7 @@ namespace SkyRoof
     private readonly ComboBox SpectrumCleanupBox = new();
     private readonly Label SpectrumStatusLabel = new();
     private readonly Button SettingsBtn = new();
+    private readonly Button RxHistoryBtn = new();
     private readonly Button InstallModelBtn = new();
 
     private readonly Label InputStatusLabel = new();
@@ -197,6 +198,40 @@ namespace SkyRoof
         CwConsolePanel_FormClosing;
     }
 
+    private void ShowRxHistory()
+    {
+      CwReceiveWorker? worker=ctx.CwReceiveWorker;
+      if(worker==null)return;
+      IReadOnlyList<CwArchivedTranscript> events=worker.History.GetAll();
+      using var dialog=new Form
+      {
+        Text="CW RX History (committed, UTC)",
+        StartPosition=FormStartPosition.CenterParent,
+        Width=880,Height=560,MinimumSize=new Size(520,320)
+      };
+      using var display=new RichTextBox
+      {
+        Dock=DockStyle.Fill,ReadOnly=true,WordWrap=true,
+        Font=new Font(FontFamily.GenericMonospace,10),
+        ScrollBars=RichTextBoxScrollBars.Vertical
+      };
+      var lines=new System.Text.StringBuilder();
+      foreach(CwArchivedTranscript item in events)
+      {
+        lines.AppendLine(
+          $"{item.LastWindowEndUtc:yyyy-MM-dd HH:mm:ss}Z · "+
+          $"G{item.TimelineGeneration} · "+
+          (item.UsesAssociationHint?"H":"T")+
+          $"{item.IdentityId}");
+        lines.AppendLine(item.CommittedText);
+        lines.AppendLine();
+      }
+      display.Text=lines.Length>0 ? lines.ToString() :
+        "No committed CW text yet.";
+      dialog.Controls.Add(display);
+      dialog.ShowDialog(this);
+    }
+
     private void BuildUi()
     {
       var root =
@@ -294,6 +329,11 @@ namespace SkyRoof
         };
       toolbar.Controls.Add(
         SettingsBtn);
+
+      RxHistoryBtn.Text="CW History…";
+      RxHistoryBtn.AutoSize=true;
+      RxHistoryBtn.Click+=(_,_)=>ShowRxHistory();
+      toolbar.Controls.Add(RxHistoryBtn);
 
       InstallModelBtn.Text =
         "Install DeepCW Model";
