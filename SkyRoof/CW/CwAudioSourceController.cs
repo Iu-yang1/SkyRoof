@@ -203,7 +203,7 @@ namespace SkyRoof.CW
       Ingress.FrontEnd.EnableExperimentalStationGate=
         settings.ExperimentalStationGate;
       Ingress.FrontEnd.EnableCarrierPhaseVerification=
-        settings.VerifyCarrierPhase;
+        settings.ExperimentalVerifyCarrierPhase;
 
       // Stop device callbacks before changing the timeline/source identity.
       captureInput.Enabled = false;
