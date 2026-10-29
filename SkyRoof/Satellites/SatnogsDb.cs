@@ -1058,18 +1058,23 @@ namespace SkyRoof
     {
       Dictionary<int, List<JE9PELtransmitter>> dict = new();
 
-      foreach (string line in File.ReadAllLines(Path.Combine(DownloadsFolder, "JE9PEL.csv")))
-        try
+      int rejected = 0;
+      int imported = 0;
+      foreach (string line in File.ReadLines(Path.Combine(DownloadsFolder, "JE9PEL.csv")))
+      {
+        if (!JE9PELtransmitter.TryParse(line, out JE9PELtransmitter? tx))
         {
-          JE9PELtransmitter tx = new(line);
-          if (tx.NoradId == 0) continue;
-          dict.TryAdd(tx.NoradId, new());
-          dict[tx.NoradId].Add(tx);
+          if (!string.IsNullOrWhiteSpace(line)) rejected++;
+          continue;
         }
-        catch (Exception ex)
-        {
-          Log.Error($"Error in JE9PEL.csv: {ex.Message} Line: '{line}'");
-        }
+        if (!dict.TryGetValue(tx!.NoradId, out List<JE9PELtransmitter>? rows))
+          dict[tx.NoradId] = rows = new List<JE9PELtransmitter>();
+        rows.Add(tx);
+        imported++;
+      }
+      Log.Information(
+        "JE9PEL import: accepted {Accepted} rows, skipped {Rejected} incomplete/invalid NORAD rows; optional trailing columns allowed.",
+        imported, rejected);
 
       // insert in satnogs db
       foreach (var sat in Satellites)
