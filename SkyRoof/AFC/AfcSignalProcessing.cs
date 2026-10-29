@@ -84,7 +84,10 @@ namespace SkyRoof.AFC
         carrierSearchHz = result.IfOffsetHz;
         carrierTracked = true;
       }
-      return result with { SpectrumDb = BuildSpectrum(bb) };
+      // Display FFT runs independently at its own cadence through
+      // AfcIfDisplayAnalyzer, not through the CAT/measurement scheduler.
+      // Avoid an extra 4096-point FFT on this control-critical path.
+      return result;
     }
 
     private Complex[] Downconvert(ReadOnlySpan<float> samples)
@@ -272,33 +275,6 @@ namespace SkyRoof.AFC
       if (signalN < 1 || noiseN < 1) return 0;
       double basePower = Math.Max(1e-16, noise / noiseN);
       return Math.Max(0, (signal / signalN) / basePower - 1);
-    }
-
-    private float[] BuildSpectrum(Complex[] bb)
-    {
-      const int n = 4096, count = 512;
-      var result = new float[count];
-      if (bb.Length < n) return result;
-      var fft = new Complex[n];
-      for (int i = 0; i < n; i++)
-      {
-        double w = 0.5 - 0.5 * Math.Cos(2 * Math.PI * i / (n - 1));
-        fft[i] = bb[bb.Length - n + i] * w;
-      }
-      Fourier(fft);
-      double max = 1e-15;
-      var power = new double[count];
-      for (int i = 0; i < count; i++)
-      {
-        double hz = -6000 + i * (12000.0 / (count - 1));
-        int bin = (int)Math.Round(hz / (sampleRate / 2.0 / n));
-        power[i] = Power(fft, bin);
-        max = Math.Max(max, power[i]);
-      }
-      for (int i = 0; i < count; i++)
-        result[i] = (float)Math.Clamp(
-          10 * Math.Log10(Math.Max(1e-18, power[i]) / max), -70, 0);
-      return result;
     }
 
     private double FmSpectralCenter(Complex[] bb)

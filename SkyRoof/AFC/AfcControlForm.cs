@@ -17,6 +17,15 @@ namespace SkyRoof.AFC
     private readonly AfcThemePalette palette = AfcThemePalette.Current;
     private readonly PropertyGrid settingsGrid = new();
     private readonly AfcSpectrumView spectrum = new();
+    private readonly ComboBox spanBox = new();
+    private readonly ComboBox averageBox = new();
+    private readonly CheckBox waterfallCheck = new();
+    private readonly CheckBox peakCheck = new();
+    private readonly CheckBox haloCheck = new();
+    private readonly CheckBox bhCheck = new();
+    private DateTime displayUtc;
+    private double inputRms = double.NaN, clipFraction;
+    private float noiseFloorDb;
     private readonly TabControl tabs = new();
     private readonly Label heading = new();
     private readonly Label inputStatus = new();
@@ -108,11 +117,67 @@ namespace SkyRoof.AFC
       header.Controls.Add(startButton, 2, 0);
       layout.Controls.Add(header, 0, 0);
 
+      var spectrumBlock = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
+        Margin = new Padding(0, 3, 0, 10)
+      };
+      spectrumBlock.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+      spectrumBlock.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+      var spectrumToolbar = new FlowLayoutPanel
+      {
+        Dock = DockStyle.Fill, WrapContents = false, AutoScroll = false,
+        BackColor = palette.Surface, Padding = new Padding(4, 3, 3, 1)
+      };
+      Label toolbarLabel(string caption) => new()
+      {
+        Text = caption, AutoSize = true, ForeColor = palette.Muted,
+        Margin = new Padding(6, 7, 1, 0)
+      };
+      spanBox.DropDownStyle = ComboBoxStyle.DropDownList;
+      spanBox.Width = 85;
+      spanBox.Items.AddRange(new object[] { "12 kHz", "6 kHz", "2 kHz", "1 kHz" });
+      spanBox.SelectedIndex = 0;
+      averageBox.DropDownStyle = ComboBoxStyle.DropDownList;
+      averageBox.Width = 82;
+      averageBox.Items.AddRange(new object[] { "OFF", "100 ms", "200 ms", "400 ms" });
+      averageBox.SelectedIndex = 2;
+      foreach (ComboBox combo in new[] { spanBox, averageBox })
+      {
+        combo.BackColor = palette.Plot;
+        combo.ForeColor = palette.Text;
+        combo.FlatStyle = FlatStyle.Flat;
+        combo.Margin = new Padding(1, 2, 4, 1);
+      }
+      waterfallCheck.Text = "WF";
+      waterfallCheck.Checked = true;
+      peakCheck.Text = "PEAK";
+      haloCheck.Text = "HALO";
+      bhCheck.Text = "BH4";
+      bhCheck.Checked = true;
+      foreach (CheckBox option in new[]
+        { waterfallCheck, peakCheck, haloCheck, bhCheck })
+      {
+        option.AutoSize = true;
+        option.ForeColor = palette.Text;
+        option.Margin = new Padding(6, 6, 1, 0);
+      }
+      spectrumToolbar.Controls.Add(toolbarLabel("SPAN"));
+      spectrumToolbar.Controls.Add(spanBox);
+      spectrumToolbar.Controls.Add(toolbarLabel("AVG"));
+      spectrumToolbar.Controls.Add(averageBox);
+      spectrumToolbar.Controls.Add(peakCheck);
+      spectrumToolbar.Controls.Add(waterfallCheck);
+      spectrumToolbar.Controls.Add(haloCheck);
+      spectrumToolbar.Controls.Add(bhCheck);
       spectrum.Dock = DockStyle.Fill;
-      spectrum.Margin = new Padding(0, 3, 0, 10);
+      spectrum.Margin = new Padding(0, 2, 0, 0);
       spectrum.ApplyPalette(palette);
       spectrum.TargetSelected += OnSpectrumTargetSelected;
-      layout.Controls.Add(spectrum, 0, 1);
+      spectrum.SpanChanged += OnSpanChanged;
+      spectrumBlock.Controls.Add(spectrumToolbar, 0, 0);
+      spectrumBlock.Controls.Add(spectrum, 0, 1);
+      layout.Controls.Add(spectrumBlock, 0, 1);
 
       var metricRow = new TableLayoutPanel
       {
@@ -247,9 +312,65 @@ namespace SkyRoof.AFC
         owner.AfcController.CenterOn(ctx.Settings.Afc.DesiredOffsetHz);
       owner.AfcTargetInvalidated += OnTargetInvalidated;
       input.ObservationAvailable += OnObservation;
+      input.DisplayFrameAvailable += OnDisplayFrame;
+      spanBox.SelectedIndexChanged += (_, _) =>
+        spectrum.SetSpan(spanBox.SelectedIndex switch
+        {
+          0 => 12000, 1 => 6000, 2 => 2000, _ => 1000
+        });
+      averageBox.SelectedIndexChanged += (_, _) => ConfigureDisplay();
+      haloCheck.CheckedChanged += (_, _) => ConfigureDisplay();
+      bhCheck.CheckedChanged += (_, _) => ConfigureDisplay();
+      waterfallCheck.CheckedChanged += (_, _) =>
+        spectrum.SetWaterfallVisible(waterfallCheck.Checked);
+      peakCheck.CheckedChanged += (_, _) =>
+        spectrum.SetPeakHold(peakCheck.Checked);
+      VisibleChanged += (_, _) => input.DisplayEnabled = Visible && active;
+      ConfigureDisplay();
       timer.Tick += (_, _) => RefreshDisplay();
       timer.Start();
       RefreshDisplay();
+    }
+
+    private void OnSpanChanged(int hz)
+    {
+      int index = hz switch { 12000 => 0, 6000 => 1, 2000 => 2, _ => 3 };
+      if (spanBox.SelectedIndex != index) spanBox.SelectedIndex = index;
+    }
+
+    private void ConfigureDisplay()
+    {
+      int ms = averageBox.SelectedIndex switch
+      {
+        0 => 0, 1 => 100, 3 => 400, _ => 200
+      };
+      input.ConfigureDisplay(bhCheck.Checked, haloCheck.Checked, ms);
+    }
+
+    private void OnDisplayFrame(AfcIfDisplayFrame frame)
+    {
+      // Display samples are independent from the low-rate AFC telemetry.
+      // Hidden RX-AFC capture does no UI FFT and requires no repaint.
+      if (!active || !Visible || !IsHandleCreated || IsDisposed) return;
+      try
+      {
+        BeginInvoke((Action)(() =>
+        {
+          if (!active || IsDisposed || !Visible ||
+              frame.Generation != input.Generation) return;
+          displayUtc = frame.EndUtc;
+          inputRms = frame.InputRms;
+          clipFraction = frame.ClippingFraction;
+          noiseFloorDb = frame.NoiseFloorDb;
+          var snapshot = owner.AfcController.Snapshot;
+          spectrum.SetDisplayFrame(frame,
+            snapshot.LastObservationUtc != default &&
+              snapshot.Confidence > 0 && snapshot.State == AfcLockState.Locked
+              ? snapshot.ObservedIfOffsetHz : null,
+            ctx.Settings.Afc.TargetOffsetHz);
+        }));
+      }
+      catch (InvalidOperationException) { }
     }
 
     private void StyleButton(Button button)
@@ -310,6 +431,7 @@ namespace SkyRoof.AFC
     {
       if (!active) return;
       input.InvalidateTarget();
+      spectrum.ClearHistory();
       currentMode = owner.CurrentAfcMode;
       if (!AutoAllowed && ctx.Settings.Afc.Control == AfcControlMode.Auto)
       {
@@ -400,9 +522,9 @@ namespace SkyRoof.AFC
             catReadbackIsTimeAligned: double.IsFinite(readback),
             confirmedOwnAfcReadback:
               owner.IsAfcReadbackConfirmedAt(observation.SampleUtc));
-          spectrum.SetSpectrum(observation.SpectrumDb,
-            observation.SpectrumMinHz, observation.SpectrumStepHz,
-            observation.HasAbsoluteReference ? observation.IfOffsetHz : null,
+          spectrum.SetMeasurement(
+            observation.HasAbsoluteReference && observation.Confidence > 0
+              ? observation.IfOffsetHz : null,
             cfg.TargetOffsetHz);
           owner.ApplyAfcRxCorrection();
           RefreshDisplay();
@@ -423,6 +545,10 @@ namespace SkyRoof.AFC
         if (!input.IsRunning)
           throw new InvalidOperationException("12 kHz IF input did not start. Check routing.");
         active = true;
+        input.DisplayEnabled = Visible;
+        spectrum.ClearHistory();
+        displayUtc = default;
+        inputRms = double.NaN;
         cfg.Enabled = true;
         if (!AutoAllowed && cfg.Control == AfcControlMode.Auto)
           cfg.Control = AfcControlMode.Assist;
@@ -452,7 +578,9 @@ namespace SkyRoof.AFC
     private void Stop()
     {
       active = false;
+      input.DisplayEnabled = false;
       input.Stop();
+      spectrum.ClearHistory();
       owner.AfcController.Reset("Stopped by operator");
       ctx.Settings.Afc.Enabled = false;
       ctx.Settings.Afc.Control = AfcControlMode.Assist;
@@ -481,6 +609,7 @@ namespace SkyRoof.AFC
       {
         currentMode = mode;
         input.UpdateTarget(mode, cfg.SsbPilotEnabled, cfg.TargetOffsetHz);
+        spectrum.ClearHistory();
         owner.AfcController.Reset("Radio mode changed");
         if (!AutoAllowed && cfg.Control == AfcControlMode.Auto)
         {
@@ -503,7 +632,11 @@ namespace SkyRoof.AFC
       var s = owner.AfcController.Snapshot;
       bool freshCat = double.IsFinite(owner.GetAfcReadbackAt(DateTime.UtcNow));
       heading.Text = $"{currentMode}  ·  IC-9700 / 12 kHz IF";
-      inputStatus.Text = input.IsRunning ? "● IF 连接正常" : "○ IF 未连接";
+      inputStatus.Text = input.IsRunning
+        ? double.IsFinite(inputRms) && inputRms > 0
+          ? $"● IF RMS {20 * Math.Log10(inputRms):F0} dBFS"
+          : "● IF 采集已启动"
+        : "○ IF 未连接";
       inputStatus.ForeColor = input.IsRunning ? palette.Good : palette.Muted;
       metrics[0].Text = $"{owner.PredictedDownlinkDopplerHz:+0;-0;0} Hz";
       metrics[1].Text = $"{s.ErrorHz:+0.0;-0.0;0} Hz";
@@ -516,7 +649,8 @@ namespace SkyRoof.AFC
       stateLabel.ForeColor = active &&
         s.State == AfcLockState.Locked ? palette.Good : palette.Warning;
       stateDetail.Text = active
-        ? $"{s.Detail}  ·  搜索 {cfg.TargetOffsetHz:+0;-0;0} Hz  ·  居中 {cfg.DesiredOffsetHz:+0;-0;0} Hz  ·  RF/IF 方向 {(s.MappingSign == 0 ? "待确认" : s.MappingSign.ToString("+0;-0"))}"
+        ? $"{s.Detail}  ·  搜索 {cfg.TargetOffsetHz:+0;-0;0} Hz  ·  居中 {cfg.DesiredOffsetHz:+0;-0;0} Hz  ·  RF/IF 方向 {(s.MappingSign == 0 ? "待确认" : s.MappingSign.ToString("+0;-0"))}" +
+          $"  ·  底噪 {noiseFloorDb:F0} dBFS  ·  削波 {clipFraction:P1}"
         : "请在「高级设置」配置真正的 12 kHz IF 输入，再启动 IF 采集。";
       startButton.Text = active ? "停止 IF" : "启动 IF";
       bool canLock = active && currentMode != AfcSignalMode.FM;
@@ -556,6 +690,8 @@ namespace SkyRoof.AFC
       owner.AfcTargetInvalidated -= OnTargetInvalidated;
       spectrum.TargetSelected -= OnSpectrumTargetSelected;
       input.ObservationAvailable -= OnObservation;
+      input.DisplayFrameAvailable -= OnDisplayFrame;
+      spectrum.SpanChanged -= OnSpanChanged;
       input.Dispose();
       timer.Dispose();
       base.OnFormClosing(e);
