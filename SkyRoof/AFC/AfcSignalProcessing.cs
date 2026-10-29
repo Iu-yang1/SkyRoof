@@ -192,19 +192,28 @@ namespace SkyRoof.AFC
       double span = mode == AfcSignalMode.CW ? 55 : 50;
       int low = (int)Math.Ceiling((expectedHz - span) / binHz);
       int high = (int)Math.Floor((expectedHz + span) / binHz);
-      double best = -1, side = 0;
+      double best = -1;
       int bestBin = 0, count = 0;
       for (int b = low; b <= high; b++)
       {
-        int pos = (b % fftSize + fftSize) % fftSize;
-        double p = spectrum[pos].Magnitude * spectrum[pos].Magnitude;
-        side += p;
+        double p = Power(spectrum, b);
         count++;
         if (p > best) { best = p; bestBin = b; }
       }
-      if (best <= 0 || count <= 3)
+      if (best <= 0 || count <= 12)
         return new(mode, utc, generation, 0, 9999, 0, false);
-      double noise = Math.Max(1e-18, (side - best) / Math.Max(1, count - 1));
+      // Main-lobe energy spans several adjacent Hann FFT bins. Treating
+      // those bins as noise makes even a strong clean CW carrier appear
+      // low-confidence and prevents Center & Lock from acquiring.
+      double noiseSum = 0;
+      int noiseCount = 0;
+      for (int b = low; b <= high; b++)
+      {
+        if (Math.Abs(b - bestBin) <= 4) continue;
+        noiseSum += Power(spectrum, b);
+        noiseCount++;
+      }
+      double noise = Math.Max(1e-18, noiseSum / Math.Max(1, noiseCount));
       double ratio = best / noise;
       double y0 = Math.Log(Math.Max(1e-18, Power(spectrum, bestBin - 1)));
       double y1 = Math.Log(Math.Max(1e-18, Power(spectrum, bestBin)));
