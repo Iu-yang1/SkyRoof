@@ -18,7 +18,7 @@ namespace VE3NEA.Dsp.Tests
       for (int i = 0; i < pcm.Length; i++)
         pcm[i] = (float)(0.3 * Math.Cos(2 * Math.PI * 12145 * i / fs));
       var estimator = new AfcSignalProcessing();
-      var result = estimator.Analyze(pcm, AfcSignalMode.CW, T0, 1);
+      var result = estimator.Analyze(pcm, AfcSignalMode.CW, T0, 1, expectedOffsetHz:145);
       result.HasAbsoluteReference.Should().BeTrue();
       result.IfOffsetHz.Should().BeApproximately(145, 3);
     }
