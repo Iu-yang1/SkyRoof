@@ -50,6 +50,13 @@ namespace SkyRoof
     public CwDenoiseMode SpectrumDenoiseMode { get; set; } =
       CwDenoiseMode.Bypass;
 
+    // Enabled for the reported 245–308 Hz false-station case. Operators
+    // may disable immediately for labelled weak-signal A/B diagnosis.
+    [DisplayName("Verify CW Carrier Phase")]
+    [Description("Require a persistent keyed narrowband oscillator rather than momentary AF noise peaks. Disable temporarily if legitimate weak CW is missed.")]
+    [DefaultValue(true)]
+    public bool VerifyCarrierPhase {get;set;} = true;
+
     // New inference paths are intentionally OFF until real labelled
     // IC-9700 PCM A/B tests establish no regression.
     [DisplayName("Experimental CW Multi-Hypothesis Gate")]
