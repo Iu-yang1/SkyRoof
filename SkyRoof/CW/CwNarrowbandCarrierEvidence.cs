@@ -86,11 +86,16 @@ namespace SkyRoof.CW
             c[k]=nextC;
           }
         }
-        Span<double> guard=stackalloc double[4];
-        for(int k=0;k<4;k++)
-          guard[k]=real[k+1]*real[k+1]+imag[k+1]*imag[k+1];
-        guard.Sort();
-        double reference=Math.Max(1e-17,(guard[1]+guard[2])*0.5);
+        // The higher of the two flanks is deliberately used. A broad
+        // AF-passband shoulder near 200–400 Hz can otherwise look >10 dB
+        // above a median mixing quiet low-AF bins with noisy high-AF bins.
+        double left=0.5*(
+          real[1]*real[1]+imag[1]*imag[1]+
+          real[2]*real[2]+imag[2]*imag[2]);
+        double right=0.5*(
+          real[3]*real[3]+imag[3]*imag[3]+
+          real[4]*real[4]+imag[4]*imag[4]);
+        double reference=Math.Max(1e-17,Math.Max(left,right));
         double signal=Math.Max(1e-17,real[0]*real[0]+imag[0]*imag[0]);
         double contrast=10*Math.Log10(signal/reference);
         contrasts[frame]=contrast;
