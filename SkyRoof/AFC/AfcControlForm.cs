@@ -158,8 +158,6 @@ namespace SkyRoof.AFC
       offButton.Click += (_, _) => SwitchControl(AfcControlMode.Off);
       spectrum.TargetSelected += OnSpectrumTargetSelected;
       owner.AfcTargetInvalidated += OnTargetInvalidated;
-      centerButton.Click += (_, _) => owner.AfcController.CenterOn(
-        ctx.Settings.Afc.TargetOffsetHz);
       input.ObservationAvailable += OnObservation;
       timer.Tick += (_, _) => RefreshDisplay();
       timer.Start();
@@ -248,7 +246,8 @@ namespace SkyRoof.AFC
         BeginInvoke((Action)(() =>
         {
           if (!active || IsDisposed || owner.IsDisposed ||
-              observation.Mode != currentMode) return;
+              observation.Mode != currentMode ||
+              observation.Generation != input.Generation) return;
           var cfg = ctx.Settings.Afc;
           double readback = owner.GetAfcReadbackAt(observation.SampleUtc);
           owner.AfcController.Observe(observation,
@@ -317,7 +316,10 @@ namespace SkyRoof.AFC
     {
       owner.AfcController.Tick(DateTime.UtcNow);
       if (!ReferenceEquals(settingsGrid.SelectedObject, ctx.Settings.Afc))
+      {
         settingsGrid.SelectedObject = ctx.Settings.Afc;
+        if (active) { Restart(); return; }
+      }
       AfcSignalMode mode = owner.CurrentAfcMode;
       if (active && mode != currentMode)
       {
