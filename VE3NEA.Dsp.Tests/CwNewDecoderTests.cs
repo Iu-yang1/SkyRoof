@@ -65,7 +65,10 @@ namespace VE3NEA.Dsp.Tests
       decoded[0].Symbols.Should().NotBeNull();
       // A synthetic keying sample is decoded locally; no ONNX metadata,
       // model manager, network fetch or skycatd is used.
-      decoded[0].Text.Should().Contain("SOS");
+      float[] keying=CwHsmmDecoder.EstimateEnvelope(audio,rate,800);
+      CwHsmmResult direct=CwHsmmDecoder.Decode(keying,0.010);
+      decoded[0].Text.Should().Contain("SOS",
+        $"offline morse={direct.Text} evidence={direct.EvidenceScore:F3} wpm={direct.Wpm:F0} frames={direct.InputFrames}; decoded='{decoded[0].Text}'");
     }
 
     [Fact]
