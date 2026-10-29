@@ -104,6 +104,7 @@ namespace SkyRoof.AFC
             Math.Clamp(cfg.FmDeadbandHz, 1, 500),
             Math.Clamp(cfg.ToneDeadbandHz, 0.5, 100),
             owner.IsAfcTransmitting);
+          owner.ApplyAfcRxCorrection();
         }));
       }
       catch (InvalidOperationException) { }
