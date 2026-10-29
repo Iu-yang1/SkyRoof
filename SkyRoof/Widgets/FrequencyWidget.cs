@@ -564,7 +564,12 @@ namespace SkyRoof
 
         if (ctx.CatControl.Rx != null)
           SendCatRxFrequency(
-            RadioLink.CorrectedDownlinkFrequency + AfcRxOffset);
+            RadioLink.CorrectedDownlinkFrequency + AfcRxOffset,
+            ctx.Settings.Afc.Enabled &&
+              AfcController.Snapshot.Control == AfcControlMode.Auto &&
+              Math.Abs(AfcRxOffset) > 0.5
+                ? AfcCatWriteSource.Afc
+                : AfcCatWriteSource.SatelliteModel);
       }
 
       if (RadioLink.CorrectedUplinkFrequency != 0 &&
