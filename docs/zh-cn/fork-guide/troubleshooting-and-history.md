@@ -93,6 +93,6 @@ Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
 
 **P2：CAT 和发射诊断**：日志新增 PTT 指令接受、PTT 读回变化、CTCSS 指令接受的相关信息和 RX/TX 请求频率；`CAT ACK` **不是物理电台的 PTT/CTCSS 独立硬件确认**。SO-50 的 67.0 Hz 之类音频亚音必须再用电台面板或实际信号确认，不把“请求已发出”误作“射频输出正确”。
 
-**SkyCAT CI-V**：`FE-FE-E0-A2-27` 只是潜在未完成的 IC-9700 27 00 频谱帧前缀。修复在 SkyCAT 独立 PR 中，不能单靠此 SkyRoof PR 修改已构建的内置 SkyCAT 子模块。需要更新 `Vendor/SkyCAT` gitlink 并重新构建后才进入 SkyRoof 分发包。
+**SkyCAT CI-V**：`FE-FE-E0-A2-27` 只是潜在未完成的 IC-9700 27 00 频谱帧前缀。修复在 SkyCAT 独立 PR 中，不能单靠此 SkyRoof PR 修改已构建的内置 SkyCAT 子模块。本分支已经更新 `Vendor/SkyCAT` gitlink 到 SkyCAT 合并提交 `7fe61a79`；须以本分支最新 Windows 安装包验收实际内置 Worker 行为。
 
 验收：用相同配置对比新旧版本 20 分钟以上的空闲连接、SO-50 FM/CTCSS、重扫数据库与 PARK；核对异常行数、CAT/CI-V 状态、旋转器 PID/C2 序列与实际 AZ/EL。所有发射相关测试须有人值守。
