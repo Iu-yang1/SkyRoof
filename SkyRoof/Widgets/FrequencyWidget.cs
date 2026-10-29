@@ -70,6 +70,13 @@ namespace SkyRoof
       AfcCatTimeline.RecordReadback(catHz, utc);
     }
 
+    internal bool IsAfcReadbackConfirmedAt(DateTime sampleUtc)
+    {
+      return AfcCatTimeline.TryReadbackAt(sampleUtc, out long catHz) &&
+        AfcCatTimeline.ExpectedWriteSource(catHz, sampleUtc)
+          == AfcCatWriteSource.Afc;
+    }
+
     internal double GetAfcReadbackAt(DateTime sampleUtc)
     {
       if (!AfcCatTimeline.TryReadbackAt(sampleUtc, out long catHz))

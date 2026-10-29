@@ -256,7 +256,9 @@ namespace SkyRoof.AFC
             Math.Clamp(cfg.FmDeadbandHz, 1, 500),
             Math.Clamp(cfg.ToneDeadbandHz, 0.5, 100),
             owner.IsAfcTransmitting,
-            catReadbackIsTimeAligned: double.IsFinite(readback));
+            catReadbackIsTimeAligned: double.IsFinite(readback),
+            confirmedOwnAfcReadback:
+              owner.IsAfcReadbackConfirmedAt(observation.SampleUtc));
           spectrum.SetSpectrum(observation.SpectrumDb,
             observation.SpectrumMinHz, observation.SpectrumStepHz,
             observation.HasAbsoluteReference
