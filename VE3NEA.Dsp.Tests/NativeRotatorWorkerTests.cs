@@ -786,6 +786,13 @@ public sealed class NativeRotatorWorkerTests
             if(disconnect)break;
           }
           }
+          catch(Exception e) when(e is IOException or SocketException or ObjectDisposedException)
+          {
+            // A worker process can close its socket via TCP RST rather than
+            // a graceful EOF on Windows. The bridge must keep accepting
+            // replacement workers; a per-session socket fault must NEVER
+            // tear down the simulated hardware listener.
+          }
           finally
           {
             // The previous socket is no longer serviced by the bridge.
