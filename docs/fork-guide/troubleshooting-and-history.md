@@ -76,3 +76,17 @@ The official deployment job creates the `github-pages` environment and outputs t
 - RS-BA1 passive capture uses network capture privileges; only install a driver from the pinned verified source.
 - An unsafe rotator movement or stuck TX requires **physical intervention**; software retries are not a replacement for safe antenna installation.
 - [Current fork source](https://github.com/Iu-yang1/SkyRoof) · [Windows build checks](https://github.com/Iu-yang1/SkyRoof/actions) · [GitHub Pages](https://iu-yang1.github.io/SkyRoof/).
+
+## 2026-10-29 SO-50 log findings: P1/P2 fixes
+
+SO-50 pass (UTC+8 13:17–13:35) had no replacement of rotator TCP worker PID 2572, only two one-off C2 response delays (~2.56s) recovered on the existing connection. This patch does not change rotator motion or fail-safe interlocks.
+
+- **P1 WebSocket:** `Utils.DoNotAwait()` no longer discards task faults. It observes them with caller attribution, while the global unobserved handler separates actual remote WebSocket close-handshake failures from unrelated Socket/CAT failures. An orphaned task's originating component remains unknown until its owner is instrumented.
+- **P1 JE9PEL:** tolerate missing optional trailing columns, reject rows without a valid NORAD and emit bounded accepted/skipped counts instead of index errors.
+- **P2 AutoTLE:** migrate only the old built-in HTTP 302 endpoint to the HTTPS GitHub upstream already observed working as a manual source; preserve user overrides and existing source priority.
+- **P2 SGP4:** quarantine failed *element sets*, not a NORAD identifier, across repeat tracker rebuilds; fresh TLE/OMM elements remain eligible. Preserve orbit safety rather than manufacturing passes for decayed objects.
+- **P2 local transmitters:** report invalid, already-present, and unresolved-satellite records separately.
+- **P2 CAT/PTT/CTCSS:** log key state transitions and requested tuning/CTCSS details, clearly distinguishing CAT command acknowledgment from RF/rig readback.
+- **SkyCAT:** an incomplete `FE FE E0 A2 27` preamble is handled in a separate SkyCAT PR; the pinned `Vendor/SkyCAT` gitlink must be updated and rebuilt before the fix reaches the embedded worker.
+
+Field validation: attended testing of SO-50 FM/CTCSS, Doppler, post-TX C2 feedback, park and actual mechanical AZ/EL; no assumption that logged `CAT ACK` proves tone or RF transmission.
