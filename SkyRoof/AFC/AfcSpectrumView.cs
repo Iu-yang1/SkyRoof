@@ -27,7 +27,7 @@ namespace SkyRoof.AFC
       ForeColor = palette.Text;
     }
 
-    public void ApplyPalette(AfcThemePalette colors)
+    internal void ApplyPalette(AfcThemePalette colors)
     {
       palette = colors;
       BackColor = colors.Plot;
