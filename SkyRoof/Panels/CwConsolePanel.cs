@@ -727,8 +727,12 @@ namespace SkyRoof
       object? sender,
       CwDecodeUpdatedEventArgs e)
     {
+      if(e.Mode!=ctx.CwReceiveWorker?.DecoderMode)
+        return; // late result from the previous decoder
       lock (stateSync)
       {
+        if(e.Mode!=ctx.CwReceiveWorker?.DecoderMode)
+          return;
         EnsureGenerationLocked(
           e.TimelineGeneration);
 
