@@ -79,6 +79,10 @@ namespace SkyRoof
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public CwConsoleSettings CwConsole { get; set; } = new();
 
+    [DisplayName("FM / CW / SSB AFC")]
+    [TypeConverter(typeof(ExpandableObjectConverter))]
+    public AfcSettings Afc { get; set; } = new();
+
 
     [DisplayName("Transverter")]
     [Description("Settings for HF rigs and SDRs connected via a VHF/UHF transverter")]
