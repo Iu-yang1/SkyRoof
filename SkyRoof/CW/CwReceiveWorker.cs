@@ -59,13 +59,16 @@ namespace SkyRoof.CW
   {
     public long TimelineGeneration { get; }
     public CwContinuousDecodeBatch Batch { get; }
+    public CwDecoderMode Mode { get; }
 
     public CwDecodeUpdatedEventArgs(
       long timelineGeneration,
-      CwContinuousDecodeBatch batch)
+      CwContinuousDecodeBatch batch,
+      CwDecoderMode mode = CwDecoderMode.DeepCW)
     {
       TimelineGeneration = timelineGeneration;
       Batch = batch;
+      Mode=mode;
     }
   }
 
@@ -600,19 +603,25 @@ namespace SkyRoof.CW
             revision!=Interlocked.Read(ref modeRevision))
           return;
 
-        lock (sync)
-          latestDecode = batch;
-
-        // Archive is independent from live tracking, UI slot lifetime and
-        // decoder timeline resets. Never commit provisional hypotheses.
-        History.Append(generation,batch.Transcripts,
-          decoderMode);
+        CwDecoderMode completedMode;
+        lock(sync)
+        {
+          // Mode switches may arrive after the prior unlocked generation
+          // check. Publish and archive atomically with the mode revision
+          // so a late ONNX reply cannot pollute a New CW transcript.
+          if(revision!=modeRevision ||
+             generation!=ingress.TimelineGeneration)
+            return;
+          latestDecode=batch;
+          completedMode=decoderMode;
+          History.Append(generation,batch.Transcripts,completedMode);
+        }
 
         DecodeUpdated?.Invoke(
           this,
           new CwDecodeUpdatedEventArgs(
             generation,
-            batch));
+            batch,completedMode));
       }
       catch (Exception ex)
       {
