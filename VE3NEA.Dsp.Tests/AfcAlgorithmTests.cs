@@ -170,5 +170,31 @@ namespace VE3NEA.Dsp.Tests
       }
     }
 
+
+    [Fact]
+    public void FM_AutoCentersInitialOffsetRatherThanLockingItInPlace()
+    {
+      var controller = new AfcController();
+      controller.Configure(AfcSignalMode.FM, AfcControlMode.Auto);
+      for (int i = 0; i < 4; i++)
+        controller.Observe(new(AfcSignalMode.FM,
+          T0.AddMilliseconds(600 * i), 1, 140, 8, 1, true),
+          145000000, 1, 2000, 20, 5, false);
+      controller.Snapshot.CorrectionHz.Should().BeGreaterThan(0);
+      controller.Snapshot.ErrorHz.Should().BeApproximately(140, 1);
+    }
+
+    [Fact]
+    public void AFC_LearnsSignOnlyFromRepeatedConsistentCatIfMotion()
+    {
+      var controller = new AfcController();
+      controller.Configure(AfcSignalMode.FM, AfcControlMode.Auto);
+      for (int i = 0; i < 6; i++)
+        controller.Observe(new(AfcSignalMode.FM,
+          T0.AddMilliseconds(600 * i), 1, 200 - 40 * i, 5, 1, true),
+          145000000 + 40 * i, 0, 2000, 20, 5, false);
+      controller.Snapshot.MappingSign.Should().Be(1);
+    }
+
   }
 }
