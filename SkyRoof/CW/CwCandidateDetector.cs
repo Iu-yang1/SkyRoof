@@ -258,7 +258,7 @@ namespace SkyRoof.CW
     public double AnalysisSeconds { get; }
     private readonly CwStationHypothesisManager stationHypotheses=new();
     public bool EnableExperimentalStationGate {get;set;}
-    public bool EnableCarrierPhaseVerification {get;set;} = true;
+    public bool EnableCarrierPhaseVerification {get;set;} = false;
 
     public CwPileupFrontEnd(
       int sampleRate = SdrConst.AUDIO_SAMPLING_RATE,
