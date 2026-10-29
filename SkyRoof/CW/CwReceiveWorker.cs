@@ -605,7 +605,8 @@ namespace SkyRoof.CW
 
         // Archive is independent from live tracking, UI slot lifetime and
         // decoder timeline resets. Never commit provisional hypotheses.
-        History.Append(generation,batch.Transcripts);
+        History.Append(generation,batch.Transcripts,
+          decoderMode);
 
         DecodeUpdated?.Invoke(
           this,
