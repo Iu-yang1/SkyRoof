@@ -30,7 +30,11 @@ namespace SkyRoof.CW
         return default;
 
       int window=Math.Max(48,(int)Math.Round(0.080*effectiveRate));
-      int hop=Math.Max(24,(int)Math.Round(0.040*effectiveRate));
+      // Keep the temporal sample cadence close to the existing 15ms
+      // fast ridge path. A 40ms hop aliases legitimate, independently
+      // keyed 15Hz doublets into too many transitions per observed frame
+      // and makes the morphology gate reject real CW as if it were noise.
+      int hop=Math.Max(24,(int)Math.Round(0.020*effectiveRate));
       int maxOriginal=Math.Min(pcm.Length,(int)(2.8*rate));
       int firstOriginal=pcm.Length-maxOriginal;
       int available=maxOriginal/decimation;
