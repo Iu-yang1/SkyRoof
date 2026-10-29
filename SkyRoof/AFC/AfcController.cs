@@ -118,7 +118,14 @@ namespace SkyRoof.AFC
         previousConfirmedError = previousConfirmedCatHz = double.NaN;
         divergenceVotes = 0;
         confirmations = 0;
+        if (state.State == AfcLockState.Fault)
+        {
+          inferredSign = 0;
+          havePolaritySample = false;
+          acceptedCorrection = 0;
+        }
         state = state with { State = AfcLockState.Acquiring,
+          CorrectionHz = acceptedCorrection,
           Detail = "Locking currently observed IF frequency" };
       }
     }
@@ -134,7 +141,14 @@ namespace SkyRoof.AFC
         previousConfirmedError = previousConfirmedCatHz = double.NaN;
         divergenceVotes = 0;
         confirmations = 0;
+        if (state.State == AfcLockState.Fault)
+        {
+          inferredSign = 0;
+          havePolaritySample = false;
+          acceptedCorrection = 0;
+        }
         state = state with { State = AfcLockState.Acquiring,
+          CorrectionHz = acceptedCorrection,
           Detail = "Centering selected IF signal" };
       }
     }
@@ -304,7 +318,9 @@ namespace SkyRoof.AFC
     {
       lock (sync)
       {
-        if (state.Control == AfcControlMode.Off || state.LastObservationUtc == default)
+        if (state.State == AfcLockState.Fault ||
+            state.Control == AfcControlMode.Off ||
+            state.LastObservationUtc == default)
           return;
         double age = (nowUtc - state.LastObservationUtc).TotalSeconds;
         if (age > 8)
