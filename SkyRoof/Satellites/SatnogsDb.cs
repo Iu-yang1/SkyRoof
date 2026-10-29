@@ -628,6 +628,18 @@ namespace SkyRoof
       if (string.IsNullOrWhiteSpace(source))
         return 0;
 
+      if (label == "AutoTLE")
+      {
+        string resolved = OrbitSourceSettings.ResolveAutoTleUrl(source);
+        if (!string.Equals(resolved, source.Trim(), StringComparison.Ordinal))
+        {
+          Log.Information(
+            "Migrating legacy AutoTLE endpoint to verified HTTPS source: {Url}",
+            resolved);
+          source = resolved;
+        }
+      }
+
       try
       {
         string content;
