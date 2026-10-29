@@ -111,6 +111,28 @@ public sealed class AfcIfDisplayTests
   }
 
   [Fact]
+  public void DisplayOnlyFft_ContinuousFramesStayBoundedAndIndependent()
+  {
+    using var analyzer = new AfcIfDisplayAnalyzer();
+    var pcm = Synthetic((12130, .2));
+    long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+    var clock = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 40; i++)
+    {
+      var frame = analyzer.Analyze(pcm,
+        T0.AddMilliseconds(80 * i), 1);
+      frame.RelativeDb.Length.Should().Be(2049);
+      frame.RawDb.Length.Should().Be(2049);
+    }
+    clock.Stop();
+    long bytes = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+    bytes.Should().BeLessThan(64L * 1024 * 1024,
+      "the 15-FPS FFT path must not allocate unbounded history");
+    clock.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(12),
+      "40 windows should have enough throughput for a 15-FPS IF display");
+  }
+
+  [Fact]
   public void SpectrumView_PeakPreservingZoomAndWaterfallRenderInSta()
   {
     Exception? failure = null;
