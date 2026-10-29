@@ -17,6 +17,7 @@ namespace SkyRoof.AFC
     private readonly Button assistButton = new();
     private readonly Button autoButton = new();
     private readonly Button lockButton = new();
+    private readonly Button centerButton = new();
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 250 };
     private AfcSignalMode currentMode;
     private bool active;
@@ -43,9 +44,10 @@ namespace SkyRoof.AFC
       startButton.Text = "Start IF"; startButton.Width = 85;
       assistButton.Text = "Assist"; assistButton.Width = 78;
       autoButton.Text = "Auto"; autoButton.Width = 75;
-      lockButton.Text = "Lock Here"; lockButton.Width = 96;
+      lockButton.Text = "Lock Here"; lockButton.Width = 88;
+      centerButton.Text = "Center & Lock"; centerButton.Width = 108;
       buttons.Controls.AddRange(new Control[]
-        { startButton, assistButton, autoButton, lockButton });
+        { startButton, assistButton, autoButton, lockButton, centerButton });
       layout.Controls.Add(buttons, 0, 0);
 
       stateLabel.Dock = DockStyle.Fill;
@@ -71,6 +73,8 @@ namespace SkyRoof.AFC
       assistButton.Click += (_, _) => SwitchControl(AfcControlMode.Assist);
       autoButton.Click += (_, _) => SwitchControl(AfcControlMode.Auto);
       lockButton.Click += (_, _) => owner.AfcController.LockHere();
+      centerButton.Click += (_, _) => owner.AfcController.CenterOn(
+        ctx.Settings.Afc.TargetOffsetHz);
       input.ObservationAvailable += OnObservation;
       timer.Tick += (_, _) => RefreshDisplay();
       timer.Start();
@@ -86,6 +90,8 @@ namespace SkyRoof.AFC
       ctx.Settings.Afc.Control = control;
       ctx.Settings.SaveToFile();
       owner.AfcController.Configure(currentMode, control);
+      if (currentMode == AfcSignalMode.SSB && ctx.Settings.Afc.SsbPilotEnabled)
+        owner.AfcController.CenterOn(ctx.Settings.Afc.TargetOffsetHz);
       RefreshDisplay();
     }
 
@@ -125,6 +131,8 @@ namespace SkyRoof.AFC
         active = true;
         cfg.Enabled = true;
         owner.AfcController.Configure(currentMode, cfg.Control);
+        if (currentMode == AfcSignalMode.SSB && cfg.SsbPilotEnabled)
+          owner.AfcController.CenterOn(cfg.TargetOffsetHz);
         ctx.Settings.SaveToFile();
         RefreshDisplay();
       }
@@ -175,6 +183,7 @@ namespace SkyRoof.AFC
       autoButton.Enabled = active &&
         (currentMode != AfcSignalMode.SSB || ctx.Settings.Afc.SsbPilotEnabled);
       lockButton.Enabled = active;
+      centerButton.Enabled = active;
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
