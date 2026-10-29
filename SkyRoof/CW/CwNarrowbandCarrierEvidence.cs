@@ -103,16 +103,18 @@ namespace SkyRoof.CW
         double signal=Math.Max(1e-17,real[0]*real[0]+imag[0]*imag[0]);
         double contrast=10*Math.Log10(signal/reference);
         contrasts[frame]=contrast;
-        if(contrast>=6)high++;
+        if(contrast>=4.0)high++;
         maxContrast=Math.Max(maxContrast,contrast);
       }
 
       CwKeyingAssessment morphology=CwKeyingGate.AssessSnrSeries(
         contrasts,hop/effectiveRate,minimumKeyingDepthDb:5.5);
-      // Requiring a substantial number of independent high-contrast
-      // observations protects against occasional large noise periodograms.
+      // Requiring sustained contrast in a complete PCM timeline protects
+      // against isolated large noise periodograms. The 4 dB per-frame gate
+      // is deliberately below a 6 dB fixed threshold to preserve weaker
+      // CW. The higher duty requirement (22%) controls false alarms.
       bool credible=morphology.IsKeyed &&
-        high>=Math.Max(5,(int)Math.Ceiling(0.17*frameCount)) &&
+        high>=Math.Max(5,(int)Math.Ceiling(0.22*frameCount)) &&
         morphology.OnRuns>=2;
       return new Result(credible,maxContrast,
         morphology.KeyingDepthDb,morphology.DutyCycle,
