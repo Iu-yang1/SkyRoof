@@ -48,8 +48,11 @@ corrections cause the controller to enter Fault and stop auto writes.
    Choose **Auto** to compensate RX only. If the mapping sign cannot yet be
    learned automatically, the controller remains in observation mode. This
    does not require a calibration prompt on every launch.
-4. In CW, set **Target IF offset (Hz)** near the desired tone (relative to
-   12 kHz), and use **Lock Here** to reanchor on the selected signal.
+4. For CW, click the carrier in the live spectrum or enter its original
+   offset in **Target search IF offset (Hz)** on Advanced settings.
+   **Lock Here** preserves the carrier's current IF pitch;
+   **Center & Lock** moves it toward the independent
+   **Desired center IF offset (Hz)** setting.
 5. In SSB, normal suppressed-carrier speech has no recoverable absolute
    frequency reference. Only enable **SSB reference available** if an actual
    stable pilot/CW beacon is present. Without a reference, only Assist is
