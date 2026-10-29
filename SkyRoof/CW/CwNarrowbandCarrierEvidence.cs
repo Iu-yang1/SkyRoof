@@ -159,28 +159,50 @@ namespace SkyRoof.CW
       double[] ordered=(double[])magnitude.Clone();
       Array.Sort(ordered);
       double cutoff=ordered[(int)Math.Floor(0.55*(ordered.Length-1))];
-      double totalMagnitude=0;
-      int selected=0;
+      // The carrier must persist in BOTH halves of the observation. A
+      // finite sample of narrow colored noise can occasionally fit one
+      // frequency over the whole window by chance; two independent time
+      // segments are a stronger false-station control.
+      int middle=magnitude.Length/2;
+      double totalMagnitude=0,leftMagnitude=0,rightMagnitude=0;
+      int leftSelected=0,rightSelected=0;
       for(int i=0;i<magnitude.Length;i++)
-        if(magnitude[i]>cutoff){totalMagnitude+=magnitude[i];selected++;}
-      if(selected<8 || totalMagnitude<1e-9)return 0;
+      {
+        if(magnitude[i]<=cutoff)continue;
+        double amp=magnitude[i];
+        totalMagnitude+=amp;
+        if(i<middle){leftMagnitude+=amp;leftSelected++;}
+        else{rightMagnitude+=amp;rightSelected++;}
+      }
+      if(leftSelected<8 || rightSelected<8 ||
+         totalMagnitude<1e-9 || leftMagnitude<1e-9 ||
+         rightMagnitude<1e-9)
+        return 0;
 
       double best=0;
       for(int trial=-12;trial<=12;trial++)
       {
         double correctionHz=trial*0.25;
-        double sumRe=0,sumIm=0;
+        double sumRe=0,sumIm=0,leftRe=0,leftIm=0;
+        double rightRe=0,rightIm=0;
         for(int i=0;i<magnitude.Length;i++)
         {
           if(magnitude[i]<=cutoff)continue;
           double phase=2*Math.PI*correctionHz*seconds[i];
           double cp=Math.Cos(phase),sp=Math.Sin(phase);
-          sumRe+=real[i]*cp-imag[i]*sp;
-          sumIm+=real[i]*sp+imag[i]*cp;
+          double r=real[i]*cp-imag[i]*sp;
+          double im=real[i]*sp+imag[i]*cp;
+          sumRe+=r;sumIm+=im;
+          if(i<middle){leftRe+=r;leftIm+=im;}
+          else{rightRe+=r;rightIm+=im;}
         }
-        double coherence=Math.Sqrt(sumRe*sumRe+sumIm*sumIm)/
+        double overall=Math.Sqrt(sumRe*sumRe+sumIm*sumIm)/
           totalMagnitude;
-        best=Math.Max(best,coherence);
+        double early=Math.Sqrt(leftRe*leftRe+leftIm*leftIm)/
+          leftMagnitude;
+        double late=Math.Sqrt(rightRe*rightRe+rightIm*rightIm)/
+          rightMagnitude;
+        best=Math.Max(best,Math.Min(overall,Math.Min(early,late)));
       }
       return Math.Clamp(best,0,1);
     }
