@@ -404,7 +404,14 @@ namespace SkyRoof.CW
         CwSignalTrack track=latestTracks[i];
         CwKeyingAssessment evidence=
           CwKeyingGate.AssessRidge(track,scan,snapshot,FrameScanner);
-        bool keyed=evidence.IsKeyed &&
+        // The scanner returns only local spectral maxima. On coloured
+        // noise, missed peaks were formerly treated as key-up samples,
+        // and intermittent noise maxima as CW key-down. Cross-check
+        // the complete PCM against adjacent frequency guard channels
+        // before allowing an identity to become CW-verified.
+        bool independentlyKeyed=evidence.IsKeyed &&
+          CwNarrowbandCarrierEvidence.Assess(snapshot,track).IsKeyed;
+        bool keyed=independentlyKeyed &&
           (!EnableExperimentalStationGate ||
            stationHypotheses.Update(track,evidence,now));
         if(keyed)
