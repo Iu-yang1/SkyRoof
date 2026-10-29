@@ -166,3 +166,23 @@ multi-target track coalescence/repulsion (DOI
 `10.1109/OJSP.2024.3451167`) and merged measurements (DOI
 `10.1109/TSP.2015.2393843`); it does not directly implement the full
 Bayesian trackers in those papers.
+
+## 2026-10-29 CW-MHT implementation: P0–P4 (experimental)
+
+This work is an independent implementation, **not a reverse-engineering or reimplementation of proprietary CW Skimmer code**. The existing DeepCW/CTC decoder remains the production baseline.
+
+- **P0:** The WinForms `FormClosing` handler no longer blocks on `DisarmAsync().GetAwaiter().GetResult()`. It cancels pending sends and waits asynchronously up to 5 s for a verified STOP. On timeout/fault, RF STOP is explicitly **unverified**; the operator decides whether to close the display while the independent keyer/watchdog retains responsibility. CI can test the bounded waiter.
+- **P1:** A process-session GUID + audio generation + stable association-hint/track-id key is used by `CwTranscriptArchive`, owned by `CwReceiveWorker`. Only committed deltas are appended. The optional history window reads this archive independently from live 8-slot tracking. The async bounded channel persists JSONL under `%LOCALAPPDATA%/SkyRoof/CW/History`; a 16-MiB/day limit and 512-entry memory ceiling guard resource usage. JSONL writes are not transactional, so hard power loss remains an open durability test.
+- **P2:** `ExperimentalStationGate` accumulates multi-frame keyed-carrier evidence after the existing fast/precision STFT + Kalman/GNN tracker; uncalibrated score, not a posterior probability. Birdies remain detector candidates but do not automatically occupy decode lanes.
+- **P3:** `ExperimentalCoherentSeparation` attempts a bounded, joint real sine/cosine least-squares fit with frequency/drift priors from 2–4 tracks and short 0.25–1 s windows. A minimum spacing and residual gate enforce fallback to the existing wideband soft-mask path. This is not a proven 5-Hz keyed-pileup solution.
+- **P4:** `ExperimentalHsmmArbitration` derives a 10-ms soft keyed-envelope and evaluates explicit Morse dot/dash/inter-symbol/character/word duration priors over WPM candidates. DeepCW output always wins when non-empty; a sufficiently strong non-empty HSMM alternative may fill a neural blank before standard overlapping-window transcript voting. Evidence scores are uncalibrated.
+
+All three experiments ship **disabled by default**. Production validation requires source-labelled IC-9700 recordings, 15-Hz/5-Hz pair scenarios with both equal power and 8-dB imbalance, QSB, drift, and separate strong/weak CER/WER, false stations, identity swaps, latency and CPU/RSS. A passing synthetic unit test is not evidence of real-world decoding improvement.
+
+### 2026-10-29: no-signal 245–308 Hz false-station correction
+
+The screenshot shows 245/271/289/308-Hz peaks reported around 9–12 dB, with unreliable CW text, while the IC-9700 LAN RF scope has no obvious corresponding CW line. The RF scope and USB AF input are different measurement paths. The shown dB was **local spectral peak contrast**, not decoded message confidence or a calibrated receive SNR; the UI now labels active peaks as `peak N dB` and suppresses stale numerical peaks for Grace tracks.
+
+Missing observations in the sparse ridge detector had been interpreted as CW key-up frames; colored AF noise can then create alternating apparent key-down/key-up intervals. An independent `CwNarrowbandCarrierEvidence` now analyzes complete PCM, compares the target band against asymmetric local guard-frequency energy, and requires coherent keyed carrier phase persistence across both halves of the window. A ±3-Hz residual search tolerates tracker frequency uncertainty and short-term Doppler. It rejects many band-limited noise humps without raising the original waterfall/detector threshold. Very narrow-band noise can still be statistically indistinguishable from a real oscillator and needs captured AF recordings.
+
+**Safe-to-merge A/B switch:** `Experimental CW Carrier Phase Verification` in CW Settings defaults **OFF**. Synthetic tests are insufficient to establish that real IC-9700 weak CW is not rejected; the production path remains the prior ridge-plus-keying gate. Operators may opt in for matched USB AF A/B evaluation. Prior experimental installers' saved `VerifyCarrierPhase=true` is intentionally ignored to avoid inadvertently enabling an unvalidated receive gate after upgrade. The per-track evidence cache is bounded to 300 ms. Tests cover 245–308-Hz coloured AF noise, 5/15-Hz keyed pairs, 8-dB weak stations and Doppler, but real PCM CER and false-alarm testing are still required.

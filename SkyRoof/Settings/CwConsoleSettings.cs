@@ -50,6 +50,32 @@ namespace SkyRoof
     public CwDenoiseMode SpectrumDenoiseMode { get; set; } =
       CwDenoiseMode.Bypass;
 
+    // The 245–308 Hz phase gate has only synthetic validation. Do not
+    // change production weak-CW behaviour without a labelled IC-9700 AF
+    // comparison. A *new* property intentionally ignores a saved true value
+    // from experimental installers' legacy VerifyCarrierPhase field.
+    [DisplayName("Experimental CW Carrier Phase Verification")]
+    [Description("A/B only: distinguish keyed tones from coloured AF noise. Off by default until real weak-signal recordings validate sensitivity.")]
+    [DefaultValue(false)]
+    public bool ExperimentalVerifyCarrierPhase {get;set;} = false;
+
+    // New inference paths are intentionally OFF until real labelled
+    // IC-9700 PCM A/B tests establish no regression.
+    [DisplayName("Experimental CW Multi-Hypothesis Gate")]
+    [Description("Require sustained independent CW keying evidence before assigning an RX lane. A/B experiment; disabled by default.")]
+    [DefaultValue(false)]
+    public bool ExperimentalStationGate {get;set;} = false;
+
+    [DisplayName("Experimental Coherent CW Separation")]
+    [Description("Try bounded joint multi-tone real-I/Q least-squares separation on nearby CW signals; fallback on bad residual. Not yet validated for 5 Hz / 8 dB pileups.")]
+    [DefaultValue(false)]
+    public bool ExperimentalCoherentSeparation {get;set;} = false;
+
+    [DisplayName("Experimental Bayesian Morse HSMM")]
+    [Description("Cross-check neural CTC with an independent soft-keying duration decoder. Neural remains primary; test on labelled recordings first.")]
+    [DefaultValue(false)]
+    public bool ExperimentalHsmmArbitration {get;set;} = false;
+
     // Compatibility field for older SkyRoof settings files. Manual CW
     // transmission no longer requires or consults a separate software
     // enable gate; the real radio/SkyCAT status is verified on Send.

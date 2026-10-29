@@ -20,6 +20,7 @@ namespace SkyRoof
     private readonly ComboBox SpectrumCleanupBox = new();
     private readonly Label SpectrumStatusLabel = new();
     private readonly Button SettingsBtn = new();
+    private readonly Button RxHistoryBtn = new();
     private readonly Button InstallModelBtn = new();
 
     private readonly Label InputStatusLabel = new();
@@ -62,6 +63,8 @@ namespace SkyRoof
     private bool sendRequestInProgress;
     private CancellationTokenSource? sendRequestStop;
     private bool statusPollInProgress;
+    private bool closeStopInProgress;
+    private bool closeStopChecked;
     private DateTime nextStatusPollUtc = DateTime.MinValue;
 
     private readonly System.Windows.Forms.Timer UiTimer =
@@ -195,6 +198,88 @@ namespace SkyRoof
         CwConsolePanel_FormClosing;
     }
 
+    private Form? rxHistoryForm;
+    private void ShowRxHistory()
+    {
+      if(rxHistoryForm is Form active && !active.IsDisposed)
+      {
+        active.BringToFront();
+        active.Activate();
+        return;
+      }
+      CwReceiveWorker? worker=ctx.CwReceiveWorker;
+      if(worker==null)return;
+      var dialog=new Form
+      {
+        Text="CW RX History (committed · UTC)",
+        StartPosition=FormStartPosition.CenterParent,
+        Width=880,Height=560,MinimumSize=new Size(520,320)
+      };
+      rxHistoryForm=dialog;
+      var search=new TextBox
+      {
+        Dock=DockStyle.Top,
+        PlaceholderText="Filter text, frequency-lane identity or UTC…",
+        Height=30
+      };
+      var display=new RichTextBox
+      {
+        Dock=DockStyle.Fill,ReadOnly=true,WordWrap=true,
+        Font=new Font(FontFamily.GenericMonospace,10),
+        ScrollBars=RichTextBoxScrollBars.Vertical
+      };
+      long renderedVersion=-1;
+      void Render()
+      {
+        if(dialog.IsDisposed)return;
+        long revision=worker.History.Version;
+        if(renderedVersion==revision)return;
+        renderedVersion=revision;
+        IReadOnlyList<CwArchivedTranscript> entries=
+          worker.History.GetAll();
+        string filter=search.Text.Trim();
+        var lines=new System.Text.StringBuilder();
+        foreach(CwArchivedTranscript item in entries.Take(256))
+        {
+          string identity=(item.UsesAssociationHint?"H":"T")+
+            item.IdentityId;
+          string header=$"{item.LastWindowEndUtc:yyyy-MM-dd HH:mm:ss}Z · "+
+            $"S{item.SessionId.ToString("N")[..8]} · "+
+            $"G{item.TimelineGeneration} · {identity}";
+          if(filter.Length>0 &&
+             !header.Contains(filter,StringComparison.OrdinalIgnoreCase) &&
+             !item.CommittedText.Contains(filter,
+               StringComparison.OrdinalIgnoreCase))continue;
+          lines.AppendLine(header);
+          lines.AppendLine(item.CommittedText);
+          lines.AppendLine();
+        }
+        string next=lines.Length>0?lines.ToString():
+          "No committed CW messages for this filter.";
+        if(display.Text==next)return;
+        bool follow=display.SelectionStart>=Math.Max(0,display.TextLength-2);
+        int selection=display.SelectionStart;
+        display.Text=next;
+        display.SelectionStart=follow?display.TextLength:
+          Math.Min(selection,display.TextLength);
+        display.SelectionLength=0;
+        if(follow)display.ScrollToCaret();
+      }
+      var timer=new System.Windows.Forms.Timer{Interval=750};
+      timer.Tick+=(_,_)=>Render();
+      search.TextChanged+=(_,_)=>{renderedVersion=-1;Render();};
+      dialog.FormClosed+=(_,_)=>
+      {
+        timer.Stop();timer.Dispose();
+        if(ReferenceEquals(rxHistoryForm,dialog))rxHistoryForm=null;
+      };
+      dialog.Controls.Add(display);
+      dialog.Controls.Add(search);
+      Render();
+      timer.Start();
+      dialog.Show(this); // modeless: RX and TX UI stay responsive
+    }
+
     private void BuildUi()
     {
       var root =
@@ -292,6 +377,11 @@ namespace SkyRoof
         };
       toolbar.Controls.Add(
         SettingsBtn);
+
+      RxHistoryBtn.Text="CW History…";
+      RxHistoryBtn.AutoSize=true;
+      RxHistoryBtn.Click+=(_,_)=>ShowRxHistory();
+      toolbar.Controls.Add(RxHistoryBtn);
 
       InstallModelBtn.Text =
         "Install DeepCW Model";
@@ -1724,10 +1814,68 @@ namespace SkyRoof
         keyData);
     }
 
-    private void CwConsolePanel_FormClosing(
+    private async void CwConsolePanel_FormClosing(
       object? sender,
       FormClosingEventArgs e)
     {
+      // Never synchronously block WinForms on SkyCAT TCP / SemaphoreSlim.
+      // A close is cancelled once and retried after bounded asynchronous
+      // STOP/disarm. A failed STOP is explicitly reported, not assumed.
+      if(!closeStopChecked)
+      {
+        e.Cancel=true;
+        if(closeStopInProgress)return;
+        closeStopInProgress=true;
+        Serilog.Log.Information(
+          "CW Console close requested: armed={Armed}, sending={Sending}, pendingSend={Pending}",
+          ctx.CwTransmit?.State.Armed,ctx.CwTransmit?.State.Sending,
+          sendRequestInProgress);
+        sendRequestStop?.Cancel();
+        var stopwatch=Stopwatch.StartNew();
+        try
+        {
+          CwTransmitController? tx=ctx.CwTransmit;
+          if(tx!=null && (tx.State.Armed || tx.State.Sending ||
+             sendRequestInProgress))
+          {
+            Task disarm=tx.DisarmAsync();
+            if(!await CwCloseStopPolicy.AwaitVerifiedStopAsync(
+               disarm,TimeSpan.FromSeconds(5)))
+              throw new TimeoutException(
+                "SkyCAT CW STOP has not completed within 5 seconds.");
+          }
+          closeStopChecked=true;
+          Serilog.Log.Information(
+            "CW console close: CW STOP/disarm phase completed in {Ms}ms",
+            stopwatch.ElapsedMilliseconds);
+        }
+        catch(Exception ex)
+        {
+          Serilog.Log.Error(ex,
+            "CW console close: STOP not confirmed after {Ms}ms; no assumption that RF TX ceased",
+            stopwatch.ElapsedMilliseconds);
+          // The outstanding STOP task (if any) remains running. The TX
+          // controller owns its lease/watchdog after this view closes.
+          DialogResult choice=MessageBox.Show(this,
+            "CW STOP could not be confirmed. Verify the IC-9700 is not transmitting and press the radio's physical STOP if necessary.\r\n\r\n"+
+            ex.Message+"\r\n\r\nClose CW Console anyway?",
+            "CW STOP NOT VERIFIED",
+            MessageBoxButtons.YesNo,MessageBoxIcon.Warning);
+          if(choice==DialogResult.Yes)closeStopChecked=true;
+        }
+        finally
+        {
+          closeStopInProgress=false;
+        }
+        if(closeStopChecked && !IsDisposed && !Disposing)
+        {
+          // Avoid nested FormClosing invocation in the same WinForms stack.
+          if(IsHandleCreated)BeginInvoke(new Action(Close));
+          else Close();
+        }
+        return;
+      }
+      Serilog.Log.Information("CW console closing: teardown begins");
       UiTimer.Stop();
       UiTimer.Tick -=
         UiTimer_Tick;
@@ -1745,23 +1893,7 @@ namespace SkyRoof
 
       modelInstallStop?.Cancel();
 
-      if (ctx.CwTransmit?.State.Armed == true)
-      {
-        try
-        {
-          ctx.CwTransmit
-            .DisarmAsync()
-            .GetAwaiter()
-            .GetResult();
-        }
-        catch
-        {
-          // Closing the keyer session invokes SkyCAT's disconnect STOP even
-          // if the explicit STOP acknowledgement was lost.
-        }
-      }
-
-      CwReceiveWorker? worker =
+       CwReceiveWorker? worker =
         ctx.CwReceiveWorker;
       if (worker != null)
       {

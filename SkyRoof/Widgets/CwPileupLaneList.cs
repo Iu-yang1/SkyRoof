@@ -210,8 +210,14 @@ namespace SkyRoof
 
       string state = slot.Present
         ? CwConsolePresentation.StateText(track) : "Grace";
+      // This is a tracked FFT *peak-over-local-floor*, not a verified
+      // receive SNR or Morse decode confidence. Do not show a high numeric
+      // value for a Grace/aged track after the physical carrier disappeared.
+      string peak=slot.Present && track.Active
+        ? $"peak {track.SnrDb:F0}dB"
+        : "peak — (stale)";
       title.Text = $"{Index + 1}  {CwConsolePresentation.LaneLabel(track)} " +
-        $"{track.FrequencyHz:F0} Hz · {track.SnrDb:F0}dB · {state}";
+        $"{track.FrequencyHz:F0} Hz · {peak} · {state}";
       title.ForeColor = !slot.Present ? SystemColors.GrayText :
         track.Ambiguous ? Color.DarkOrange : SystemColors.ControlText;
       preview.ForeColor = title.ForeColor;

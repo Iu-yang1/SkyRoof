@@ -136,3 +136,53 @@ CW 信号在归一化掩膜分母中重复竞争自身能量。对真实的近�
 IEEE OJSP DOI `10.1109/OJSP.2024.3451167`；
 IEEE TSP DOI `10.1109/TSP.2015.2393843`。
 此处采用的是针对 CW 的保守判据，而非复现完整贝叶斯多目标跟踪框架。
+
+## 2026-10-29 CW-MHT 统一重构：P0–P4 实施与实验限制
+
+此版本以现有 SkyRoof DeepCW/CTC 作为生产基线，**不复刻或反编译闭源 CW Skimmer**。CW-MHT 是独立设计并带 A/B 开关的多阶段接收研究路径，尚未经真实 IC-9700 标注音频证明 5 Hz 密集 Pileup 可用。
+
+### P0 · CW 窗口安全关闭
+
+- 取消在 `FormClosing` UI 线程直接 `DisarmAsync().GetAwaiter().GetResult()` 的同步等待；改为取消当前发射请求、异步等待 SkyCAT STOP/Disarm，限时 5 秒。
+- 5 秒超时只说明没有确认 STOP，不等于成功关闭电台发射。操作员看到明确的射频安全警告后选择是否关闭窗口；STOP 后台操作与控制器 watchdog 不被强行取消。
+- 新增可独立测试的 `CwCloseStopPolicy`。保留现有 CAT/TX 频率保护以及 PTT 联锁。
+- 需要现场收集 WinForms UI dump、关闭阶段耗时、SkyCAT 的 STOP ACK 与实际电台 PTT 才能验证原卡死的完整因果链。
+
+### P1 · 与 Track/窗口完全独立的已提交历史
+
+- `CwTranscriptArchive` 由全局 `CwReceiveWorker` 持有，而非 `CwConsolePanel`。同一时间线内用 `(process-session GUID, generation, H/T identity)` 保存文本。
+- 仅已确认的 Committed 增量追加到历史；Provisional 不落盘。对于旧窗口覆盖新窗口、Track 短暂消失、UI 槽位回收，不允许删除已提交字符。
+- 本地归档使用 `%LOCALAPPDATA%/SkyRoof/CW/History/cw-YYYY-MM-DD.jsonl`；独立有界 Channel 写入，不在采样回调中读写磁盘。每日日志软限制 16 MiB；内存最多 512 个会话。队列丢弃和文件系统故障应按 `DroppedDiskEvents`/`LastWriteError` 诊断。
+- CW Console 顶部 **CW History…** 查看跨时间线归档。历史存放的 H/T 轨迹 ID 不能单凭相近频率跨会话合并为一个“真实台站”。
+- 目前历史以可读 JSONL 存储，不会在窗体消失时清空；文件持久化完整性仍需持续写入/断电恢复测试，暂不保证强一致事务语义。
+
+### P2 · 自适应 CW 台站证据（默认关闭）
+
+`ExperimentalStationGate`：在原有 fast/precision STFT、Kalman/GNN 和 `CwKeyingGate` 之后增加短时间假设状态分数，要求经过多次真实键控观察才向解码槽位放行。拒绝持续未键控鸟鸣信号、仅有单一频谱峰的假候选，不改变原始低门限频谱显示。分数是**未校准 evidence score**，不是概率；需要通过 ROC/PR、误检率和弱台漏检率验证后才可上线。
+
+### P3 · 有界联合相干分离（默认关闭）
+
+`ExperimentalCoherentSeparation`：将 2–4 条经过筛选的 Track 作为频率/漂移先验，在 0.25–1.0 秒局部窗口对所有音频样本联合拟合正交余弦/正弦基，最小二乘解出每路信号并检查归一化残差。仅通过残差保护的结果才参与各路 DeepCW 特征提取；奇异矩阵、频距小于 3 Hz、能量不符或超过 4 台时回退原有多轨软掩码。
+`x[n]=sum_k(a_k cos(phi_k[n])+b_k sin(phi_k[n]))+epsilon[n]`。
+这种短时间恒幅近似不代表已经能够稳定重构电码边沿；尤其 5 Hz 及 8 dB 强弱差可能出现弱台被吸收、边缘失真，必须标注真实录音对比 CER/误警报。默认不启用。
+
+### P4 · HSMM 时长先验 + DeepCW 保守仲裁（默认关闭）
+
+`ExperimentalHsmmArbitration`：从选中的载波音频计算每 10 ms 的软键控包络，比较多种 WPM 的点、划、元素间距/字符/单词间距的显式时长假设，得到候选文本、帧位置与**未校准 evidence score**。现有 DeepCW/CTC 始终优先；仅当神经输出为空、HSMM 证据足够高且不少于 2 字符，才选择 HSMM 结果，并仍经后续跨窗口投票确认。实验分离通过时使用隔离音频，失败时回退原始 AF。任何接收内容均不会自动进入发射通道。
+
+### 按验收层级交付
+
+1. Windows CI 编译 + 单元测试：关闭超时不伪称 ACK、Committed 历史不可回退、独立时间线隔离、稳态载波不误判、双台正弦信号分离、SOS HSMM 模拟与 DeepCW 优先仲裁。
+2. AWGN 多种 SNR、Watterson 扩展、频漂、手键及脉冲干扰：分别报告 Track false-alarm/min、identity swaps/min、CER/WER、延迟、CPU/RSS、file I/O backpressure。
+3. 真实 IC-9700 PCM（若无真实标注，仅能报告实验现象，不能宣称实际准确率）：15 Hz 等强、15 Hz/8 dB、5 Hz 等强、5 Hz/8 dB，加入持续 QSB 和频漂。成功门槛必须基于对照组制定，弱台 CER 不得因算法开关显著恶化。
+4. 只有完成闭环实机测试并比现有 DeepCW 明确优越，才允许将三项实验开关之一设为默认。变更应先在独立 PR 中验收，不直接覆盖 `master`。
+
+### 2026-10-29：无信号时 245–308 Hz 假 CW 台站的二次修复
+
+用户提供的截图显示，CW RX 在 245、271、289、308 Hz 附近出现 9–12 dB 的峰值读数和乱码，但电台 LAN 射频频谱没有明确对应载波。两者来自不同数据链，不能将 LAN 频谱空白当作 AF 全静音的证据。原 UI 的数值是短时频谱峰/局部噪声底的 **peak contrast**，不是 DeepCW 字符置信度或严格的接收 SNR；因此现将 UI 文本明确写成 `peak N dB`，过期 Grace Track 显示 `peak stale`。
+
+原始 Ridge Scanner 的稀疏谱峰列表在某个时间帧没有检出峰值时，会令键控判别器将其视为 OFF。谱峰随机出现时可能被当作 Morse ON/OFF。新 `CwNarrowbandCarrierEvidence` 对完整 PCM 逐帧计算目标载波相对于两侧 guard frequency 的窄带对比度、键控形态和跨时间相位连续性。相位连续性在 2.4 秒窗口内以两半独立校验，并搜索 ±3 Hz 的频率估计残差，以兼容弱 CW、短时多普勒和 STFT 插值误差，减少 250–350 Hz 的带限噪声伪装为 Morse 台站。此频谱与相位统计判别不是确定性分类器；极窄带干扰可能仍需实录验证。
+
+该二次验证只影响 `CW Verified` 和后续 ONNX 解码槽位，不调高频谱显示门限。真实的 5 Hz / 15 Hz 近频双台和 8 dB 强弱差场景已加入合成测试，但 **5 Hz 弱台的正确 CER 仍未通过真实标注录音确认**。每个 Track 的二次验证结果最多缓存 300 ms，避免重复扫描整个重叠 PCM 窗口使 UI/CPU 负担上升。
+
+**安全合并配置**：CW Settings 新增 `Experimental CW Carrier Phase Verification`，**默认关闭**。经评估，合成测试不能证明其不会漏检真实 IC-9700 弱 CW，因此正式版仍使用 Ridge + KeyingGate 原有验证。实验用户可手动开启进行相同 AF 录音的 A/B 对照。曾在旧测试版中自动保存为 true 的 `VerifyCarrierPhase` 不会使新版本意外自动启用此实验特性。本设置与默认关闭的其他三项研究性开关（Station Gate / Coherent Separation / HSMM）独立。

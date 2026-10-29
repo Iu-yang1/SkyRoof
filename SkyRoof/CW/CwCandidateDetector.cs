@@ -240,6 +240,15 @@ namespace SkyRoof.CW
     private IReadOnlyList<CwSignalTrack> latestTracks =
       Array.Empty<CwSignalTrack>();
     private readonly Dictionary<int,DateTime> verifiedUntil = new();
+    private readonly Dictionary<int,(DateTime Utc,double FrequencyHz,
+      CwNarrowbandCarrierEvidence.Result Evidence)>
+      physicalCache = new();
+    private DateTime gateTelemetrySinceUtc=DateTime.MinValue;
+    private int gateRejectedObservations;
+    private int gateAcceptedObservations;
+    private double strongestRejectedHz;
+    private double strongestRejectedPeakSnr=double.NegativeInfinity;
+    private double strongestRejectedPhase;
 
     public CwAudioHub Audio { get; }
     public CwCandidateDetector Detector { get; }
@@ -247,6 +256,9 @@ namespace SkyRoof.CW
     public CwFixedLagAssociator Associations { get; }
     public CwPileupTrackManager Tracks { get; }
     public double AnalysisSeconds { get; }
+    private readonly CwStationHypothesisManager stationHypotheses=new();
+    public bool EnableExperimentalStationGate {get;set;}
+    public bool EnableCarrierPhaseVerification {get;set;} = false;
 
     public CwPileupFrontEnd(
       int sampleRate = SdrConst.AUDIO_SAMPLING_RATE,
@@ -402,13 +414,69 @@ namespace SkyRoof.CW
         CwSignalTrack track=latestTracks[i];
         CwKeyingAssessment evidence=
           CwKeyingGate.AssessRidge(track,scan,snapshot,FrameScanner);
-        if(evidence.IsKeyed)
+        // The scanner returns only local spectral maxima. On coloured
+        // noise, missed peaks were formerly treated as key-up samples,
+        // and intermittent noise maxima as CW key-down. Cross-check
+        // the complete PCM against adjacent frequency guard channels
+        // before allowing an identity to become CW-verified.
+        bool independentlyKeyed=evidence.IsKeyed;
+        CwNarrowbandCarrierEvidence.Result physical=default;
+        if(independentlyKeyed && EnableCarrierPhaseVerification)
+        {
+          // Full-window phase testing is heavier than ridge FFT caching.
+          // Re-evaluate at most every 300 ms per stable track unless the
+          // frequency changed materially, while preserving 120 ms tracker
+          // responsiveness and the existing 3-second verified hold.
+          bool canReuse=physicalCache.TryGetValue(track.Id,out var cached) &&
+            now>=cached.Utc &&
+            now-cached.Utc<TimeSpan.FromMilliseconds(300) &&
+            Math.Abs(cached.FrequencyHz-track.FrequencyHz)<2;
+          physical=canReuse?cached.Evidence:
+            CwNarrowbandCarrierEvidence.Assess(snapshot,track);
+          if(!canReuse)
+            physicalCache[track.Id]=(now,track.FrequencyHz,physical);
+          independentlyKeyed=physical.IsKeyed;
+          if(independentlyKeyed)gateAcceptedObservations++;
+          else
+          {
+            gateRejectedObservations++;
+            if(track.SnrDb>strongestRejectedPeakSnr)
+            {
+              strongestRejectedHz=track.FrequencyHz;
+              strongestRejectedPeakSnr=track.SnrDb;
+              strongestRejectedPhase=physical.PhaseCoherence;
+            }
+          }
+        }
+        bool keyed=independentlyKeyed &&
+          (!EnableExperimentalStationGate ||
+           stationHypotheses.Update(track,evidence,now));
+        if(keyed && track.Active)
           verifiedUntil[track.Id]=now.AddSeconds(3);
         bool verified=verifiedUntil.TryGetValue(track.Id,out DateTime until) &&
           until>=now;
         vetted[i]=track with {KeyingStatus=verified
           ? CwKeyingStatus.Verified : CwKeyingStatus.Candidate};
       }
+      // Once per 30s, emit a bounded diagnostic sample rather than one
+      // log record per rejected noise peak or per 120ms tracker cycle.
+      if(gateTelemetrySinceUtc==DateTime.MinValue)
+        gateTelemetrySinceUtc=now;
+      else if(now-gateTelemetrySinceUtc>=TimeSpan.FromSeconds(30))
+      {
+        if(gateRejectedObservations>0)
+          Serilog.Log.Information(
+            "CW AF carrier gate: rejectedSamples={Rejected}, acceptedSamples={Accepted}, strongestRejectedHz={Hz:F1}, spectralPeakDb={Peak:F1}, phaseCoherence={Coherence:F2}; peak dB is not message SNR",
+            gateRejectedObservations,gateAcceptedObservations,
+            strongestRejectedHz,strongestRejectedPeakSnr,
+            strongestRejectedPhase);
+        gateTelemetrySinceUtc=now;
+        gateRejectedObservations=0;
+        gateAcceptedObservations=0;
+        strongestRejectedPeakSnr=double.NegativeInfinity;
+        strongestRejectedPhase=0;
+      }
+
       // Resolve co-keyed duplicates before they consume ONNX lanes or
       // become independent competitors in the DeepCW soft mask.
       // Only identities with corroborating fast/precision evidence retire.
@@ -418,11 +486,18 @@ namespace SkyRoof.CW
           FrameScanner.FastHopSamples);
       Tracks.RetireAliases(resolution.RetiredTrackIds);
       foreach(int id in resolution.RetiredTrackIds)
+      {
         verifiedUntil.Remove(id);
+        physicalCache.Remove(id);
+      }
       latestTracks=resolution.Tracks;
       foreach(int id in verifiedUntil
         .Where(x=>x.Value<now).Select(x=>x.Key).ToArray())
         verifiedUntil.Remove(id);
+      foreach(int id in physicalCache
+        .Where(x=>now-x.Value.Utc>TimeSpan.FromSeconds(6))
+        .Select(x=>x.Key).ToArray())
+        physicalCache.Remove(id);
       return latestTracks;
     }
 
@@ -432,7 +507,14 @@ namespace SkyRoof.CW
       FrameScanner.ResetCache();
       Associations.Reset();
       Tracks.Reset();
+      stationHypotheses.Reset();
       verifiedUntil.Clear();
+      physicalCache.Clear();
+      gateTelemetrySinceUtc=DateTime.MinValue;
+      gateRejectedObservations=0;
+      gateAcceptedObservations=0;
+      strongestRejectedPeakSnr=double.NegativeInfinity;
+      strongestRejectedPhase=0;
       lastPrecisionSampleIndex = long.MinValue;
       lastCommittedSampleIndex = long.MinValue;
       lastCommittedUtc = null;

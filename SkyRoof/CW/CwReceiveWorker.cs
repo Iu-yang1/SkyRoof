@@ -10,6 +10,8 @@ namespace SkyRoof.CW
     // Decode all eight instead of silently leaving the last three
     // displayed lanes without ONNX inference.
     public int MaxDecodeLanes { get; init; } = 8;
+    public bool ExperimentalCoherentSeparation {get;init;}
+    public bool ExperimentalHsmmArbitration {get;init;}
     public double LaneBandwidthHz { get; init; } = 240;
     public double TargetCenterHz { get; init; } = 800;
     public TimeSpan ModelRetryInterval { get; init; } =
@@ -98,6 +100,8 @@ namespace SkyRoof.CW
           onnx)
         {
           MaxLanes = options.MaxDecodeLanes,
+          ExperimentalCoherentSeparation=options.ExperimentalCoherentSeparation,
+          ExperimentalHsmmArbitration=options.ExperimentalHsmmArbitration,
           LaneBandwidthHz =
             options.LaneBandwidthHz,
           TargetCenterHz =
@@ -142,6 +146,7 @@ namespace SkyRoof.CW
   /// </summary>
   public sealed class CwReceiveWorker : IDisposable
   {
+    public CwTranscriptArchive History { get; } = new();
     private readonly object sync = new();
     private readonly CwPcmIngress ingress;
     private readonly CwReceiveWorkerOptions options;
@@ -546,6 +551,10 @@ namespace SkyRoof.CW
         lock (sync)
           latestDecode = batch;
 
+        // Archive is independent from live tracking, UI slot lifetime and
+        // decoder timeline resets. Never commit provisional hypotheses.
+        History.Append(generation,batch.Transcripts);
+
         DecodeUpdated?.Invoke(
           this,
           new CwDecodeUpdatedEventArgs(
@@ -720,11 +729,19 @@ namespace SkyRoof.CW
       if (disposed)
         return;
 
-      StopAsync()
-        .GetAwaiter()
-        .GetResult();
-
-      disposed = true;
+      // MainForm may call Dispose on the WinForms thread while ONNX/CTC
+      // inference is in native code. Cancellation is immediate, but waiting
+      // for the outstanding native window is not safe on the UI thread.
+      disposed=true;
+      Task completion=StopAsync();
+      _=completion.ContinueWith(task=>
+      {
+        if(task.Exception!=null)
+          Serilog.Log.Error(task.Exception,
+            "CW receive worker delayed shutdown failed");
+        History.Dispose();
+      },CancellationToken.None,
+      TaskContinuationOptions.ExecuteSynchronously,TaskScheduler.Default);
       GC.SuppressFinalize(this);
     }
   }
