@@ -150,6 +150,7 @@ namespace SkyRoof.AFC
 
     private void RefreshDisplay()
     {
+      owner.AfcController.Tick(DateTime.UtcNow);
       AfcSignalMode mode = owner.CurrentAfcMode;
       if (active && mode != currentMode)
       {
