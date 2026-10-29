@@ -13,6 +13,19 @@ namespace VE3NEA.Dsp.Tests
       new(id,hz,snr,0,Now,Now,true,true);
 
     [Fact]
+    public void ExperimentalReceiveGatesDefaultDisabledOnProductionUpgrade()
+    {
+      var settings=new SkyRoof.Settings.CwConsoleSettings();
+      settings.ExperimentalVerifyCarrierPhase.Should().BeFalse();
+      settings.ExperimentalStationGate.Should().BeFalse();
+      settings.ExperimentalCoherentSeparation.Should().BeFalse();
+      settings.ExperimentalHsmmArbitration.Should().BeFalse();
+      var frontEnd=new CwPileupFrontEnd();
+      frontEnd.EnableCarrierPhaseVerification.Should().BeFalse();
+      frontEnd.EnableExperimentalStationGate.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task CwCloseStop_WaitIsBoundedButNeverTreatsTimeoutAsAck()
     {
       var unfinished=new TaskCompletionSource<bool>(
