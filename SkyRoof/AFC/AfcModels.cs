@@ -5,6 +5,8 @@ using VE3NEA;
 
 namespace SkyRoof
 {
+  public enum AfcIfSource { WasapiCapture, PlaybackLoopback }
+
   /// <summary>
   /// Frequency tracking is independent of the saved satellite/transponder
   /// offsets and never changes the TX frequency model.
@@ -24,6 +26,15 @@ namespace SkyRoof
     [DisplayName("Control")]
     [DefaultValue(AFC.AfcControlMode.Assist)]
     public AFC.AfcControlMode Control { get; set; } = AFC.AfcControlMode.Assist;
+
+    [DisplayName("IF transport")]
+    [DefaultValue(AfcIfSource.WasapiCapture)]
+    public AfcIfSource InputSource { get; set; } = AfcIfSource.WasapiCapture;
+
+    [DisplayName("IF playback loopback endpoint")]
+    [Description("Use the render/virtual speaker endpoint carrying remote 12-kHz IF; not an AF-only speaker feed.")]
+    [TypeConverter(typeof(OutputSoundcardNameConverter))]
+    public string? LoopbackDeviceId { get; set; }
 
     [DisplayName("Nominal IF frequency (Hz)")]
     [DefaultValue(12000.0)]
