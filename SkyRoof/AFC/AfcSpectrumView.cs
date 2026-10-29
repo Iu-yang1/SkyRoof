@@ -116,6 +116,13 @@ namespace SkyRoof.AFC
       Invalidate();
     }
 
+    public void SetMeasurement(double? observed, double target)
+    {
+      observedHz = observed;
+      targetHz = target;
+      Invalidate();
+    }
+
     public void SetDisplayFrame(AfcIfDisplayFrame frame, double? observed,
       double target)
     {
@@ -336,7 +343,8 @@ namespace SkyRoof.AFC
       if (HasWaterfall)
       {
         var rect = WaterfallBounds;
-        g.FillRectangle(new SolidBrush(palette.Plot), rect);
+        using var waterfallBackground = new SolidBrush(palette.Plot);
+        g.FillRectangle(waterfallBackground, rect);
         PaintWaterfall(g, rect);
         g.DrawRectangle(gridPen, rect.Left, rect.Top, rect.Width, rect.Height);
       }
