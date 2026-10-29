@@ -424,7 +424,10 @@ namespace SkyRoof.AFC
           throw new InvalidOperationException("12 kHz IF input did not start. Check routing.");
         active = true;
         cfg.Enabled = true;
+        if (!AutoAllowed && cfg.Control == AfcControlMode.Auto)
+          cfg.Control = AfcControlMode.Assist;
         owner.AfcController.Configure(currentMode, EffectiveControl());
+        owner.UpdateRxAfcCheckbox(EffectiveControl() == AfcControlMode.Auto);
         if (currentMode == AfcSignalMode.SSB && cfg.SsbPilotEnabled)
           owner.AfcController.CenterOn(cfg.DesiredOffsetHz);
         ctx.Settings.SaveToFile();
@@ -486,6 +489,16 @@ namespace SkyRoof.AFC
           ctx.Settings.SaveToFile();
         }
         owner.AfcController.Configure(mode, EffectiveControl());
+      }
+      // CAT/disconnected receiver can change without changing the signal
+      // mode. Do not leave the strip checked when Auto can no longer run.
+      if (active && cfg.Control == AfcControlMode.Auto && !AutoAllowed)
+      {
+        cfg.Control = AfcControlMode.Assist;
+        owner.AfcController.Configure(currentMode, AfcControlMode.Assist);
+        owner.UpdateRxAfcCheckbox(false);
+        ctx.Settings.SaveToFile();
+        if (!Visible) { Stop(); Close(); return; }
       }
       var s = owner.AfcController.Snapshot;
       bool freshCat = double.IsFinite(owner.GetAfcReadbackAt(DateTime.UtcNow));

@@ -160,7 +160,10 @@ namespace SkyRoof
           _ = AfcWindow.Handle;
         }
         if (!AfcWindow.SetAutomaticTracking(true))
+        {
           UpdateRxAfcCheckbox(false);
+          if (!AfcWindow.Visible) AfcWindow.Close();
+        }
       }
       else
         AfcWindow?.SetAutomaticTracking(false);
