@@ -25,6 +25,7 @@ namespace SkyRoof.AFC
 
     public event Action<AfcObservation>? ObservationAvailable;
     public bool IsRunning => input.IsRunning || loopback.IsRunning;
+    public long Generation { get { lock (sync) return generation; } }
     public string DeviceName => loopback.IsRunning ? loopback.GetDisplayName() : input.GetDisplayName();
 
     public AfcIfInput()
