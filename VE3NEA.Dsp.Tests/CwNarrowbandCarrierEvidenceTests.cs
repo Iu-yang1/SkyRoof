@@ -92,8 +92,10 @@ namespace VE3NEA.Dsp.Tests
         .IsKeyed.Should().BeFalse();
     }
 
-    [Fact]
-    public void TwoIndependentCloseKeyedStationsRemainEligible()
+    [Theory]
+    [InlineData(0.24)] // ~3 dB imbalance
+    [InlineData(0.135)] // 8 dB weak-station imbalance
+    public void TwoIndependentCloseKeyedStationsRemainEligible(double weakAmplitude)
     {
       int count=(int)(Rate*2.4);
       var samples=new float[count];
@@ -103,7 +105,7 @@ namespace VE3NEA.Dsp.Tests
         if(t%0.19<0.11)
           samples[i]+=(float)(0.34*Math.Sin(2*Math.PI*800*t));
         if(t%0.27<0.14)
-          samples[i]+=(float)(0.24*Math.Sin(2*Math.PI*815*t));
+          samples[i]+=(float)(weakAmplitude*Math.Sin(2*Math.PI*815*t));
       }
       var snapshot=Snapshot(samples);
       CwNarrowbandCarrierEvidence.Assess(snapshot,Track(800))
