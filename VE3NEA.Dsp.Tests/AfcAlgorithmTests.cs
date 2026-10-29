@@ -215,6 +215,9 @@ namespace VE3NEA.Dsp.Tests
       controller.Observe(new(AfcSignalMode.FM,
         T0.AddSeconds(5), 4, 140, 3, 1, true),
         145000160, 0, 2000, 20, 5, false);
+      controller.Observe(new(AfcSignalMode.FM,
+        T0.AddSeconds(6), 4, 140, 3, 1, true),
+        145000160, 0, 2000, 20, 5, false);
       controller.Snapshot.MappingSign.Should().Be(1);
     }
 
