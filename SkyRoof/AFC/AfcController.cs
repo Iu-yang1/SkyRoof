@@ -58,7 +58,28 @@ namespace SkyRoof.AFC
     {
       lock (sync)
       {
-        if (state.Mode == mode && state.Control == control && state.State != AfcLockState.Off) return;
+        if (state.Mode == mode && state.State != AfcLockState.Off &&
+            state.Control != AfcControlMode.Off && control != AfcControlMode.Off)
+        {
+          if (state.Control == control) return;
+          // Assist->Auto retains the already observed IF/CAT polarity
+          // from the same input timeline and radio mode, but discards
+          // all prior correction and reacquires the chosen pitch.
+          state = state with
+          {
+            Control = control, State = AfcLockState.Acquiring,
+            CorrectionHz = 0, ErrorHz = 0,
+            Detail = "Control level changed; reacquiring target"
+          };
+          anchored = false;
+          centerNext = mode != AfcSignalMode.CW;
+          centerIfOffsetHz = 0;
+          acceptedCorrection = 0;
+          confirmations = 0;
+          return;
+        }
+        if (state.Mode == mode && state.Control == control &&
+            state.State != AfcLockState.Off) return;
         state = state with
         {
           Mode = mode, Control = control, State = AfcLockState.Acquiring,
@@ -259,9 +280,10 @@ namespace SkyRoof.AFC
         anchored = false;
         centerNext = false;
         acceptedCorrection = 0;
-        havePolaritySample = false;
-        inferredSign = 0;
-        polarityCandidate = polarityVotes = 0;
+        // Preserve polarity evidence through routine hand tuning: those
+        // known CAT/IF motions are precisely the observations that let
+        // automatic sign inference work without a separate calibration UI.
+        // Switching PCM generation or mode still clears this evidence.
         state = state with { State = AfcLockState.Acquiring, CorrectionHz = 0,
           Detail = "Manual tune: AFC target rebased" };
         confirmations = 0;
