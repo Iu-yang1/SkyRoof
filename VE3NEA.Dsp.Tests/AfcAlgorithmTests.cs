@@ -342,6 +342,9 @@ namespace VE3NEA.Dsp.Tests
           confirmedOwnAfcReadback: true);
       }
       controller.Snapshot.State.Should().Be(AfcLockState.Fault);
+      controller.Tick(T0.AddMinutes(1));
+      controller.Snapshot.State.Should().Be(AfcLockState.Fault,
+        "the background timer must not silently clear a convergence fault");
       double frozen = controller.Snapshot.CorrectionHz;
       controller.Observe(new(AfcSignalMode.CW,
         T0.AddSeconds(10), 42, 1400, 1, 1, true),
