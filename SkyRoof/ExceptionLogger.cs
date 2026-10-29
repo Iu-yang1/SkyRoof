@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Net.WebSockets;
 using Serilog;
 using Serilog.Core;
 using Serilog.Events;
@@ -79,10 +80,66 @@ namespace VE3NEA
       if (ShowDialog(e.Exception) == DialogResult.Abort) Application.Exit();
     }
 
-    private static void TaskScheduler_UnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
+    private static readonly object WebSocketFaultSync = new();
+    private static DateTime WebSocketFaultIntervalUtc = DateTime.MinValue;
+    private static int WebSocketFaultsInInterval;
+
+    // Only classify actual WebSocketExceptions. A SocketException(995)
+    // elsewhere might be a meaningful CAT/rotator failure; never hide it.
+    internal static bool IsExpectedWebSocketClose(Exception ex)
     {
-        Log.Error(e.Exception, "Async task exception occurred:");
-        e.SetObserved(); // Prevents the process from terminating
+      if (ex is AggregateException group)
+        return group.Flatten().InnerExceptions.Count > 0 &&
+          group.Flatten().InnerExceptions.All(IsExpectedWebSocketClose);
+      if (ex is WebSocketException socket)
+        return socket.Message.Contains("close handshake",
+          StringComparison.OrdinalIgnoreCase) ||
+          socket.WebSocketErrorCode == WebSocketError.ConnectionClosedPrematurely;
+      return ex.InnerException != null &&
+        IsExpectedWebSocketClose(ex.InnerException);
+    }
+
+    private static void TaskScheduler_UnobservedTaskException(object? sender,
+      UnobservedTaskExceptionEventArgs e)
+    {
+      try
+      {
+        if (!IsExpectedWebSocketClose(e.Exception))
+        {
+          Log.Error(e.Exception,
+            "Unobserved async task exception; source task identity unavailable");
+          return;
+        }
+
+        // The global finalizer cannot identify the initiating WebSocket
+        // owner. Do not make up a component name or call this a rotator drop.
+        // Emit bounded summaries; owned tasks must instead be observed via
+        // Utils.DoNotAwait() or awaited by their component.
+        lock (WebSocketFaultSync)
+        {
+          DateTime utc = DateTime.UtcNow;
+          if (utc - WebSocketFaultIntervalUtc >= TimeSpan.FromMinutes(1))
+          {
+            if (WebSocketFaultsInInterval > 0)
+              Log.Warning(
+                "Unobserved remote WebSocket closures in prior interval: {Count}; originating component still unknown",
+                WebSocketFaultsInInterval);
+            WebSocketFaultsInInterval = 0;
+            WebSocketFaultIntervalUtc = utc;
+          }
+          WebSocketFaultsInInterval++;
+          if (WebSocketFaultsInInterval == 1)
+            Log.Warning(
+              "Remote WebSocket closed without close handshake; source task not observed. Full detail: {Detail}",
+              e.Exception.GetBaseException().Message);
+        }
+      }
+      finally
+      {
+        // Observe even unexpected faults after logging; never allow the
+        // finalizer handler itself to crash WinForms at shutdown.
+        e.SetObserved();
+      }
     }
 
     private static DialogResult ShowDialog(Exception? e, bool allowContinue = true)

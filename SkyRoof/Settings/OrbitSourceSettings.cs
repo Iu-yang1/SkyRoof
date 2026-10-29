@@ -19,8 +19,21 @@ namespace SkyRoof
       "https://db.satnogs.org/api/tle/?format=json";
     public const string DefaultCelestrakOmmCsvUrl =
       "https://celestrak.org/NORAD/elements/gp.php?GROUP=amateur&FORMAT=csv";
-    public const string DefaultAutoTleUrl =
+    public const string LegacyAutoTleUrl =
       "http://autotle.bi4pym.cn/AutoTLE.txt";
+    // The old domain responds with HTTP 302 on some client paths.
+    // Use the same upstream file that succeeded as a manual source in
+    // the user's SO-50 operation log, with HTTPS and no redirect.
+    public const string DefaultAutoTleUrl =
+      "https://raw.githubusercontent.com/BI4PYM/AutoTLE/refs/heads/master/AutoTLE.txt";
+
+    internal static string ResolveAutoTleUrl(string? configured)
+    {
+      string url = configured?.Trim() ?? string.Empty;
+      return url.Equals(LegacyAutoTleUrl, StringComparison.OrdinalIgnoreCase)
+        ? DefaultAutoTleUrl
+        : url;
+    }
 
     public const string DefaultDe440sSources =
       "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp;" +

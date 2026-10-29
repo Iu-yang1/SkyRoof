@@ -2,6 +2,8 @@
 using System.Diagnostics;
 using System.Net;
 using System.Reflection;
+using System.Runtime.CompilerServices;
+using Serilog;
 using System.Text.RegularExpressions;
 using System.Web;
 using Newtonsoft.Json;
@@ -110,9 +112,27 @@ namespace VE3NEA
     }
 
 
-    // avoid warning when not awaiting for an async task. Usage: DoSomethingAsync().DoNotAwait();
-    // https://stackoverflow.com/questions/14903887
-    public static void DoNotAwait(this Task task) { }
+    // Fire-and-forget is not fire-and-forget-exceptions. The previous empty
+    // implementation left faulted tasks unobserved until GC finalized them,
+    // losing their origin and generating misleading global WebSocket errors.
+    // Report at fault time with the caller name, without running user code on
+    // a WinForms UI synchronization context.
+    public static void DoNotAwait(this Task task,
+      [CallerMemberName] string origin = "")
+    {
+      ArgumentNullException.ThrowIfNull(task);
+      _ = task.ContinueWith(completed =>
+      {
+        Exception? error = completed.Exception;
+        if (error == null) return;
+        if (ExceptionLogger.IsExpectedWebSocketClose(error))
+          Log.Warning("Background task {Origin} ended due to remote WebSocket closure: {Error}",
+            origin, error.GetBaseException().Message);
+        else
+          Log.Error(error, "Background task {Origin} failed", origin);
+      }, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted,
+        TaskScheduler.Default);
+    }
 
     public static string TimespanToString(TimeSpan timeSpan, bool showSeconds = true)
     {

@@ -76,3 +76,23 @@ Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
 - 被动捕获需要相关权限与驱动；应使用经过校验的指定版本。
 - 对于转台超限或持续发射，必须有实际硬件应急措施，不能仅依赖软件的安全重试。
 - [SkyRoof fork](https://github.com/Iu-yang1/SkyRoof) · [构建任务](https://github.com/Iu-yang1/SkyRoof/actions) · [GitHub Pages](https://iu-yang1.github.io/SkyRoof/)。
+
+## 2026-10-29 SO-50 过境日志：P1–P2 修复与诊断
+
+此次 SO-50 过境（UTC+8 13:17–13:35），旋转器 Worker PID 2572 未发生 TCP 重建；仅两次孤立的 C2 回复延迟（约 2.56–2.57 s）后原连接恢复，非“掉线”。本轮不再盲目增加超时，也不改安全停止/云台运动算法。
+
+**P1：WebSocket 异步未观察错误**：旧 `Utils.DoNotAwait()` 是空函数，后台 Task 故障只能在 GC Finalizer 的 `UnobservedTaskException` 中出现，失去调用方。现在后台 Task 使用带调用来源的故障观察续体；全局异常仅将实际 `WebSocketException` 的无关闭握手事件降级并汇总，其他 Socket/CAT/rotator 故障仍按原错误级别记录。**全局处理器不能推断具体 WebSocket 归属**：若仍遇到此日志，须结合任务来源/新堆栈定位库级会话关闭路径；绝不将其直接定性为 RF 干扰。
+
+**P1：JE9PEL**：字段缺失时采用空可选列，NORAD 不合法则跳过；每次导入输出接受/跳过行汇总，不再针对不完整记录每行抛 `IndexOutOfRangeException`。不猜测缺失的 NORAD 或转发器字段。
+
+**P2：AutoTLE**：内建旧 `http://autotle.bi4pym.cn/AutoTLE.txt` 在此环境得到 302，而手动导入成功的 `https://raw.githubusercontent.com/BI4PYM/AutoTLE/refs/heads/master/AutoTLE.txt` 现为默认来源。只迁移旧内建地址，用户自定义来源不改。其他源与优先级不变。
+
+**P2：SGP4/坏轨道**：将异常 TLE/OMM 以 **元素身份** 跨 Tracker 重建进行进程内隔离，首次输出简短原因；新下载元素（新 TLE/OMM 历元）可恢复正常计算，不按 NORAD 号永久屏蔽卫星。此次出错的衰减/轨道异常目标不应污染 SO-50 的独立轨道计算。
+
+**P2：自定义转发器**：除了 `applied` 之外，记录 `already present`、`invalid` 和 `unresolved satellite`，并为无法匹配卫星的 UUID/卫星 ID/NORAD 提示缺失原因。这些记录可在后续数据库刷新后自动重新匹配。
+
+**P2：CAT 和发射诊断**：日志新增 PTT 指令接受、PTT 读回变化、CTCSS 指令接受的相关信息和 RX/TX 请求频率；`CAT ACK` **不是物理电台的 PTT/CTCSS 独立硬件确认**。SO-50 的 67.0 Hz 之类音频亚音必须再用电台面板或实际信号确认，不把“请求已发出”误作“射频输出正确”。
+
+**SkyCAT CI-V**：`FE-FE-E0-A2-27` 只是潜在未完成的 IC-9700 27 00 频谱帧前缀。修复在 SkyCAT 独立 PR 中，不能单靠此 SkyRoof PR 修改已构建的内置 SkyCAT 子模块。本分支已经更新 `Vendor/SkyCAT` gitlink 到 SkyCAT 合并提交 `7fe61a79`；须以本分支最新 Windows 安装包验收实际内置 Worker 行为。
+
+验收：用相同配置对比新旧版本 20 分钟以上的空闲连接、SO-50 FM/CTCSS、重扫数据库与 PARK；核对异常行数、CAT/CI-V 状态、旋转器 PID/C2 序列与实际 AZ/EL。所有发射相关测试须有人值守。

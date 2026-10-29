@@ -1,4 +1,5 @@
 ﻿using Serilog;
+using System.Collections.Concurrent;
 using SGPdotNET.CoordinateSystem;
 using SGPdotNET.Observation;
 using SGPdotNET.TLE;
@@ -13,6 +14,12 @@ namespace SkyRoof
     private readonly JplBody? EphemerisBody;
 
     public Tle? Tle;
+    // The same expired or malformed orbit may be rehydrated into a new
+    // tracker after every refresh. Quarantine by element identity, never by
+    // NORAD alone, so fresh ephemerides get another chance immediately.
+    private static readonly ConcurrentDictionary<string,byte> InvalidElements = new();
+    private const int MaxInvalidElements = 4096;
+    private readonly string? orbitElementKey;
     public bool Enabled { get; private set; }
     internal bool IsJplEphemeris => EphemerisBody.HasValue;
 
@@ -20,6 +27,9 @@ namespace SkyRoof
     {
       if (tle == null) return;
 
+      orbitElementKey = BuildOrbitElementKey(tle);
+      if (InvalidElements.ContainsKey(orbitElementKey))
+        return;
       Tle = CreateTle(tle);
       if (Tle == null) return;
 
@@ -51,9 +61,7 @@ namespace SkyRoof
           tle.omm != null
             ? $"OMM NORAD {tle.omm.NoradCatID} epoch {tle.omm.Epoch:O}"
             : $"|{tle.tle0}|{tle.tle1}|{tle.tle2}|";
-        Log.Error(
-          ex,
-          $"Error creating orbit object: {payload}.");
+        LogOrbitFailure(ex, $"Error creating orbit object: {payload}.");
         return null;
       }
     }
@@ -71,8 +79,7 @@ namespace SkyRoof
       catch (Exception ex)
       {
         Enabled = false;
-        Log.Error(
-          ex,
+        LogOrbitFailure(ex,
           $"Predict failed for {Tle!.Name} ({Tle.NoradNumber}).");
         return null;
       }
@@ -111,8 +118,7 @@ namespace SkyRoof
       catch (Exception ex)
       {
         Enabled = false;
-        Log.Error(
-          ex,
+        LogOrbitFailure(ex,
           $"Observe failed for {Tle!.Name} ({Tle.NoradNumber}).");
         return null;
       }
@@ -143,11 +149,37 @@ namespace SkyRoof
       catch (Exception ex)
       {
         Enabled = false;
-        Log.Error(
-          ex,
+        LogOrbitFailure(ex,
           $"ComputePasses failed for {Tle!.Name} ({Tle.NoradNumber}).");
         return new();
       }
+    }
+
+    internal static string BuildOrbitElementKey(SatnogsDbTle element) =>
+      element.omm is { } omm
+        ? $"OMM:{element.norad_cat_id}:{omm.Epoch:O}:{omm.MeanMotion}:{omm.Eccentricity}"
+        : $"TLE:{element.norad_cat_id}:{element.tle1}:{element.tle2}";
+
+    internal static bool QuarantineOrbitKey(string key)
+    {
+      if (InvalidElements.Count >= MaxInvalidElements)
+        InvalidElements.Clear(); // bounds the lifetime cache; never block new elements.
+      return InvalidElements.TryAdd(key, 1);
+    }
+
+    private void LogOrbitFailure(Exception exception, string context)
+    {
+      if (orbitElementKey == null)
+      {
+        Log.Error(exception, "{OrbitIssue}", context);
+        return;
+      }
+      if (QuarantineOrbitKey(orbitElementKey))
+        Log.Warning(
+          "Orbit elements quarantined for this process (source failure logged once). {Context} {ExceptionType}: {Message}",
+          context, exception.GetType().Name, exception.Message);
+      else
+        Log.Debug("Repeated invalid orbit skipped: {Context}", context);
     }
 
     private List<SatelliteVisibilityPeriod> ComputeEphemerisPasses(

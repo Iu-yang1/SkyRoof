@@ -628,6 +628,18 @@ namespace SkyRoof
       if (string.IsNullOrWhiteSpace(source))
         return 0;
 
+      if (label == "AutoTLE")
+      {
+        string resolved = OrbitSourceSettings.ResolveAutoTleUrl(source);
+        if (!string.Equals(resolved, source.Trim(), StringComparison.Ordinal))
+        {
+          Log.Information(
+            "Migrating legacy AutoTLE endpoint to verified HTTPS source: {Url}",
+            resolved);
+          source = resolved;
+        }
+      }
+
       try
       {
         string content;
@@ -1058,18 +1070,23 @@ namespace SkyRoof
     {
       Dictionary<int, List<JE9PELtransmitter>> dict = new();
 
-      foreach (string line in File.ReadAllLines(Path.Combine(DownloadsFolder, "JE9PEL.csv")))
-        try
+      int rejected = 0;
+      int imported = 0;
+      foreach (string line in File.ReadLines(Path.Combine(DownloadsFolder, "JE9PEL.csv")))
+      {
+        if (!JE9PELtransmitter.TryParse(line, out JE9PELtransmitter? tx))
         {
-          JE9PELtransmitter tx = new(line);
-          if (tx.NoradId == 0) continue;
-          dict.TryAdd(tx.NoradId, new());
-          dict[tx.NoradId].Add(tx);
+          if (!string.IsNullOrWhiteSpace(line)) rejected++;
+          continue;
         }
-        catch (Exception ex)
-        {
-          Log.Error($"Error in JE9PEL.csv: {ex.Message} Line: '{line}'");
-        }
+        if (!dict.TryGetValue(tx!.NoradId, out List<JE9PELtransmitter>? rows))
+          dict[tx.NoradId] = rows = new List<JE9PELtransmitter>();
+        rows.Add(tx);
+        imported++;
+      }
+      Log.Information(
+        "JE9PEL import: accepted {Accepted} rows, skipped {Rejected} incomplete/invalid NORAD rows; optional trailing columns allowed.",
+        imported, rejected);
 
       // insert in satnogs db
       foreach (var sat in Satellites)
@@ -1357,16 +1374,26 @@ namespace SkyRoof
             StringComparer.OrdinalIgnoreCase);
 
       int applied = 0;
+      int invalid = 0, alreadyPresent = 0, unresolvedSatellite = 0;
       foreach (CustomTransmitterDefinition definition in definitions)
       {
         if (string.IsNullOrWhiteSpace(definition.uuid) ||
             string.IsNullOrWhiteSpace(definition.description) ||
             !definition.HasAnyFrequency)
+        {
+          invalid++;
+          Log.Warning(
+            "Local transmitter skipped: invalid UUID/description/frequency; UUID={Uuid}",
+            definition.uuid);
           continue;
+        }
 
         if (existingUuids.Contains(
               definition.uuid))
+        {
+          alreadyPresent++;
           continue;
+        }
 
         SatnogsDbSatellite? sat = null;
         if (!string.IsNullOrWhiteSpace(definition.sat_id))
@@ -1383,7 +1410,14 @@ namespace SkyRoof
               s => s.norad_cat_id == definition.norad_cat_id);
 
         if (sat == null)
+        {
+          unresolvedSatellite++;
+          Log.Warning(
+            "Local transmitter pending: satellite not found; UUID={Uuid}, sat_id={SatId}, NORAD={Norad}. Will retry after orbit metadata refresh.",
+            definition.uuid, definition.sat_id,
+            definition.norad_cat_id);
           continue;
+        }
 
         SatnogsDbTransmitter tx =
           CreateCustomTransmitter(
@@ -1405,8 +1439,8 @@ namespace SkyRoof
 
       if (definitions.Count > 0)
         Log.Information(
-          "Local transmitters: applied {Applied} of {Total} saved record(s).",
-          applied,
+          "Local transmitters: applied={Applied}, already present={AlreadyPresent}, invalid={Invalid}, unresolved satellite={Unresolved} of {Total} saved record(s).",
+          applied, alreadyPresent, invalid, unresolvedSatellite,
           definitions.Count);
 
       return applied;
