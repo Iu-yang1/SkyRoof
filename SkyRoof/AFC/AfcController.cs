@@ -15,6 +15,8 @@ namespace SkyRoof.AFC
       0, 0, 0, 0, 0, default, "AFC disabled");
     private double anchorIfHz;
     private bool anchored;
+    private bool centerNext;
+    private double centerIfOffsetHz;
     private int confirmations;
     private DateTime lastProcess;
     private long generation = -1;
@@ -36,6 +38,7 @@ namespace SkyRoof.AFC
           ErrorHz = 0, Confidence = 0, Detail = reason
         };
         anchored = false;
+        centerNext = false;
         confirmations = 0;
         generation = -1;
         havePolaritySample = false;
@@ -64,6 +67,8 @@ namespace SkyRoof.AFC
           Detail = "Awaiting fresh IF signal"
         };
         anchored = false;
+        centerNext = mode != AfcSignalMode.CW;
+        centerIfOffsetHz = 0;
         confirmations = 0;
         generation = -1;
         havePolaritySample = false;
@@ -79,9 +84,24 @@ namespace SkyRoof.AFC
       lock (sync)
       {
         anchored = false;
+        centerNext = false;
         confirmations = 0;
         state = state with { State = AfcLockState.Acquiring,
           Detail = "Locking currently observed IF frequency" };
+      }
+    }
+
+    public void CenterOn(double desiredIfOffsetHz)
+    {
+      if (!double.IsFinite(desiredIfOffsetHz)) return;
+      lock (sync)
+      {
+        centerNext = true;
+        centerIfOffsetHz = desiredIfOffsetHz;
+        anchored = false;
+        confirmations = 0;
+        state = state with { State = AfcLockState.Acquiring,
+          Detail = "Centering selected IF signal" };
       }
     }
 
@@ -155,7 +175,9 @@ namespace SkyRoof.AFC
 
         if (!anchored)
         {
-          anchorIfHz = obs.IfOffsetHz;
+          // FM is centered on the nominal 12-kHz IF. CW "Lock Here"
+          // instead preserves the operator's chosen audible pitch.
+          anchorIfHz = centerNext ? centerIfOffsetHz : obs.IfOffsetHz;
           anchored = true;
           confirmations = 1;
           state = state with { State = AfcLockState.Acquiring,
@@ -235,6 +257,7 @@ namespace SkyRoof.AFC
       lock (sync)
       {
         anchored = false;
+        centerNext = false;
         acceptedCorrection = 0;
         havePolaritySample = false;
         inferredSign = 0;
