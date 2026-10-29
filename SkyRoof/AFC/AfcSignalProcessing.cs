@@ -15,6 +15,8 @@ namespace SkyRoof.AFC
     private readonly double[] taps;
     private readonly int sampleRate;
     private readonly double ifReferenceHz;
+    private double[]? lastSsbSpectrum;
+    private long lastSsbGeneration = -1;
     public int SampleRate => sampleRate;
 
     public AfcSignalProcessing(int sampleRate = 48000, double ifReferenceHz = 12000)
@@ -61,6 +63,7 @@ namespace SkyRoof.AFC
         AfcSignalMode.CW => EstimateTone(bb, mode, utc, generation, expectedOffsetHz),
         AfcSignalMode.SSB when ssbPilot =>
           EstimateTone(bb, mode, utc, generation, expectedOffsetHz),
+        AfcSignalMode.SSB => EstimateSsbRelative(bb, utc, generation),
         _ => new(mode, utc, generation, 0, double.PositiveInfinity, 0, false)
       };
     }
@@ -126,6 +129,16 @@ namespace SkyRoof.AFC
       double confidence = Math.Clamp(
         Math.Min(1.0, power * 200) *
         Math.Max(0, 1 - mad / 500.0), 0, 1);
+      // Independent spectral-centroid estimate: detect unusually biased
+      // short FM discriminator windows or strong off-center interference.
+      // Agreement alone is not proof of an unbiased FM signal.
+      double spectralHz = FmSpectralCenter(bb);
+      if (double.IsFinite(spectralHz))
+      {
+        double disagreement = Math.Abs(median - spectralHz);
+        confidence *= Math.Clamp(250.0 / Math.Max(250, disagreement), 0, 1);
+        sigma = Math.Max(sigma, disagreement * 0.25);
+      }
       bool valid = double.IsFinite(median) && Math.Abs(median) < 8000 &&
         power > 1e-8 && confidence >= 0.4;
       return new(AfcSignalMode.FM, utc, generation, median, sigma,
@@ -152,7 +165,9 @@ namespace SkyRoof.AFC
       // Search the target's local interval, never the strongest unrelated
       // station across the whole IF. CW initial selection can be adjusted
       // in the UI to follow individual pileup signals.
-      double span = mode == AfcSignalMode.CW ? 650 : 120;
+      // Explicitly selected IF targets get a narrow admission gate; a nearby
+      // stronger pileup station must not silently become the new target.
+      double span = mode == AfcSignalMode.CW ? 55 : 50;
       int low = (int)Math.Ceiling((expectedHz - span) / binHz);
       int high = (int)Math.Floor((expectedHz + span) / binHz);
       double best = -1, side = 0;
@@ -181,6 +196,93 @@ namespace SkyRoof.AFC
       double confidence = Math.Clamp((10 * Math.Log10(Math.Max(1, ratio)) - 5) / 18, 0, 1);
       bool valid = confidence >= 0.5 && double.IsFinite(hz);
       return new(mode, utc, generation, hz, sigma, valid ? confidence : 0, valid);
+    }
+
+
+    private double FmSpectralCenter(Complex[] bb)
+    {
+      const int n = 8192;
+      if (bb.Length < n) return double.NaN;
+      var spectrum = new Complex[n];
+      for (int i = 0; i < n; i++)
+      {
+        double win = .5 - .5 * Math.Cos(2 * Math.PI * i / (n - 1));
+        spectrum[i] = bb[bb.Length - n + i] * win;
+      }
+      Fourier(spectrum);
+      double binHz = sampleRate / 2.0 / n, sum = 0, weighted = 0;
+      for (int k = -2400; k <= 2400; k++)
+      {
+        double hz = k * binHz;
+        if (Math.Abs(hz) > 6800) continue;
+        double power = Power(spectrum, k);
+        sum += power;
+        weighted += hz * power;
+      }
+      return sum > 1e-12 ? weighted / sum : double.NaN;
+    }
+
+    /// <summary>
+    /// Reference-free SSB has no unique absolute carrier. Frame-to-frame
+    /// spectral displacement is useful as a suggestion only. HasAbsoluteReference
+    /// intentionally stays false, so no CAT writes can result.
+    /// </summary>
+    private AfcObservation EstimateSsbRelative(Complex[] bb,
+      DateTime utc, long generation)
+    {
+      const int n = 8192, halfBins = 1024;
+      if (bb.Length < n)
+        return new(AfcSignalMode.SSB, utc, generation, 0, 9999, 0, false);
+      var spec = new Complex[n];
+      for (int i = 0; i < n; i++)
+      {
+        double win = .5 - .5 * Math.Cos(2 * Math.PI * i / (n - 1));
+        spec[i] = bb[bb.Length - n + i] * win;
+      }
+      Fourier(spec);
+      var profile = new double[2 * halfBins + 1];
+      double mean = 0;
+      for (int k = -halfBins; k <= halfBins; k++)
+      {
+        double v = Math.Log(1e-12 + Power(spec, k));
+        profile[k + halfBins] = v;
+        mean += v;
+      }
+      mean /= profile.Length;
+      double norm = 0;
+      for (int i = 0; i < profile.Length; i++)
+      {
+        profile[i] -= mean;
+        norm += profile[i] * profile[i];
+      }
+      if (lastSsbSpectrum == null || lastSsbGeneration != generation ||
+          norm < 1e-8)
+      {
+        lastSsbSpectrum = profile;
+        lastSsbGeneration = generation;
+        return new(AfcSignalMode.SSB, utc, generation, 0, 9999, 0, false);
+      }
+      double best = -1;
+      int bestShift = 0;
+      // +/-75 Hz relative drift; speech-content changes often fail the
+      // correlation-quality gate, which correctly produces no measurement.
+      for (int shift = -25; shift <= 25; shift++)
+      {
+        double cross = 0, a = 0, b = 0;
+        for (int k = 40; k < profile.Length - 40; k++)
+        {
+          double x = lastSsbSpectrum[k], y = profile[k + shift];
+          cross += x * y;
+          a += x * x;
+          b += y * y;
+        }
+        double corr = cross / Math.Sqrt(Math.Max(1e-15, a * b));
+        if (corr > best) { best = corr; bestShift = shift; }
+      }
+      lastSsbSpectrum = profile;
+      double confidence = Math.Clamp((best - .55) / .4, 0, 1);
+      return new(AfcSignalMode.SSB, utc, generation,
+        bestShift * (sampleRate / 2.0 / n), 15, confidence, false);
     }
 
     private static double Power(Complex[] spec, int b)
