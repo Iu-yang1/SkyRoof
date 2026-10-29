@@ -325,5 +325,32 @@ namespace VE3NEA.Dsp.Tests
       controller.Snapshot.State.Should().Be(AfcLockState.Acquiring);
     }
 
+
+    [Fact]
+    public void Controller_ConfirmedDivergentAfcReadbacksStopAutomaticWrites()
+    {
+      var controller = new AfcController();
+      controller.Configure(AfcSignalMode.CW, AfcControlMode.Auto);
+      controller.CenterOn(0);
+      int[] increasinglyWrong = { 100, 160, 260, 420, 680, 800 };
+      for (int k = 0; k < increasinglyWrong.Length; k++)
+      {
+        controller.Observe(new(AfcSignalMode.CW,
+          T0.AddSeconds(k), 42, increasinglyWrong[k], 1, 1, true),
+          145000000 + 50 * k, 1, 2000, 20, 5, false,
+          catReadbackIsTimeAligned: true,
+          confirmedOwnAfcReadback: true);
+      }
+      controller.Snapshot.State.Should().Be(AfcLockState.Fault);
+      double frozen = controller.Snapshot.CorrectionHz;
+      controller.Observe(new(AfcSignalMode.CW,
+        T0.AddSeconds(10), 42, 1400, 1, 1, true),
+        145000400, 1, 2000, 20, 5, false,
+        catReadbackIsTimeAligned: true, confirmedOwnAfcReadback: true);
+      controller.Snapshot.CorrectionHz.Should().Be(frozen);
+      controller.LockHere();
+      controller.Snapshot.State.Should().Be(AfcLockState.Acquiring);
+    }
+
   }
 }
