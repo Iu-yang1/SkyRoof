@@ -7,6 +7,29 @@ AFC 使用单独的 12 kHz IF PCM 输入，在 SkyRoof 原有卫星多普勒与�
 RIT/XIT 或 TX 上行频率。有关 IC-9700 USB/LAN 12 kHz IF 输出，见
 [Icom 官方说明书](https://icomuk.co.uk/files/icom/PDF/productManual/IC-9700_ENG_Basic_6.pdf)。
 
+## 本次 P1–P4 更新的操作界面
+
+AFC 已改为两个页签：**实时追踪**与**高级设置**。实时追踪页显示
+12 kHz IF 的实际 FFT 频谱、观测频偏、目标误差、RX AFC 修正量、
+置信度、CAT 状态、RF/IF 方向及故障原因。点击频谱可选择 CW/SSB
+参考信号；FM 的中心频率估计不需要点击单音目标。
+
+**锁定当前**以当前被选信号频率为基准保留其音调，
+**居中并锁定**则试图将该信号调至高级设置中的
+`Desired center IF offset (Hz)`。它与用来搜索原始信号的
+`Target search IF offset (Hz)` **是两个独立参数**，不能混用。
+若显示 `Fault`，应检查真实 IF/CAT 响应并重新选择目标，
+不能让后台自动反向追频。
+
+普通目标参数更新不会重启音频设备；只有切换输入设备、输入方式
+或 IF 参考频率才需要重新启动采集。切换卫星/转发器或修改 IF
+目标时，旧 PCM 和 AFC 目标身份会失效并重新捕获。
+
+CAT 读回按照它在 CAT 工作线程的实际时间保存，只允许与
+对应样本时刻相近的 IF 观测配对，过期的读回不会参与自动方向
+学习。写频请求和真实设备读回分开记录，不能把「已请求」当作
+「已确认」。
+
 ## 使用步骤
 
 1. 在 IC-9700 设置 `SET > Connectors > USB AF/IF Output >
