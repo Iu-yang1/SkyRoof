@@ -138,10 +138,14 @@ namespace VE3NEA.Dsp.Tests
     {
       var ingress=ReadyIngress();
       var oldSession=new BlockingInferenceSession();
-      int published=0;
+      int stalePublished=0;
       using var worker=new CwReceiveWorker(
         ingress,TestOptions(),()=>oldSession,_=>[ConfirmedTrack()]);
-      worker.DecodeUpdated+=(_,_)=>Interlocked.Increment(ref published);
+      worker.DecodeUpdated+=(_,e)=>
+      {
+        if(e.Mode==CwDecoderMode.DeepCW)
+          Interlocked.Increment(ref stalePublished);
+      };
       worker.Start();
       await WaitUntilAsync(()=>oldSession.Started);
       var sw=System.Diagnostics.Stopwatch.StartNew();
@@ -151,8 +155,9 @@ namespace VE3NEA.Dsp.Tests
       worker.DecoderMode.Should().Be(CwDecoderMode.NewCW);
       oldSession.Release();
       await WaitUntilAsync(()=>!worker.GetStatus().InferenceBusy);
-      Volatile.Read(ref published).Should().Be(0);
-      worker.LatestDecode.Should().BeNull();
+      // The worker may legitimately schedule a *new* mode window after
+      // the old one exits. Only an old-mode event must be prohibited.
+      Volatile.Read(ref stalePublished).Should().Be(0);
     }
 
     [Fact]
