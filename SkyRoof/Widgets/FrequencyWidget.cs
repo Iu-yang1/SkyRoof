@@ -36,7 +36,8 @@ namespace SkyRoof
     private AfcControlForm? AfcWindow;
     private double lastAfcExpectedRf;
 
-    internal AfcSignalMode CurrentAfcMode => RadioLink.DownlinkMode switch
+    internal AfcSignalMode CurrentAfcMode =>
+      (RadioLink.TxCust == null ? Slicer.Mode.FM : RadioLink.DownlinkMode) switch
     {
       Slicer.Mode.FM or Slicer.Mode.FM_D => AfcSignalMode.FM,
       Slicer.Mode.CW => AfcSignalMode.CW,
