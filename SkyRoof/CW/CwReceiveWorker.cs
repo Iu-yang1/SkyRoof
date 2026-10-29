@@ -10,8 +10,7 @@ namespace SkyRoof.CW
     // Decode all eight instead of silently leaving the last three
     // displayed lanes without ONNX inference.
     public int MaxDecodeLanes { get; init; } = 8;
-    public bool ExperimentalCoherentSeparation {get;init;}
-    public bool ExperimentalHsmmArbitration {get;init;}
+    public CwDecoderMode DecoderMode {get;init;} = CwDecoderMode.DeepCW;
     public double LaneBandwidthHz { get; init; } = 240;
     public double TargetCenterHz { get; init; } = 800;
     public TimeSpan ModelRetryInterval { get; init; } =
@@ -100,8 +99,7 @@ namespace SkyRoof.CW
           onnx)
         {
           MaxLanes = options.MaxDecodeLanes,
-          ExperimentalCoherentSeparation=options.ExperimentalCoherentSeparation,
-          ExperimentalHsmmArbitration=options.ExperimentalHsmmArbitration,
+
           LaneBandwidthHz =
             options.LaneBandwidthHz,
           TargetCenterHz =
@@ -150,7 +148,7 @@ namespace SkyRoof.CW
     private readonly object sync = new();
     private readonly CwPcmIngress ingress;
     private readonly CwReceiveWorkerOptions options;
-    private readonly Func<ICwInferenceSession?> sessionFactory;
+    private readonly Func<CwDecoderMode,ICwInferenceSession?> sessionFactory;
     private readonly Func<double, IReadOnlyList<CwSignalTrack>>
       trackAnalyzer;
 
@@ -158,6 +156,10 @@ namespace SkyRoof.CW
     private Task? trackingTask;
     private Task? inferenceTask;
     private ICwInferenceSession? session;
+    private CwDecoderMode decoderMode;
+    private CwDecoderMode? sessionMode;
+    private long modeRevision;
+    private long appliedTrackingModeRevision=-1;
 
     private IReadOnlyList<CwSignalTrack> latestTracks =
       Array.Empty<CwSignalTrack>();
@@ -209,6 +211,7 @@ namespace SkyRoof.CW
       this.options =
         options ??
         new CwReceiveWorkerOptions();
+      decoderMode=this.options.DecoderMode;
 
       ValidateOptions(
         this.options);
@@ -220,15 +223,13 @@ namespace SkyRoof.CW
           nameof(options));
 
       this.sessionFactory =
-        sessionFactory ??
-        (() =>
-        {
-          if (!DeepCwModelManager.IsInstalled())
-            return null;
-
-          return new DeepCwInferenceSession(
-            this.options);
-        });
+        sessionFactory!=null
+          ? _=>sessionFactory()
+          : mode=>mode==CwDecoderMode.NewCW
+            ? new NewCwInferenceSession(this.options)
+            : DeepCwModelManager.IsInstalled()
+              ? new DeepCwInferenceSession(this.options)
+              : null;
 
       this.trackAnalyzer =
         trackAnalyzer ??
@@ -239,6 +240,33 @@ namespace SkyRoof.CW
 
     public CwReceiveWorkerOptions Options =>
       options;
+
+    public CwDecoderMode DecoderMode
+    {
+      get { lock(sync)return decoderMode; }
+    }
+
+    // Mode switching keeps the audio input and CAT/TX sessions alive.
+    // The inference task alone owns session.Dispose(), so this cannot
+    // dispose native ONNX while it is decoding on another thread.
+    public void SetDecoderMode(CwDecoderMode next)
+    {
+      if(!Enum.IsDefined(next))
+        throw new ArgumentOutOfRangeException(nameof(next));
+      ThrowIfDisposed();
+      lock(sync)
+      {
+        if(decoderMode==next)return;
+        decoderMode=next;
+        modeRevision++;
+        lastInferenceAttemptSampleIndex=-1;
+        latestDecode=null;
+        modelState=CwReceiveModelState.Unknown;
+        nextModelAttemptUtc=DateTime.MinValue;
+        lastError=null;
+      }
+      OnStatusChanged();
+    }
 
     public double KnownDopplerRateHzPerSecond
     {
@@ -349,6 +377,7 @@ namespace SkyRoof.CW
         inferenceTask = null;
         session?.Dispose();
         session = null;
+        sessionMode=null;
         latestTracks =
           Array.Empty<CwSignalTrack>();
         latestDecode = null;
@@ -381,6 +410,7 @@ namespace SkyRoof.CW
 
         try
         {
+          ApplyTrackingMode();
           IReadOnlyList<CwSignalTrack> tracks =
             trackAnalyzer(
               Volatile.Read(
@@ -435,6 +465,23 @@ namespace SkyRoof.CW
       }
 
       OnStatusChanged();
+    }
+
+    private void ApplyTrackingMode()
+    {
+      CwDecoderMode selected;
+      long revision;
+      lock(sync)
+      {
+        revision=modeRevision;
+        if(appliedTrackingModeRevision==revision)return;
+        appliedTrackingModeRevision=revision;
+        selected=decoderMode;
+      }
+      CwPileupFrontEnd front=ingress.FrontEnd;
+      front.EnableCarrierPhaseVerification=selected==CwDecoderMode.NewCW;
+      front.EnableExperimentalStationGate=selected==CwDecoderMode.NewCW;
+      front.ResetVerification();
     }
 
     private void TryScheduleInference(
@@ -497,13 +544,15 @@ namespace SkyRoof.CW
         tracks.ToArray();
       long generation =
         observedGeneration;
+      long revision;
+      lock(sync)revision=modeRevision;
 
       Task task =
         Task.Run(
           () => RunInference(
             pcm,
             trackSnapshot,
-            generation));
+            generation,revision));
 
       lock (sync)
         inferenceTask = task;
@@ -514,12 +563,13 @@ namespace SkyRoof.CW
     private void RunInference(
       CwAudioSnapshot pcm,
       IReadOnlyList<CwSignalTrack> tracks,
-      long generation)
+      long generation,long revision)
     {
       try
       {
         if (generation !=
-            ingress.TimelineGeneration)
+            ingress.TimelineGeneration ||
+            revision!=Interlocked.Read(ref modeRevision))
           return;
 
         ICwInferenceSession? decoder =
@@ -533,7 +583,8 @@ namespace SkyRoof.CW
           decoder.Reset();
 
         if (generation !=
-            ingress.TimelineGeneration)
+            ingress.TimelineGeneration ||
+            revision!=Interlocked.Read(ref modeRevision))
           return;
 
         CwContinuousDecodeBatch batch =
@@ -545,7 +596,8 @@ namespace SkyRoof.CW
           ref completedInferenceWindows);
 
         if (generation !=
-            ingress.TimelineGeneration)
+            ingress.TimelineGeneration ||
+            revision!=Interlocked.Read(ref modeRevision))
           return;
 
         lock (sync)
@@ -569,6 +621,7 @@ namespace SkyRoof.CW
         {
           session?.Dispose();
           session = null;
+          sessionMode=null;
           modelState =
             CwReceiveModelState.Error;
           nextModelAttemptUtc =
@@ -590,6 +643,13 @@ namespace SkyRoof.CW
     {
       lock (sync)
       {
+        if (session!=null && sessionMode!=decoderMode)
+        {
+          session.Dispose();
+          session=null;
+          sessionMode=null;
+          nextModelAttemptUtc=DateTime.MinValue;
+        }
         if (session != null)
           return session;
 
@@ -599,7 +659,7 @@ namespace SkyRoof.CW
           return null;
 
         ICwInferenceSession? created =
-          sessionFactory();
+          sessionFactory(decoderMode);
         if (created == null)
         {
           modelState =
@@ -612,6 +672,7 @@ namespace SkyRoof.CW
         }
 
         session = created;
+        sessionMode=decoderMode;
         modelState =
           CwReceiveModelState.Ready;
         nextModelAttemptUtc =
@@ -679,6 +740,8 @@ namespace SkyRoof.CW
     private static void ValidateOptions(
       CwReceiveWorkerOptions value)
     {
+      if(!Enum.IsDefined(value.DecoderMode))
+        throw new ArgumentOutOfRangeException(nameof(value.DecoderMode));
       if (value.TrackingInterval <
             TimeSpan.FromMilliseconds(20) ||
           value.TrackingInterval >
