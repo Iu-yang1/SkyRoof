@@ -599,7 +599,9 @@ namespace SkyRoof
         else
         {
           long catHz = (long)Math.Truncate(rxRf - band.LoOffset);
-          AfcCatTimeline.RecordRequest(catHz, DateTime.UtcNow, source);
+          long step = Math.Max(1, ctx.Settings.Cat.TuningStep);
+          AfcCatTimeline.RecordRequest((catHz / step) * step,
+            DateTime.UtcNow, source);
           lastAfcExpectedRf = rxRf;
           ctx.CatControl.Rx!.SetRxFrequency(catHz);
         }
@@ -607,7 +609,9 @@ namespace SkyRoof
       else
       {
         long catHz = (long)Math.Truncate(rxRf);
-        AfcCatTimeline.RecordRequest(catHz, DateTime.UtcNow, source);
+        long step = Math.Max(1, ctx.Settings.Cat.TuningStep);
+        AfcCatTimeline.RecordRequest((catHz / step) * step,
+          DateTime.UtcNow, source);
         lastAfcExpectedRf = rxRf;
         ctx.CatControl.Rx!.SetRxFrequency(catHz);
       }
