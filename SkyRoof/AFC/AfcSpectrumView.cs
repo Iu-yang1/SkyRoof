@@ -213,7 +213,10 @@ namespace SkyRoof.AFC
         double b = -6000 + (px + 1) * (12000.0 / HistoryWidth);
         linePixels[px] = HeatColor(PeakAt(spectrum, a, b)).ToArgb();
       }
-      historyHead = (historyHead + 1) % HistoryRows;
+      // Write rows in descending order so the two DrawImage segments
+      // always display newest first, even before the 180-row ring fills.
+      historyHead = historyHead < 0 ? HistoryRows - 1 :
+        (historyHead + HistoryRows - 1) % HistoryRows;
       historyCount = Math.Min(HistoryRows, historyCount + 1);
       BitmapData data = history.LockBits(
         new Rectangle(0, historyHead, HistoryWidth, 1),
