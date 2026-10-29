@@ -10,6 +10,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using VE3NEA;
+using SkyRoof.AFC;
 
 namespace SkyRoof
 {
@@ -31,6 +32,63 @@ namespace SkyRoof
     private readonly Font DownlinkRegularFont, DownlinkBoldFont;
     private readonly ContextMenuStrip PttMenu = new();
     private long SuppressCatTuneFeedbackUntil;
+    public readonly AfcController AfcController = new();
+    private AfcControlForm? AfcWindow;
+    private double lastAfcExpectedRf;
+
+    internal AfcSignalMode CurrentAfcMode =>
+      (RadioLink.TxCust == null ? Slicer.Mode.FM : RadioLink.DownlinkMode) switch
+    {
+      Slicer.Mode.FM or Slicer.Mode.FM_D => AfcSignalMode.FM,
+      Slicer.Mode.CW => AfcSignalMode.CW,
+      _ => AfcSignalMode.SSB
+    };
+
+    internal bool IsAfcTransmitting =>
+      ctx?.CatControl.Rx?.Ptt == true || ctx?.CatControl.Tx?.Ptt == true;
+
+    internal double GetAfcRxReadbackRf()
+    {
+      double freq = ctx?.CatControl.Rx?.LastReadRxFrequency ?? 0;
+      if (freq <= 0) return double.NaN;
+      if (ctx!.Settings.Transverter.RxCatOffsetEnabled)
+      {
+        var band = ctx.Settings.Transverter.GetCatBand(
+          RadioLink.CorrectedDownlinkFrequency);
+        if (band == null) return double.NaN;
+        freq += band.LoOffset;
+      }
+      return freq;
+    }
+
+    internal void ApplyAfcRxCorrection()
+    {
+      if (ctx == null || ctx.Settings.Afc.Enabled != true ||
+          !RadioLink.HasDownlink || IsAfcTransmitting ||
+          ctx.CatControl.Rx == null) return;
+      if (AfcController.Snapshot.Control != AfcControlMode.Auto) return;
+      double target = RadioLink.CorrectedDownlinkFrequency + AfcRxOffset;
+      if (Math.Abs(target - lastAfcExpectedRf) < 1) return;
+      SendCatRxFrequency(target);
+      if (ctx.Settings.Transverter.SdrOffsetEnabled)
+        XverterSetSlicerFrequency();
+      else SetSlicerFrequency();
+    }
+
+    private double AfcRxOffset => ctx?.Settings.Afc.Enabled == true
+      ? AfcController.GetRxCorrection(IsAfcTransmitting) : 0;
+
+    private void OpenAfcWindow()
+    {
+      if (ctx == null) return;
+      if (AfcWindow == null || AfcWindow.IsDisposed)
+      {
+        AfcWindow = new AfcControlForm(ctx, this);
+        AfcWindow.FormClosed += (_, _) => AfcWindow = null;
+        AfcWindow.Show(ctx.MainForm);
+      }
+      else AfcWindow.Activate();
+    }
 
     public FrequencyWidget()
     {
@@ -55,6 +113,13 @@ namespace SkyRoof
 
       BuildCtcssMenu();
       BuildPttMenu();
+      // Preserve the existing nominal/corrected frequency popup shared by
+      // both RX and TX labels, then append AFC as an additional command.
+      contextMenuStrip1.Items.Add(new ToolStripSeparator());
+      contextMenuStrip1.Items.Add("FM / CW / SSB AFC...", null,
+        (_, _) => OpenAfcWindow());
+      DownlinkLabel.ContextMenuStrip = contextMenuStrip1;
+      DownlinkFrequencyLabel.DoubleClick += (_, _) => OpenAfcWindow();
     }
 
     internal void AttachTransmitButton(Control host)
@@ -93,6 +158,7 @@ namespace SkyRoof
     //----------------------------------------------------------------------------------------------
     public void SetTransmitter(bool returnToBase = false)
     {
+      AfcController.Reset("Satellite or transmitter changed");
       // Tracking-only ephemeris objects (Moon/Sun/Venus) intentionally do not
       // own radio frequencies. Selecting one must leave the current rig state.
       if (ctx.SatelliteSelector.SelectedTransmitter == null)
@@ -300,6 +366,11 @@ namespace SkyRoof
         return;
       }
 
+      double catRf = GetAfcRxReadbackRf();
+      if (lastAfcExpectedRf > 0 && double.IsFinite(catRf) &&
+          Math.Abs(catRf - lastAfcExpectedRf) <= 3)
+        return; // readback of our own requested tuning, not a user knob
+      AfcController.OnUserTune();
       int delta = (int)(ctx.CatControl.Rx!.LastReadRxFrequency - RadioLink.CorrectedDownlinkFrequency);
       RadioLink.IncrementDownlinkFrequency(delta);
       RadioLinkToRadio();
@@ -397,6 +468,7 @@ namespace SkyRoof
     //----------------------------------------------------------------------------------------------
     public void SettingsToRadioLink(bool isTerrestrial, double? frequency = null)
     {
+      AfcController.Reset("Frequency model changed");
       RadioLink.IsTerrestrial = isTerrestrial;
       if (isTerrestrial) RadioLink.DownlinkFrequency = frequency!.Value;
 
@@ -447,7 +519,7 @@ namespace SkyRoof
 
         if (ctx.CatControl.Rx != null)
           SendCatRxFrequency(
-            RadioLink.CorrectedDownlinkFrequency);
+            RadioLink.CorrectedDownlinkFrequency + AfcRxOffset);
       }
 
       if (RadioLink.CorrectedUplinkFrequency != 0 &&
@@ -472,6 +544,7 @@ namespace SkyRoof
 
     private void SendCatRxFrequency(double rxRf)
     {
+      lastAfcExpectedRf = rxRf;
       var transverter = ctx.Settings.Transverter;
       if (transverter.RxCatOffsetEnabled)
       {
@@ -528,7 +601,7 @@ namespace SkyRoof
       double low = ctx.Sdr.Frequency - bandwidth / 2;
       double high = ctx.Sdr.Frequency + bandwidth / 2;
 
-      double targetFrequency = RadioLink.CorrectedDownlinkFrequency!;
+      double targetFrequency = RadioLink.CorrectedDownlinkFrequency + AfcRxOffset;
 
       if (targetFrequency < low || targetFrequency > high)
         if (ctx.Sdr.IsFrequencySupported(targetFrequency))
@@ -597,7 +670,7 @@ namespace SkyRoof
     {
       if (ctx.Sdr?.Enabled != true) return;
 
-      double rfFrequency = RadioLink.CorrectedDownlinkFrequency!;
+      double rfFrequency = RadioLink.CorrectedDownlinkFrequency + AfcRxOffset;
       var band = ctx.Settings.Transverter.GetSdrBand(rfFrequency);
 
       if (band == null)

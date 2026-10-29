@@ -8,6 +8,8 @@ items:
     href: radio-and-ft4.md
   - name: Embedded SkyCAT CAT server
     href: embedded-skycat.md
+  - name: FM / CW / SSB AFC
+    href: afc.md
   - name: IC-9700 spectrum
     href: spectrum.md
   - name: ONVIF camera (GPU)

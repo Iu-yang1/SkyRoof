@@ -8,6 +8,8 @@ items:
     href: radio-and-ft4.md
   - name: 内嵌 SkyCAT 串口、频谱和 CW 服务
     href: embedded-skycat.md
+  - name: FM / CW / SSB 自动频率追踪
+    href: afc.md
   - name: IC-9700 频谱
     href: spectrum.md
   - name: ONVIF 摄像机（GPU）
