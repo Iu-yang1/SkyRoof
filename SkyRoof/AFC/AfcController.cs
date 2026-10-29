@@ -31,7 +31,7 @@ namespace SkyRoof.AFC
       {
         state = state with
         {
-          State = AfcLockState.Off, CorrectionHz = 0,
+          State = AfcLockState.Off, Control = AfcControlMode.Off, CorrectionHz = 0,
           ErrorHz = 0, Confidence = 0, Detail = reason
         };
         anchored = false;
@@ -53,10 +53,12 @@ namespace SkyRoof.AFC
     {
       lock (sync)
       {
-        if (state.Mode == mode && state.Control == control) return;
+        if (state.Mode == mode && state.Control == control && state.State != AfcLockState.Off) return;
         state = state with
         {
           Mode = mode, Control = control, State = AfcLockState.Acquiring,
+          CorrectionHz = 0, ErrorHz = 0, Confidence = 0,
+          LastObservationUtc = default,
           Detail = "Awaiting fresh IF signal"
         };
         anchored = false;
@@ -65,6 +67,7 @@ namespace SkyRoof.AFC
         havePolaritySample = false;
         inferredSign = 0;
         acceptedCorrection = 0;
+        lastProcess = default;
       }
     }
 
@@ -199,8 +202,10 @@ namespace SkyRoof.AFC
       // A user knob command changes the reference target; do not fight it.
       lock (sync)
       {
-        anchorIfHz = state.ObservedIfOffsetHz;
+        anchored = false;
         acceptedCorrection = 0;
+        havePolaritySample = false;
+        inferredSign = 0;
         state = state with { State = AfcLockState.Acquiring, CorrectionHz = 0,
           Detail = "Manual tune: AFC target rebased" };
         confirmations = 0;
