@@ -240,6 +240,9 @@ namespace SkyRoof.CW
     private IReadOnlyList<CwSignalTrack> latestTracks =
       Array.Empty<CwSignalTrack>();
     private readonly Dictionary<int,DateTime> verifiedUntil = new();
+    private readonly Dictionary<int,(DateTime Utc,double FrequencyHz,
+      CwNarrowbandCarrierEvidence.Result Evidence)>
+      physicalCache = new();
 
     public CwAudioHub Audio { get; }
     public CwCandidateDetector Detector { get; }
@@ -249,6 +252,7 @@ namespace SkyRoof.CW
     public double AnalysisSeconds { get; }
     private readonly CwStationHypothesisManager stationHypotheses=new();
     public bool EnableExperimentalStationGate {get;set;}
+    public bool EnableCarrierPhaseVerification {get;set;} = true;
 
     public CwPileupFrontEnd(
       int sampleRate = SdrConst.AUDIO_SAMPLING_RATE,
@@ -409,12 +413,28 @@ namespace SkyRoof.CW
         // and intermittent noise maxima as CW key-down. Cross-check
         // the complete PCM against adjacent frequency guard channels
         // before allowing an identity to become CW-verified.
-        bool independentlyKeyed=evidence.IsKeyed &&
-          CwNarrowbandCarrierEvidence.Assess(snapshot,track).IsKeyed;
+        bool independentlyKeyed=evidence.IsKeyed;
+        CwNarrowbandCarrierEvidence.Result physical=default;
+        if(independentlyKeyed && EnableCarrierPhaseVerification)
+        {
+          // Full-window phase testing is heavier than ridge FFT caching.
+          // Re-evaluate at most every 300 ms per stable track unless the
+          // frequency changed materially, while preserving 120 ms tracker
+          // responsiveness and the existing 3-second verified hold.
+          bool canReuse=physicalCache.TryGetValue(track.Id,out var cached) &&
+            now>=cached.Utc &&
+            now-cached.Utc<TimeSpan.FromMilliseconds(300) &&
+            Math.Abs(cached.FrequencyHz-track.FrequencyHz)<2;
+          physical=canReuse?cached.Evidence:
+            CwNarrowbandCarrierEvidence.Assess(snapshot,track);
+          if(!canReuse)
+            physicalCache[track.Id]=(now,track.FrequencyHz,physical);
+          independentlyKeyed=physical.IsKeyed;
+        }
         bool keyed=independentlyKeyed &&
           (!EnableExperimentalStationGate ||
            stationHypotheses.Update(track,evidence,now));
-        if(keyed)
+        if(keyed && track.Active)
           verifiedUntil[track.Id]=now.AddSeconds(3);
         bool verified=verifiedUntil.TryGetValue(track.Id,out DateTime until) &&
           until>=now;
@@ -430,11 +450,18 @@ namespace SkyRoof.CW
           FrameScanner.FastHopSamples);
       Tracks.RetireAliases(resolution.RetiredTrackIds);
       foreach(int id in resolution.RetiredTrackIds)
+      {
         verifiedUntil.Remove(id);
+        physicalCache.Remove(id);
+      }
       latestTracks=resolution.Tracks;
       foreach(int id in verifiedUntil
         .Where(x=>x.Value<now).Select(x=>x.Key).ToArray())
         verifiedUntil.Remove(id);
+      foreach(int id in physicalCache
+        .Where(x=>now-x.Value.Utc>TimeSpan.FromSeconds(6))
+        .Select(x=>x.Key).ToArray())
+        physicalCache.Remove(id);
       return latestTracks;
     }
 
@@ -446,6 +473,7 @@ namespace SkyRoof.CW
       Tracks.Reset();
       stationHypotheses.Reset();
       verifiedUntil.Clear();
+      physicalCache.Clear();
       lastPrecisionSampleIndex = long.MinValue;
       lastCommittedSampleIndex = long.MinValue;
       lastCommittedUtc = null;
