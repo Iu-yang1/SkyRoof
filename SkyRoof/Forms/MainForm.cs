@@ -123,10 +123,7 @@ namespace SkyRoof
         new CwReceiveWorker(ctx.CwAudio.Ingress,
           new CwReceiveWorkerOptions
           {
-            ExperimentalCoherentSeparation=
-              ctx.Settings.CwConsole.ExperimentalCoherentSeparation,
-            ExperimentalHsmmArbitration=
-              ctx.Settings.CwConsole.ExperimentalHsmmArbitration
+            DecoderMode=ctx.Settings.CwConsole.DecoderMode
           });
       ctx.CwReceiveWorker.Start();
       ctx.CwTransmit =

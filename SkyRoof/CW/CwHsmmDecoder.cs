@@ -88,6 +88,15 @@ namespace SkyRoof.CW
           }
           else if(pattern.Length>0)
           {
+            // An observation window may end in arbitrarily long silence
+            // after the final transmitted character. It is censoring,
+            // not a 40-dot Morse word gap, and must not destroy an
+            // otherwise correct multi-letter transcript.
+            if(run.Start+run.Length>=keyDown.Length)
+            {
+              Commit(run.Start);
+              continue;
+            }
             int distance=units>=5?7:units>=2?3:1;
             penalty+=Math.Pow((units-distance)/(distance==1?0.8:2.1),2);
             if(distance>=3)Commit(run.Start);
@@ -159,11 +168,19 @@ namespace SkyRoof.CW
       double hi=sorted[(int)(0.85*(sorted.Length-1))];
       if(hi<=lo*1.8 || hi<1e-16)
         return Enumerable.Repeat(0.5f,count).ToArray();
-      double threshold=Math.Sqrt(Math.Max(lo,1e-16)*hi);
-      double slope=Math.Max(1e-9,0.20*(hi-lo));
+      // A linear-power sigmoid maps genuine key-up silence (lo~=0) to
+      // ~0.5, yielding phantom long key-down runs. Compare log power
+      // instead: separate signal and noise decades without depending on
+      // absolute USB AF amplitude or inventing activity in flat noise.
+      double floor=Math.Max(hi*1e-6,1e-18);
+      double loLog=Math.Log(Math.Max(lo,floor));
+      double hiLog=Math.Log(Math.Max(hi,floor*1.01));
+      double mid=0.5*(loLog+hiLog);
+      double width=Math.Max(0.10,0.18*(hiLog-loLog));
       return power.Select(x=>
-        (float)Math.Clamp(0.5+0.5*Math.Tanh((x-threshold)/slope),0,1))
-        .ToArray();
+        (float)Math.Clamp(
+          0.5+0.5*Math.Tanh((Math.Log(Math.Max(x,floor))-mid)/width),
+          0,1)).ToArray();
     }
 
     /// <summary>Conservative A/B arbitration: neural output remains primary.</summary>

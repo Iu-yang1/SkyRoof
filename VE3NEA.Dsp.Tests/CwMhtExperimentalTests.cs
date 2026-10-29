@@ -13,16 +13,18 @@ namespace VE3NEA.Dsp.Tests
       new(id,hz,snr,0,Now,Now,true,true);
 
     [Fact]
-    public void ExperimentalReceiveGatesDefaultDisabledOnProductionUpgrade()
+    public void ExclusiveReceiveModeDefaultsToLegacyDeepCw()
     {
       var settings=new SkyRoof.CwConsoleSettings();
-      settings.ExperimentalVerifyCarrierPhase.Should().BeFalse();
-      settings.ExperimentalStationGate.Should().BeFalse();
-      settings.ExperimentalCoherentSeparation.Should().BeFalse();
-      settings.ExperimentalHsmmArbitration.Should().BeFalse();
+      settings.DecoderMode.Should().Be(CwDecoderMode.DeepCW);
       var frontEnd=new CwPileupFrontEnd();
       frontEnd.EnableCarrierPhaseVerification.Should().BeFalse();
       frontEnd.EnableExperimentalStationGate.Should().BeFalse();
+      // No individual experimental flags are present in the user settings.
+      typeof(SkyRoof.CwConsoleSettings).GetProperties()
+        .Select(p=>p.Name)
+        .Should().NotContain(x=>x.StartsWith("Experimental",
+          StringComparison.Ordinal));
     }
 
     [Fact]

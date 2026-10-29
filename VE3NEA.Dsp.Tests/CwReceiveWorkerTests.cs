@@ -134,6 +134,33 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public async Task SwitchingDecoderWhileOldInferenceRuns_DiscardsStaleBatch()
+    {
+      var ingress=ReadyIngress();
+      var oldSession=new BlockingInferenceSession();
+      int stalePublished=0;
+      using var worker=new CwReceiveWorker(
+        ingress,TestOptions(),()=>oldSession,_=>[ConfirmedTrack()]);
+      worker.DecodeUpdated+=(_,e)=>
+      {
+        if(e.Mode==CwDecoderMode.DeepCW)
+          Interlocked.Increment(ref stalePublished);
+      };
+      worker.Start();
+      await WaitUntilAsync(()=>oldSession.Started);
+      var sw=System.Diagnostics.Stopwatch.StartNew();
+      worker.SetDecoderMode(CwDecoderMode.NewCW);
+      sw.Stop();
+      sw.ElapsedMilliseconds.Should().BeLessThan(300);
+      worker.DecoderMode.Should().Be(CwDecoderMode.NewCW);
+      oldSession.Release();
+      await WaitUntilAsync(()=>!worker.GetStatus().InferenceBusy);
+      // The worker may legitimately schedule a *new* mode window after
+      // the old one exits. Only an old-mode event must be prohibited.
+      Volatile.Read(ref stalePublished).Should().Be(0);
+    }
+
+    [Fact]
     public async Task MissingModel_IsReportedWithoutStoppingTracker()
     {
       var ingress = ReadyIngress();
