@@ -88,7 +88,7 @@ public sealed class AfcIfDisplayTests
     var updated = analyzer.Analyze(high, T0.AddSeconds(1), 2);
     using var fresh = new AfcIfDisplayAnalyzer();
     var reference = fresh.Analyze(high, T0.AddSeconds(1), 2);
-    updated.NoiseFloorDb.Should().BeApproximately(reference.NoiseFloorDb, 1e-4,
+    ((double)updated.NoiseFloorDb).Should().BeApproximately(reference.NoiseFloorDb, 1e-4,
       "a new IF target must not inherit previous generation display history");
   }
 
