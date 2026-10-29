@@ -213,7 +213,11 @@ public sealed class NativeRotatorWorkerTests
     // may still be draining its previous socket when the old PID exits.
     // Wait for that observation, not merely Process.HasExited, before trying
     // to connect a new generation to the same simulated hardware.
-    await UntilAsync(()=>server.ActiveConnections==0);
+    var bridgeReleaseDeadline=System.Diagnostics.Stopwatch.StartNew();
+    while(server.ActiveConnections!=0 &&
+          bridgeReleaseDeadline.Elapsed<TimeSpan.FromSeconds(8))
+      await Task.Delay(50);
+    Assert.Equal(0,server.ActiveConnections);
     using var replacement=new RotatorEngineSubprocess(settings,exe);
     Assert.NotEqual(firstPid,replacement.WorkerPid);
     var acquisitionDeadline=System.Diagnostics.Stopwatch.StartNew();
