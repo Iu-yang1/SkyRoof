@@ -185,4 +185,4 @@ IEEE TSP DOI `10.1109/TSP.2015.2393843`。
 
 该二次验证只影响 `CW Verified` 和后续 ONNX 解码槽位，不调高频谱显示门限。真实的 5 Hz / 15 Hz 近频双台和 8 dB 强弱差场景已加入合成测试，但 **5 Hz 弱台的正确 CER 仍未通过真实标注录音确认**。每个 Track 的二次验证结果最多缓存 300 ms，避免重复扫描整个重叠 PCM 窗口使 UI/CPU 负担上升。
 
-**回退选项**：CW Settings 新增 `Verify CW Carrier Phase`，默认开启，允许在实际弱信号接收被误拒绝时临时关闭，并与相同 AF 录音进行 A/B 对照。关闭此项会恢复基于 Ridge + KeyingGate 的旧台站验证行为，因此也可能重新出现截图中的假台站。本设置与默认关闭的三项研究性开关（Station Gate / Coherent Separation / HSMM）独立。
+**安全合并配置**：CW Settings 新增 `Experimental CW Carrier Phase Verification`，**默认关闭**。经评估，合成测试不能证明其不会漏检真实 IC-9700 弱 CW，因此正式版仍使用 Ridge + KeyingGate 原有验证。实验用户可手动开启进行相同 AF 录音的 A/B 对照。曾在旧测试版中自动保存为 true 的 `VerifyCarrierPhase` 不会使新版本意外自动启用此实验特性。本设置与默认关闭的其他三项研究性开关（Station Gate / Coherent Separation / HSMM）独立。
