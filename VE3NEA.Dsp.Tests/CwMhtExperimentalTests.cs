@@ -15,7 +15,7 @@ namespace VE3NEA.Dsp.Tests
     [Fact]
     public void ExperimentalReceiveGatesDefaultDisabledOnProductionUpgrade()
     {
-      var settings=new SkyRoof.Settings.CwConsoleSettings();
+      var settings=new SkyRoof.CwConsoleSettings();
       settings.ExperimentalVerifyCarrierPhase.Should().BeFalse();
       settings.ExperimentalStationGate.Should().BeFalse();
       settings.ExperimentalCoherentSeparation.Should().BeFalse();
