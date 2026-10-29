@@ -1374,16 +1374,26 @@ namespace SkyRoof
             StringComparer.OrdinalIgnoreCase);
 
       int applied = 0;
+      int invalid = 0, alreadyPresent = 0, unresolvedSatellite = 0;
       foreach (CustomTransmitterDefinition definition in definitions)
       {
         if (string.IsNullOrWhiteSpace(definition.uuid) ||
             string.IsNullOrWhiteSpace(definition.description) ||
             !definition.HasAnyFrequency)
+        {
+          invalid++;
+          Log.Warning(
+            "Local transmitter skipped: invalid UUID/description/frequency; UUID={Uuid}",
+            definition.uuid);
           continue;
+        }
 
         if (existingUuids.Contains(
               definition.uuid))
+        {
+          alreadyPresent++;
           continue;
+        }
 
         SatnogsDbSatellite? sat = null;
         if (!string.IsNullOrWhiteSpace(definition.sat_id))
@@ -1400,7 +1410,14 @@ namespace SkyRoof
               s => s.norad_cat_id == definition.norad_cat_id);
 
         if (sat == null)
+        {
+          unresolvedSatellite++;
+          Log.Warning(
+            "Local transmitter pending: satellite not found; UUID={Uuid}, sat_id={SatId}, NORAD={Norad}. Will retry after orbit metadata refresh.",
+            definition.uuid, definition.sat_id,
+            definition.norad_cat_id);
           continue;
+        }
 
         SatnogsDbTransmitter tx =
           CreateCustomTransmitter(
@@ -1422,8 +1439,8 @@ namespace SkyRoof
 
       if (definitions.Count > 0)
         Log.Information(
-          "Local transmitters: applied {Applied} of {Total} saved record(s).",
-          applied,
+          "Local transmitters: applied={Applied}, already present={AlreadyPresent}, invalid={Invalid}, unresolved satellite={Unresolved} of {Total} saved record(s).",
+          applied, alreadyPresent, invalid, unresolvedSatellite,
           definitions.Count);
 
       return applied;
