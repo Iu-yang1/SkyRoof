@@ -130,10 +130,18 @@ namespace SkyRoof.AFC
       previousGeneration = generation;
 
       double measuredFloor = Percentile(trace, .35);
+      // Never let exact zero PCM or numerical sidelobes establish a
+      // -200 dBFS "noise floor". With a synthetic CW carrier and silence,
+      // that would saturate all sidelobes and hide weaker CW signals.
+      measuredFloor = Math.Max(-120, measuredFloor);
       floorDb = double.IsFinite(floorDb)
         ? .90 * floorDb + .10 * measuredFloor
         : measuredFloor;
-      double reference = floorDb;
+      float strongest = trace.Max();
+      // For clean single-carrier input, extend the display baseline only
+      // as far as needed to keep the main lobe within a 38-dB viewport.
+      // Noise-only input is NEVER peak-normalized to zero dBFS.
+      double reference = Math.Max(floorDb, strongest - 38);
 
       if (haloReduction)
         FlattenNoiseBaseline(trace);
