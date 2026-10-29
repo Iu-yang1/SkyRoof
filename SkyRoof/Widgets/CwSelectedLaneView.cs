@@ -132,9 +132,12 @@ namespace SkyRoof
       string state = slot.Present
         ? CwConsolePresentation.StateText(track)
         : "Grace";
+      string peak=slot.Present && track.Active
+        ? $"peak {track.SnrDb:F1} dB"
+        : "peak stale";
       status.Text =
         $"Slot {slot.Index + 1}/8 · {identity} · " +
-        $"{track.FrequencyHz:F0} Hz · {track.SnrDb:F1} dB · {state}";
+        $"{track.FrequencyHz:F0} Hz · {peak} · {state}";
 
       string committed = selectedTranscript?.CommittedText ?? string.Empty;
       string provisional = selectedTranscript?.ProvisionalText ?? string.Empty;
