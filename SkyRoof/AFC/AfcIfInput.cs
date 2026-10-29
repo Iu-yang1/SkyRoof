@@ -13,6 +13,24 @@ namespace SkyRoof.AFC
       captureBufferMilliseconds: 40, readerBlockSizeSamples: 1600);
     private readonly LoopbackInputSoundcard loopback = new();
     private readonly object sync = new();
+    private readonly object displayGate = new();
+    private readonly AfcIfDisplayAnalyzer displayAnalyzer = new();
+    private int displayBusy;
+    private long lastDisplayMs;
+    private volatile bool displayEnabled;
+    public bool DisplayEnabled
+    {
+      get => displayEnabled;
+      set => displayEnabled = value;
+    }
+    public event Action<AfcIfDisplayFrame>? DisplayFrameAvailable;
+
+    public void ConfigureDisplay(bool blackmanHarris, bool haloReduction,
+      double smoothingMs)
+    {
+      lock (displayGate)
+        displayAnalyzer.Configure(blackmanHarris, haloReduction, smoothingMs);
+    }
     private readonly float[] buffer = new float[96000];
     private int write, used, busy;
     private long generation, lastAnalysisMs;
@@ -56,6 +74,7 @@ namespace SkyRoof.AFC
         generation++;
         write = used = 0;
         lastUtc = default;
+        lastDisplayMs = 0;
         processor = newProcessor;
         mode = signalMode;
         pilot = ssbPilot;
@@ -109,7 +128,7 @@ namespace SkyRoof.AFC
       try
       {
         if (disposed || e.Count <= 0) return;
-        float[]? pcm = null;
+        float[]? pcm = null, displayPcm = null;
         long gen = 0;
         AfcSignalMode selected = default;
         bool refPresent = false;
@@ -117,6 +136,7 @@ namespace SkyRoof.AFC
         AfcSignalProcessing analyzer;
         lock (sync)
         {
+          if (disposed) return;
           if (lastUtc != default && e.Utc <= lastUtc)
           {
             generation++;
@@ -130,6 +150,20 @@ namespace SkyRoof.AFC
             used = Math.Min(used + 1, buffer.Length);
           }
           long tick = Environment.TickCount64;
+          gen = generation;
+          if (displayEnabled && used >= AfcIfDisplayAnalyzer.FftSize &&
+              tick - lastDisplayMs >= 65 &&
+              Interlocked.CompareExchange(ref displayBusy, 1, 0) == 0)
+          {
+            lastDisplayMs = tick;
+            int n = AfcIfDisplayAnalyzer.FftSize;
+            displayPcm = new float[n];
+            int start = (write - n + buffer.Length) % buffer.Length;
+            for (int i = 0; i < n; i++)
+              displayPcm[i] = buffer[(start + i) % buffer.Length];
+          }
+          // Original measurement/CAT control scheduling remains unchanged.
+          // UI FFT is deliberately independent of the ~550ms AFC loop.
           if (used >= 24000 && tick - lastAnalysisMs >= 550 &&
               Interlocked.CompareExchange(ref busy, 1, 0) == 0)
           {
@@ -138,24 +172,41 @@ namespace SkyRoof.AFC
             int start = (write - used + buffer.Length) % buffer.Length;
             for (int i = 0; i < used; i++)
               pcm[i] = buffer[(start + i) % buffer.Length];
-            gen = generation;
             selected = mode;
             refPresent = pilot;
             expected = targetOffset;
           }
           analyzer = processor;
         }
+        DateTime packetUtc = e.Utc;
+        if (displayPcm != null)
+        {
+          float[] displayData = displayPcm;
+          _ = Task.Run(() =>
+          {
+            try
+            {
+              AfcIfDisplayFrame frame;
+              lock (displayGate)
+                frame = displayAnalyzer.Analyze(displayData, packetUtc, gen);
+              lock (sync)
+                if (disposed || gen != generation || !displayEnabled) return;
+              DisplayFrameAvailable?.Invoke(frame);
+            }
+            catch (Exception ex)
+            {
+              if (!disposed) Log.Warning(ex, "AFC display-only IF FFT failed");
+            }
+            finally { Interlocked.Exchange(ref displayBusy, 0); }
+          });
+        }
         if (pcm == null) return;
         float[] data = pcm;
         long version = gen;
-        DateTime packetUtc = e.Utc;
         _ = Task.Run(() =>
         {
           try
           {
-            // DSP reports a window-averaged measurement, not an instantaneous
-            // reading at the end of the WASAPI packet. Use the physical
-            // measurement center when pairing with timestamped CAT readbacks.
             double centerLagSeconds = selected == AfcSignalMode.FM
               ? Math.Min(data.Length / 48000.0, 2.0) / 2.0
               : 8192.0 / 24000 / 2.0;
@@ -167,17 +218,15 @@ namespace SkyRoof.AFC
           }
           catch (Exception ex)
           {
-            Log.Warning(ex, "AFC IF DSP failed");
+            if (!disposed) Log.Warning(ex, "AFC IF DSP failed");
           }
-          finally
-          {
-            Interlocked.Exchange(ref busy, 0);
-          }
+          finally { Interlocked.Exchange(ref busy, 0); }
         });
       }
       catch (Exception ex)
       {
         Interlocked.Exchange(ref busy, 0);
+        Interlocked.Exchange(ref displayBusy, 0);
         Log.Warning(ex, "AFC IF capture failed");
       }
     }
@@ -191,6 +240,7 @@ namespace SkyRoof.AFC
       loopback.SamplesAvailable -= OnSamples;
       input.Dispose();
       loopback.Dispose();
+      lock (displayGate) displayAnalyzer.Dispose();
       GC.SuppressFinalize(this);
     }
   }
