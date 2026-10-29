@@ -208,14 +208,73 @@ public sealed class NativeRotatorWorkerTests
     // replacement must never be created before the prior lease is reaped.
     await old.ShutdownAsync().WaitAsync(TimeSpan.FromSeconds(12));
     Assert.True(old.WorkerExited);
+    // The fake endpoint accepts connections sequentially. A killed process
+    // releases its OS file lock immediately, but the asynchronous TCP server
+    // may still be draining its previous socket when the old PID exits.
+    // Wait for that observation, not merely Process.HasExited, before trying
+    // to connect a new generation to the same simulated hardware.
+    var bridgeReleaseDeadline=System.Diagnostics.Stopwatch.StartNew();
+    while(server.ActiveConnections!=0 &&
+          bridgeReleaseDeadline.Elapsed<TimeSpan.FromSeconds(8))
+      await Task.Delay(50);
+    Assert.Equal(0,server.ActiveConnections);
     using var replacement=new RotatorEngineSubprocess(settings,exe);
     Assert.NotEqual(firstPid,replacement.WorkerPid);
-    for(int i=0;i<120 && !replacement.IsReady;i++)
+    var acquisitionDeadline=System.Diagnostics.Stopwatch.StartNew();
+    while(!replacement.IsReady &&
+          !replacement.WorkerExited &&
+          acquisitionDeadline.Elapsed<TimeSpan.FromSeconds(12))
       await Task.Delay(50);
     Assert.True(replacement.IsReady,
-      "Replacement must acquire exclusive device ownership after old PID exits.");
+      "Replacement failed to become ready after old PID and TCP session exited. " +
+      $"Old PID={firstPid}, new PID={replacement.WorkerPid}, " +
+      $"new worker exited={replacement.WorkerExited}, " +
+      $"status={replacement.GetStatusString()}, " +
+      $"bridge accepts={server.ConnectionCount}, " +
+      $"bridge active={server.ActiveConnections}.");
     replacement.RotateTo(new SkyRoof.Bearing(100*Math.PI/180,30*Math.PI/180));
     await UntilAsync(()=>server.Count("W100 030")>=1);
+  }
+
+  [Fact]
+  public async Task FakeGs232BridgeSurvivesClientTcpResetAndAcceptsReplacement()
+  {
+    // On Windows, forcibly closing a socket can cause ReadAsync to throw
+    // IOException instead of returning zero. One abandoned TCP connection
+    // must never terminate the entire simulated rotator accept loop.
+    await using var server=new FakeGs232Bridge();
+    using(var old=new TcpClient())
+    {
+      old.LingerState=new LingerOption(true,0);
+      await old.ConnectAsync(IPAddress.Loopback,server.Port);
+      var socket=old.GetStream();
+      byte[] query=Encoding.ASCII.GetBytes("C2\r");
+      await socket.WriteAsync(query);
+      byte[] buffer=new byte[128];
+      int n=await socket.ReadAsync(buffer,0,buffer.Length)
+        .WaitAsync(TimeSpan.FromSeconds(5));
+      Assert.Contains("AZ=90",Encoding.ASCII.GetString(buffer,0,n));
+    }
+    var disconnected=System.Diagnostics.Stopwatch.StartNew();
+    while(server.ActiveConnections!=0 &&
+          disconnected.Elapsed<TimeSpan.FromSeconds(8))
+      await Task.Delay(50);
+    Assert.Equal(0,server.ActiveConnections);
+
+    using(var next=new TcpClient())
+    {
+      await next.ConnectAsync(IPAddress.Loopback,server.Port)
+        .WaitAsync(TimeSpan.FromSeconds(5));
+      var socket=next.GetStream();
+      byte[] query=Encoding.ASCII.GetBytes("C2\r");
+      await socket.WriteAsync(query);
+      byte[] buffer=new byte[128];
+      int n=await socket.ReadAsync(buffer,0,buffer.Length)
+        .WaitAsync(TimeSpan.FromSeconds(5));
+      Assert.Contains("AZ=90",Encoding.ASCII.GetString(buffer,0,n));
+    }
+    Assert.True(server.ConnectionCount>=2,
+      "The fake GS232 listener must still accept sessions after a TCP reset.");
   }
 
   [Fact]
@@ -667,11 +726,12 @@ public sealed class NativeRotatorWorkerTests
     private readonly bool dropFirstMove;
     private readonly bool simulateSlowFeedback;
     private readonly bool fragmentC2Response;
-    private int dropped,connections,overlappingWaypoints,plannedWrites;
+    private int dropped,connections,activeConnections,overlappingWaypoints,plannedWrites;
     private int simulatedAz=90,simulatedEl=30,waypointAz=90,waypointEl=30,pollCounter;
     internal int OverlappingWaypoints=>Volatile.Read(ref overlappingWaypoints);
     internal int PlannedWrites=>Volatile.Read(ref plannedWrites);
     internal int ConnectionCount => Volatile.Read(ref connections);
+    internal int ActiveConnections => Volatile.Read(ref activeConnections);
     internal int Port {get;}
     internal FakeGs232Bridge(Func<string,byte[]>? response=null,bool dropFirstMove=false,
       bool simulateSlowFeedback=false,bool fragmentC2Response=false)
@@ -693,6 +753,9 @@ public sealed class NativeRotatorWorkerTests
         {
           using var client=await listener.AcceptTcpClientAsync(cancel.Token);
           Interlocked.Increment(ref connections);
+          Interlocked.Increment(ref activeConnections);
+          try
+          {
           var stream=client.GetStream();
           var data=new byte[256];
           var command=new StringBuilder();
@@ -762,6 +825,21 @@ public sealed class NativeRotatorWorkerTests
               else command.Append(c);
             }
             if(disconnect)break;
+          }
+          }
+          catch(Exception e) when(e is IOException or SocketException or ObjectDisposedException)
+          {
+            // A worker process can close its socket via TCP RST rather than
+            // a graceful EOF on Windows. The bridge must keep accepting
+            // replacement workers; a per-session socket fault must NEVER
+            // tear down the simulated hardware listener.
+          }
+          finally
+          {
+            // The previous socket is no longer serviced by the bridge.
+            // The replacement-ownership test observes this transition
+            // instead of racing the fake controller's accept loop.
+            Interlocked.Decrement(ref activeConnections);
           }
         }
       }

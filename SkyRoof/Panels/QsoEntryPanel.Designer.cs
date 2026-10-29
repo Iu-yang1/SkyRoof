@@ -697,7 +697,6 @@
     private VE3NEA.TextBoxEx NameEdit;
     private Panel UtcFrame;
     private VE3NEA.DateTimePickerEx UtcPicker;
-    private VE3NEA.DateTimePickerEx dateTimePicker1;
     private ComboBox comboBox1;
     private VE3NEA.ToolTipEx toolTip1;
     private Panel panel12;

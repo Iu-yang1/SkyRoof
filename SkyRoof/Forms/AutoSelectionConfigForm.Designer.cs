@@ -359,7 +359,6 @@ namespace SkyRoof
     private Button CancelBtn;
     private Button ClearBtn;
     private Button SelectAllBtn;
-    private Button button1;
     private Button DropdownBtn;
     private ContextMenuStrip MenuStrip;
     private ToolStripMenuItem ClearAllMNU;

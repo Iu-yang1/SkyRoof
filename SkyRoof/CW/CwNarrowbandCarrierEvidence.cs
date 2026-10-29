@@ -57,6 +57,16 @@ namespace SkyRoof.CW
       int high=0;
       double maxContrast=double.NegativeInfinity;
 
+      // Fixed-size spans are allocated once per invocation. Repeating
+      // stackalloc within each 20-ms frame can grow the stack across an
+      // entire analysis window (CA2014), even though each buffer is small.
+      Span<double> frequencies=stackalloc double[5];
+      Span<double> real=stackalloc double[5];
+      Span<double> imag=stackalloc double[5];
+      Span<double> c=stackalloc double[5];
+      Span<double> si=stackalloc double[5];
+      Span<double> stepC=stackalloc double[5];
+      Span<double> stepS=stackalloc double[5];
       for(int frame=0;frame<frameCount;frame++)
       {
         int start=firstOriginal+frame*hop*decimation;
@@ -66,14 +76,13 @@ namespace SkyRoof.CW
           track.DriftHzPerSecond*secondsFromEnd;
         // Guard channels are far enough from a 5/15 Hz pileup doublet
         // not to reject independent CW, but track the AF noise shaping.
-        Span<double> frequencies=stackalloc double[5]
-          {center,center-140,center-78,center+78,center+140};
-        Span<double> real=stackalloc double[5];
-        Span<double> imag=stackalloc double[5];
-        Span<double> c=stackalloc double[5];
-        Span<double> si=stackalloc double[5];
-        Span<double> stepC=stackalloc double[5];
-        Span<double> stepS=stackalloc double[5];
+        frequencies[0]=center;
+        frequencies[1]=center-140;
+        frequencies[2]=center-78;
+        frequencies[3]=center+78;
+        frequencies[4]=center+140;
+        real.Clear();
+        imag.Clear();
         for(int k=0;k<5;k++)
         {
           double theta=2*Math.PI*frequencies[k]/effectiveRate;
