@@ -72,7 +72,7 @@ namespace SkyRoof.AFC
     /// window. Never labels an arbitrary front-panel move as AFC.
     /// </summary>
     public AfcCatWriteSource? ExpectedWriteSource(long catHz, DateTime sampleUtc,
-      long frequencyToleranceHz = 10)
+      long frequencyToleranceHz = 3)
     {
       lock (sync)
       {
