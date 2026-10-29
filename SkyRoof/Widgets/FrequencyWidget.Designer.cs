@@ -43,6 +43,7 @@
       label1 = new Label();
       UplinkManualSpinner = new NumericUpDown();
       UplinkManualCheckbox = new CheckBox();
+      RxAfcCheckbox = new CheckBox();
       UplinkDopplerCheckbox = new CheckBox();
       UplinkFrequencyLabel = new Label();
       contextMenuStrip1 = new ContextMenuStrip(components);
@@ -217,6 +218,18 @@
       UplinkManualCheckbox.UseVisualStyleBackColor = true;
       UplinkManualCheckbox.CheckedChanged += UiControl_Changed;
       // 
+      // RxAfcCheckbox - RX-only shortcut under Uplink Manual;
+      // separate from the TX Manual/Doppler model.
+      //
+      RxAfcCheckbox.AutoSize = false;
+      RxAfcCheckbox.Location = new Point(529, 53);
+      RxAfcCheckbox.Name = "RxAfcCheckbox";
+      RxAfcCheckbox.Size = new Size(100, 21);
+      RxAfcCheckbox.TabIndex = 51;
+      RxAfcCheckbox.Text = "RX AFC";
+      RxAfcCheckbox.UseVisualStyleBackColor = true;
+      RxAfcCheckbox.CheckedChanged += RxAfcCheckbox_CheckedChanged;
+      //
       // UplinkDopplerCheckbox
       // 
       UplinkDopplerCheckbox.AutoSize = true;
@@ -412,6 +425,7 @@
       Controls.Add(label1);
       Controls.Add(UplinkManualSpinner);
       Controls.Add(UplinkManualCheckbox);
+      Controls.Add(RxAfcCheckbox);
       Controls.Add(UplinkDopplerCheckbox);
       Controls.Add(UplinkFrequencyLabel);
       Controls.Add(UplinkLabel);
@@ -448,6 +462,7 @@
     private Label label1;
     private NumericUpDown UplinkManualSpinner;
     private CheckBox UplinkManualCheckbox;
+    private CheckBox RxAfcCheckbox;
     private CheckBox UplinkDopplerCheckbox;
     private Label UplinkFrequencyLabel;
     private Label UplinkLabel;

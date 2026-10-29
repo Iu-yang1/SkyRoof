@@ -37,6 +37,10 @@ namespace SkyRoof
     internal event Action? AfcTargetInvalidated;
     private AfcControlForm? AfcWindow;
     private double lastAfcExpectedRf;
+    private bool updatingRxAfcCheckbox;
+    internal bool RxAfcChecked => RxAfcCheckbox.Checked;
+    internal double PredictedDownlinkDopplerHz =>
+      -RadioLink.DownlinkFrequency * RadioLink.DopplerFactor;
 
     internal AfcSignalMode CurrentAfcMode =>
       (RadioLink.IsTerrestrial || RadioLink.TxCust == null
@@ -123,9 +127,47 @@ namespace SkyRoof
       {
         AfcWindow = new AfcControlForm(ctx, this);
         AfcWindow.FormClosed += (_, _) => AfcWindow = null;
-        AfcWindow.Show(ctx.MainForm);
       }
+      if (!AfcWindow.Visible) AfcWindow.Show(ctx.MainForm);
       else AfcWindow.Activate();
+    }
+
+    /// <summary>Synchronize the strip with changes made inside AFC console.</summary>
+    internal void UpdateRxAfcCheckbox(bool enabled)
+    {
+      if (RxAfcCheckbox.IsDisposed) return;
+      updatingRxAfcCheckbox = true;
+      try { RxAfcCheckbox.Checked = enabled; }
+      finally { updatingRxAfcCheckbox = false; }
+    }
+
+    private void RxAfcCheckbox_CheckedChanged(object? sender, EventArgs e)
+    {
+      if (updatingRxAfcCheckbox || Changing || ctx == null) return;
+      if (RxAfcCheckbox.Checked)
+      {
+        if (!RadioLink.HasDownlink || ctx.CatControl.Rx == null)
+        {
+          UpdateRxAfcCheckbox(false);
+          return;
+        }
+        // Keep the IF capture running with no visible dialog. Force the
+        // hidden WinForms handle so DSP BeginInvoke is still serviced.
+        if (AfcWindow == null || AfcWindow.IsDisposed)
+        {
+          AfcWindow = new AfcControlForm(ctx, this);
+          AfcWindow.Owner = ctx.MainForm; // Close hidden IF capture with the app.
+          AfcWindow.FormClosed += (_, _) => AfcWindow = null;
+          _ = AfcWindow.Handle;
+        }
+        if (!AfcWindow.SetAutomaticTracking(true))
+        {
+          UpdateRxAfcCheckbox(false);
+          if (!AfcWindow.Visible) AfcWindow.Close();
+        }
+      }
+      else
+        AfcWindow?.SetAutomaticTracking(false);
     }
 
     public FrequencyWidget()
@@ -158,6 +200,9 @@ namespace SkyRoof
         (_, _) => OpenAfcWindow());
       DownlinkLabel.ContextMenuStrip = contextMenuStrip1;
       DownlinkFrequencyLabel.DoubleClick += (_, _) => OpenAfcWindow();
+      toolTip1.SetToolTip(RxAfcCheckbox,
+        "Enable RX-only AFC Auto with the configured 12 kHz IF input. " +
+        "Right-click the downlink frequency to open the full AFC console.");
     }
 
     internal void AttachTransmitButton(Control host)
@@ -935,6 +980,9 @@ namespace SkyRoof
       }
 
       Changing = false;
+      // The switch is positioned below the TX manual row for compactness,
+      // but controls receiver AFC only. TX frequency is never affected.
+      RxAfcCheckbox.Enabled = RadioLink.HasDownlink;
 
       FrequenciesToUi();
       ctx.WaterfallPanel?.ScaleControl.Refresh();
