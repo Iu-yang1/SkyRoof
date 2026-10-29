@@ -176,3 +176,13 @@ IEEE TSP DOI `10.1109/TSP.2015.2393843`。
 2. AWGN 多种 SNR、Watterson 扩展、频漂、手键及脉冲干扰：分别报告 Track false-alarm/min、identity swaps/min、CER/WER、延迟、CPU/RSS、file I/O backpressure。
 3. 真实 IC-9700 PCM（若无真实标注，仅能报告实验现象，不能宣称实际准确率）：15 Hz 等强、15 Hz/8 dB、5 Hz 等强、5 Hz/8 dB，加入持续 QSB 和频漂。成功门槛必须基于对照组制定，弱台 CER 不得因算法开关显著恶化。
 4. 只有完成闭环实机测试并比现有 DeepCW 明确优越，才允许将三项实验开关之一设为默认。变更应先在独立 PR 中验收，不直接覆盖 `master`。
+
+### 2026-10-29：无信号时 245–308 Hz 假 CW 台站的二次修复
+
+用户提供的截图显示，CW RX 在 245、271、289、308 Hz 附近出现 9–12 dB 的峰值读数和乱码，但电台 LAN 射频频谱没有明确对应载波。两者来自不同数据链，不能将 LAN 频谱空白当作 AF 全静音的证据。原 UI 的数值是短时频谱峰/局部噪声底的 **peak contrast**，不是 DeepCW 字符置信度或严格的接收 SNR；因此现将 UI 文本明确写成 `peak N dB`，过期 Grace Track 显示 `peak stale`。
+
+原始 Ridge Scanner 的稀疏谱峰列表在某个时间帧没有检出峰值时，会令键控判别器将其视为 OFF。谱峰随机出现时可能被当作 Morse ON/OFF。新 `CwNarrowbandCarrierEvidence` 对完整 PCM 逐帧计算目标载波相对于两侧 guard frequency 的窄带对比度、键控形态和跨时间相位连续性。相位连续性在 2.4 秒窗口内以两半独立校验，并搜索 ±3 Hz 的频率估计残差，以兼容弱 CW、短时多普勒和 STFT 插值误差，减少 250–350 Hz 的带限噪声伪装为 Morse 台站。此频谱与相位统计判别不是确定性分类器；极窄带干扰可能仍需实录验证。
+
+该二次验证只影响 `CW Verified` 和后续 ONNX 解码槽位，不调高频谱显示门限。真实的 5 Hz / 15 Hz 近频双台和 8 dB 强弱差场景已加入合成测试，但 **5 Hz 弱台的正确 CER 仍未通过真实标注录音确认**。每个 Track 的二次验证结果最多缓存 300 ms，避免重复扫描整个重叠 PCM 窗口使 UI/CPU 负担上升。
+
+**回退选项**：CW Settings 新增 `Verify CW Carrier Phase`，默认开启，允许在实际弱信号接收被误拒绝时临时关闭，并与相同 AF 录音进行 A/B 对照。关闭此项会恢复基于 Ridge + KeyingGate 的旧台站验证行为，因此也可能重新出现截图中的假台站。本设置与默认关闭的三项研究性开关（Station Gate / Coherent Separation / HSMM）独立。
