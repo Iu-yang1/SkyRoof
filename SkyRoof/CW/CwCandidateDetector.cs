@@ -326,6 +326,20 @@ namespace SkyRoof.CW
         new CwPileupTrackManager();
     }
 
+    // Called on the tracking worker only, before processing a new mode.
+    // Preserve raw PCM and long-lived ridge tracking, but do not inherit
+    // a DeepCW verification latch in New CW (or vice versa).
+    public void ResetVerification()
+    {
+      verifiedUntil.Clear();
+      physicalCache.Clear();
+      stationHypotheses.Reset();
+      gateTelemetrySinceUtc=DateTime.MinValue;
+      gateRejectedObservations=0;
+      gateAcceptedObservations=0;
+      strongestRejectedPeakSnr=double.NegativeInfinity;
+    }
+
     public void AddSamples(float[] data, int count, DateTime utc) =>
       Audio.Append(data, count, utc);
 
