@@ -11,11 +11,13 @@ namespace SkyRoof.CW
   public sealed record CwArchivedTranscript(
     long TimelineGeneration, bool UsesAssociationHint, int IdentityId,
     string CommittedText, DateTime LastWindowEndUtc,
-    Guid SessionId = default);
+    Guid SessionId = default,
+    CwDecoderMode Mode = CwDecoderMode.DeepCW);
 
   public sealed record CwArchiveEvent(
     DateTime Utc, long TimelineGeneration, bool UsesAssociationHint,
-    int IdentityId, string Delta, Guid SessionId = default);
+    int IdentityId, string Delta, Guid SessionId = default,
+    CwDecoderMode Mode = CwDecoderMode.DeepCW);
 
   /// <summary>
   /// Independent receive text lifetime: survives short QSB, slot recycling,
@@ -28,6 +30,7 @@ namespace SkyRoof.CW
     private sealed class Entry
     {
       public required Guid SessionId;
+      public required CwDecoderMode Mode;
       public required long Generation;
       public required bool UsesHint;
       public required int Id;
@@ -38,7 +41,7 @@ namespace SkyRoof.CW
 
     private readonly object sync = new();
     private readonly Guid sessionId=Guid.NewGuid();
-    private readonly Dictionary<(Guid, long, bool, int), Entry> entries = new();
+    private readonly Dictionary<(Guid, long, CwDecoderMode, bool, int), Entry> entries = new();
     private readonly Channel<CwArchiveEvent> pending;
     private readonly Task writer;
     private readonly string folder;
@@ -70,7 +73,9 @@ namespace SkyRoof.CW
       writer = Task.Run(PersistAsync);
     }
 
-    public void Append(long generation, IEnumerable<CwTranscriptSnapshot> snapshots)
+    public void Append(long generation,
+      IEnumerable<CwTranscriptSnapshot> snapshots,
+      CwDecoderMode mode = CwDecoderMode.DeepCW)
     {
       ArgumentNullException.ThrowIfNull(snapshots);
       lock(sync)
@@ -82,10 +87,10 @@ namespace SkyRoof.CW
             continue;
           bool hint = snapshot.AssociationHintId != 0;
           int id = hint ? snapshot.AssociationHintId : snapshot.TrackId;
-          var key = (sessionId,generation, hint, id);
+          var key = (sessionId,generation, mode, hint, id);
           if(!entries.TryGetValue(key, out Entry? entry))
           {
-            entry = new Entry { SessionId=sessionId,
+            entry = new Entry { SessionId=sessionId,Mode=mode,
               Generation=generation, UsesHint=hint, Id=id };
             entries.Add(key,entry);
           }
@@ -106,7 +111,7 @@ namespace SkyRoof.CW
           entry.Committed.Append(delta);
           Interlocked.Increment(ref version);
           if(!pending.Writer.TryWrite(
-            new CwArchiveEvent(snapshot.LastWindowEndUtc,generation,hint,id,delta,sessionId)))
+            new CwArchiveEvent(snapshot.LastWindowEndUtc,generation,hint,id,delta,sessionId,mode)))
             Interlocked.Increment(ref droppedEvents);
         }
         while(entries.Count>maximumEntries)
@@ -123,7 +128,7 @@ namespace SkyRoof.CW
         return entries.Values
           .OrderByDescending(x=>x.LastUtc)
           .Select(x=>new CwArchivedTranscript(
-            x.Generation,x.UsesHint,x.Id,x.Committed.ToString(),x.LastUtc,x.SessionId))
+            x.Generation,x.UsesHint,x.Id,x.Committed.ToString(),x.LastUtc,x.SessionId,x.Mode))
           .ToArray();
     }
 
@@ -139,10 +144,10 @@ namespace SkyRoof.CW
           {
             CwArchiveEvent? item=JsonSerializer.Deserialize<CwArchiveEvent>(line);
             if(item==null || item.Utc.Kind!=DateTimeKind.Utc)continue;
-            var key=(item.SessionId,item.TimelineGeneration,item.UsesAssociationHint,item.IdentityId);
+            var key=(item.SessionId,item.TimelineGeneration,item.Mode,item.UsesAssociationHint,item.IdentityId);
             if(!entries.TryGetValue(key,out Entry? entry))
             {
-              entry=new Entry {SessionId=item.SessionId,
+              entry=new Entry {SessionId=item.SessionId,Mode=item.Mode,
                 Generation=item.TimelineGeneration,
                 UsesHint=item.UsesAssociationHint,Id=item.IdentityId};
               entries.Add(key,entry);
