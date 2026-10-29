@@ -128,7 +128,8 @@ namespace SkyRoof.AFC
 
     public void Observe(AfcObservation obs, double catReadbackHz,
       int configuredSign, double maxCorrectionHz,
-      double fmDeadbandHz, double toneDeadbandHz, bool transmitting)
+      double fmDeadbandHz, double toneDeadbandHz, bool transmitting,
+      bool catReadbackIsTimeAligned = true)
     {
       lock (sync)
       {
@@ -171,7 +172,7 @@ namespace SkyRoof.AFC
         // radio documentation specifies 12-kHz IF but not every mode's
         // frequency-axis sign. Never guess a CAT direction.
         if (havePolaritySample && configuredSign == 0 && inferredSign == 0 &&
-            double.IsFinite(catReadbackHz))
+            catReadbackIsTimeAligned && double.IsFinite(catReadbackHz))
         {
           double catDelta = catReadbackHz - lastCatHz;
           double ifDelta = obs.IfOffsetHz - lastIfHz;
@@ -192,7 +193,7 @@ namespace SkyRoof.AFC
         }
         lastIfHz = obs.IfOffsetHz;
         lastCatHz = catReadbackHz;
-        havePolaritySample = double.IsFinite(catReadbackHz);
+        havePolaritySample = catReadbackIsTimeAligned && double.IsFinite(catReadbackHz);
 
         if (!anchored)
         {

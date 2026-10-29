@@ -395,6 +395,8 @@ namespace SkyRoof
     private CatControlEngine CreateRxEngine()
     {
       var engine = new CatControlEngine(ResolveRadioSettings(ctx.Settings.Cat.RxCat), ctx.Settings.Cat);
+      engine.RxReadbackSampled += (hz, utc) =>
+        ctx.FrequencyControl.RecordAfcCatReadback(hz, utc);
       engine.RxTuned += (s, e) => ctx.FrequencyControl.RxTuned();
       // when this engine is shared (Tx == Rx) it also drives the uplink, so wire TxTuned too;
       // an RX-only engine never fires it, so the extra subscription is harmless there

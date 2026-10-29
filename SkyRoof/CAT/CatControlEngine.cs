@@ -99,6 +99,7 @@ namespace SkyRoof
       Interlocked.Read(
         ref RejectedIcomScopeControlCountValue);
 
+    public event Action<long, DateTime>? RxReadbackSampled;
     public event EventHandler? RxTuned;
     public event EventHandler? TxTuned;
     internal event Action<IcomScopeReadbackState>?
@@ -500,6 +501,7 @@ namespace SkyRoof
           IsDiff(frequency, LastWrittenTxFrequency); // tx freq read by accident, ignore
 
       LastReadRxFrequency = frequency;
+      RxReadbackSampled?.Invoke(frequency, DateTime.UtcNow);
       
       if (DialKnobSpinning)
       {
