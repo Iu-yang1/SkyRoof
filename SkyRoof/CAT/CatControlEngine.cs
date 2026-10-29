@@ -674,6 +674,11 @@ namespace SkyRoof
 
       PttChanged = newPtt != Ptt;
       Ptt = newPtt;
+      if (PttChanged)
+        Log.Information(
+          "CAT PTT readback transition: PTT={Ptt}, mode={Mode}, lastRxHz={Rx}, lastTxHz={Tx}, requestedCtcss={CtcssEnabled}, toneHz={Tone:F1}",
+          Ptt, CatMode, LastReadRxFrequency, LastReadTxFrequency,
+          CtcssEnabled, CtcssTone);
 
       if (PttChanged)
         if (Ptt == true) LastWrittenTxFrequency = NOT_ASSIGNED; else LastWrittenRxFrequency = NOT_ASSIGNED;
@@ -756,6 +761,10 @@ namespace SkyRoof
 
       Ptt = RequestedPtt.Value;
       PttChanged = true;
+      Log.Information(
+        "CAT PTT command accepted: PTT={Ptt}, mode={Mode}, requestedRxHz={Rx}, requestedTxHz={Tx}, ctcssRequested={CtcssEnabled}, toneHz={Tone:F1}; command ACK is not independent RF-output verification",
+        Ptt, CatMode, RequestedRxFrequency, RequestedTxFrequency,
+        CtcssEnabled, CtcssTone);
 
       if (Ptt)
       {
@@ -822,7 +831,18 @@ namespace SkyRoof
           CtcssEnabled == true ? commands.enable_ctcss! : commands.disable_ctcss!);
 
       bool ok = toneOk && enableOk;
-      if (ok) CtcssPending = false;
+      if (ok)
+      {
+        if (CtcssPending || CtcssReassertAfterTune)
+          Log.Information(
+            "CAT CTCSS write accepted: mode={Mode}, requestedToneHz={Tone:F1}, requestedEnabled={Enabled}; this is CAT ACK, not independent IC-9700 state readback",
+            CatMode, CtcssTone, CtcssEnabled);
+        CtcssPending = false;
+      }
+      else
+        Log.Warning(
+          "CAT CTCSS write rejected: toneOk={ToneOk}, enableOk={EnableOk}, mode={Mode}; PTT must not be armed while reassert is pending",
+          toneOk, enableOk, CatMode);
       return ok;
     }
 
