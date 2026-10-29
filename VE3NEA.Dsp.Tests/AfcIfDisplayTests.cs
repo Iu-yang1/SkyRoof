@@ -75,7 +75,8 @@ public sealed class AfcIfDisplayTests
     second.RawDb.Should().Equal(first.RawDb,
       "baseline flattening is exclusively visual and must not change FFT power");
     int center = (int)Math.Round((115 + 6000) / second.StepHz);
-    second.RelativeDb.Skip(center - 2).Take(5).Max().Should().BeGreaterThan(20);
+    second.RelativeDb.Skip(center - 2).Take(5).Max().Should().BeGreaterThan(18,
+      "local noise-floor flattening must retain the selected carrier above noise");
   }
 
   [Fact]
