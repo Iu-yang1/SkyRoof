@@ -196,5 +196,27 @@ namespace VE3NEA.Dsp.Tests
       controller.Snapshot.MappingSign.Should().Be(1);
     }
 
+
+    [Fact]
+    public void AFC_ManualDialMotionCanTeachPolarityWithoutLosingEvidence()
+    {
+      var controller = new AfcController();
+      controller.Configure(AfcSignalMode.FM, AfcControlMode.Assist);
+      controller.Observe(new(AfcSignalMode.FM, T0, 4, 200, 3, 1, true),
+        145000000, 0, 2000, 20, 5, false);
+      for (int k = 1; k <= 4; k++)
+      {
+        controller.OnUserTune();
+        controller.Observe(new(AfcSignalMode.FM,
+          T0.AddSeconds(k), 4, 200 - 40 * k, 3, 1, true),
+          145000000 + 40 * k, 0, 2000, 20, 5, false);
+      }
+      controller.Configure(AfcSignalMode.FM, AfcControlMode.Auto);
+      controller.Observe(new(AfcSignalMode.FM,
+        T0.AddSeconds(5), 4, 140, 3, 1, true),
+        145000160, 0, 2000, 20, 5, false);
+      controller.Snapshot.MappingSign.Should().Be(1);
+    }
+
   }
 }
