@@ -243,6 +243,12 @@ namespace SkyRoof.CW
     private readonly Dictionary<int,(DateTime Utc,double FrequencyHz,
       CwNarrowbandCarrierEvidence.Result Evidence)>
       physicalCache = new();
+    private DateTime gateTelemetrySinceUtc=DateTime.MinValue;
+    private int gateRejectedObservations;
+    private int gateAcceptedObservations;
+    private double strongestRejectedHz;
+    private double strongestRejectedPeakSnr=double.NegativeInfinity;
+    private double strongestRejectedPhase;
 
     public CwAudioHub Audio { get; }
     public CwCandidateDetector Detector { get; }
@@ -430,6 +436,17 @@ namespace SkyRoof.CW
           if(!canReuse)
             physicalCache[track.Id]=(now,track.FrequencyHz,physical);
           independentlyKeyed=physical.IsKeyed;
+          if(independentlyKeyed)gateAcceptedObservations++;
+          else
+          {
+            gateRejectedObservations++;
+            if(track.SnrDb>strongestRejectedPeakSnr)
+            {
+              strongestRejectedHz=track.FrequencyHz;
+              strongestRejectedPeakSnr=track.SnrDb;
+              strongestRejectedPhase=physical.PhaseCoherence;
+            }
+          }
         }
         bool keyed=independentlyKeyed &&
           (!EnableExperimentalStationGate ||
@@ -441,6 +458,25 @@ namespace SkyRoof.CW
         vetted[i]=track with {KeyingStatus=verified
           ? CwKeyingStatus.Verified : CwKeyingStatus.Candidate};
       }
+      // Once per 30s, emit a bounded diagnostic sample rather than one
+      // log record per rejected noise peak or per 120ms tracker cycle.
+      if(gateTelemetrySinceUtc==DateTime.MinValue)
+        gateTelemetrySinceUtc=now;
+      else if(now-gateTelemetrySinceUtc>=TimeSpan.FromSeconds(30))
+      {
+        if(gateRejectedObservations>0)
+          Serilog.Log.Information(
+            "CW AF carrier gate: rejectedSamples={Rejected}, acceptedSamples={Accepted}, strongestRejectedHz={Hz:F1}, spectralPeakDb={Peak:F1}, phaseCoherence={Coherence:F2}; peak dB is not message SNR",
+            gateRejectedObservations,gateAcceptedObservations,
+            strongestRejectedHz,strongestRejectedPeakSnr,
+            strongestRejectedPhase);
+        gateTelemetrySinceUtc=now;
+        gateRejectedObservations=0;
+        gateAcceptedObservations=0;
+        strongestRejectedPeakSnr=double.NegativeInfinity;
+        strongestRejectedPhase=0;
+      }
+
       // Resolve co-keyed duplicates before they consume ONNX lanes or
       // become independent competitors in the DeepCW soft mask.
       // Only identities with corroborating fast/precision evidence retire.
@@ -474,6 +510,11 @@ namespace SkyRoof.CW
       stationHypotheses.Reset();
       verifiedUntil.Clear();
       physicalCache.Clear();
+      gateTelemetrySinceUtc=DateTime.MinValue;
+      gateRejectedObservations=0;
+      gateAcceptedObservations=0;
+      strongestRejectedPeakSnr=double.NegativeInfinity;
+      strongestRejectedPhase=0;
       lastPrecisionSampleIndex = long.MinValue;
       lastCommittedSampleIndex = long.MinValue;
       lastCommittedUtc = null;
