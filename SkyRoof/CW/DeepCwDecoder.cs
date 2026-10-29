@@ -267,8 +267,6 @@ namespace SkyRoof.CW
     public int MaxLanes { get; set; } = 8;
     public double LaneBandwidthHz { get; set; } = 240;
     public double TargetCenterHz { get; set; } = 800;
-    public bool ExperimentalCoherentSeparation {get;set;}
-    public bool ExperimentalHsmmArbitration {get;set;}
 
     // Physical pre-decode gate. A confirmed tracker ridge is not sufficient
     // evidence that keyed CW exists: shaped noise and steady birdies can
@@ -466,30 +464,13 @@ namespace SkyRoof.CW
       var results =
         new List<DeepCwLaneResult>(
           decodeSelectedTracks.Length);
-      IReadOnlyDictionary<int,float[]>? coherent=null;
-      if(ExperimentalCoherentSeparation &&
-         WindowDenoiser==null && LaneDenoiser==null &&
-         CwCoherentMultitoneSeparator.TrySeparate(
-           audio,sourceSampleRate,allDetectedTracks,out var sources))
-        coherent=sources;
-
       foreach (CwSignalTrack track
         in decodeSelectedTracks)
       {
         DeepCwTensor tensor;
         double durationSeconds;
 
-        if(coherent!=null && coherent.TryGetValue(track.Id,out float[]? isolated))
-        {
-          CwLaneSignal lane=laneExtractor.Extract(
-            isolated,sourceSampleRate,track,metadata.SampleRate,
-            TargetCenterHz);
-          DeepCwFeatureWindow isolatedFeatures=
-            DeepCwFeatureWindow.Create(lane.Audio,lane.SampleRate,metadata);
-          tensor=isolatedFeatures.BuildStandardTensor();
-          durationSeconds=isolatedFeatures.DurationSeconds;
-        }
-        else if (LaneDenoiser == null)
+        if (LaneDenoiser == null)
         {
           tensor =
             widebandFeatures!.BuildLaneTensor(
@@ -536,17 +517,6 @@ namespace SkyRoof.CW
         // The incremental transcript coordinator already performs
         // multiple-window, confidence-weighted consensus before commit.
         DeepCwDecodedText text = decoder.Decode(tensor);
-        if(ExperimentalHsmmArbitration)
-        {
-          ReadOnlySpan<float> hypothesisAudio=
-            coherent!=null && coherent.TryGetValue(track.Id,out float[]? source)
-              ? source : audio;
-          float[] keyDown=CwHsmmDecoder.EstimateEnvelope(
-            hypothesisAudio,sourceSampleRate,track.FrequencyHz);
-          CwHsmmResult alternative=CwHsmmDecoder.Decode(
-            keyDown,0.010);
-          text=CwHsmmDecoder.Arbitrate(text,alternative);
-        }
 
         results.Add(new(
           track.Id,
