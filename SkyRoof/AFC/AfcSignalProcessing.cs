@@ -17,6 +17,10 @@ namespace SkyRoof.AFC
     private readonly double ifReferenceHz;
     private double[]? lastSsbSpectrum;
     private long lastSsbGeneration = -1;
+    private long carrierGeneration = -1;
+    private AfcSignalMode carrierMode;
+    private double carrierSearchHz;
+    private bool carrierTracked;
     public int SampleRate => sampleRate;
 
     public AfcSignalProcessing(int sampleRate = 48000, double ifReferenceHz = 12000)
@@ -57,15 +61,30 @@ namespace SkyRoof.AFC
       // Work on the last two seconds only. Never process an unlimited backlog.
       pcm = pcm.Slice(Math.Max(0, pcm.Length - 2 * sampleRate));
       var bb = Downconvert(pcm);
-      return mode switch
+      bool toneMode = mode == AfcSignalMode.CW || (mode == AfcSignalMode.SSB && ssbPilot);
+      if (carrierGeneration != generation || carrierMode != mode)
+      {
+        carrierGeneration = generation;
+        carrierMode = mode;
+        carrierSearchHz = expectedOffsetHz;
+        carrierTracked = false;
+      }
+      double search = toneMode && carrierTracked ? carrierSearchHz : expectedOffsetHz;
+      AfcObservation result = mode switch
       {
         AfcSignalMode.FM => EstimateFm(bb, utc, generation),
-        AfcSignalMode.CW => EstimateTone(bb, mode, utc, generation, expectedOffsetHz),
+        AfcSignalMode.CW => EstimateTone(bb, mode, utc, generation, search),
         AfcSignalMode.SSB when ssbPilot =>
-          EstimateTone(bb, mode, utc, generation, expectedOffsetHz),
+          EstimateTone(bb, mode, utc, generation, search),
         AfcSignalMode.SSB => EstimateSsbRelative(bb, utc, generation),
         _ => new(mode, utc, generation, 0, double.PositiveInfinity, 0, false)
       };
+      if (toneMode && result.HasAbsoluteReference && !result.Ambiguous)
+      {
+        carrierSearchHz = result.IfOffsetHz;
+        carrierTracked = true;
+      }
+      return result with { SpectrumDb = BuildSpectrum(bb) };
     }
 
     private Complex[] Downconvert(ReadOnlySpan<float> samples)
@@ -126,8 +145,11 @@ namespace SkyRoof.AFC
       // it must not turn into an aggressive CAT correction.
       double sigma = Math.Max(5, 1.4826 * mad / Math.Sqrt(segments));
       double power = Median(energy);
+      // Frequency confidence should primarily depend on relative signal
+      // quality, not the operator's Windows audio gain setting.
+      double snrRatio = EstimateFmSpectralQuality(bb);
       double confidence = Math.Clamp(
-        Math.Min(1.0, power * 200) *
+        (snrRatio / (snrRatio + 2.0)) *
         Math.Max(0, 1 - mad / 500.0), 0, 1);
       // Independent spectral-centroid estimate: detect unusually biased
       // short FM discriminator windows or strong off-center interference.
@@ -170,19 +192,28 @@ namespace SkyRoof.AFC
       double span = mode == AfcSignalMode.CW ? 55 : 50;
       int low = (int)Math.Ceiling((expectedHz - span) / binHz);
       int high = (int)Math.Floor((expectedHz + span) / binHz);
-      double best = -1, side = 0;
+      double best = -1;
       int bestBin = 0, count = 0;
       for (int b = low; b <= high; b++)
       {
-        int pos = (b % fftSize + fftSize) % fftSize;
-        double p = spectrum[pos].Magnitude * spectrum[pos].Magnitude;
-        side += p;
+        double p = Power(spectrum, b);
         count++;
         if (p > best) { best = p; bestBin = b; }
       }
-      if (best <= 0 || count <= 3)
+      if (best <= 0 || count <= 12)
         return new(mode, utc, generation, 0, 9999, 0, false);
-      double noise = Math.Max(1e-18, (side - best) / Math.Max(1, count - 1));
+      // Main-lobe energy spans several adjacent Hann FFT bins. Treating
+      // those bins as noise makes even a strong clean CW carrier appear
+      // low-confidence and prevents Center & Lock from acquiring.
+      double noiseSum = 0;
+      int noiseCount = 0;
+      for (int b = low; b <= high; b++)
+      {
+        if (Math.Abs(b - bestBin) <= 4) continue;
+        noiseSum += Power(spectrum, b);
+        noiseCount++;
+      }
+      double noise = Math.Max(1e-18, noiseSum / Math.Max(1, noiseCount));
       double ratio = best / noise;
       double y0 = Math.Log(Math.Max(1e-18, Power(spectrum, bestBin - 1)));
       double y1 = Math.Log(Math.Max(1e-18, Power(spectrum, bestBin)));
@@ -194,10 +225,81 @@ namespace SkyRoof.AFC
       double hz = (bestBin + fraction) * binHz;
       double sigma = Math.Max(0.5, binHz / Math.Sqrt(Math.Max(1, ratio)));
       double confidence = Math.Clamp((10 * Math.Log10(Math.Max(1, ratio)) - 5) / 18, 0, 1);
-      bool valid = confidence >= 0.5 && double.IsFinite(hz);
-      return new(mode, utc, generation, hz, sigma, valid ? confidence : 0, valid);
+      double secondPeak = 0;
+      for (int b = low; b <= high; b++)
+      {
+        if (Math.Abs(b - bestBin) <= 4) continue;
+        secondPeak = Math.Max(secondPeak, Power(spectrum, b));
+      }
+      bool ambiguous = secondPeak > best * 0.40 &&
+        secondPeak > noise * 12;
+      bool valid = confidence >= 0.5 && double.IsFinite(hz) && !ambiguous;
+      return new(mode, utc, generation, hz, sigma,
+        valid ? confidence : 0, valid, ambiguous);
     }
 
+
+
+    private double EstimateFmSpectralQuality(Complex[] bb)
+    {
+      const int n = 8192;
+      if (bb.Length < n) return 0;
+      var s = new Complex[n];
+      for (int i = 0; i < n; i++)
+      {
+        double w = 0.5 - 0.5 * Math.Cos(2 * Math.PI * i / (n - 1));
+        s[i] = bb[bb.Length - n + i] * w;
+      }
+      Fourier(s);
+      double signal = 0, noise = 0;
+      int signalN = 0, noiseN = 0;
+      double bin = sampleRate / 2.0 / n;
+      for (int k = -3200; k <= 3200; k++)
+      {
+        double freq = Math.Abs(k * bin);
+        double p = Power(s, k);
+        if (freq < 6000)
+        {
+          signal += p;
+          signalN++;
+        }
+        else if (freq >= 7500 && freq <= 8400)
+        {
+          noise += p;
+          noiseN++;
+        }
+      }
+      if (signalN < 1 || noiseN < 1) return 0;
+      double basePower = Math.Max(1e-16, noise / noiseN);
+      return Math.Max(0, (signal / signalN) / basePower - 1);
+    }
+
+    private float[] BuildSpectrum(Complex[] bb)
+    {
+      const int n = 4096, count = 512;
+      var result = new float[count];
+      if (bb.Length < n) return result;
+      var fft = new Complex[n];
+      for (int i = 0; i < n; i++)
+      {
+        double w = 0.5 - 0.5 * Math.Cos(2 * Math.PI * i / (n - 1));
+        fft[i] = bb[bb.Length - n + i] * w;
+      }
+      Fourier(fft);
+      double max = 1e-15;
+      var power = new double[count];
+      for (int i = 0; i < count; i++)
+      {
+        double hz = -6000 + i * (12000.0 / (count - 1));
+        int bin = (int)Math.Round(hz / (sampleRate / 2.0 / n));
+        power[i] = Power(fft, bin);
+        max = Math.Max(max, power[i]);
+      }
+      for (int i = 0; i < count; i++)
+        result[i] = (float)Math.Clamp(
+          10 * Math.Log10(Math.Max(1e-18, power[i]) / max), -70, 0);
+      return result;
+    }
 
     private double FmSpectralCenter(Complex[] bb)
     {

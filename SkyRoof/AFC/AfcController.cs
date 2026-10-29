@@ -25,6 +25,9 @@ namespace SkyRoof.AFC
     private int inferredSign;
     private int polarityCandidate, polarityVotes;
     private double acceptedCorrection;
+    private double previousConfirmedError = double.NaN;
+    private double previousConfirmedCatHz = double.NaN;
+    private int divergenceVotes;
 
     public AfcSnapshot Snapshot { get { lock (sync) return state; } }
 
@@ -45,6 +48,8 @@ namespace SkyRoof.AFC
         inferredSign = 0;
         polarityCandidate = polarityVotes = 0;
         acceptedCorrection = 0;
+        previousConfirmedError = previousConfirmedCatHz = double.NaN;
+        divergenceVotes = 0;
         lastProcess = default;
       }
     }
@@ -75,6 +80,8 @@ namespace SkyRoof.AFC
           centerNext = mode != AfcSignalMode.CW;
           centerIfOffsetHz = 0;
           acceptedCorrection = 0;
+          previousConfirmedError = previousConfirmedCatHz = double.NaN;
+          divergenceVotes = 0;
           confirmations = 0;
           return;
         }
@@ -95,6 +102,8 @@ namespace SkyRoof.AFC
         havePolaritySample = false;
         inferredSign = 0;
         acceptedCorrection = 0;
+        previousConfirmedError = previousConfirmedCatHz = double.NaN;
+        divergenceVotes = 0;
         lastProcess = default;
       }
     }
@@ -106,8 +115,17 @@ namespace SkyRoof.AFC
       {
         anchored = false;
         centerNext = false;
+        previousConfirmedError = previousConfirmedCatHz = double.NaN;
+        divergenceVotes = 0;
         confirmations = 0;
+        if (state.State == AfcLockState.Fault)
+        {
+          inferredSign = 0;
+          havePolaritySample = false;
+          acceptedCorrection = 0;
+        }
         state = state with { State = AfcLockState.Acquiring,
+          CorrectionHz = acceptedCorrection,
           Detail = "Locking currently observed IF frequency" };
       }
     }
@@ -120,18 +138,31 @@ namespace SkyRoof.AFC
         centerNext = true;
         centerIfOffsetHz = desiredIfOffsetHz;
         anchored = false;
+        previousConfirmedError = previousConfirmedCatHz = double.NaN;
+        divergenceVotes = 0;
         confirmations = 0;
+        if (state.State == AfcLockState.Fault)
+        {
+          inferredSign = 0;
+          havePolaritySample = false;
+          acceptedCorrection = 0;
+        }
         state = state with { State = AfcLockState.Acquiring,
+          CorrectionHz = acceptedCorrection,
           Detail = "Centering selected IF signal" };
       }
     }
 
     public void Observe(AfcObservation obs, double catReadbackHz,
       int configuredSign, double maxCorrectionHz,
-      double fmDeadbandHz, double toneDeadbandHz, bool transmitting)
+      double fmDeadbandHz, double toneDeadbandHz, bool transmitting,
+      bool catReadbackIsTimeAligned = true,
+      bool confirmedOwnAfcReadback = false)
     {
       lock (sync)
       {
+        if (state.State == AfcLockState.Fault)
+          return; // require explicit retarget/reset after a convergence fault
         if (state.Control == AfcControlMode.Off)
         {
           state = state with { State = AfcLockState.Off, CorrectionHz = 0,
@@ -149,6 +180,8 @@ namespace SkyRoof.AFC
           inferredSign = 0;
           polarityCandidate = polarityVotes = 0;
           acceptedCorrection = 0;
+          previousConfirmedError = previousConfirmedCatHz = double.NaN;
+          divergenceVotes = 0;
           state = state with { CorrectionHz = 0, State = AfcLockState.Acquiring };
         }
         lastProcess = obs.SampleUtc;
@@ -171,7 +204,7 @@ namespace SkyRoof.AFC
         // radio documentation specifies 12-kHz IF but not every mode's
         // frequency-axis sign. Never guess a CAT direction.
         if (havePolaritySample && configuredSign == 0 && inferredSign == 0 &&
-            double.IsFinite(catReadbackHz))
+            catReadbackIsTimeAligned && double.IsFinite(catReadbackHz))
         {
           double catDelta = catReadbackHz - lastCatHz;
           double ifDelta = obs.IfOffsetHz - lastIfHz;
@@ -192,7 +225,7 @@ namespace SkyRoof.AFC
         }
         lastIfHz = obs.IfOffsetHz;
         lastCatHz = catReadbackHz;
-        havePolaritySample = double.IsFinite(catReadbackHz);
+        havePolaritySample = catReadbackIsTimeAligned && double.IsFinite(catReadbackHz);
 
         if (!anchored)
         {
@@ -212,6 +245,31 @@ namespace SkyRoof.AFC
         int sign = configuredSign == 1 || configuredSign == -1 ?
           configuredSign : inferredSign;
         double error = obs.IfOffsetHz - anchorIfHz;
+        // Only actual, timestamp-aligned readback of an AFC-authored CAT
+        // target can provide evidence of a divergent control direction.
+        if (confirmedOwnAfcReadback && catReadbackIsTimeAligned &&
+            double.IsFinite(catReadbackHz) &&
+            (!double.IsFinite(previousConfirmedCatHz) ||
+              Math.Abs(catReadbackHz - previousConfirmedCatHz) >= 8))
+        {
+          double absError = Math.Abs(error);
+          if (double.IsFinite(previousConfirmedError))
+          {
+            if (absError > previousConfirmedError +
+                Math.Max(10, previousConfirmedError * 0.2))
+              divergenceVotes++;
+            else
+              divergenceVotes = Math.Max(0, divergenceVotes - 1);
+          }
+          previousConfirmedCatHz = catReadbackHz;
+          previousConfirmedError = absError;
+          if (divergenceVotes >= 3)
+          {
+            state = state with { State = AfcLockState.Fault,
+              Detail = "AFC divergence detected; automatic CAT writes stopped" };
+            return;
+          }
+        }
         bool mayWrite = state.Control == AfcControlMode.Auto &&
           confirmations >= 3 && sign != 0 && !transmitting;
         if (obs.Mode == AfcSignalMode.SSB && !obs.HasAbsoluteReference)
@@ -260,7 +318,9 @@ namespace SkyRoof.AFC
     {
       lock (sync)
       {
-        if (state.Control == AfcControlMode.Off || state.LastObservationUtc == default)
+        if (state.State == AfcLockState.Fault ||
+            state.Control == AfcControlMode.Off ||
+            state.LastObservationUtc == default)
           return;
         double age = (nowUtc - state.LastObservationUtc).TotalSeconds;
         if (age > 8)

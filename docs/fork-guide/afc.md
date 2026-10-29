@@ -8,6 +8,31 @@ it does not edit transponder tuning, stored manual corrections, RIT, XIT,
 or uplink/TX frequency. IC-9700 USB and LAN IF output are documented in
 the [Icom IC-9700 manual](https://icomuk.co.uk/files/icom/PDF/productManual/IC-9700_ENG_Basic_6.pdf).
 
+## Updated P1–P4 operator interface
+
+The AFC console now has **Tracking** and **Advanced settings** tabs.
+Tracking displays a measured 12-kHz IF spectrum, observed offset, error
+from desired center, RX-only correction, confidence, frequency-direction
+state, and CAT availability. Click the spectrum to select a CW/pilot
+carrier; ordinary FM center tracking does not use a selected tone.
+
+**Lock Here** preserves the current carrier's IF pitch.
+**Center & Lock** attempts to move that selected carrier toward
+`Desired center IF offset (Hz)`. This is **independent** of
+`Target search IF offset (Hz)`, which selects the original signal
+to search for. Do not use the same setting for both roles.
+
+Changes to ordinary tracking parameters do not reopen WASAPI. Switching
+devices, IF transport or reference frequency intentionally restarts the
+capture source. Satellite/transponder changes and IF target selection
+invalidate the old PCM generation and require reacquisition.
+
+CAT readbacks are timestamped on the CAT worker thread, and only
+readbacks close to the IF sample time can contribute to frequency-axis
+polarity learning. A requested CAT write is **not** treated as a
+confirmed hardware readback. Confirmed, repeatedly diverging AFC
+corrections cause the controller to enter Fault and stop auto writes.
+
 ## Getting started
 
 1. On IC-9700 choose `SET > Connectors > USB AF/IF Output > Output Select > IF`
@@ -23,8 +48,11 @@ the [Icom IC-9700 manual](https://icomuk.co.uk/files/icom/PDF/productManual/IC-9
    Choose **Auto** to compensate RX only. If the mapping sign cannot yet be
    learned automatically, the controller remains in observation mode. This
    does not require a calibration prompt on every launch.
-4. In CW, set **Target IF offset (Hz)** near the desired tone (relative to
-   12 kHz), and use **Lock Here** to reanchor on the selected signal.
+4. For CW, click the carrier in the live spectrum or enter its original
+   offset in **Target search IF offset (Hz)** on Advanced settings.
+   **Lock Here** preserves the carrier's current IF pitch;
+   **Center & Lock** moves it toward the independent
+   **Desired center IF offset (Hz)** setting.
 5. In SSB, normal suppressed-carrier speech has no recoverable absolute
    frequency reference. Only enable **SSB reference available** if an actual
    stable pilot/CW beacon is present. Without a reference, only Assist is

@@ -221,5 +221,139 @@ namespace VE3NEA.Dsp.Tests
       controller.Snapshot.MappingSign.Should().Be(1);
     }
 
+
+    [Fact]
+    public void CatTimeline_UsesReadbackAtIFSampleTimeNotLaterFrequency()
+    {
+      var history = new AfcCatTimeline();
+      history.RecordReadback(145000000, T0);
+      history.RecordReadback(145000150, T0.AddMilliseconds(250));
+      history.RecordReadback(145000500, T0.AddMilliseconds(900));
+      history.TryReadbackAt(T0.AddMilliseconds(300), out long selected)
+        .Should().BeTrue();
+      selected.Should().Be(145000150);
+      history.TryReadbackAt(T0.AddSeconds(3), out _)
+        .Should().BeFalse("a stale CAT read must not teach IF polarity");
+      history.TryReadbackAt(T0.AddMilliseconds(-50), out _)
+        .Should().BeFalse("future readbacks are not historical evidence");
+    }
+
+    [Fact]
+    public void CatTimeline_TracksWriteSourcesSeparatelyFromReadback()
+    {
+      var history = new AfcCatTimeline();
+      history.RecordRequest(145000100, T0, AfcCatWriteSource.Afc);
+      history.ExpectedWriteSource(145000100, T0.AddSeconds(1))
+        .Should().Be(AfcCatWriteSource.Afc);
+      history.ExpectedWriteSource(145000180, T0.AddSeconds(1))
+        .Should().BeNull();
+      history.ExpectedWriteSource(145000100, T0.AddSeconds(7))
+        .Should().BeNull();
+      history.TryReadbackAt(T0.AddMilliseconds(200), out _)
+        .Should().BeFalse("a requested frequency is not a CAT readback ACK");
+    }
+
+    [Fact]
+    public void CW_DesiredCenterCanDifferFromSelectedSearchFrequency()
+    {
+      const int fs = 48000;
+      var pcm = new float[fs];
+      for (int i = 0; i < fs; i++)
+        pcm[i] = (float)(.35 * Math.Cos(2 * Math.PI *
+          12145 * i / fs));
+      var estimator = new AfcSignalProcessing();
+      var result = estimator.Analyze(pcm, AfcSignalMode.CW, T0, 5,
+        expectedOffsetHz: 145);
+      result.HasAbsoluteReference.Should().BeTrue();
+      var controller = new AfcController();
+      controller.Configure(AfcSignalMode.CW, AfcControlMode.Auto);
+      controller.CenterOn(0);
+      for (int k = 0; k < 4; k++)
+        controller.Observe(result with {
+          SampleUtc = T0.AddMilliseconds(k * 600)
+        }, 145000000, 1, 500, 20, 5, false);
+      controller.Snapshot.ErrorHz.Should().BeApproximately(145, 5);
+      controller.Snapshot.CorrectionHz.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public void CW_TargetFollowsSlowIFMotionWithinOneGeneration()
+    {
+      const int fs = 48000;
+      var estimator = new AfcSignalProcessing();
+      for (int k = 0; k <= 5; k++)
+      {
+        int hz = 12000 + 145 - 35 * k;
+        var pcm = new float[fs];
+        for (int i = 0; i < fs; i++)
+          pcm[i] = (float)(.35 * Math.Cos(2 * Math.PI *
+            hz * i / fs));
+        var obs = estimator.Analyze(pcm, AfcSignalMode.CW,
+          T0.AddSeconds(k), 6, expectedOffsetHz:145);
+        obs.HasAbsoluteReference.Should().BeTrue();
+        obs.IfOffsetHz.Should().BeApproximately(145 - 35*k, 5);
+      }
+    }
+
+    [Fact]
+    public void FM_ConfidenceIsIndependentOfReasonableWindowsGain()
+    {
+      const int fs = 48000;
+      var high = new float[fs];
+      var low = new float[fs];
+      for (int i = 0; i < fs; i++)
+      {
+        double t = i / (double)fs;
+        double phase = 2 * Math.PI * (12000 + 85) * t +
+          1.1 * Math.Sin(2 * Math.PI * 310 * t);
+        high[i] = (float)(.5 * Math.Cos(phase));
+        low[i] = high[i] / 10;
+      }
+      var a = new AfcSignalProcessing().Analyze(high, AfcSignalMode.FM, T0, 1);
+      var b = new AfcSignalProcessing().Analyze(low, AfcSignalMode.FM, T0, 1);
+      Math.Abs(a.Confidence - b.Confidence).Should().BeLessThan(.1);
+    }
+
+    [Fact]
+    public void Controller_ReconfiguresSameModeAfterSatelliteReset()
+    {
+      var controller = new AfcController();
+      controller.Configure(AfcSignalMode.FM, AfcControlMode.Auto);
+      controller.Reset("new FM satellite");
+      controller.Configure(AfcSignalMode.FM, AfcControlMode.Auto);
+      controller.Snapshot.Control.Should().Be(AfcControlMode.Auto);
+      controller.Snapshot.State.Should().Be(AfcLockState.Acquiring);
+    }
+
+
+    [Fact]
+    public void Controller_ConfirmedDivergentAfcReadbacksStopAutomaticWrites()
+    {
+      var controller = new AfcController();
+      controller.Configure(AfcSignalMode.CW, AfcControlMode.Auto);
+      controller.CenterOn(0);
+      int[] increasinglyWrong = { 100, 160, 260, 420, 680, 800 };
+      for (int k = 0; k < increasinglyWrong.Length; k++)
+      {
+        controller.Observe(new(AfcSignalMode.CW,
+          T0.AddSeconds(k), 42, increasinglyWrong[k], 1, 1, true),
+          145000000 + 50 * k, 1, 2000, 20, 5, false,
+          catReadbackIsTimeAligned: true,
+          confirmedOwnAfcReadback: true);
+      }
+      controller.Snapshot.State.Should().Be(AfcLockState.Fault);
+      controller.Tick(T0.AddMinutes(1));
+      controller.Snapshot.State.Should().Be(AfcLockState.Fault,
+        "the background timer must not silently clear a convergence fault");
+      double frozen = controller.Snapshot.CorrectionHz;
+      controller.Observe(new(AfcSignalMode.CW,
+        T0.AddSeconds(10), 42, 1400, 1, 1, true),
+        145000400, 1, 2000, 20, 5, false,
+        catReadbackIsTimeAligned: true, confirmedOwnAfcReadback: true);
+      controller.Snapshot.CorrectionHz.Should().Be(frozen);
+      controller.LockHere();
+      controller.Snapshot.State.Should().Be(AfcLockState.Acquiring);
+    }
+
   }
 }

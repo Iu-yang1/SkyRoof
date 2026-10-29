@@ -25,6 +25,7 @@ namespace SkyRoof.AFC
 
     public event Action<AfcObservation>? ObservationAvailable;
     public bool IsRunning => input.IsRunning || loopback.IsRunning;
+    public long Generation { get { lock (sync) return generation; } }
     public string DeviceName => loopback.IsRunning ? loopback.GetDisplayName() : input.GetDisplayName();
 
     public AfcIfInput()
@@ -76,6 +77,18 @@ namespace SkyRoof.AFC
         mode = signalMode;
         pilot = ssbPilot;
         targetOffset = offset;
+      }
+    }
+
+    public void InvalidateTarget()
+    {
+      // Keep WASAPI open, but never reinterpret old PCM as the new satellite,
+      // transponder, IF source, or selected CW lane.
+      lock (sync)
+      {
+        generation++;
+        write = used = 0;
+        lastUtc = default;
       }
     }
 
@@ -140,7 +153,14 @@ namespace SkyRoof.AFC
         {
           try
           {
-            AfcObservation obs = analyzer.Analyze(data, selected, packetUtc,
+            // DSP reports a window-averaged measurement, not an instantaneous
+            // reading at the end of the WASAPI packet. Use the physical
+            // measurement center when pairing with timestamped CAT readbacks.
+            double centerLagSeconds = selected == AfcSignalMode.FM
+              ? Math.Min(data.Length / 48000.0, 2.0) / 2.0
+              : 8192.0 / 24000 / 2.0;
+            DateTime analysisUtc = packetUtc.AddSeconds(-centerLagSeconds);
+            AfcObservation obs = analyzer.Analyze(data, selected, analysisUtc,
               version, expected, refPresent);
             lock (sync) if (disposed || version != generation) return;
             ObservationAvailable?.Invoke(obs);

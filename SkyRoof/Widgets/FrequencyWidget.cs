@@ -33,11 +33,15 @@ namespace SkyRoof
     private readonly ContextMenuStrip PttMenu = new();
     private long SuppressCatTuneFeedbackUntil;
     public readonly AfcController AfcController = new();
+    public readonly AfcCatTimeline AfcCatTimeline = new();
+    internal event Action? AfcTargetInvalidated;
     private AfcControlForm? AfcWindow;
     private double lastAfcExpectedRf;
 
     internal AfcSignalMode CurrentAfcMode =>
-      (RadioLink.TxCust == null ? Slicer.Mode.FM : RadioLink.DownlinkMode) switch
+      (RadioLink.IsTerrestrial || RadioLink.TxCust == null
+        ? (DownlinkModeCombobox.SelectedItem is Slicer.Mode selected ? selected : Slicer.Mode.FM)
+        : RadioLink.DownlinkMode) switch
     {
       Slicer.Mode.FM or Slicer.Mode.FM_D => AfcSignalMode.FM,
       Slicer.Mode.CW => AfcSignalMode.CW,
@@ -61,6 +65,40 @@ namespace SkyRoof
       return freq;
     }
 
+    internal void RecordAfcCatReadback(long catHz, DateTime utc)
+    {
+      AfcCatTimeline.RecordReadback(catHz, utc);
+    }
+
+    internal bool IsAfcReadbackConfirmedAt(DateTime sampleUtc)
+    {
+      return AfcCatTimeline.TryReadbackAt(sampleUtc, out long catHz) &&
+        AfcCatTimeline.ExpectedWriteSource(catHz, sampleUtc)
+          == AfcCatWriteSource.Afc;
+    }
+
+    internal double GetAfcReadbackAt(DateTime sampleUtc)
+    {
+      if (!AfcCatTimeline.TryReadbackAt(sampleUtc, out long catHz))
+        return double.NaN;
+      double value = catHz;
+      if (ctx.Settings.Transverter.RxCatOffsetEnabled)
+      {
+        var band = ctx.Settings.Transverter.GetCatBand(
+          RadioLink.CorrectedDownlinkFrequency);
+        if (band == null) return double.NaN;
+        value += band.LoOffset;
+      }
+      return value;
+    }
+
+    private void InvalidateAfcTarget(string reason)
+    {
+      AfcCatTimeline.Clear();
+      AfcController.Reset(reason);
+      AfcTargetInvalidated?.Invoke();
+    }
+
     internal void ApplyAfcRxCorrection()
     {
       if (ctx == null || ctx.Settings.Afc.Enabled != true ||
@@ -69,7 +107,7 @@ namespace SkyRoof
       if (AfcController.Snapshot.Control != AfcControlMode.Auto) return;
       double target = RadioLink.CorrectedDownlinkFrequency + AfcRxOffset;
       if (Math.Abs(target - lastAfcExpectedRf) < 1) return;
-      SendCatRxFrequency(target);
+      SendCatRxFrequency(target, AfcCatWriteSource.Afc);
       if (ctx.Settings.Transverter.SdrOffsetEnabled)
         XverterSetSlicerFrequency();
       else SetSlicerFrequency();
@@ -158,7 +196,7 @@ namespace SkyRoof
     //----------------------------------------------------------------------------------------------
     public void SetTransmitter(bool returnToBase = false)
     {
-      AfcController.Reset("Satellite or transmitter changed");
+      InvalidateAfcTarget("Satellite or transmitter changed");
       // Tracking-only ephemeris objects (Moon/Sun/Venus) intentionally do not
       // own radio frequencies. Selecting one must leave the current rig state.
       if (ctx.SatelliteSelector.SelectedTransmitter == null)
@@ -367,11 +405,18 @@ namespace SkyRoof
       }
 
       double catRf = GetAfcRxReadbackRf();
-      if (lastAfcExpectedRf > 0 && double.IsFinite(catRf) &&
-          Math.Abs(catRf - lastAfcExpectedRf) <= 3)
-        return; // readback of our own requested tuning, not a user knob
+      if (!double.IsFinite(catRf)) return;
+      // CAT engine only raises RxTuned for a read that differs from both
+      // last written RX and TX. A queued own-write can be late; distinguish
+      // sources rather than assuming any unexplained readback is a dial turn.
+      if (AfcCatTimeline.ExpectedWriteSource(
+            ctx.CatControl.Rx!.LastReadRxFrequency, DateTime.UtcNow)
+            is AfcCatWriteSource.Afc or AfcCatWriteSource.SatelliteModel)
+        return;
+      double preTuneTarget = RadioLink.CorrectedDownlinkFrequency + AfcRxOffset;
+      int delta = (int)Math.Round(catRf - preTuneTarget);
+      if (delta == 0) return;
       AfcController.OnUserTune();
-      int delta = (int)(ctx.CatControl.Rx!.LastReadRxFrequency - RadioLink.CorrectedDownlinkFrequency);
       RadioLink.IncrementDownlinkFrequency(delta);
       RadioLinkToRadio();
       BeginInvoke(RadioLinkToUi);
@@ -468,7 +513,7 @@ namespace SkyRoof
     //----------------------------------------------------------------------------------------------
     public void SettingsToRadioLink(bool isTerrestrial, double? frequency = null)
     {
-      AfcController.Reset("Frequency model changed");
+      InvalidateAfcTarget("Frequency model changed");
       RadioLink.IsTerrestrial = isTerrestrial;
       if (isTerrestrial) RadioLink.DownlinkFrequency = frequency!.Value;
 
@@ -519,7 +564,12 @@ namespace SkyRoof
 
         if (ctx.CatControl.Rx != null)
           SendCatRxFrequency(
-            RadioLink.CorrectedDownlinkFrequency + AfcRxOffset);
+            RadioLink.CorrectedDownlinkFrequency + AfcRxOffset,
+            ctx.Settings.Afc.Enabled &&
+              AfcController.Snapshot.Control == AfcControlMode.Auto &&
+              Math.Abs(AfcRxOffset) > 0.5
+                ? AfcCatWriteSource.Afc
+                : AfcCatWriteSource.SatelliteModel);
       }
 
       if (RadioLink.CorrectedUplinkFrequency != 0 &&
@@ -542,9 +592,9 @@ namespace SkyRoof
         ctx.MainForm?.ShowCatStatus();
     }
 
-    private void SendCatRxFrequency(double rxRf)
+    private void SendCatRxFrequency(double rxRf,
+      AfcCatWriteSource source = AfcCatWriteSource.SatelliteModel)
     {
-      lastAfcExpectedRf = rxRf;
       var transverter = ctx.Settings.Transverter;
       if (transverter.RxCatOffsetEnabled)
       {
@@ -552,10 +602,24 @@ namespace SkyRoof
         if (band == null)
           Serilog.Log.Warning($"RX CAT transverter offset enabled but no CAT band matches RF {rxRf:n0} Hz — skipping CAT command");
         else
-          ctx.CatControl.Rx!.SetRxFrequency((long)Math.Truncate(rxRf - band.LoOffset));
+        {
+          long catHz = (long)Math.Truncate(rxRf - band.LoOffset);
+          long step = Math.Max(1, ctx.Settings.Cat.TuningStep);
+          AfcCatTimeline.RecordRequest((catHz / step) * step,
+            DateTime.UtcNow, source);
+          lastAfcExpectedRf = rxRf;
+          ctx.CatControl.Rx!.SetRxFrequency(catHz);
+        }
       }
       else
-        ctx.CatControl.Rx!.SetRxFrequency((long)Math.Truncate(rxRf));
+      {
+        long catHz = (long)Math.Truncate(rxRf);
+        long step = Math.Max(1, ctx.Settings.Cat.TuningStep);
+        AfcCatTimeline.RecordRequest((catHz / step) * step,
+          DateTime.UtcNow, source);
+        lastAfcExpectedRf = rxRf;
+        ctx.CatControl.Rx!.SetRxFrequency(catHz);
+      }
     }
 
     private void SendCatTxFrequency(double txRf)
