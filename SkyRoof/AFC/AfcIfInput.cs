@@ -153,7 +153,14 @@ namespace SkyRoof.AFC
         {
           try
           {
-            AfcObservation obs = analyzer.Analyze(data, selected, packetUtc,
+            // DSP reports a window-averaged measurement, not an instantaneous
+            // reading at the end of the WASAPI packet. Use the physical
+            // measurement center when pairing with timestamped CAT readbacks.
+            double centerLagSeconds = selected == AfcSignalMode.FM
+              ? Math.Min(data.Length / 48000.0, 2.0) / 2.0
+              : 8192.0 / 24000 / 2.0;
+            DateTime analysisUtc = packetUtc.AddSeconds(-centerLagSeconds);
+            AfcObservation obs = analyzer.Analyze(data, selected, analysisUtc,
               version, expected, refPresent);
             lock (sync) if (disposed || version != generation) return;
             ObservationAvailable?.Invoke(obs);
