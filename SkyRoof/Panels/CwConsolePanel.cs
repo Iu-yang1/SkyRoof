@@ -16,6 +16,7 @@ namespace SkyRoof
     private readonly object stateSync = new();
 
     private readonly Button RxToggleBtn = new();
+    private readonly Button DecoderModeBtn = new();
     private readonly ComboBox SourceBox = new();
     private readonly ComboBox SpectrumCleanupBox = new();
     private readonly Label SpectrumStatusLabel = new();
@@ -245,7 +246,7 @@ namespace SkyRoof
             item.IdentityId;
           string header=$"{item.LastWindowEndUtc:yyyy-MM-dd HH:mm:ss}Z · "+
             $"S{item.SessionId.ToString("N")[..8]} · "+
-            $"G{item.TimelineGeneration} · {identity}";
+            $"G{item.TimelineGeneration} · {item.Mode} · {identity}";
           if(filter.Length>0 &&
              !header.Contains(filter,StringComparison.OrdinalIgnoreCase) &&
              !item.CommittedText.Contains(filter,
@@ -304,6 +305,14 @@ namespace SkyRoof
         RxToggleBtn_Click;
       toolbar.Controls.Add(
         RxToggleBtn);
+
+      DecoderModeBtn.AutoSize=true;
+      DecoderModeBtn.Click+=DecoderModeBtn_Click;
+      new ToolTip().SetToolTip(DecoderModeBtn,
+        "Switch the entire CW receive engine while keeping audio and radio connected. "+
+        "DeepCW uses ONNX/CTC; New CW uses the built-in offline tracking, "+
+        "multi-tone separation and Morse HSMM. RX never transmits.");
+      toolbar.Controls.Add(DecoderModeBtn);
 
       SourceBox.DropDownStyle =
         ComboBoxStyle.DropDownList;
@@ -853,6 +862,9 @@ namespace SkyRoof
 
         SourceBox.SelectedItem =
           settings.AudioSource;
+        DecoderModeBtn.Text=settings.DecoderMode==CwDecoderMode.NewCW
+          ? "New CW ▸ DeepCW"
+          : "DeepCW ▸ New CW";
       }
       finally
       {
@@ -890,7 +902,7 @@ namespace SkyRoof
       if (worker == null)
       {
         ModelStatusLabel.Text =
-          "DeepCW: worker unavailable";
+          "CW decoder: worker unavailable";
         WorkerStatusLabel.Text =
           "Worker: stopped";
         return;
@@ -914,8 +926,13 @@ namespace SkyRoof
               : "not installed"
         };
 
+      CwDecoderMode mode=worker.DecoderMode;
+      if(mode==CwDecoderMode.NewCW)
+        modelText=status.ModelState==CwReceiveModelState.Error
+          ? "error" : "offline / built-in";
       ModelStatusLabel.Text =
-        "DeepCW: " + modelText +
+        (mode==CwDecoderMode.NewCW ? "New CW: " : "DeepCW: ") +
+        modelText +
         (status.InferenceBusy
           ? " · decoding"
           : string.Empty);
@@ -942,11 +959,12 @@ namespace SkyRoof
         $"gen {status.TimelineGeneration}";
 
       InstallModelBtn.Visible =
+        mode==CwDecoderMode.DeepCW && (
         status.ModelState ==
           CwReceiveModelState.NotInstalled ||
         (!modelInstalled &&
          status.ModelState ==
-           CwReceiveModelState.Unknown);
+           CwReceiveModelState.Unknown));
     }
 
     private void RefreshPileupCards()
@@ -1156,6 +1174,31 @@ namespace SkyRoof
       // callback gaps and avoids unnecessary background FFT work.
       if (DisplayFrames.TryQueue(snapshot, waterfallGeneration, mode))
         lastQueuedWaterfallSampleIndex = snapshot.EndSampleIndex;
+    }
+
+    private void DecoderModeBtn_Click(object? sender,EventArgs e)
+    {
+      CwConsoleSettings settings=ctx.Settings.CwConsole;
+      CwDecoderMode next=settings.DecoderMode==CwDecoderMode.DeepCW
+        ? CwDecoderMode.NewCW : CwDecoderMode.DeepCW;
+      if(ctx.CwReceiveWorker==null)return;
+      ctx.CwReceiveWorker.SetDecoderMode(next);
+      settings.DecoderMode=next;
+      lock(stateSync)
+      {
+        // A UI slot and its provisional message belong to ONE decoder.
+        // Persistent archived text remains accessible under both modes.
+        displayGeneration=-1;
+        transcripts.Clear();
+        latestTracks=Array.Empty<CwSignalTrack>();
+        laneSlots.Reset();
+        selectedIdentity=null;
+      }
+      ctx.Settings.SaveToFile();
+      RefreshUi();
+      Serilog.Log.Information(
+        "CW receive engine changed: {Mode}. RX audio and CW TX state unchanged.",
+        next);
     }
 
     private void RxToggleBtn_Click(
