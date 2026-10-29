@@ -14,6 +14,8 @@ RIT/XIT 或 TX 上行频率。有关 IC-9700 USB/LAN 12 kHz IF 输出，见
    **12 kHz 是实际模拟中频，不是采样率或复数 IQ。**
 2. 在 SkyRoof 的**下行频率文字上右键**，打开 **FM / CW / SSB AFC...**，
    或双击下行频率。选择正确的 Windows IF 采集设备，点 **Start IF**。
+   对于远程 IF 可将 **IF transport** 改为 **PlaybackLoopback**，
+   选择真正输出 12 kHz IF 的远程播放设备，而不是普通 AF 音频。
 3. **Assist**：只读频率观测，不改变 CAT。**Auto**：有可靠观测和
    有效频率方向时允许仅对 RX 进行自动补偿；未确认方向不会盲目写频。
    不要求每次打开软件都重新进行人工标定。
