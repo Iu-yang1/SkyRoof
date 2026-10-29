@@ -21,6 +21,7 @@ namespace SkyRoof.AFC
     private double lastIfHz, lastCatHz;
     private bool havePolaritySample;
     private int inferredSign;
+    private int polarityCandidate, polarityVotes;
     private double acceptedCorrection;
 
     public AfcSnapshot Snapshot { get { lock (sync) return state; } }
@@ -39,6 +40,7 @@ namespace SkyRoof.AFC
         generation = -1;
         havePolaritySample = false;
         inferredSign = 0;
+        polarityCandidate = polarityVotes = 0;
         acceptedCorrection = 0;
         lastProcess = default;
       }
@@ -114,8 +116,11 @@ namespace SkyRoof.AFC
             obs.SigmaHz > (obs.Mode == AfcSignalMode.FM ? 150 : 20))
         {
           state = state with { State = AfcLockState.Hold,
+            ObservedIfOffsetHz = obs.IfOffsetHz,
             Confidence = obs.Confidence, LastObservationUtc = obs.SampleUtc,
-            Detail = "Signal ambiguous, weak, or reference absent; holding" };
+            Detail = !obs.HasAbsoluteReference && obs.Mode == AfcSignalMode.SSB
+              ? "SSB relative drift assistance only; no absolute carrier"
+              : "Signal ambiguous, weak, or reference absent; holding" };
           return;
         }
 
@@ -131,7 +136,16 @@ namespace SkyRoof.AFC
               Math.Abs(ifDelta) >= 15 &&
               Math.Abs(Math.Abs(catDelta) - Math.Abs(ifDelta)) <
                 Math.Max(25, Math.Abs(catDelta) * 0.4))
-            inferredSign = -Math.Sign(ifDelta * catDelta);
+          {
+            int candidate = -Math.Sign(ifDelta * catDelta);
+            if (candidate != polarityCandidate)
+            {
+              polarityCandidate = candidate;
+              polarityVotes = 1;
+            }
+            else if (++polarityVotes >= 3)
+              inferredSign = candidate;
+          }
         }
         lastIfHz = obs.IfOffsetHz;
         lastCatHz = catReadbackHz;
@@ -197,6 +211,22 @@ namespace SkyRoof.AFC
       }
     }
 
+    public void Tick(DateTime nowUtc)
+    {
+      lock (sync)
+      {
+        if (state.Control == AfcControlMode.Off || state.LastObservationUtc == default)
+          return;
+        double age = (nowUtc - state.LastObservationUtc).TotalSeconds;
+        if (age > 8)
+          state = state with { State = AfcLockState.Lost,
+            Detail = "IF input stale; automatic tuning stopped" };
+        else if (age > 3 && state.State == AfcLockState.Locked)
+          state = state with { State = AfcLockState.Hold,
+            Detail = "No fresh IF measurement; holding correction" };
+      }
+    }
+
     public void OnUserTune()
     {
       // A user knob command changes the reference target; do not fight it.
@@ -206,6 +236,7 @@ namespace SkyRoof.AFC
         acceptedCorrection = 0;
         havePolaritySample = false;
         inferredSign = 0;
+        polarityCandidate = polarityVotes = 0;
         state = state with { State = AfcLockState.Acquiring, CorrectionHz = 0,
           Detail = "Manual tune: AFC target rebased" };
         confirmations = 0;
