@@ -15,7 +15,7 @@ namespace SkyRoof.AFC
     private readonly TabControl tabs = new();
     private readonly Label[] metricValues = { new(), new(), new() };
     private readonly Button offButton = new();
-    private readonly Button centerButton = new();
+    private readonly Label status = new();
     private readonly Label stateLabel = new();
     private readonly Label measureLabel = new();
     private readonly Button startButton = new();
@@ -135,10 +135,10 @@ namespace SkyRoof.AFC
       status.Dock = DockStyle.Fill;
       status.ForeColor = Color.FromArgb(210, 153, 34);
       status.Font = new Font("Segoe UI Semibold", 10, FontStyle.Bold);
-      measurements.Dock = DockStyle.Fill;
-      measurements.ForeColor = Color.FromArgb(139, 148, 158);
+      measureLabel.Dock = DockStyle.Fill;
+      measureLabel.ForeColor = Color.FromArgb(139, 148, 158);
       message.Controls.Add(status, 0, 0);
-      message.Controls.Add(measurements, 0, 1);
+      message.Controls.Add(measureLabel, 0, 1);
       layout.Controls.Add(message, 0, 4);
       trackingPage.Controls.Add(layout);
 
@@ -349,7 +349,7 @@ namespace SkyRoof.AFC
         : "状态: OFF · IF 输入尚未启动";
       status.ForeColor = active && snapshot.State == AfcLockState.Locked
         ? Color.FromArgb(63, 185, 80) : Color.FromArgb(210, 153, 34);
-      measurements.Text = active
+      measureLabel.Text = active
         ? snapshot.Detail + Environment.NewLine +
           $"搜索: {ctx.Settings.Afc.TargetOffsetHz:+0.0;-0.0;0} Hz · " +
           $"居中: {ctx.Settings.Afc.DesiredOffsetHz:+0.0;-0.0;0} Hz · " +
