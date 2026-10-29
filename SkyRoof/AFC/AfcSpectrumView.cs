@@ -102,8 +102,10 @@ namespace SkyRoof.AFC
         }
         using var area = new GraphicsPath();
         area.AddLines(points);
-        area.AddLine(points[^1].X, plot.Bottom);
-        area.AddLine(points[0].X, plot.Bottom);
+        area.AddLine(points[^1].X, points[^1].Y,
+          points[^1].X, plot.Bottom);
+        area.AddLine(points[^1].X, plot.Bottom,
+          points[0].X, plot.Bottom);
         area.CloseFigure();
         g.FillPath(signalBrush, area);
         if (points.Length > 1) g.DrawLines(tracePen, points);

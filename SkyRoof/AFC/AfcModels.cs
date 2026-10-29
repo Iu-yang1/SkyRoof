@@ -13,6 +13,7 @@ namespace SkyRoof
   /// </summary>
   public sealed class AfcSettings
   {
+    [Browsable(false)]
     [DisplayName("AFC enabled")]
     [DefaultValue(false)]
     public bool Enabled { get; set; } = false;
@@ -45,9 +46,15 @@ namespace SkyRoof
     [DefaultValue(0)]
     public int RfIfSign { get; set; } = 0;
 
-    [DisplayName("Target IF offset (Hz)")]
+    [DisplayName("Target search IF offset (Hz)")]
+    [Description("Where to search for the selected CW/pilot signal. Click the IF spectrum to set this value.")]
     [DefaultValue(0.0)]
     public double TargetOffsetHz { get; set; } = 0;
+
+    [DisplayName("Desired center IF offset (Hz)")]
+    [Description("Where Center & Lock should move the selected signal. It is independent of the search frequency.")]
+    [DefaultValue(0.0)]
+    public double DesiredOffsetHz { get; set; } = 0;
 
     [DisplayName("SSB reference available")]
     [Description("Only enable when there is an identifiable continuous CW/pilot reference in the selected IF channel; normal suppressed-carrier speech has no unique absolute AFC measurement.")]
@@ -84,7 +91,10 @@ namespace SkyRoof.AFC
     double SigmaHz,
     double Confidence,
     bool HasAbsoluteReference,
-    bool Ambiguous = false);
+    bool Ambiguous = false,
+    float[]? SpectrumDb = null,
+    double SpectrumMinHz = -6000,
+    double SpectrumStepHz = 12000.0 / 511);
 
   public readonly record struct AfcSnapshot(
     AfcLockState State,
