@@ -166,36 +166,105 @@ namespace SkyRoof.AFC
       RefreshDisplay();
     }
 
+    private AfcControlMode EffectiveControl() =>
+      currentMode == AfcSignalMode.SSB &&
+      !ctx.Settings.Afc.SsbPilotEnabled &&
+      ctx.Settings.Afc.Control == AfcControlMode.Auto
+        ? AfcControlMode.Assist : ctx.Settings.Afc.Control;
+
+    private void OnSpectrumTargetSelected(double hz)
+    {
+      if (!active || currentMode == AfcSignalMode.FM) return;
+      ctx.Settings.Afc.TargetOffsetHz = hz;
+      input.UpdateTarget(currentMode, ctx.Settings.Afc.SsbPilotEnabled, hz);
+      owner.AfcController.Reset("Selected a new IF carrier");
+      owner.AfcController.Configure(currentMode, EffectiveControl());
+      settingsGrid.Refresh();
+      ctx.Settings.SaveToFile();
+      RefreshDisplay();
+    }
+
+    private void OnTargetInvalidated()
+    {
+      if (!active) return;
+      input.InvalidateTarget();
+      currentMode = owner.CurrentAfcMode;
+      owner.AfcController.Configure(currentMode, EffectiveControl());
+      if (currentMode == AfcSignalMode.SSB && ctx.Settings.Afc.SsbPilotEnabled)
+        owner.AfcController.CenterOn(ctx.Settings.Afc.DesiredOffsetHz);
+    }
+
+    private void Settings_PropertyValueChanged(object? sender,
+      PropertyValueChangedEventArgs e)
+    {
+      string name = e.ChangedItem.PropertyDescriptor?.Name ?? "";
+      if (active)
+      {
+        if (name is nameof(AfcSettings.InputDeviceId) or
+            nameof(AfcSettings.LoopbackDeviceId) or
+            nameof(AfcSettings.InputSource) or
+            nameof(AfcSettings.IfReferenceHz))
+          Restart();
+        else if (name is nameof(AfcSettings.TargetOffsetHz) or
+                 nameof(AfcSettings.SsbPilotEnabled))
+        {
+          input.UpdateTarget(currentMode, ctx.Settings.Afc.SsbPilotEnabled,
+            ctx.Settings.Afc.TargetOffsetHz);
+          owner.AfcController.Reset("Target parameters changed");
+          owner.AfcController.Configure(currentMode, EffectiveControl());
+          if (currentMode == AfcSignalMode.SSB && ctx.Settings.Afc.SsbPilotEnabled)
+            owner.AfcController.CenterOn(ctx.Settings.Afc.DesiredOffsetHz);
+        }
+        else if (name == nameof(AfcSettings.Control))
+          owner.AfcController.Configure(currentMode, EffectiveControl());
+      }
+      ctx.Settings.SaveToFile();
+      RefreshDisplay();
+    }
+
     private void SwitchControl(AfcControlMode control)
     {
       if (!active) return;
       if (control == AfcControlMode.Auto &&
-          currentMode == AfcSignalMode.SSB && !ctx.Settings.Afc.SsbPilotEnabled)
+          (ctx.CatControl.Rx == null ||
+           currentMode == AfcSignalMode.SSB &&
+             !ctx.Settings.Afc.SsbPilotEnabled))
         return;
       ctx.Settings.Afc.Control = control;
       ctx.Settings.SaveToFile();
-      owner.AfcController.Configure(currentMode, control);
+      owner.AfcController.Configure(currentMode, EffectiveControl());
       if (currentMode == AfcSignalMode.SSB && ctx.Settings.Afc.SsbPilotEnabled)
-        owner.AfcController.CenterOn(ctx.Settings.Afc.TargetOffsetHz);
+        owner.AfcController.CenterOn(ctx.Settings.Afc.DesiredOffsetHz);
       RefreshDisplay();
     }
 
-    private void OnObservation(AfcObservation obs)
+    private void OnObservation(AfcObservation observation)
     {
+      // The audio-worker timestamp is used to select a historical CAT
+      // readback; never pair old IF with current, later CAT frequency.
       if (!active || !IsHandleCreated || IsDisposed) return;
       try
       {
         BeginInvoke((Action)(() =>
         {
-          if (!active || IsDisposed || owner.IsDisposed || obs.Mode != currentMode)
-            return;
+          if (!active || IsDisposed || owner.IsDisposed ||
+              observation.Mode != currentMode) return;
           var cfg = ctx.Settings.Afc;
-          owner.AfcController.Observe(obs, owner.GetAfcRxReadbackRf(),
-            cfg.RfIfSign, Math.Clamp(cfg.MaxCorrectionHz, 1, 10000),
+          double readback = owner.GetAfcReadbackAt(observation.SampleUtc);
+          owner.AfcController.Observe(observation,
+            readback, cfg.RfIfSign,
+            Math.Clamp(cfg.MaxCorrectionHz, 1, 10000),
             Math.Clamp(cfg.FmDeadbandHz, 1, 500),
             Math.Clamp(cfg.ToneDeadbandHz, 0.5, 100),
-            owner.IsAfcTransmitting);
+            owner.IsAfcTransmitting,
+            catReadbackIsTimeAligned: double.IsFinite(readback));
+          spectrum.SetSpectrum(observation.SpectrumDb,
+            observation.SpectrumMinHz, observation.SpectrumStepHz,
+            observation.HasAbsoluteReference
+              ? observation.IfOffsetHz : null,
+            cfg.TargetOffsetHz);
           owner.ApplyAfcRxCorrection();
+          RefreshDisplay();
         }));
       }
       catch (InvalidOperationException) { }
@@ -207,27 +276,29 @@ namespace SkyRoof.AFC
       {
         currentMode = owner.CurrentAfcMode;
         var cfg = ctx.Settings.Afc;
-        if (currentMode == AfcSignalMode.SSB &&
-            cfg.Control == AfcControlMode.Auto && !cfg.SsbPilotEnabled)
-          cfg.Control = AfcControlMode.Assist;
         input.Start(cfg.InputDeviceId, cfg.IfReferenceHz, currentMode,
           cfg.SsbPilotEnabled, cfg.TargetOffsetHz,
           cfg.InputSource, cfg.LoopbackDeviceId);
+        if (!input.IsRunning)
+          throw new InvalidOperationException(
+            "12 kHz IF input could not start. Verify the sound device and IF routing.");
         active = true;
         cfg.Enabled = true;
-        owner.AfcController.Configure(currentMode, cfg.Control);
+        owner.AfcController.Configure(currentMode, EffectiveControl());
         if (currentMode == AfcSignalMode.SSB && cfg.SsbPilotEnabled)
-          owner.AfcController.CenterOn(cfg.TargetOffsetHz);
+          owner.AfcController.CenterOn(cfg.DesiredOffsetHz);
         ctx.Settings.SaveToFile();
-        RefreshDisplay();
       }
       catch (Exception ex)
       {
         active = false;
-        owner.AfcController.Reset("IF capture failed");
-        MessageBox.Show(this, ex.Message, "AFC IF input",
+        input.Stop();
+        ctx.Settings.Afc.Enabled = false;
+        owner.AfcController.Reset("IF input failed");
+        MessageBox.Show(this, ex.Message, "AFC IF capture",
           MessageBoxButtons.OK, MessageBoxIcon.Warning);
       }
+      RefreshDisplay();
     }
 
     private void Restart() { Stop(); Start(); }
@@ -245,36 +316,66 @@ namespace SkyRoof.AFC
     private void RefreshDisplay()
     {
       owner.AfcController.Tick(DateTime.UtcNow);
+      if (!ReferenceEquals(settingsGrid.SelectedObject, ctx.Settings.Afc))
+        settingsGrid.SelectedObject = ctx.Settings.Afc;
       AfcSignalMode mode = owner.CurrentAfcMode;
       if (active && mode != currentMode)
       {
         currentMode = mode;
         input.UpdateTarget(mode, ctx.Settings.Afc.SsbPilotEnabled,
           ctx.Settings.Afc.TargetOffsetHz);
-        owner.AfcController.Configure(mode, ctx.Settings.Afc.Control);
+        owner.AfcController.Reset("Radio mode changed");
+        owner.AfcController.Configure(mode, EffectiveControl());
+        if (mode == AfcSignalMode.SSB && ctx.Settings.Afc.SsbPilotEnabled)
+          owner.AfcController.CenterOn(ctx.Settings.Afc.DesiredOffsetHz);
       }
-      var s = owner.AfcController.Snapshot;
-      stateLabel.Text = "Mode: " + currentMode + "    " +
-        (active ? s.State.ToString().ToUpperInvariant() : "OFF") +
-        "    IF: " + (input.IsRunning ? "running" : "stopped");
-      measureLabel.Text = "Observed IF offset: " +
-        s.ObservedIfOffsetHz.ToString("+0.0;-0.0;0") +
-        " Hz     Error: " + s.ErrorHz.ToString("+0.0;-0.0;0") +
-        " Hz\nRX AFC: " + s.CorrectionHz.ToString("+0.0;-0.0;0") +
-        " Hz     Confidence: " + s.Confidence.ToString("P0") +
-        "\n" + s.Detail;
-      startButton.Text = active ? "Stop IF" : "Start IF";
-      assistButton.Enabled = active;
-      autoButton.Enabled = active &&
+      var snapshot = owner.AfcController.Snapshot;
+      stateLabel.Text = currentMode + " · 12 kHz IF    " +
+        (input.IsRunning ? "● 输入正常" : "○ 未连接") +
+        "     频率方向: " +
+        (snapshot.MappingSign == 0 ? "待确认" :
+          snapshot.MappingSign > 0 ? "+1" : "−1");
+      double[] numbers =
+        { snapshot.ObservedIfOffsetHz, snapshot.ErrorHz, snapshot.CorrectionHz };
+      for (int i = 0; i < metricValues.Length; i++)
+        metricValues[i].Text = numbers[i].ToString("+0.0;-0.0;0") + " Hz";
+      status.Text = active ?
+        $"状态: {snapshot.State} · 置信度 {snapshot.Confidence:P0} · CAT " +
+          (ctx.CatControl.Rx == null ? "不可用" : "已连接")
+        : "状态: OFF · IF 输入尚未启动";
+      status.ForeColor = active && snapshot.State == AfcLockState.Locked
+        ? Color.FromArgb(63, 185, 80) : Color.FromArgb(210, 153, 34);
+      measurements.Text = active
+        ? snapshot.Detail + Environment.NewLine +
+          $"搜索: {ctx.Settings.Afc.TargetOffsetHz:+0.0;-0.0;0} Hz · " +
+          $"居中: {ctx.Settings.Afc.DesiredOffsetHz:+0.0;-0.0;0} Hz · " +
+          (owner.IsAfcTransmitting ? "PTT 冻结" : "仅修正 RX")
+        : "在「高级设置」选择承载 12 kHz IF 的音频输入，然后启动 IF。";
+      startButton.Text = active ? "停止 IF" : "启动 IF";
+      offButton.Enabled = assistButton.Enabled = active;
+      autoButton.Enabled = active && ctx.CatControl.Rx != null &&
         (currentMode != AfcSignalMode.SSB || ctx.Settings.Afc.SsbPilotEnabled);
-      lockButton.Enabled = active;
-      centerButton.Enabled = active;
+      lockButton.Enabled = centerButton.Enabled = active &&
+        currentMode != AfcSignalMode.FM;
+      spectrum.Enabled = active && currentMode != AfcSignalMode.FM;
+      AfcControlMode actual = active ? EffectiveControl() : AfcControlMode.Off;
+      foreach (Button b in new[] { offButton, assistButton, autoButton })
+      {
+        bool selected = b == offButton && actual == AfcControlMode.Off ||
+          b == assistButton && actual == AfcControlMode.Assist ||
+          b == autoButton && actual == AfcControlMode.Auto;
+        b.BackColor = selected
+          ? Color.FromArgb(35, 100, 170)
+          : Color.FromArgb(33, 38, 45);
+      }
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
       timer.Stop();
       active = false;
+      owner.AfcTargetInvalidated -= OnTargetInvalidated;
+      spectrum.TargetSelected -= OnSpectrumTargetSelected;
       owner.AfcController.Reset("AFC console closed");
       ctx.Settings.Afc.Enabled = false;
       ctx.Settings.SaveToFile();
