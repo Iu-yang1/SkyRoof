@@ -120,7 +120,8 @@ namespace SkyRoof.AFC
             cfg.Control == AfcControlMode.Auto && !cfg.SsbPilotEnabled)
           cfg.Control = AfcControlMode.Assist;
         input.Start(cfg.InputDeviceId, cfg.IfReferenceHz, currentMode,
-          cfg.SsbPilotEnabled, cfg.TargetOffsetHz);
+          cfg.SsbPilotEnabled, cfg.TargetOffsetHz,
+          cfg.InputSource, cfg.LoopbackDeviceId);
         active = true;
         cfg.Enabled = true;
         owner.AfcController.Configure(currentMode, cfg.Control);
