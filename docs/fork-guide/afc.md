@@ -16,7 +16,9 @@ the [Icom IC-9700 manual](https://icomuk.co.uk/files/icom/PDF/productManual/IC-9
    12 kS/s PCM and not complex I/Q**.
 2. Right-click the **downlink frequency label**, select **FM / CW / SSB
    AFC...**, or double-click the RX frequency. Set the Windows **IF input**
-   device in the dialog and press **Start IF**.
+   device in the dialog and press **Start IF**. Alternatively select
+   **IF transport = PlaybackLoopback** and the render endpoint carrying
+   IC-9700 LAN / IC-705 remote IF audio.
 3. Choose **Assist** to observe estimated IF frequency without CAT changes.
    Choose **Auto** to compensate RX only. If the mapping sign cannot yet be
    learned automatically, the controller remains in observation mode. This
