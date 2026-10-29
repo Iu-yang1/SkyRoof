@@ -105,6 +105,8 @@ namespace SkyRoof.AFC
           anchored = false;
           confirmations = 0;
           havePolaritySample = false;
+          inferredSign = 0;
+          polarityCandidate = polarityVotes = 0;
           acceptedCorrection = 0;
           state = state with { CorrectionHz = 0, State = AfcLockState.Acquiring };
         }
