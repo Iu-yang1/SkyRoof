@@ -60,6 +60,20 @@ namespace SkyRoof
       return freq;
     }
 
+    internal void ApplyAfcRxCorrection()
+    {
+      if (ctx == null || ctx.Settings.Afc.Enabled != true ||
+          !RadioLink.HasDownlink || IsAfcTransmitting ||
+          ctx.CatControl.Rx == null) return;
+      if (AfcController.Snapshot.Control != AfcControlMode.Auto) return;
+      double target = RadioLink.CorrectedDownlinkFrequency + AfcRxOffset;
+      if (Math.Abs(target - lastAfcExpectedRf) < 1) return;
+      SendCatRxFrequency(target);
+      if (ctx.Settings.Transverter.SdrOffsetEnabled)
+        XverterSetSlicerFrequency();
+      else SetSlicerFrequency();
+    }
+
     private double AfcRxOffset => ctx?.Settings.Afc.Enabled == true
       ? AfcController.GetRxCorrection(IsAfcTransmitting) : 0;
 
