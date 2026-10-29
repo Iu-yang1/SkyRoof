@@ -156,6 +156,7 @@ namespace SkyRoof
         if (AfcWindow == null || AfcWindow.IsDisposed)
         {
           AfcWindow = new AfcControlForm(ctx, this);
+          AfcWindow.Owner = ctx.MainForm; // Close hidden IF capture with the app.
           AfcWindow.FormClosed += (_, _) => AfcWindow = null;
           _ = AfcWindow.Handle;
         }
