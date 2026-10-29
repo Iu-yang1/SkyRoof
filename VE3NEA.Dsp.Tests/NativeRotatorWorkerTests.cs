@@ -237,6 +237,47 @@ public sealed class NativeRotatorWorkerTests
   }
 
   [Fact]
+  public async Task FakeGs232BridgeSurvivesClientTcpResetAndAcceptsReplacement()
+  {
+    // On Windows, forcibly closing a socket can cause ReadAsync to throw
+    // IOException instead of returning zero. One abandoned TCP connection
+    // must never terminate the entire simulated rotator accept loop.
+    await using var server=new FakeGs232Bridge();
+    using(var old=new TcpClient())
+    {
+      old.LingerState=new LingerOption(true,0);
+      await old.ConnectAsync(IPAddress.Loopback,server.Port);
+      var socket=old.GetStream();
+      byte[] query=Encoding.ASCII.GetBytes("C2\r");
+      await socket.WriteAsync(query);
+      byte[] buffer=new byte[128];
+      int n=await socket.ReadAsync(buffer,0,buffer.Length)
+        .WaitAsync(TimeSpan.FromSeconds(5));
+      Assert.Contains("AZ=90",Encoding.ASCII.GetString(buffer,0,n));
+    }
+    var disconnected=System.Diagnostics.Stopwatch.StartNew();
+    while(server.ActiveConnections!=0 &&
+          disconnected.Elapsed<TimeSpan.FromSeconds(8))
+      await Task.Delay(50);
+    Assert.Equal(0,server.ActiveConnections);
+
+    using(var next=new TcpClient())
+    {
+      await next.ConnectAsync(IPAddress.Loopback,server.Port)
+        .WaitAsync(TimeSpan.FromSeconds(5));
+      var socket=next.GetStream();
+      byte[] query=Encoding.ASCII.GetBytes("C2\r");
+      await socket.WriteAsync(query);
+      byte[] buffer=new byte[128];
+      int n=await socket.ReadAsync(buffer,0,buffer.Length)
+        .WaitAsync(TimeSpan.FromSeconds(5));
+      Assert.Contains("AZ=90",Encoding.ASCII.GetString(buffer,0,n));
+    }
+    Assert.True(server.ConnectionCount>=2,
+      "The fake GS232 listener must still accept sessions after a TCP reset.");
+  }
+
+  [Fact]
   public async Task ConcurrentShutdownCallsShareOneWorkerReap()
   {
     string? root=Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
