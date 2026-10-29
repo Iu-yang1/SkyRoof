@@ -124,11 +124,12 @@ namespace SkyRoof.AFC
         if (pcm == null) return;
         float[] data = pcm;
         long version = gen;
+        DateTime packetUtc = e.Utc;
         _ = Task.Run(() =>
         {
           try
           {
-            AfcObservation obs = analyzer.Analyze(data, selected, e.Utc,
+            AfcObservation obs = analyzer.Analyze(data, selected, packetUtc,
               version, expected, refPresent);
             lock (sync) if (disposed || version != generation) return;
             ObservationAvailable?.Invoke(obs);
