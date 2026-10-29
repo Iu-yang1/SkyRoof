@@ -113,11 +113,12 @@ namespace SkyRoof
 
       BuildCtcssMenu();
       BuildPttMenu();
-      var afcMenu = new ContextMenuStrip();
-      afcMenu.Items.Add("FM / CW / SSB AFC...", null,
+      // Preserve the existing nominal/corrected frequency popup shared by
+      // both RX and TX labels, then append AFC as an additional command.
+      contextMenuStrip1.Items.Add(new ToolStripSeparator());
+      contextMenuStrip1.Items.Add("FM / CW / SSB AFC...", null,
         (_, _) => OpenAfcWindow());
-      DownlinkFrequencyLabel.ContextMenuStrip = afcMenu;
-      DownlinkLabel.ContextMenuStrip = afcMenu;
+      DownlinkLabel.ContextMenuStrip = contextMenuStrip1;
       DownlinkFrequencyLabel.DoubleClick += (_, _) => OpenAfcWindow();
     }
 
