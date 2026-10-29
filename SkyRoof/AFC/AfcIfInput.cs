@@ -11,6 +11,7 @@ namespace SkyRoof.AFC
   {
     private readonly InputSoundcard<float> input = new(
       captureBufferMilliseconds: 40, readerBlockSizeSamples: 1600);
+    private readonly LoopbackInputSoundcard loopback = new();
     private readonly object sync = new();
     private readonly float[] buffer = new float[96000];
     private int write, used, busy;
@@ -23,24 +24,32 @@ namespace SkyRoof.AFC
     private double targetOffset;
 
     public event Action<AfcObservation>? ObservationAvailable;
-    public bool IsRunning => input.IsRunning;
-    public string DeviceName => input.GetDisplayName();
+    public bool IsRunning => input.IsRunning || loopback.IsRunning;
+    public string DeviceName => loopback.IsRunning ? loopback.GetDisplayName() : input.GetDisplayName();
 
     public AfcIfInput()
     {
       input.Retry = true;
+      loopback.Retry = true;
       input.SamplesAvailable += OnSamples;
+      loopback.SamplesAvailable += OnSamples;
     }
 
     public void Start(string? device, double referenceHz,
-      AfcSignalMode signalMode, bool ssbPilot, double offset)
+      AfcSignalMode signalMode, bool ssbPilot, double offset,
+      AfcIfSource source = AfcIfSource.WasapiCapture, string? loopbackDevice = null)
     {
       ObjectDisposedException.ThrowIf(disposed, this);
-      if (string.IsNullOrWhiteSpace(device))
+      if (source == AfcIfSource.WasapiCapture && string.IsNullOrWhiteSpace(device))
         throw new ArgumentException("Select the 12-kHz IF WASAPI input.");
+      if (source == AfcIfSource.PlaybackLoopback && string.IsNullOrWhiteSpace(loopbackDevice))
+        throw new ArgumentException("Select the remote IF playback endpoint.");
       var newProcessor = new AfcSignalProcessing(48000, referenceHz);
       input.Enabled = false;
-      input.SetDeviceId(device);
+      loopback.Enabled = false;
+      if (source == AfcIfSource.PlaybackLoopback)
+        loopback.SetDeviceId(loopbackDevice);
+      else input.SetDeviceId(device);
       lock (sync)
       {
         generation++;
@@ -51,7 +60,8 @@ namespace SkyRoof.AFC
         pilot = ssbPilot;
         targetOffset = offset;
       }
-      input.Enabled = true;
+      if (source == AfcIfSource.PlaybackLoopback) loopback.Enabled = true;
+      else input.Enabled = true;
     }
 
     public void UpdateTarget(AfcSignalMode signalMode, bool ssbPilot, double offset)
@@ -72,6 +82,7 @@ namespace SkyRoof.AFC
     public void Stop()
     {
       input.Enabled = false;
+      loopback.Enabled = false;
       lock (sync)
       {
         generation++;
@@ -157,7 +168,9 @@ namespace SkyRoof.AFC
       Stop();
       disposed = true;
       input.SamplesAvailable -= OnSamples;
+      loopback.SamplesAvailable -= OnSamples;
       input.Dispose();
+      loopback.Dispose();
       GC.SuppressFinalize(this);
     }
   }
