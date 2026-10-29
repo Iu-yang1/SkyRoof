@@ -150,7 +150,10 @@ namespace SkyRoof.AFC
         float selectedX = (float)ToX(targetHz, plot);
         if (selectedX >= plot.Left && selectedX <= plot.Right &&
             Math.Abs(selectedX - referenceX) >= 3)
-          g.DrawLine(new Pen(palette.Accent, 1f), selectedX, plot.Top, selectedX, plot.Bottom);
+        {
+          using var selectedPen = new Pen(palette.Accent, 1f);
+          g.DrawLine(selectedPen, selectedX, plot.Top, selectedX, plot.Bottom);
+        }
       }
       if (observedHz is double hzObserved && double.IsFinite(hzObserved))
       {

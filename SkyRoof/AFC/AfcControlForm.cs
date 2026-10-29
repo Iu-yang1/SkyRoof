@@ -316,6 +316,9 @@ namespace SkyRoof.AFC
         ctx.Settings.Afc.Control = AfcControlMode.Assist;
         owner.UpdateRxAfcCheckbox(false);
         ctx.Settings.SaveToFile();
+        // No reason to retain an invisible capture when the newly selected
+        // satellite has no receiver or lacks a valid SSB reference.
+        if (!Visible) { Stop(); Close(); return; }
       }
       owner.AfcController.Configure(currentMode, EffectiveControl());
       if (currentMode == AfcSignalMode.SSB && ctx.Settings.Afc.SsbPilotEnabled)
