@@ -143,6 +143,12 @@ namespace SkyRoof.AFC
       trackingPage.Controls.Add(layout);
 
       settingsGrid.Dock = DockStyle.Fill;
+      settingsGrid.BackColor = Color.FromArgb(13, 17, 23);
+      settingsGrid.ViewBackColor = Color.FromArgb(22, 27, 34);
+      settingsGrid.ViewForeColor = ForeColor;
+      settingsGrid.HelpBackColor = Color.FromArgb(22, 27, 34);
+      settingsGrid.HelpForeColor = ForeColor;
+      settingsGrid.LineColor = Color.FromArgb(65, 73, 83);
       settingsGrid.SelectedObject = ctx.Settings.Afc;
       settingsGrid.PropertyValueChanged += Settings_PropertyValueChanged;
       advancedPage.Controls.Add(settingsGrid);
@@ -345,7 +351,9 @@ namespace SkyRoof.AFC
         metricValues[i].Text = numbers[i].ToString("+0.0;-0.0;0") + " Hz";
       status.Text = active ?
         $"状态: {snapshot.State} · 置信度 {snapshot.Confidence:P0} · CAT " +
-          (ctx.CatControl.Rx == null ? "不可用" : "已连接")
+          (ctx.CatControl.Rx == null ? "不可用" :
+            double.IsFinite(owner.GetAfcReadbackAt(DateTime.UtcNow))
+              ? "读回有效" : "等待读回")
         : "状态: OFF · IF 输入尚未启动";
       status.ForeColor = active && snapshot.State == AfcLockState.Locked
         ? Color.FromArgb(63, 185, 80) : Color.FromArgb(210, 153, 34);
