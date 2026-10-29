@@ -87,6 +87,6 @@ SO-50 pass (UTC+8 13:17–13:35) had no replacement of rotator TCP worker PID 25
 - **P2 SGP4:** quarantine failed *element sets*, not a NORAD identifier, across repeat tracker rebuilds; fresh TLE/OMM elements remain eligible. Preserve orbit safety rather than manufacturing passes for decayed objects.
 - **P2 local transmitters:** report invalid, already-present, and unresolved-satellite records separately.
 - **P2 CAT/PTT/CTCSS:** log key state transitions and requested tuning/CTCSS details, clearly distinguishing CAT command acknowledgment from RF/rig readback.
-- **SkyCAT:** an incomplete `FE FE E0 A2 27` preamble is handled in a separate SkyCAT PR; the pinned `Vendor/SkyCAT` gitlink must be updated and rebuilt before the fix reaches the embedded worker.
+- **SkyCAT:** an incomplete `FE FE E0 A2 27` preamble is handled in a separate SkyCAT PR; this branch pins `Vendor/SkyCAT` to SkyCAT merged commit `7fe61a79`; verify via its fresh Windows installer before claiming embedded-worker acceptance.
 
 Field validation: attended testing of SO-50 FM/CTCSS, Doppler, post-TX C2 feedback, park and actual mechanical AZ/EL; no assumption that logged `CAT ACK` proves tone or RF transmission.
