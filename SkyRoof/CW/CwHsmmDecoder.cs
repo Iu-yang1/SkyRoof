@@ -88,6 +88,15 @@ namespace SkyRoof.CW
           }
           else if(pattern.Length>0)
           {
+            // An observation window may end in arbitrarily long silence
+            // after the final transmitted character. It is censoring,
+            // not a 40-dot Morse word gap, and must not destroy an
+            // otherwise correct multi-letter transcript.
+            if(run.Start+run.Length>=keyDown.Length)
+            {
+              Commit(run.Start);
+              continue;
+            }
             int distance=units>=5?7:units>=2?3:1;
             penalty+=Math.Pow((units-distance)/(distance==1?0.8:2.1),2);
             if(distance>=3)Commit(run.Start);
