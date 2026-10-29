@@ -79,6 +79,18 @@ namespace SkyRoof.AFC
       }
     }
 
+    public void InvalidateTarget()
+    {
+      // Keep WASAPI open, but never reinterpret old PCM as the new satellite,
+      // transponder, IF source, or selected CW lane.
+      lock (sync)
+      {
+        generation++;
+        write = used = 0;
+        lastUtc = default;
+      }
+    }
+
     public void Stop()
     {
       input.Enabled = false;
