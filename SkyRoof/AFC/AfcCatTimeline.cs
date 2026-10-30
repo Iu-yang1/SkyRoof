@@ -68,6 +68,41 @@ namespace SkyRoof.AFC
     }
 
     /// <summary>
+    /// Match a hardware readback to a request whose time PRECEDES that
+    /// readback. Looking up requests against the later IF sample timestamp
+    /// could incorrectly acknowledge a command with an older CAT read.
+    /// </summary>
+    public bool TryAttributedReadbackAt(DateTime sampleUtc,
+      AfcCatWriteSource expected, out long catHz,
+      double maximumAgeSeconds = 1.2, long frequencyToleranceHz = 3)
+    {
+      catHz = 0;
+      if (sampleUtc.Kind != DateTimeKind.Utc) return false;
+      lock (sync)
+      {
+        DateTime readUtc = default;
+        foreach (var read in readbacks)
+          if (read.Utc <= sampleUtc && read.Utc > readUtc)
+          {
+            readUtc = read.Utc;
+            catHz = read.CatHz;
+          }
+        if (readUtc == default ||
+            (sampleUtc - readUtc).TotalSeconds > maximumAgeSeconds)
+        {
+          catHz = 0;
+          return false;
+        }
+        foreach (var write in requests)
+          if (write.Source == expected && write.Utc <= readUtc &&
+              (readUtc - write.Utc).TotalSeconds <= 4 &&
+              Math.Abs(write.CatHz - catHz) <= frequencyToleranceHz)
+            return true;
+        return false;
+      }
+    }
+
+    /// <summary>
     /// Diagnostic only: newest actual CAT RX read and its age. Not a
     /// substitute for TryReadbackAt when making IF/CAT control decisions.
     /// </summary>
