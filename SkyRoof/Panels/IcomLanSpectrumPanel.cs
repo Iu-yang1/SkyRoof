@@ -492,75 +492,75 @@ namespace SkyRoof
       if (!MoreScopeMenu.Rebuild(menu =>
       {
         ToolStripMenuItem settings = new("Spectrum settings…");
-      settings.Click += (_, _) => SettingsBtn.PerformClick();
-      menu.Items.Add(settings);
-      if (!ReadbackBtn.Visible)
-      {
-        var readback = menu.Items.Add("Read back from IC-9700", null,
-          (_, _) => RequestScopeReadback());
-        readback.Enabled = ReadbackBtn.Enabled;
-      }
-      if (!ScopeGroups["d-clear"].Visible)
-        menu.Items.Add("Clear spectrum", null, (_, _) =>
+        settings.Click += (_, _) => SettingsBtn.PerformClick();
+        menu.Items.Add(settings);
+        if (!ReadbackBtn.Visible)
         {
-          ScopeState.Clear();
-          SpectrumView.Clear();
-          RefreshScopeGeometryUi();
-        });
-      if (!ScopeGroups["d-peak"].Visible)
-        menu.Items.Add("Toggle PEAK", null, (_, _) =>
-        {
-          PeakHold = !PeakHold;
-          SpectrumView.SetPeakHold(PeakHold);
-          UpdateDisplayButtons();
-        });
-      if (!ScopeGroups["d-wf"].Visible)
-        menu.Items.Add("Toggle WF", null, (_, _) =>
-        {
-          var settings = ctx.Settings.IcomLanSpectrum;
-          settings.ShowWaterfall = !settings.ShowWaterfall;
-          SpectrumView.SetWaterfallVisible(settings.ShowWaterfall);
-          ctx.Settings.SaveToFile();
-          UpdateDisplayButtons();
-        });
-      if (!ScopeGroups["r-band"].Visible)
-      {
-        var band = new ToolStripMenuItem("Scope band");
-        for (int i = 0; i < ScopeBandBox.Items.Count; i++)
-        {
-          int choice = i;
-          band.DropDownItems.Add(ScopeBandBox.Items[i].ToString(), null,
-            (_, _) => ScopeBandBox.SelectedIndex = choice);
+          var readback = menu.Items.Add("Read back from IC-9700", null,
+            (_, _) => RequestScopeReadback());
+          readback.Enabled = ReadbackBtn.Enabled;
         }
-        band.Enabled = ScopeBandBox.Enabled;
-        menu.Items.Add(band);
-      }
-      void LocalChoices(string caption, ComboBox box)
-      {
-        var item = new ToolStripMenuItem(caption)
-        {
-          Enabled = box.Enabled
-        };
-        for (int i = 0; i < box.Items.Count; i++)
-        {
-          int choice = i;
-          var option = new ToolStripMenuItem(box.Items[i].ToString())
+        if (!ScopeGroups["d-clear"].Visible)
+          menu.Items.Add("Clear spectrum", null, (_, _) =>
           {
-            Checked = box.SelectedIndex == i
-          };
-          option.Click += (_, _) => box.SelectedIndex = choice;
-          item.DropDownItems.Add(option);
+            ScopeState.Clear();
+            SpectrumView.Clear();
+            RefreshScopeGeometryUi();
+          });
+        if (!ScopeGroups["d-peak"].Visible)
+          menu.Items.Add("Toggle PEAK", null, (_, _) =>
+          {
+            PeakHold = !PeakHold;
+            SpectrumView.SetPeakHold(PeakHold);
+            UpdateDisplayButtons();
+          });
+        if (!ScopeGroups["d-wf"].Visible)
+          menu.Items.Add("Toggle WF", null, (_, _) =>
+          {
+            var settings = ctx.Settings.IcomLanSpectrum;
+            settings.ShowWaterfall = !settings.ShowWaterfall;
+            SpectrumView.SetWaterfallVisible(settings.ShowWaterfall);
+            ctx.Settings.SaveToFile();
+            UpdateDisplayButtons();
+          });
+        if (!ScopeGroups["r-band"].Visible)
+        {
+          var band = new ToolStripMenuItem("Scope band");
+          for (int i = 0; i < ScopeBandBox.Items.Count; i++)
+          {
+            int choice = i;
+            band.DropDownItems.Add(ScopeBandBox.Items[i].ToString(), null,
+              (_, _) => ScopeBandBox.SelectedIndex = choice);
+          }
+          band.Enabled = ScopeBandBox.Enabled;
+          menu.Items.Add(band);
         }
-        menu.Items.Add(item);
-      }
-      if (!ScopeGroups["d-avg"].Visible) LocalChoices("AVG", AverageBox);
-      if (!ScopeGroups["d-smooth"].Visible) LocalChoices("SMOOTH", SmoothBox);
-      if (!ScopeGroups["d-zoom"].Visible) LocalChoices("ZOOM", ZoomBox);
-      if (!ScopeGroups["r-ref"].Visible || !ScopeGroups["r-speed"].Visible ||
-          !ScopeGroups["r-vbw"].Visible)
-        menu.Items.Add("REF / SPEED / VBW in Spectrum settings…", null,
-          (_, _) => SettingsBtn.PerformClick());
-      }))
+        void LocalChoices(string caption, ComboBox box)
+        {
+          var item = new ToolStripMenuItem(caption)
+          {
+            Enabled = box.Enabled
+          };
+          for (int i = 0; i < box.Items.Count; i++)
+          {
+            int choice = i;
+            var option = new ToolStripMenuItem(box.Items[i].ToString())
+            {
+              Checked = box.SelectedIndex == i
+            };
+            option.Click += (_, _) => box.SelectedIndex = choice;
+            item.DropDownItems.Add(option);
+          }
+          menu.Items.Add(item);
+        }
+        if (!ScopeGroups["d-avg"].Visible) LocalChoices("AVG", AverageBox);
+        if (!ScopeGroups["d-smooth"].Visible) LocalChoices("SMOOTH", SmoothBox);
+        if (!ScopeGroups["d-zoom"].Visible) LocalChoices("ZOOM", ZoomBox);
+        if (!ScopeGroups["r-ref"].Visible || !ScopeGroups["r-speed"].Visible ||
+            !ScopeGroups["r-vbw"].Visible)
+          menu.Items.Add("REF / SPEED / VBW in Spectrum settings…", null,
+            (_, _) => SettingsBtn.PerformClick());
+        }))
         return;
 
       MoreScopeMenu.Menu.Show(MoreScopeControlsBtn,
