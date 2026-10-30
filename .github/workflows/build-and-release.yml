@@ -192,7 +192,9 @@ jobs:
             - IC-9700 LAN Spectrum toolbar: START / STOP, CLEAR, SYNC, SETS; readable REF, VBW, AVG, SMOOTH, ZOOM labels.
             - Includes DPI-responsive two-row scope toolbar refinements and MORE popup lifetime crash fix.
             - Fix: RX CAT frequency readback remains available to AFC even with Ignore Dial Knob.
-            - Add bounded two-cycle RX-only CAT/IF direction calibration with hardware readback, timeout/PTT safety, and frequency restoration before Auto AFC.
+            - Corrected CAT write/readback ordering: a request is never verified by an earlier hardware readback.
+            - The RX-only polarity probe uses settled IF windows after CAT tuning and verifies both a 150-Hz FM (40-Hz tone) move and its return before AFC Auto.
+            - Satellite Doppler-rate motion is removed from measured CAT probe steps; PTT/timeout safeguards and detailed calibration diagnostics remain in place.
             - Show CAT readback age and calibration progress in the bilingual AFC console; add regression tests.
             - Preserve TX frequency and persistent satellite/transponder offsets.
 
@@ -201,7 +203,9 @@ jobs:
             - AFC 实时跟踪、控制状态、诊断信息与高级设置提供中英双语。
             - IC-9700 LAN 频谱工具栏使用 START / STOP、CLEAR、SYNC、SETS 英文按钮。
             - 包含 DPI 双行布局和 MORE 菜单对象释放异常修复。
-            - AFC 新增 RX CAT 实际频率读回解耦、自动 RF/IF 方向标定及恢复验证，修复信号锁定而修正量为零的问题。
+            - 修复 v1.60 自动方向校准失败：CAT 写频必须由之后的实际硬件读回确认，且 IF 观测须在调谐生效后稳定。
+            - FM 使用 150 Hz、CW/SSB 导频使用 40 Hz 的临时 RX 探针；验证调谐与返回后才开放 AFC 自动修正。
+            - 扣除卫星模型预期多普勒频率变化，减少动态轨道跟踪中的校准误判。
             - 校准仅作用于 RX；新增 CAT 读回时效、PTT 冻结、失号/超时回退和状态诊断。
             - 保留原有中英界面和频谱 UI 调整，不改变 TX、永久转发器偏移或卫星轨道模型。
             - IC-9700 实机闭环表现仍需联合 IF/CAT 验收。
