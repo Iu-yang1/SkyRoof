@@ -78,7 +78,7 @@ namespace SkyRoof
     [DefaultValue(5.0)]
     public double ToneDeadbandHz { get; set; } = 5;
 
-    public override string ToString() => "自适应频率跟踪 AFC";
+    public override string ToString() => SettingsLanguage.Text("自适应频率跟踪 AFC", "Adaptive frequency control AFC");
   }
 }
 
