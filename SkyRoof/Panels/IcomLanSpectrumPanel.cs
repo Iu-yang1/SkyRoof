@@ -41,9 +41,17 @@ namespace SkyRoof
     private readonly Button DiagnosticsBtn = new();
     private readonly ToolTip ScopeTips = new() { AutoPopDelay = 18000, InitialDelay = 350 };
     private readonly FlowLayoutPanel RadioToolbar = new();
+    private readonly FlowLayoutPanel RadioSecondaryToolbar = new();
     private readonly FlowLayoutPanel DisplayToolbar = new();
-    private readonly Dictionary<Control, (int Width, float FontSize, Padding Margin)> ToolbarMetrics = new();
-    private float AppliedToolbarScale = -1;
+    private readonly FlowLayoutPanel DisplaySecondaryToolbar = new();
+    private Control[] RadioToolbarControls = [];
+    private Control[] DisplayToolbarControls = [];
+    private int RadioSplitIndex;
+    private int DisplaySplitIndex;
+    private bool CompactToolbarLayout;
+    private bool UpdatingToolbarLayout;
+    private TableLayoutPanel? SpectrumRootLayout;
+    private TableLayoutPanel? SpectrumToolbarLayout;
     private readonly IcomLanSpectrumView SpectrumView = new();
     private readonly System.Windows.Forms.Timer UiTimer = new() { Interval = 500 };
     private readonly IcomScopeState ScopeState = new();
@@ -143,12 +151,16 @@ namespace SkyRoof
       UiTimer.Start();
     }
 
+    private const int ToolbarRowHeight = 44;
+    private const float ToolbarFontSizePt = 10.5f;
+
     private static Label ScopeToolbarCaption(string text, ScopeUiColors colors) =>
       new()
       {
-        Text = text, Width = 34, Height = 28,
+        Text = text, Width = 44, Height = 34,
         TextAlign = ContentAlignment.MiddleCenter,
-        Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 8.5f, FontStyle.Bold),
+        Font = new Font(SystemFonts.MessageBoxFont.FontFamily,
+          ToolbarFontSizePt, FontStyle.Bold),
         ForeColor = colors.Muted,
         Margin = new Padding(2, 3, 5, 1),
         AutoSize = false
@@ -156,19 +168,57 @@ namespace SkyRoof
 
     private void InitializeToolbarLayout()
     {
+      RadioToolbarControls = RadioToolbar.Controls.Cast<Control>().ToArray();
+      DisplayToolbarControls = DisplayToolbar.Controls.Cast<Control>().ToArray();
+
+      // Keep a caption and its selector on the same row when space is tight.
+      RadioSplitIndex = Array.FindIndex(RadioToolbarControls,
+        c => c is Label { Text: "REF:" });
+      DisplaySplitIndex = Array.FindIndex(DisplayToolbarControls,
+        c => c is Label { Text: "平滑:" });
+      if (RadioSplitIndex < 0 || DisplaySplitIndex < 0)
+        throw new InvalidOperationException("Incomplete scope toolbar controls.");
+
       var colors = ScopeUiColors.Current;
-      foreach (FlowLayoutPanel bar in new[] { RadioToolbar, DisplayToolbar })
-      foreach (Control item in bar.Controls)
+      foreach (Control item in RadioToolbarControls.Concat(DisplayToolbarControls))
       {
-        // Preserve the original control widths and font size. Changing a
-        // DisplayLabel's AutoSize while laying out must not move its combo.
-        int originalWidth = item is Label label && label.AutoSize
-          ? Math.Max(item.PreferredSize.Width + 2, item.Width) : item.Width;
-        if (item is Label label2) label2.AutoSize = false;
-        if (item is Button button) button.AutoSize = false;
-        item.Width = originalWidth;
-        item.Height = Math.Min(30, Math.Max(22, item.Height));
-        ToolbarMetrics[item] = (originalWidth, item.Font.Size, item.Margin);
+        // The old layout reduced *fonts* to 55% to fit the window.
+        // Measure at a readable fixed point size; never shrink text.
+        item.Font = new Font(SystemFonts.MessageBoxFont.FontFamily,
+          ToolbarFontSizePt, item.Font.Style);
+        if (item is Label label)
+        {
+          label.AutoSize = false;
+          if (label.TextAlign == ContentAlignment.TopLeft)
+            label.TextAlign = ContentAlignment.MiddleLeft;
+          if (item != GeometryLabel)
+            item.Width = Math.Max(item.Width,
+              TextRenderer.MeasureText(label.Text, item.Font,
+                Size.Empty, TextFormatFlags.NoPadding).Width + 8);
+        }
+        else if (item is Button button)
+        {
+          button.AutoSize = false;
+          item.Width = Math.Max(item == FixedEdgeEditBtn ? 76 : 60,
+            TextRenderer.MeasureText(button.Text, item.Font,
+              Size.Empty, TextFormatFlags.NoPadding).Width + 20);
+        }
+        else if (item is ComboBox combo)
+        {
+          int widestChoice = combo.Items.Cast<object>()
+            .Select(choice => TextRenderer.MeasureText(
+              choice.ToString() ?? string.Empty, item.Font,
+              Size.Empty, TextFormatFlags.NoPadding).Width)
+            .DefaultIfEmpty(0).Max();
+          item.Width = Math.Max(item.Width, widestChoice + 30);
+        }
+        else if (item is NumericUpDown)
+          item.Width = Math.Max(item.Width, 76);
+
+        if (item == GeometryLabel) item.Width = 126;
+        if (item is not ComboBox and not NumericUpDown)
+          item.Height = 34;
+
         if (item is ComboBox or NumericUpDown or Button)
         {
           item.BackColor = colors.Surface;
@@ -183,9 +233,11 @@ namespace SkyRoof
     private void ApplyThemeToToolbar()
     {
       ScopeUiColors colors = ScopeUiColors.Current;
-      RadioToolbar.BackColor = DisplayToolbar.BackColor = colors.Surface;
-      foreach (Control item in RadioToolbar.Controls.Cast<Control>()
-        .Concat(DisplayToolbar.Controls.Cast<Control>()))
+      foreach (FlowLayoutPanel bar in new[]
+        { RadioToolbar, RadioSecondaryToolbar, DisplayToolbar, DisplaySecondaryToolbar })
+        bar.BackColor = colors.Surface;
+
+      foreach (Control item in RadioToolbarControls.Concat(DisplayToolbarControls))
       {
         if (item is Label) item.ForeColor = colors.Muted;
         else if (item is Button button && button != HoldBtn &&
@@ -199,47 +251,67 @@ namespace SkyRoof
       UpdateDisplayButtons();
     }
 
+    private static void MoveToolbarControls(Control[] original, int splitIndex,
+      FlowLayoutPanel primary, FlowLayoutPanel secondary, bool compact)
+    {
+      for (int i = 0; i < original.Length; i++)
+      {
+        FlowLayoutPanel target = compact && i >= splitIndex
+          ? secondary : primary;
+        if (original[i].Parent != target)
+          target.Controls.Add(original[i]);
+      }
+    }
+
     private void FitToolbarsToWidth()
     {
-      if (RadioToolbar.ClientSize.Width <= 0 || ToolbarMetrics.Count == 0)
+      if (UpdatingToolbarLayout || RadioToolbar.ClientSize.Width <= 0 ||
+        SpectrumRootLayout == null || SpectrumToolbarLayout == null ||
+        RadioToolbarControls.Length == 0)
         return;
-      int available = Math.Min(RadioToolbar.ClientSize.Width,
-        DisplayToolbar.ClientSize.Width) - 6;
-      // The fixed edge editor is present only in FIXED / SCROLL-F modes.
-      int radio = RadioToolbar.Controls.Cast<Control>()
-        .Where(c => c.Visible)
-        .Sum(c => ToolbarMetrics[c].Width + ToolbarMetrics[c].Margin.Horizontal);
-      int display = DisplayToolbar.Controls.Cast<Control>()
-        .Where(c => c.Visible)
-        .Sum(c => ToolbarMetrics[c].Width + ToolbarMetrics[c].Margin.Horizontal);
-      float scale = IcomScopeToolbarLayout.CalculateScale(
-        available, Math.Max(radio, display));
-      if (Math.Abs(AppliedToolbarScale - scale) < .025f) return;
-      AppliedToolbarScale = scale;
 
-      RadioToolbar.SuspendLayout();
-      DisplayToolbar.SuspendLayout();
+      int available = Math.Min(RadioToolbar.ClientSize.Width,
+        DisplayToolbar.ClientSize.Width) - 8;
+      // Measure the two full logical groups, including controls moved to
+      // secondary rows. Fixed edge editing adds width only when visible.
+      int radio = RadioToolbarControls.Where(c => c.Visible ||
+          c == FixedEdgeEditBtn && FixedEdgeEditBtn.Visible)
+        .Sum(c => c.Width + c.Margin.Horizontal);
+      int display = DisplayToolbarControls
+        .Sum(c => c.Width + c.Margin.Horizontal);
+      bool compact = IcomScopeToolbarLayout.RequiresAdditionalRows(
+        available, Math.Max(radio, display));
+
+      if (compact == CompactToolbarLayout) return;
+      UpdatingToolbarLayout = true;
+      SpectrumRootLayout.SuspendLayout();
+      SpectrumToolbarLayout.SuspendLayout();
+      foreach (FlowLayoutPanel bar in new[]
+        { RadioToolbar, RadioSecondaryToolbar, DisplayToolbar, DisplaySecondaryToolbar })
+        bar.SuspendLayout();
       try
       {
-        foreach (var (control, original) in ToolbarMetrics)
-        {
-          int width = Math.Max(18, (int)Math.Floor(original.Width * scale));
-          control.Width = width;
-          control.Margin = new Padding(
-            (int)Math.Floor(original.Margin.Left * scale),
-            original.Margin.Top,
-            (int)Math.Floor(original.Margin.Right * scale),
-            original.Margin.Bottom);
-          float fontSize = Math.Max(6.5f, original.FontSize * scale);
-          if (Math.Abs(control.Font.Size - fontSize) > .2f)
-            control.Font = new Font(control.Font.FontFamily, fontSize,
-              control.Font.Style);
-        }
+        CompactToolbarLayout = compact;
+        RadioSecondaryToolbar.Visible = compact;
+        DisplaySecondaryToolbar.Visible = compact;
+        MoveToolbarControls(RadioToolbarControls, RadioSplitIndex,
+          RadioToolbar, RadioSecondaryToolbar, compact);
+        MoveToolbarControls(DisplayToolbarControls, DisplaySplitIndex,
+          DisplayToolbar, DisplaySecondaryToolbar, compact);
+        SpectrumToolbarLayout.RowStyles[1].Height =
+          SpectrumToolbarLayout.RowStyles[3].Height =
+            compact ? ToolbarRowHeight : 0;
+        SpectrumRootLayout.RowStyles[0].Height =
+          (compact ? 4 : 2) * ToolbarRowHeight + 4;
       }
       finally
       {
-        RadioToolbar.ResumeLayout(true);
-        DisplayToolbar.ResumeLayout(true);
+        foreach (FlowLayoutPanel bar in new[]
+          { RadioToolbar, RadioSecondaryToolbar, DisplayToolbar, DisplaySecondaryToolbar })
+          bar.ResumeLayout(true);
+        SpectrumToolbarLayout.ResumeLayout(true);
+        SpectrumRootLayout.ResumeLayout(true);
+        UpdatingToolbarLayout = false;
       }
     }
 
@@ -256,37 +328,47 @@ namespace SkyRoof
         ForeColor = colors.Text
       };
       root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-      root.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
+      root.RowStyles.Add(new RowStyle(SizeType.Absolute, 2 * ToolbarRowHeight + 4));
       root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
       root.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
       root.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
 
-      // Two stable, non-wrapping rows. Never separate ZOOM from its
-      // selector or let toolbar wrapping consume the waterfall's height.
+      // Use two generous rows when docked wide, four rows when narrow.
+      // Neither mode scales down fonts or clips entire groups.
       var toolbar = new TableLayoutPanel
       {
         Dock = DockStyle.Fill,
-        ColumnCount = 1, RowCount = 2,
+        ColumnCount = 1, RowCount = 4,
         Margin = new Padding(0, 0, 0, 2),
-        Padding = new Padding(0),
+        Padding = Padding.Empty,
         BackColor = colors.Background
       };
+      SpectrumRootLayout = root;
+      SpectrumToolbarLayout = toolbar;
       toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-      toolbar.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-      toolbar.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-      foreach (var bar in new[] { RadioToolbar, DisplayToolbar })
+      toolbar.RowStyles.Add(new RowStyle(SizeType.Absolute, ToolbarRowHeight));
+      toolbar.RowStyles.Add(new RowStyle(SizeType.Absolute, 0));
+      toolbar.RowStyles.Add(new RowStyle(SizeType.Absolute, ToolbarRowHeight));
+      toolbar.RowStyles.Add(new RowStyle(SizeType.Absolute, 0));
+      foreach (var bar in new[]
+        { RadioToolbar, RadioSecondaryToolbar, DisplayToolbar, DisplaySecondaryToolbar })
       {
         bar.Dock = DockStyle.Fill;
         bar.WrapContents = false;
+        bar.AutoScroll = false;
         bar.AutoSize = false;
         bar.FlowDirection = FlowDirection.LeftToRight;
         bar.Padding = new Padding(2, 1, 2, 1);
-        bar.Margin = new Padding(0);
+        bar.Margin = Padding.Empty;
         bar.BackColor = colors.Surface;
         bar.ForeColor = colors.Text;
       }
       toolbar.Controls.Add(RadioToolbar, 0, 0);
-      toolbar.Controls.Add(DisplayToolbar, 0, 1);
+      toolbar.Controls.Add(RadioSecondaryToolbar, 0, 1);
+      toolbar.Controls.Add(DisplayToolbar, 0, 2);
+      toolbar.Controls.Add(DisplaySecondaryToolbar, 0, 3);
+      RadioSecondaryToolbar.Visible = false;
+      DisplaySecondaryToolbar.Visible = false;
       RadioToolbar.Resize += (_, _) => FitToolbarsToWidth();
       DisplayToolbar.Resize += (_, _) => FitToolbarsToWidth();
       RadioToolbar.Controls.Add(ScopeToolbarCaption("电台", colors));
