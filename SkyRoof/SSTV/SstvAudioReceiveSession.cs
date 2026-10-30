@@ -38,6 +38,16 @@ namespace SkyRoof.SSTV
     private Task? worker;
     private int epoch;
     private int dropped;
+    private int manualCorrectionHz;
+    public int ManualCorrectionHz
+    {
+      get => Volatile.Read(ref manualCorrectionHz);
+      set
+      {
+        if (value is < -500 or > 500) throw new ArgumentOutOfRangeException(nameof(value));
+        Volatile.Write(ref manualCorrectionHz, value);
+      }
+    }
     private bool disposed;
 
     public event Action<SstvImageEvent>? ImageAvailable;
@@ -125,6 +135,7 @@ namespace SkyRoof.SSTV
     {
       SstvDecoder decoder = new();
       var ifDemod = new SstvIfAudioDemodulator();
+      var shifter = new SstvAfFrequencyShifter();
       double fmPhase = 0;
       long lastDropped = 0;
       void OnImage(SstvImageEvent evt)
@@ -153,6 +164,7 @@ namespace SkyRoof.SSTV
             decoder.ImageUpdated += OnImage;
             decoder.ImageCompleted += OnImage;
             ifDemod.Reset();
+            shifter.Reset();
             fmPhase = 0;
             // Keep receiving, but do not claim seamless scan timing.
           }
@@ -163,6 +175,9 @@ namespace SkyRoof.SSTV
           {
             double audio = intermediateIf ? ifDemod.Process(samples[i]) : samples[i];
             audio = Math.Clamp(double.IsFinite(audio) ? audio : 0, -1.0, 1.0);
+            int correction = ManualCorrectionHz;
+            if (correction != 0)
+              audio = shifter.Process((float)audio, correction);
             fmPhase += 2.0 * Math.PI * (FmDeviationHz / SampleRate) * audio;
             if (fmPhase > Math.PI) fmPhase -= 2 * Math.PI;
             if (fmPhase < -Math.PI) fmPhase += 2 * Math.PI;
