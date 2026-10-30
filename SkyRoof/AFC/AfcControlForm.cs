@@ -708,6 +708,13 @@ namespace SkyRoof.AFC
     {
       RefreshLanguage();
       owner.AfcController.Tick(DateTime.UtcNow);
+      polarityProbe.Watchdog(DateTime.UtcNow,
+        active && EffectiveControl() == AfcControlMode.Auto &&
+        !owner.IsAfcTransmitting &&
+        owner.AfcController.Snapshot.State == AfcLockState.Locked &&
+        ctx.CatControl.Rx != null);
+      owner.SetAfcCalibrationOffsetHz(polarityProbe.OffsetHz,
+        polarityProbe.Active);
       var cfg = ctx.Settings.Afc;
       spectrum.SetReferenceLevel(cfg.SpectrumRefLevelDb);
       if (!ReferenceEquals(settingsGrid.SelectedObject, cfg))
