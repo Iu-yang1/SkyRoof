@@ -756,7 +756,7 @@ namespace SkyRoof
         new Label
         {
           AutoSize = true,
-          Text = "平滑:",
+          Text = "SMOOTH:",
           Margin = new Padding(2, 7, 3, 0)
         });
 
@@ -802,7 +802,7 @@ namespace SkyRoof
         new Label
         {
           AutoSize = true,
-          Text = "缩放:",
+          Text = "ZOOM:",
           Margin = new Padding(2, 7, 3, 0)
         });
 
