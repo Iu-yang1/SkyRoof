@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.IO;
 using System.Reflection;
+using System.Linq;
 using System.Threading;
 using System.Windows.Forms;
 using SkyRoof;
@@ -87,51 +88,167 @@ public sealed class IcomScopeToolbarLayoutTests
     {
       try
       {
+        // A surrogate WinForms toolbar with actual native combo boxes,
+        // buttons, labels and grouped FlowLayoutPanels; unlike a two-rectangle
+        // image, its bounds checks detect caption/selector separation.
         using var font = new Font("Segoe UI", 10f * dpiPercent / 100f);
-        using var pane = new Panel
+        int scale = dpiPercent;
+        int rowHeight = Math.Max(42, (int)Math.Ceiling(45d * scale / 100));
+        using var host = new TableLayoutPanel
         {
-          Size = new Size(dockWidth, Math.Max(96, 90 * dpiPercent / 100)),
-          BackColor = Color.FromArgb(238, 246, 251)
+          Size = new Size(dockWidth, rowHeight * 2 + 4),
+          ColumnCount = 2, RowCount = 2,
+          Margin = Padding.Empty, Padding = Padding.Empty
         };
-        int rowHeight = pane.Height / 2;
-        int[] fullWidths = { 810, 855 };
-        int[] compactWidths = { 580, 625 };
-        int[] restrictedWidths = { 430, 460 };
-        int[] minimalWidths = { 245, 265 };
-        int Scale(int size) => (int)Math.Ceiling(size * dpiPercent / 100.0);
-        var mode = IcomScopeToolbarLayout.Pick(dockWidth,
-          Scale(fullWidths[0]), Scale(fullWidths[1]),
-          Scale(compactWidths[0]), Scale(compactWidths[1]),
-          Scale(restrictedWidths[0]), Scale(restrictedWidths[1]),
-          Scale(minimalWidths[0]), Scale(minimalWidths[1]));
-        var selected = mode switch
+        host.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        host.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 1));
+        host.RowStyles.Add(new RowStyle(SizeType.Absolute, rowHeight));
+        host.RowStyles.Add(new RowStyle(SizeType.Absolute, rowHeight));
+        using var radioRow = new FlowLayoutPanel
         {
-          ScopeToolbarDensity.Standard => fullWidths,
-          ScopeToolbarDensity.Compact => compactWidths,
-          ScopeToolbarDensity.Restricted => restrictedWidths,
-          _ => minimalWidths
+          Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
+          WrapContents = false, Margin = Padding.Empty
         };
-        for (int row = 0; row < 2; row++)
+        using var displayRow = new FlowLayoutPanel
         {
-          int total = Scale(selected[row]);
-          Assert.True(IcomScopeToolbarLayout.IsWithin(0, total, dockWidth));
-          var marker = new Label
+          Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
+          WrapContents = false, Margin = Padding.Empty
+        };
+        using var actionRow = new FlowLayoutPanel
+        {
+          Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft,
+          WrapContents = false, Margin = Padding.Empty
+        };
+        host.Controls.Add(radioRow, 0, 0);
+        host.SetColumnSpan(radioRow, 2);
+        host.Controls.Add(displayRow, 0, 1);
+        host.Controls.Add(actionRow, 1, 1);
+
+        int GroupWidth(FlowLayoutPanel group) =>
+          group.Width + group.Margin.Horizontal;
+        FlowLayoutPanel Group(string text, bool selector = false)
+        {
+          var group = new FlowLayoutPanel
           {
-            Bounds = new Rectangle(0, row * rowHeight, total, rowHeight - 2),
-            Font = font, BorderStyle = BorderStyle.FixedSingle,
-            TextAlign = ContentAlignment.MiddleLeft,
-            Text = row == 0 ? $"RADIO / {mode}" : $"DISPLAY / {mode}"
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false, Margin = new Padding(0, 0, 3, 0),
+            Height = rowHeight
           };
-          pane.Controls.Add(marker);
+          Control inner = selector
+            ? new ComboBox { Font = font, DropDownStyle = ComboBoxStyle.DropDownList }
+            : new Button { Text = text, Font = font };
+          if (inner is ComboBox combo)
+          {
+            combo.Items.AddRange(new object[] { text, "SCROLL-C" });
+            combo.SelectedIndex = 0;
+          }
+          int textWidth = TextRenderer.MeasureText(
+            selector ? "SCROLL-C" : text, font).Width;
+          inner.Width = Math.Max(40,
+            textWidth + (selector ? SystemInformation.VerticalScrollBarWidth + 10 : 18));
+          inner.Height = Math.Min(rowHeight - 5, font.Height + 11);
+          inner.Margin = new Padding(0, 2, 2, 1);
+          group.Width = inner.Width + inner.Margin.Horizontal + 1;
+          group.Controls.Add(inner);
+          return group;
         }
-        using var bitmap = new Bitmap(pane.Width, pane.Height);
-        pane.DrawToBitmap(bitmap, new Rectangle(Point.Empty, pane.Size));
+
+        using var band = Group("AUTO", true);
+        using var mode = Group("CENTER", true);
+        using var span = Group("25 kHz", true);
+        using var reference = Group("REF");
+        using var speed = Group("FAST", true);
+        using var vbw = Group("VBW");
+        using var start = Group("STOP");
+        using var clear = Group("CLR");
+        using var hold = Group("HOLD");
+        using var peak = Group("PEAK");
+        using var waterfall = Group("WF");
+        using var avg = Group("AVG");
+        using var smooth = Group("SMOOTH");
+        using var zoom = Group("ZOOM");
+        using var settings = Group("SET");
+        using var readback = Group("SYNC");
+        using var more = Group("MORE");
+
+        FlowLayoutPanel[] standardRadio = { band, mode, span, reference, speed, vbw };
+        FlowLayoutPanel[] standardDisplay = { start, clear, hold, peak, waterfall, avg, smooth, zoom };
+        FlowLayoutPanel[] compactRadio = { band, mode, span, reference };
+        FlowLayoutPanel[] compactDisplay = { start, clear, hold, peak, waterfall, avg };
+        FlowLayoutPanel[] restrictedRadio = { band, mode, span };
+        FlowLayoutPanel[] restrictedDisplay = { start, hold, waterfall };
+        FlowLayoutPanel[] minimalRadio = { mode, span };
+        FlowLayoutPanel[] minimalDisplay = { start, hold };
+        int Width(FlowLayoutPanel[] groups) =>
+          groups.Sum(GroupWidth) + 8;
+        int actionStandard = GroupWidth(settings) + GroupWidth(readback) + 5;
+        int actionMore = actionStandard + GroupWidth(more);
+        int actionMinimal = GroupWidth(settings) + GroupWidth(more) + 5;
+        var density = IcomScopeToolbarLayout.Pick(dockWidth,
+          Width(standardRadio), Width(standardDisplay) + actionStandard,
+          Width(compactRadio), Width(compactDisplay) + actionMore,
+          Width(restrictedRadio), Width(restrictedDisplay) + actionMore,
+          Width(minimalRadio), Width(minimalDisplay) + actionMinimal);
+        FlowLayoutPanel[] visibleRadio = density switch
+        {
+          ScopeToolbarDensity.Standard => standardRadio,
+          ScopeToolbarDensity.Compact => compactRadio,
+          ScopeToolbarDensity.Restricted => restrictedRadio,
+          _ => minimalRadio
+        };
+        FlowLayoutPanel[] visibleDisplay = density switch
+        {
+          ScopeToolbarDensity.Standard => standardDisplay,
+          ScopeToolbarDensity.Compact => compactDisplay,
+          ScopeToolbarDensity.Restricted => restrictedDisplay,
+          _ => minimalDisplay
+        };
+        bool compact = density != ScopeToolbarDensity.Standard;
+        int reserved = density == ScopeToolbarDensity.Standard ?
+          actionStandard : density == ScopeToolbarDensity.Minimal ?
+          actionMinimal : actionMore;
+
+        host.ColumnStyles[1].Width = reserved;
+        foreach (var group in visibleRadio) radioRow.Controls.Add(group);
+        foreach (var group in visibleDisplay) displayRow.Controls.Add(group);
+        actionRow.Controls.Add(settings);
+        if (density != ScopeToolbarDensity.Minimal)
+          actionRow.Controls.Add(readback);
+        if (compact) actionRow.Controls.Add(more);
+        host.PerformLayout();
+        radioRow.PerformLayout();
+        displayRow.PerformLayout();
+        actionRow.PerformLayout();
+
+        foreach (var (row, controls) in new[]
+          { (radioRow, visibleRadio), (displayRow, visibleDisplay) })
+        {
+          foreach (var group in controls)
+          {
+            Assert.True(IcomScopeToolbarLayout.IsWithin(
+              group.Left, group.Width + group.Margin.Right,
+              row.ClientSize.Width),
+              $"{dockWidth}px at {dpiPercent}% {density}: {group.Name} " +
+              $"right={group.Right}, row={row.ClientSize.Width}");
+            Assert.Single(group.Controls);
+            var child = group.Controls[0];
+            Assert.True(IcomScopeToolbarLayout.IsWithin(
+              child.Left, child.Width + child.Margin.Right,
+              group.ClientSize.Width));
+          }
+        }
+        foreach (Control item in actionRow.Controls)
+          Assert.True(IcomScopeToolbarLayout.IsWithin(item.Left, item.Width,
+            actionRow.ClientSize.Width));
+
+        using var image = new Bitmap(host.Width, host.Height);
+        host.DrawToBitmap(image, new Rectangle(Point.Empty, host.Size));
         string? dir = Environment.GetEnvironmentVariable(
           "SKYROOF_SCOPE_LAYOUT_ARTIFACT_DIR");
         if (!string.IsNullOrWhiteSpace(dir))
         {
           Directory.CreateDirectory(dir);
-          bitmap.Save(Path.Combine(dir,
+          image.Save(Path.Combine(dir,
             $"scope-two-row-{dockWidth}px-dpi{dpiPercent}.png"));
         }
       }
@@ -139,7 +256,8 @@ public sealed class IcomScopeToolbarLayoutTests
     });
     t.SetApartmentState(ApartmentState.STA);
     t.Start();
-    Assert.True(t.Join(TimeSpan.FromSeconds(10)));
+    Assert.True(t.Join(TimeSpan.FromSeconds(10)),
+      "Windows WinForms surrogate must render");
     if (failure != null) throw new Xunit.Sdk.XunitException(failure.ToString());
   }
 
