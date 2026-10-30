@@ -74,7 +74,8 @@ namespace SkyRoof.AFC
     /// </summary>
     public bool TryAttributedReadbackAt(DateTime sampleUtc,
       AfcCatWriteSource expected, out long catHz,
-      double maximumAgeSeconds = 1.2, long frequencyToleranceHz = 3)
+      double maximumAgeSeconds = 1.2, long frequencyToleranceHz = 3,
+      DateTime notBeforeUtc = default)
     {
       catHz = 0;
       if (sampleUtc.Kind != DateTimeKind.Utc) return false;
@@ -94,7 +95,8 @@ namespace SkyRoof.AFC
           return false;
         }
         foreach (var write in requests)
-          if (write.Source == expected && write.Utc <= readUtc &&
+          if (write.Source == expected &&
+              write.Utc >= notBeforeUtc && write.Utc <= readUtc &&
               (readUtc - write.Utc).TotalSeconds <= 4 &&
               Math.Abs(write.CatHz - catHz) <= frequencyToleranceHz)
             return true;
