@@ -235,7 +235,6 @@ namespace SkyRoof
         }));
       }
       catch (InvalidOperationException) { picture.Dispose(); }
-      catch (ObjectDisposedException) { picture.Dispose(); }
     }
 
     private void LoadImage()
