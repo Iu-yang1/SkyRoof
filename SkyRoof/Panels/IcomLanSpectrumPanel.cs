@@ -143,6 +143,106 @@ namespace SkyRoof
       UiTimer.Start();
     }
 
+    private static Label ScopeToolbarCaption(string text, ScopeUiColors colors) =>
+      new()
+      {
+        Text = text, Width = 34, Height = 28,
+        TextAlign = ContentAlignment.MiddleCenter,
+        Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 8.5f, FontStyle.Bold),
+        ForeColor = colors.Muted,
+        Margin = new Padding(2, 3, 5, 1),
+        AutoSize = false
+      };
+
+    private void InitializeToolbarLayout()
+    {
+      var colors = ScopeUiColors.Current;
+      foreach (FlowLayoutPanel bar in new[] { RadioToolbar, DisplayToolbar })
+      foreach (Control item in bar.Controls)
+      {
+        // Preserve the original control widths and font size. Changing a
+        // DisplayLabel's AutoSize while laying out must not move its combo.
+        int originalWidth = item is Label label && label.AutoSize
+          ? Math.Max(item.PreferredSize.Width + 2, item.Width) : item.Width;
+        if (item is Label label2) label2.AutoSize = false;
+        if (item is Button button) button.AutoSize = false;
+        item.Width = originalWidth;
+        item.Height = Math.Min(30, Math.Max(22, item.Height));
+        ToolbarMetrics[item] = (originalWidth, item.Font.Size, item.Margin);
+        if (item is ComboBox or NumericUpDown or Button)
+        {
+          item.BackColor = colors.Surface;
+          item.ForeColor = colors.Text;
+        }
+        else if (item is Label)
+          item.ForeColor = colors.Muted;
+      }
+      ApplyThemeToToolbar();
+    }
+
+    private void ApplyThemeToToolbar()
+    {
+      ScopeUiColors colors = ScopeUiColors.Current;
+      RadioToolbar.BackColor = DisplayToolbar.BackColor = colors.Surface;
+      foreach (Control item in RadioToolbar.Controls.Cast<Control>()
+        .Concat(DisplayToolbar.Controls.Cast<Control>()))
+      {
+        if (item is Label) item.ForeColor = colors.Muted;
+        else if (item is Button button && button != HoldBtn &&
+          button != PeakBtn && button != WaterfallBtn)
+        {
+          button.UseVisualStyleBackColor = false;
+          button.BackColor = colors.Surface;
+          button.ForeColor = colors.Text;
+        }
+      }
+      UpdateDisplayButtons();
+    }
+
+    private void FitToolbarsToWidth()
+    {
+      if (RadioToolbar.ClientSize.Width <= 0 || ToolbarMetrics.Count == 0)
+        return;
+      int available = Math.Min(RadioToolbar.ClientSize.Width,
+        DisplayToolbar.ClientSize.Width) - 6;
+      // The fixed edge editor is present only in FIXED / SCROLL-F modes.
+      int radio = RadioToolbar.Controls.Cast<Control>()
+        .Where(c => c.Visible)
+        .Sum(c => ToolbarMetrics[c].Width + ToolbarMetrics[c].Margin.Horizontal);
+      int display = DisplayToolbar.Controls.Cast<Control>()
+        .Where(c => c.Visible)
+        .Sum(c => ToolbarMetrics[c].Width + ToolbarMetrics[c].Margin.Horizontal);
+      float scale = IcomScopeToolbarLayout.CalculateScale(
+        available, Math.Max(radio, display));
+      if (Math.Abs(AppliedToolbarScale - scale) < .025f) return;
+      AppliedToolbarScale = scale;
+
+      RadioToolbar.SuspendLayout();
+      DisplayToolbar.SuspendLayout();
+      try
+      {
+        foreach (var (control, original) in ToolbarMetrics)
+        {
+          int width = Math.Max(18, (int)Math.Floor(original.Width * scale));
+          control.Width = width;
+          control.Margin = new Padding(
+            (int)Math.Floor(original.Margin.Left * scale),
+            original.Margin.Top,
+            (int)Math.Floor(original.Margin.Right * scale),
+            original.Margin.Bottom);
+          float fontSize = Math.Max(6.5f, original.FontSize * scale);
+          if (Math.Abs(control.Font.Size - fontSize) > .2f)
+            control.Font = new Font(control.Font.FontFamily, fontSize,
+              control.Font.Style);
+        }
+      }
+      finally
+      {
+        RadioToolbar.ResumeLayout(true);
+        DisplayToolbar.ResumeLayout(true);
+      }
+    }
+
     private void BuildUi()
     {
       var colors = ScopeUiColors.Current;
@@ -185,8 +285,10 @@ namespace SkyRoof
         bar.BackColor = colors.Surface;
         bar.ForeColor = colors.Text;
       }
-      RadioToolbar.Controls.Add(RadioToolbar, 0, 0);
-      RadioToolbar.Controls.Add(DisplayToolbar, 0, 1);
+      toolbar.Controls.Add(RadioToolbar, 0, 0);
+      toolbar.Controls.Add(DisplayToolbar, 0, 1);
+      RadioToolbar.Resize += (_, _) => FitToolbarsToWidth();
+      DisplayToolbar.Resize += (_, _) => FitToolbarsToWidth();
       RadioToolbar.Controls.Add(ScopeToolbarCaption("电台", colors));
       DisplayToolbar.Controls.Add(ScopeToolbarCaption("显示", colors));
 
@@ -1044,26 +1146,12 @@ namespace SkyRoof
         ctx.Settings.IcomLanSpectrum.ShowWaterfall);
     }
 
-    private static void SetToggleButtonState(
-      Button button,
-      bool active)
+    private static void SetToggleButtonState(Button button, bool active)
     {
-      button.UseVisualStyleBackColor =
-        !active;
-
-      button.BackColor =
-        active
-          ? Theme.IsDark
-            ? Theme.BlueDark
-            : Theme.BlueWash
-          : SystemColors.Control;
-
-      button.ForeColor =
-        active
-          ? Theme.IsDark
-            ? Color.White
-            : Theme.LightInk
-          : SystemColors.ControlText;
+      var colors = ScopeUiColors.Current;
+      button.UseVisualStyleBackColor = false;
+      button.BackColor = active ? colors.Accent : colors.Surface;
+      button.ForeColor = active ? colors.SelectedText : colors.Text;
     }
 
     private bool UsingSkyCatScopeSource =>
@@ -2564,7 +2652,7 @@ namespace SkyRoof
           ? $" · 待确认 {PendingScopeControls.Count}" : "") +
         (unconfirmed.Length > 0
           ? $" · 本轮超时 {unconfirmed.Length}" : "");
-      ScopeTips.SetToolTip(StatsLabel, LastDiagnosticsText);
+      // Diagnostics tooltip updated after the full details are assembled below.
 
       LastDiagnosticsText =
         string.Join(
