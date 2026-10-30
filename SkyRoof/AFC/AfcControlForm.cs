@@ -606,7 +606,7 @@ namespace SkyRoof.AFC
             observation.SampleUtc, polarityProbe.PhaseStartedUtc);
           polarityProbe.Observe(observation, readback,
             probeAcknowledged, eligible, ctx.Settings.Cat.TuningStep,
-            DateTime.UtcNow);
+            DateTime.UtcNow, owner.PredictedRxCatRateHzPerSecond);
           if (phaseBefore != polarityProbe.State)
             Serilog.Log.Information(
               "AFC polarity calibration: {Before} -> {After}, detail={Detail}, IF={If:F1} Hz, CAT={Cat:F0} Hz, readbackAck={Ack}, confidence={Confidence:P0}, sampleUtc={SampleUtc:o}",
