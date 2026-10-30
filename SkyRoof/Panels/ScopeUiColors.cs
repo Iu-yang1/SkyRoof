@@ -85,16 +85,49 @@ namespace SkyRoof
     }
   }
 
+  internal enum ScopeToolbarDensity
+  {
+    Standard,
+    Compact,
+    Restricted,
+    Minimal
+  }
+
   internal static class IcomScopeToolbarLayout
   {
     /// <summary>
-    /// Keep two row groups intact and scale the entire toolbar rather than
-    /// wrapping controls, introducing scrollbars or hiding CAT operations.
+    /// Evaluate complete, measured control groups in physical client pixels.
+    /// Never reduce fonts, split a caption from its selector, wrap the rows,
+    /// or claim a mode fits unless BOTH rows fit the dock width.
     /// </summary>
-    internal static float CalculateScale(int available, int required)
+    internal static ScopeToolbarDensity Pick(
+      int available,
+      int standardRadio, int standardDisplay,
+      int compactRadio, int compactDisplay,
+      int restrictedRadio, int restrictedDisplay,
+      int minimalRadio, int minimalDisplay)
     {
-      if (required <= 0 || available <= 0) return 1;
-      return Math.Clamp(available / (float)required, .55f, 1f);
+      if (available > 0 &&
+          standardRadio <= available && standardDisplay <= available)
+        return ScopeToolbarDensity.Standard;
+      if (available > 0 &&
+          compactRadio <= available && compactDisplay <= available)
+        return ScopeToolbarDensity.Compact;
+      if (available > 0 &&
+          restrictedRadio <= available && restrictedDisplay <= available)
+        return ScopeToolbarDensity.Restricted;
+      return ScopeToolbarDensity.Minimal;
     }
+
+    internal static bool Fits(int available, params int[] widths) =>
+      available > 0 && widths.All(w => w <= available);
+
+    /// <summary>
+    /// Check the actual bounds after WinForms has completed a layout pass.
+    /// This detects clipping separately from the pure width-budget decision.
+    /// </summary>
+    internal static bool IsWithin(int x, int width, int clientWidth) =>
+      x >= 0 && width > 0 && x + width <= clientWidth;
   }
+
 }
