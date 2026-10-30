@@ -14,6 +14,7 @@ namespace SkyRoof.AFC
     private readonly Context ctx;
     private readonly FrequencyWidget owner;
     private readonly AfcIfInput input = new();
+    private readonly AfcPolarityCalibrator polarityProbe = new();
     private readonly AfcThemePalette palette = AfcThemePalette.Current;
     private readonly PropertyGrid settingsGrid = new();
     private readonly AfcSpectrumView spectrum = new();
@@ -464,8 +465,15 @@ namespace SkyRoof.AFC
       return true;
     }
 
+    internal void AbortPolarityCalibration()
+    {
+      polarityProbe.Reset();
+      owner.SetAfcCalibrationOffsetHz(0, false);
+    }
+
     private void OnTargetInvalidated()
     {
+      AbortPolarityCalibration();
       if (!active) return;
       input.InvalidateTarget();
       spectrum.ClearHistory();
@@ -500,6 +508,8 @@ namespace SkyRoof.AFC
       object? sender, PropertyValueChangedEventArgs e)
     {
       string name = e.ChangedItem.PropertyDescriptor?.Name ?? "";
+      if (name == nameof(AfcSettings.RfIfSign))
+        AbortPolarityCalibration();
       if (active)
       {
         if (name is nameof(AfcSettings.InputDeviceId) or
@@ -531,6 +541,8 @@ namespace SkyRoof.AFC
     {
       if (!active) return;
       if (control == AfcControlMode.Auto && !AutoAllowed) return;
+      if (control != AfcControlMode.Auto)
+        AbortPolarityCalibration();
       ctx.Settings.Afc.Control = control;
       owner.AfcController.Configure(currentMode, EffectiveControl());
       if (currentMode == AfcSignalMode.SSB && ctx.Settings.Afc.SsbPilotEnabled &&
@@ -553,6 +565,7 @@ namespace SkyRoof.AFC
               observation.Generation != input.Generation) return;
           var cfg = ctx.Settings.Afc;
           double readback = owner.GetAfcReadbackAt(observation.SampleUtc);
+          bool blocked = polarityProbe.BlocksAutomaticControl;
           owner.AfcController.Observe(observation, readback,
             cfg.RfIfSign, Math.Clamp(cfg.MaxCorrectionHz, 1, 10000),
             Math.Clamp(cfg.FmDeadbandHz, 1, 500),
@@ -560,7 +573,22 @@ namespace SkyRoof.AFC
             owner.IsAfcTransmitting,
             catReadbackIsTimeAligned: double.IsFinite(readback),
             confirmedOwnAfcReadback:
-              owner.IsAfcReadbackConfirmedAt(observation.SampleUtc));
+              owner.IsAfcReadbackConfirmedAt(observation.SampleUtc),
+            calibrationInProgress: blocked);
+          var snapshot = owner.AfcController.Snapshot;
+          bool eligible = cfg.RfIfSign == 0 &&
+            EffectiveControl() == AfcControlMode.Auto &&
+            !owner.IsAfcTransmitting &&
+            snapshot.State == AfcLockState.Locked &&
+            (polarityProbe.Active || snapshot.MappingSign == 0);
+          polarityProbe.Observe(observation, readback,
+            owner.IsAfcProbeReadbackConfirmedAt(observation.SampleUtc),
+            eligible, ctx.Settings.Cat.TuningStep);
+          if (polarityProbe.VerifiedSign != 0)
+            owner.AfcController.ConfirmCalibratedSign(
+              polarityProbe.VerifiedSign);
+          owner.SetAfcCalibrationOffsetHz(polarityProbe.OffsetHz,
+            polarityProbe.Active);
           spectrum.SetMeasurement(
             observation.HasAbsoluteReference && observation.Confidence > 0
               ? observation.IfOffsetHz : null,
@@ -577,6 +605,7 @@ namespace SkyRoof.AFC
       try
       {
         currentMode = owner.CurrentAfcMode;
+        AbortPolarityCalibration();
         var cfg = ctx.Settings.Afc;
         input.Start(cfg.InputDeviceId, cfg.IfReferenceHz, currentMode,
           cfg.SsbPilotEnabled, cfg.TargetOffsetHz,
@@ -606,6 +635,7 @@ namespace SkyRoof.AFC
         ctx.Settings.Afc.Enabled = false;
         ctx.Settings.Afc.Control = AfcControlMode.Assist;
         owner.AfcController.Reset("IF input failed");
+        AbortPolarityCalibration();
         owner.UpdateRxAfcCheckbox(false);
         MessageBox.Show(this, ex.Message, "AFC IF capture",
           MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -621,6 +651,7 @@ namespace SkyRoof.AFC
       input.Stop();
       spectrum.ClearHistory();
       owner.AfcController.Reset("Stopped by operator");
+      AbortPolarityCalibration();
       ctx.Settings.Afc.Enabled = false;
       ctx.Settings.Afc.Control = AfcControlMode.Assist;
       owner.UpdateRxAfcCheckbox(false);
@@ -705,6 +736,11 @@ namespace SkyRoof.AFC
       }
       var s = owner.AfcController.Snapshot;
       bool freshCat = double.IsFinite(owner.GetAfcReadbackAt(DateTime.UtcNow));
+      bool hasCat = owner.TryGetAfcLatestReadbackAge(out double catAge);
+      string catZh = freshCat ? "读回有效" :
+        hasCat ? $"读回过期 {catAge:F1}s" : "等待读回";
+      string catEn = freshCat ? "readback OK" :
+        hasCat ? $"stale readback {catAge:F1}s" : "awaiting readback";
       heading.Text = $"{currentMode}  ·  IC-9700 / 12 kHz IF";
       inputStatus.Text = input.IsRunning
         ? double.IsFinite(inputRms) && inputRms > 0
@@ -719,17 +755,26 @@ namespace SkyRoof.AFC
         ? palette.Good : palette.Warning;
       stateLabel.Text = active
         ? T(
-            $"状态: {StateText(s.State)}   ·   置信度 {s.Confidence:P0}   ·   CAT {(freshCat ? "读回有效" : "等待读回")}",
-            $"State: {StateText(s.State)}  ·  Confidence {s.Confidence:P0}  ·  CAT {(freshCat ? "readback OK" : "awaiting readback")}")
+            $"状态: {StateText(s.State)}   ·   置信度 {s.Confidence:P0}   ·   CAT {catZh}",
+            $"State: {StateText(s.State)}  ·  Confidence {s.Confidence:P0}  ·  CAT {catEn}")
         : T("状态: 关闭  ·  IF 输入尚未启动", "State: Off  ·  IF input not started");
       stateLabel.ForeColor = active &&
         s.State == AfcLockState.Locked ? palette.Good : palette.Warning;
+      string calibrationZh = polarityProbe.State switch
+      {
+        AfcPolarityCalibrator.Phase.Probing => "方向校准: 测试调谐",
+        AfcPolarityCalibrator.Phase.Restoring => "方向校准: 恢复并验证",
+        AfcPolarityCalibrator.Phase.Complete => "方向校准: 已验证",
+        AfcPolarityCalibrator.Phase.Failed => "方向校准: 失败，已禁止自动修正",
+        _ => "方向校准: 等待可靠 CAT/IF 数据"
+      };
+      string calibrationEn = polarityProbe.Detail;
       stateDetail.Text = active
         ? T(
             $"{DetailText(s.Detail)}  ·  搜索 {cfg.TargetOffsetHz:+0;-0;0} Hz  ·  居中 {cfg.DesiredOffsetHz:+0;-0;0} Hz  ·  RF/IF 方向 {(s.MappingSign == 0 ? "待确认" : s.MappingSign.ToString("+0;-0"))}" +
-              $"  ·  底噪 {noiseFloorDb:F0} dBFS  ·  削波 {clipFraction:P1}",
+              $"  ·  {calibrationZh}  ·  底噪 {noiseFloorDb:F0} dBFS  ·  削波 {clipFraction:P1}",
             $"{DetailText(s.Detail)}  ·  Search {cfg.TargetOffsetHz:+0;-0;0} Hz  ·  Center {cfg.DesiredOffsetHz:+0;-0;0} Hz  ·  RF/IF sign {(s.MappingSign == 0 ? "unknown" : s.MappingSign.ToString("+0;-0"))}" +
-              $"  ·  Noise {noiseFloorDb:F0} dBFS  ·  Clipping {clipFraction:P1}")
+              $"  ·  {calibrationEn}  ·  Noise {noiseFloorDb:F0} dBFS  ·  Clipping {clipFraction:P1}")
         : T("请在「高级设置」配置真正的 12 kHz IF 输入，再启动 IF 采集。",
             "Select a real 12 kHz IF input under Advanced settings, then start capture.");
       startButton.Text = active ? T("停止 IF", "STOP IF") : T("启动 IF", "START IF");
