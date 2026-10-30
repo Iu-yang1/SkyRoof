@@ -44,7 +44,7 @@ namespace SkyRoof
       ["Volume"] = "音量", ["Gain"] = "增益",
       ["Sample rate"] = "采样率", ["Bandwidth"] = "带宽",
       ["Frequency"] = "频率", ["Timeout"] = "超时",
-      ["Receive timeout"] = "接收超时", ["Poll interval"] = "轮询间隔",
+      ["Poll interval"] = "轮询间隔",
       ["Delay"] = "延迟", ["Theme"] = "主题",
       ["Latitude"] = "纬度", ["Longitude"] = "经度",
       ["Altitude"] = "海拔高度", ["Call"] = "呼号",
