@@ -33,6 +33,24 @@ polarity learning. A requested CAT write is **not** treated as a
 confirmed hardware readback. Confirmed, repeatedly diverging AFC
 corrections cause the controller to enter Fault and stop auto writes.
 
+## RS-BA1 color mapping and IF reference level
+
+The IF scope uses SkyRoof's existing Icom LAN Scope **161-step Classic
+palette**, with a navy instrument background, green live trace and yellow
+reference/peak markers. The waterfall uses blue, cyan, green, yellow and
+white to represent progressively stronger signal levels. The plotting
+surface is navy in all supported SkyRoof Light, Dark, GitHub Light/Dark
+and System themes; surrounding dialog controls follow the app theme.
+
+Under Advanced settings, **IF 频谱 REF LEVEL (dB)** defaults to **+15 dB**
+and persists in the AFC settings. Increasing it reduces the displayed
+intensity; decreasing it emphasizes weaker signals. It adjusts display
+headroom and waterfall color levels only, **not** the audio samples, IF
+frequency estimates, AFC confidence, CAT readback, or RX control.
+
+Vertical dB labels are display levels, **not hardware-calibrated dBm**.
+The scope heading reads “12 kHz IF · REF +15 dB · 频谱”.
+
 ## Getting started
 
 1. On IC-9700 choose `SET > Connectors > USB AF/IF Output > Output Select > IF`

@@ -173,6 +173,7 @@ namespace SkyRoof.AFC
       spectrum.Dock = DockStyle.Fill;
       spectrum.Margin = new Padding(0, 2, 0, 0);
       spectrum.ApplyPalette(palette);
+      spectrum.SetReferenceLevel(ctx.Settings.Afc.SpectrumRefLevelDb);
       spectrum.TargetSelected += OnSpectrumTargetSelected;
       spectrum.SpanChanged += OnSpanChanged;
       spectrumBlock.Controls.Add(spectrumToolbar, 0, 0);
@@ -481,6 +482,8 @@ namespace SkyRoof.AFC
         else if (name == nameof(AfcSettings.Control))
           owner.AfcController.Configure(currentMode, EffectiveControl());
       }
+      if (name == nameof(AfcSettings.SpectrumRefLevelDb))
+        spectrum.SetReferenceLevel(ctx.Settings.Afc.SpectrumRefLevelDb);
       if (!AutoAllowed && ctx.Settings.Afc.Control == AfcControlMode.Auto)
         ctx.Settings.Afc.Control = AfcControlMode.Assist;
       owner.UpdateRxAfcCheckbox(active && EffectiveControl() == AfcControlMode.Auto);
@@ -598,10 +601,51 @@ namespace SkyRoof.AFC
       if (Start() && wasAuto) owner.UpdateRxAfcCheckbox(true);
     }
 
+    // User-facing Chinese text belongs to the view; the controller retains
+    // stable English diagnostic identifiers for logging and regression tests.
+    private static string StateText(AfcLockState state) => state switch
+    {
+      AfcLockState.Off => "关闭",
+      AfcLockState.Acquiring => "捕获中",
+      AfcLockState.Locked => "已锁定",
+      AfcLockState.Coasting => "短时保持",
+      AfcLockState.Hold => "保持",
+      AfcLockState.Lost => "信号丢失",
+      AfcLockState.Fault => "故障",
+      _ => state.ToString()
+    };
+
+    private static string DetailText(string value) => value switch
+    {
+      "Control level changed; reacquiring target" => "控制等级已切换，重新捕获目标",
+      "Awaiting fresh IF signal" => "等待新 IF 信号",
+      "Locking currently observed IF frequency" => "正在锁定当前 IF 频率",
+      "Centering selected IF signal" => "正在将所选 IF 信号移至中心",
+      "AFC disabled" => "AFC 已关闭",
+      "SSB relative drift assistance only; no absolute carrier" =>
+        "SSB 仅提供相对漂移辅助，缺少绝对载波参考",
+      "Signal ambiguous, weak, or reference absent; holding" =>
+        "信号不明确、过弱或缺少参考，暂时保持",
+      "Acquiring selected carrier" => "正在捕获所选载波",
+      "AFC divergence detected; automatic CAT writes stopped" =>
+        "检测到 AFC 发散，已停止自动 CAT 写频",
+      "PTT active: AFC frozen" => "正在发射，AFC 已冻结",
+      "Learning IF/CAT polarity from observed tuning" =>
+        "正在根据 CAT 调谐学习 IF 频率方向",
+      "Tracking reference" => "正在跟踪参考信号",
+      "IF input stale; automatic tuning stopped" =>
+        "IF 数据已过期，自动调谐已停止",
+      "No fresh IF measurement; holding correction" =>
+        "暂无新的 IF 测量，保持当前修正",
+      "Manual tune: AFC target rebased" => "检测到手动调谐，已重新定位 AFC 目标",
+      _ => value
+    };
+
     private void RefreshDisplay()
     {
       owner.AfcController.Tick(DateTime.UtcNow);
       var cfg = ctx.Settings.Afc;
+      spectrum.SetReferenceLevel(cfg.SpectrumRefLevelDb);
       if (!ReferenceEquals(settingsGrid.SelectedObject, cfg))
         settingsGrid.SelectedObject = cfg;
       AfcSignalMode mode = owner.CurrentAfcMode;
@@ -644,12 +688,12 @@ namespace SkyRoof.AFC
       metrics[1].ForeColor = s.State == AfcLockState.Locked
         ? palette.Good : palette.Warning;
       stateLabel.Text = active
-        ? $"状态: {s.State}   ·   置信度 {s.Confidence:P0}   ·   CAT {(freshCat ? "读回有效" : "等待读回")}"
-        : "状态: OFF  ·  IF 输入尚未启动";
+        ? $"状态: {StateText(s.State)}   ·   置信度 {s.Confidence:P0}   ·   CAT {(freshCat ? "读回有效" : "等待读回")}"
+        : "状态: 关闭  ·  IF 输入尚未启动";
       stateLabel.ForeColor = active &&
         s.State == AfcLockState.Locked ? palette.Good : palette.Warning;
       stateDetail.Text = active
-        ? $"{s.Detail}  ·  搜索 {cfg.TargetOffsetHz:+0;-0;0} Hz  ·  居中 {cfg.DesiredOffsetHz:+0;-0;0} Hz  ·  RF/IF 方向 {(s.MappingSign == 0 ? "待确认" : s.MappingSign.ToString("+0;-0"))}" +
+        ? $"{DetailText(s.Detail)}  ·  搜索 {cfg.TargetOffsetHz:+0;-0;0} Hz  ·  居中 {cfg.DesiredOffsetHz:+0;-0;0} Hz  ·  RF/IF 方向 {(s.MappingSign == 0 ? "待确认" : s.MappingSign.ToString("+0;-0"))}" +
           $"  ·  底噪 {noiseFloorDb:F0} dBFS  ·  削波 {clipFraction:P1}"
         : "请在「高级设置」配置真正的 12 kHz IF 输入，再启动 IF 采集。";
       startButton.Text = active ? "停止 IF" : "启动 IF";

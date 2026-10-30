@@ -14,66 +14,71 @@ namespace SkyRoof
   public sealed class AfcSettings
   {
     [Browsable(false)]
-    [DisplayName("AFC enabled")]
+    [DisplayName("启用 AFC")]
     [DefaultValue(false)]
     public bool Enabled { get; set; } = false;
 
-    [DisplayName("AFC input (12 kHz IF)")]
-    [Description("Windows capture endpoint carrying the radio's USB 12 kHz IF output. Select a different endpoint if another program uses the radio's USB audio for AF.")]
+    [DisplayName("AFC 音频输入 (12 kHz IF)")]
+    [Description("选择承载电台 USB 12 kHz IF 的 Windows 录音设备。若其他程序需要该 USB 声卡的 AF 音频，请使用独立输入通道。")]
     [TypeConverter(typeof(InputSoundcardNameConverter))]
     public string? InputDeviceId { get; set; } =
       Soundcard.GetPreferredSoundcardId(DataFlow.Capture, "USB Audio CODEC", "ICOM");
 
-    [DisplayName("Control")]
+    [DisplayName("AFC 控制等级")]
     [DefaultValue(AFC.AfcControlMode.Assist)]
     public AFC.AfcControlMode Control { get; set; } = AFC.AfcControlMode.Assist;
 
-    [DisplayName("IF transport")]
+    [DisplayName("IF 音频来源")]
     [DefaultValue(AfcIfSource.WasapiCapture)]
     public AfcIfSource InputSource { get; set; } = AfcIfSource.WasapiCapture;
 
-    [DisplayName("IF playback loopback endpoint")]
-    [Description("Use the render/virtual speaker endpoint carrying remote 12-kHz IF; not an AF-only speaker feed.")]
+    [DisplayName("远程 IF 播放回环设备")]
+    [Description("选择承载远程 12 kHz IF 的播放或虚拟扬声器端点，不可选择仅有解调 AF 的输出。")]
     [TypeConverter(typeof(OutputSoundcardNameConverter))]
     public string? LoopbackDeviceId { get; set; }
 
-    [DisplayName("Nominal IF frequency (Hz)")]
+    [DisplayName("IF 参考频率 (Hz)")]
     [DefaultValue(12000.0)]
     public double IfReferenceHz { get; set; } = 12000;
 
-    [DisplayName("RF/IF direction (0=auto, +/-1=override)")]
-    [Description("0 learns polarity from a stable tracked signal and observed CAT tuning. Only required for automatic CAT control; Assist works without polarity.")]
+    [DisplayName("RF/IF 频率方向 (0=自动，±1=手动)")]
+    [Description("0 表示根据稳定信号和 CAT 调谐读回来学习频率方向。只有自动 CAT 修正需要方向判断，辅助模式不要求。")]
     [DefaultValue(0)]
     public int RfIfSign { get; set; } = 0;
 
-    [DisplayName("Target search IF offset (Hz)")]
-    [Description("Where to search for the selected CW/pilot signal. Click the IF spectrum to set this value.")]
+    [DisplayName("目标搜索 IF 偏移 (Hz)")]
+    [Description("CW/导频参考信号的搜索中心；也可直接点击实时 IF 频谱选择目标。")]
     [DefaultValue(0.0)]
     public double TargetOffsetHz { get; set; } = 0;
 
-    [DisplayName("Desired center IF offset (Hz)")]
-    [Description("Where Center & Lock should move the selected signal. It is independent of the search frequency.")]
+    [DisplayName("希望居中的 IF 偏移 (Hz)")]
+    [Description("“居中并锁定”要将所选信号移动到的位置，与目标搜索频率相互独立。")]
     [DefaultValue(0.0)]
     public double DesiredOffsetHz { get; set; } = 0;
 
-    [DisplayName("SSB reference available")]
-    [Description("Only enable when there is an identifiable continuous CW/pilot reference in the selected IF channel; normal suppressed-carrier speech has no unique absolute AFC measurement.")]
+    [DisplayName("SSB 导频参考可用")]
+    [Description("仅当所选 IF 中存在稳定可识别的 CW/导频时才启用。普通抑制载波 SSB 语音无法提供唯一的绝对 AFC 参考。")]
     [DefaultValue(false)]
     public bool SsbPilotEnabled { get; set; } = false;
 
-    [DisplayName("Maximum AFC correction (Hz)")]
+    [DisplayName("IF 频谱 REF LEVEL (dB)")]
+    [Description("12 kHz IF 频谱/瀑布图的显示参考等级，默认 +15 dB。提高数值使画面更暗，降低数值有助于观察较弱信号；只影响显示，不修改 IF 音频、频偏估计、置信度或 CAT 控制。")]
+    [DefaultValue(15.0)]
+    public double SpectrumRefLevelDb { get; set; } = 15;
+
+    [DisplayName("AFC 最大修正量 (Hz)")]
     [DefaultValue(2000.0)]
     public double MaxCorrectionHz { get; set; } = 2000;
 
-    [DisplayName("FM write deadband (Hz)")]
+    [DisplayName("FM 写频死区 (Hz)")]
     [DefaultValue(20.0)]
     public double FmDeadbandHz { get; set; } = 20;
 
-    [DisplayName("CW/SSB write deadband (Hz)")]
+    [DisplayName("CW/SSB 写频死区 (Hz)")]
     [DefaultValue(5.0)]
     public double ToneDeadbandHz { get; set; } = 5;
 
-    public override string ToString() => "Adaptive Frequency Tracking";
+    public override string ToString() => "自适应频率跟踪 AFC";
   }
 }
 
