@@ -9,6 +9,9 @@ namespace SkyRoof
     public Point MainWindowLocation { get; set; }
     public string? DockingLayoutString { get; set; }
     public bool ClockUtcMode { get; set; }
+    // Persisted UI presentation preference, independent of radio settings.
+    // Old Settings.json files without this field retain the Chinese default.
+    public UiLanguage Language { get; set; } = UiLanguage.SimplifiedChinese;
 
     // applied on startup, selected in the Tools | Theme menu. Not shown in the settings dialog,
     // so it carries no DisplayName/Description attributes
