@@ -21,6 +21,7 @@ namespace SkyRoof.AFC
     private string failureReason = "";
 
     public Phase State { get; private set; } = Phase.Waiting;
+    public DateTime PhaseStartedUtc => phaseStartedUtc;
     public double OffsetHz { get; private set; }
     public int VerifiedSign { get; private set; }
     public bool Active => State is Phase.Probing or Phase.Restoring;
