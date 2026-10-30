@@ -285,6 +285,8 @@ namespace SkyRoof.AFC
 
     private void RebuildHistoryColors()
     {
+      // Dispose the Graphics before LockBits: GDI+ forbids raster locks
+      // while an active Graphics instance owns the same bitmap.
       using (Graphics g = Graphics.FromImage(history))
         g.Clear(Color.FromArgb(RsBa1WaterfallPalette[0]));
       for (int row = 0; row < HistoryRows; row++)
