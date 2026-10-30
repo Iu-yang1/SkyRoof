@@ -3,81 +3,91 @@ using System;
 namespace SkyRoof.AFC
 {
   /// <summary>
-  /// Verifies the sign of an actual RX CAT/12-kHz IF response without using
-  /// a guessed direction. The caller owns the single CAT writer and applies
-  /// OffsetHz as a temporary, RX-only layer. This object never writes TX.
+  /// A temporary receive-only CAT/IF calibration. No direction is guessed:
+  /// a deliberate RX step and its independently acknowledged return must
+  /// produce opposite IF movements. The caller owns the sole CAT writer.
   /// </summary>
   public sealed class AfcPolarityCalibrator
   {
     public enum Phase { Waiting, Probing, Restoring, Complete, Failed }
 
     private long generation = -1;
-    private DateTime commandSampleUtc;
-    private double lastCatHz, lastIfHz;
-    private int stableSamples, transitions, candidateSign;
+    private DateTime phaseStartedUtc;
+    private double baselineCatHz, baselineIfHz;
+    private double probedCatHz, probedIfHz;
+    private double previousWaitingIfHz = double.NaN;
+    private int stableSamples, phaseVotes, candidateSign;
     private double probeHz;
+    private string failureReason = "";
 
     public Phase State { get; private set; } = Phase.Waiting;
     public double OffsetHz { get; private set; }
     public int VerifiedSign { get; private set; }
     public bool Active => State is Phase.Probing or Phase.Restoring;
-    public bool BlocksAutomaticControl => Active || State == Phase.Failed;
+    public bool BlocksAutomaticControl => State != Phase.Complete;
 
     public string Detail => State switch
     {
-      Phase.Waiting => "Awaiting stable IF and time-aligned CAT readback",
-      Phase.Probing => "Verifying RX CAT/IF direction (probe)",
-      Phase.Restoring => "Verifying RX CAT/IF direction (restore)",
-      Phase.Complete => "RX CAT/IF direction verified; probe restored",
-      _ => "RX CAT/IF calibration failed; no automatic correction"
+      Phase.Waiting => "Waiting for three stable IF samples and aligned RX CAT readback",
+      Phase.Probing => "RX probe: waiting for settled IF and verified CAT readback",
+      Phase.Restoring => "RX restore: verifying opposite IF movement and CAT return",
+      Phase.Complete => "RX CAT/IF polarity verified; original RX frequency restored",
+      _ => $"RX polarity calibration failed: {failureReason}"
     };
 
     public void Reset()
     {
       generation = -1;
-      commandSampleUtc = default;
-      lastCatHz = lastIfHz = 0;
-      stableSamples = transitions = candidateSign = 0;
+      phaseStartedUtc = default;
+      baselineCatHz = baselineIfHz = probedCatHz = probedIfHz = 0;
+      previousWaitingIfHz = double.NaN;
+      stableSamples = phaseVotes = candidateSign = 0;
       probeHz = OffsetHz = 0;
+      failureReason = "";
       VerifiedSign = 0;
       State = Phase.Waiting;
     }
 
     /// <summary>
-    /// One probe/restore pair is not sufficient: require four independent
-    /// time-aligned CAT/IF transitions (two complete probe/restore pairs).
-    /// Each transition must match the commanded CAT movement, and all four
-    /// must imply the same sign. Any timeout aborts with zero RX probe offset.
+    /// IF SampleUtc represents the CENTER of the measured PCM window.
+    /// A CAT command is posted on the UI thread later than that sample.
+    /// Therefore evidence is only accepted once the entire IF window
+    /// starts after the actual command time, and its CAT readback is
+    /// independently confirmed at the IF sample timestamp.
     /// </summary>
     public void Observe(AfcObservation observation, double catReadbackHz,
-      bool confirmedProbeReadback, bool eligible, int tuningStepHz)
+      bool confirmedProbeReadback, bool eligible, int tuningStepHz,
+      DateTime nowUtc)
     {
+      if (nowUtc.Kind != DateTimeKind.Utc)
+        throw new ArgumentException("AFC calibration clock must be UTC");
       if (generation != observation.Generation)
       {
         Reset();
         generation = observation.Generation;
       }
+      if (State is Phase.Complete or Phase.Failed) return;
 
       if (!eligible)
       {
-        if (Active) Fail();
+        if (Active) Fail("RX tracking/PTT changed during calibration");
+        else stableSamples = 0;
+        return;
+      }
+
+      if (Active && (nowUtc - phaseStartedUtc).TotalSeconds > 15)
+      {
+        Fail(State == Phase.Probing
+          ? "CAT probe readback or settled IF response timed out"
+          : "CAT restoration readback or settled IF response timed out");
         return;
       }
 
       bool valid = observation.HasAbsoluteReference &&
-        !observation.Ambiguous && observation.Confidence >= .75 &&
+        !observation.Ambiguous && observation.Confidence >= .7 &&
         double.IsFinite(observation.IfOffsetHz) &&
         double.IsFinite(catReadbackHz) &&
         observation.SigmaHz <= (observation.Mode == AfcSignalMode.FM ? 150 : 20);
-
-      if (State == Phase.Complete || State == Phase.Failed) return;
-
-      if (Active && (observation.SampleUtc - commandSampleUtc).TotalSeconds > 8)
-      {
-        Fail();
-        return;
-      }
-
       if (!valid)
       {
         if (!Active) stableSamples = 0;
@@ -86,82 +96,118 @@ namespace SkyRoof.AFC
 
       if (State == Phase.Waiting)
       {
-        // Do not step outside the CW/SSB target gate with coarse CAT tuning.
-        int amplitude = observation.Mode == AfcSignalMode.FM ? 80 : 40;
+        double maxDrift = observation.Mode == AfcSignalMode.FM ? 60 : 15;
+        if (double.IsFinite(previousWaitingIfHz) &&
+            Math.Abs(previousWaitingIfHz - observation.IfOffsetHz) <= maxDrift)
+          stableSamples++;
+        else
+          stableSamples = 1;
+        previousWaitingIfHz = observation.IfOffsetHz;
+        if (stableSamples < 3) return;
+
+        // A stronger FM test step makes the response identifiable even when
+        // the finite FM discriminator window has a modest modulation bias.
+        int amplitude = observation.Mode == AfcSignalMode.FM ? 150 : 40;
         if (tuningStepHz <= 0 || tuningStepHz > amplitude)
         {
-          Fail();
+          Fail("CAT tuning step is too coarse for a safe IF probe");
           return;
         }
         probeHz = Math.Ceiling(amplitude / (double)tuningStepHz) * tuningStepHz;
-        if (++stableSamples < 3) return;
-        lastCatHz = catReadbackHz;
-        lastIfHz = observation.IfOffsetHz;
+        baselineCatHz = catReadbackHz;
+        baselineIfHz = observation.IfOffsetHz;
         OffsetHz = probeHz;
+        phaseStartedUtc = nowUtc;
+        phaseVotes = candidateSign = 0;
         State = Phase.Probing;
-        commandSampleUtc = observation.SampleUtc;
         return;
       }
 
-      if (observation.SampleUtc <= commandSampleUtc ||
+      // For FM this is a 2-second PCM window, centered at SampleUtc.
+      // Requiring the center to be >= 1.2 s after the command means
+      // the entire effective averaging window follows the CAT move.
+      double settlingSeconds = observation.Mode == AfcSignalMode.FM ? 1.2 : .3;
+      if (observation.SampleUtc < phaseStartedUtc.AddSeconds(settlingSeconds) ||
           !confirmedProbeReadback)
         return;
 
-      double catDelta = catReadbackHz - lastCatHz;
-      double ifDelta = observation.IfOffsetHz - lastIfHz;
-      double expected = State == Phase.Probing ? probeHz : -probeHz;
-      double tolerance = Math.Max(20, probeHz * .4);
-      if (Math.Abs(catDelta - expected) > tolerance ||
-          Math.Abs(ifDelta) < 15 ||
-          Math.Abs(Math.Abs(catDelta) - Math.Abs(ifDelta)) > tolerance)
-        return;
+      double expectedStep = State == Phase.Probing ? probeHz : -probeHz;
+      double fromCat = State == Phase.Probing ? baselineCatHz : probedCatHz;
+      double fromIf = State == Phase.Probing ? baselineIfHz : probedIfHz;
+      double catDelta = catReadbackHz - fromCat;
+      double ifDelta = observation.IfOffsetHz - fromIf;
+      double catTolerance = Math.Max(25, probeHz * .35);
+      double ifTolerance = observation.Mode == AfcSignalMode.FM
+        ? Math.Max(85, probeHz * .65)
+        : Math.Max(20, probeHz * .5);
 
-      int observedSign = -Math.Sign(catDelta * ifDelta);
-      if (observedSign == 0) return;
-      if (candidateSign != 0 && observedSign != candidateSign)
+      // A readback must show the actual commanded CAT step, not merely a
+      // request. Doppler model changes are tolerated within a bounded range.
+      if (Math.Abs(catDelta - expectedStep) > catTolerance ||
+          Math.Abs(ifDelta) < Math.Max(15, probeHz * .25) ||
+          Math.Abs(Math.Abs(ifDelta) - Math.Abs(catDelta)) > ifTolerance)
       {
-        Fail();
+        phaseVotes = 0;
         return;
       }
 
-      candidateSign = observedSign;
-      transitions++;
-      lastCatHz = catReadbackHz;
-      lastIfHz = observation.IfOffsetHz;
-      commandSampleUtc = observation.SampleUtc;
+      int sign = -Math.Sign(catDelta * ifDelta);
+      if (sign == 0 || candidateSign != 0 && sign != candidateSign)
+      {
+        Fail("CAT/IF direction reversed or inconsistent");
+        return;
+      }
+
+      candidateSign = sign;
+      // Two independent settled IF samples for each of the two CAT edges.
+      if (++phaseVotes < 2) return;
+      phaseVotes = 0;
 
       if (State == Phase.Probing)
       {
+        probedCatHz = catReadbackHz;
+        probedIfHz = observation.IfOffsetHz;
         OffsetHz = 0;
         State = Phase.Restoring;
+        phaseStartedUtc = nowUtc;
+        return;
       }
-      else if (transitions >= 4)
+
+      // Never publish the sign until the original RX was actually restored.
+      double returnTolerance = observation.Mode == AfcSignalMode.FM ? 85 : 20;
+      if (Math.Abs(catReadbackHz - baselineCatHz) > catTolerance ||
+          Math.Abs(observation.IfOffsetHz - baselineIfHz) > returnTolerance)
       {
-        OffsetHz = 0;
-        VerifiedSign = candidateSign;
-        State = Phase.Complete;
+        phaseVotes = 0;
+        return;
       }
-      else
-      {
-        OffsetHz = probeHz;
-        State = Phase.Probing;
-      }
+      OffsetHz = 0;
+      VerifiedSign = candidateSign;
+      State = Phase.Complete;
     }
 
     /// <summary>
-    /// Also enforce the deadline when the IF callback stops completely.
-    /// Called on the UI timer; no audio observation is required to abort.
+    /// The UI timer also enforces the deadline if there are no IF callbacks.
+    /// Return the temporary RX layer to zero on any failure.
     /// </summary>
     public void Watchdog(DateTime nowUtc, bool eligible)
     {
-      if (Active && (!eligible ||
-          (nowUtc - commandSampleUtc).TotalSeconds > 8))
-        Fail();
+      if (!Active) return;
+      if (!eligible)
+      {
+        Fail("PTT, target change, or lost signal lock");
+        return;
+      }
+      if ((nowUtc - phaseStartedUtc).TotalSeconds > 15)
+        Fail(State == Phase.Probing
+          ? "CAT probe not acknowledged by a settled IF measurement"
+          : "CAT restore not acknowledged by a settled IF measurement");
     }
 
-    private void Fail()
+    private void Fail(string reason)
     {
-      OffsetHz = 0; // caller must restore the normal RX model through CAT
+      failureReason = reason;
+      OffsetHz = 0;
       VerifiedSign = 0;
       State = Phase.Failed;
     }
