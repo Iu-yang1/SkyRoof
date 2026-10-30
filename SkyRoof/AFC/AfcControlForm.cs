@@ -33,6 +33,9 @@ namespace SkyRoof.AFC
     private readonly Label stateDetail = new();
     private readonly Label[] metrics = { new(), new(), new() };
     private readonly Label[] metricCaptions = { new(), new(), new() };
+    private readonly Label[] metricHelp = { new(), new(), new() };
+    private readonly Label levelCaption = new();
+    private UiLanguage renderedLanguage = (UiLanguage)(-1);
     private readonly Panel[] metricCards = { new(), new(), new() };
     private readonly Button startButton = new();
     private readonly Button offButton = new();
@@ -51,6 +54,7 @@ namespace SkyRoof.AFC
     {
       this.ctx = ctx;
       this.owner = owner;
+      SettingsLanguage.Set(ctx.Settings.Ui.Language);
       currentMode = owner.CurrentAfcMode;
       Text = "SkyRoof - FM / CW / SSB AFC";
       Font = new Font("Segoe UI", 9.5f);
@@ -207,8 +211,10 @@ namespace SkyRoof.AFC
         metrics[i].Dock = DockStyle.Fill;
         metrics[i].Font = new Font("Segoe UI Semibold", 14, FontStyle.Bold);
         metrics[i].ForeColor = palette.Accent;
-        var help = new Label
-          { Text = hints[i], Dock = DockStyle.Fill, ForeColor = palette.Muted };
+        var help = metricHelp[i];
+        help.Text = hints[i];
+        help.Dock = DockStyle.Fill;
+        help.ForeColor = palette.Muted;
         tile.Controls.Add(metricCaptions[i], 0, 0);
         tile.Controls.Add(metrics[i], 0, 1);
         tile.Controls.Add(help, 0, 2);
@@ -233,11 +239,11 @@ namespace SkyRoof.AFC
       levels.RowStyles.Add(new RowStyle(SizeType.Absolute, 25));
       levels.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
       levels.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-      var levelTitle = new Label
-      {
-        Text = "AFC 控制等级", Dock = DockStyle.Fill,
-        ForeColor = palette.Text, Font = new Font("Segoe UI Semibold", 10, FontStyle.Bold)
-      };
+      var levelTitle = levelCaption;
+      levelTitle.Text = "AFC 控制等级";
+      levelTitle.Dock = DockStyle.Fill;
+      levelTitle.ForeColor = palette.Text;
+      levelTitle.Font = new Font("Segoe UI Semibold", 10, FontStyle.Bold);
       var segmented = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3 };
       for (int i = 0; i < 3; i++)
         segmented.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / 3));
@@ -291,6 +297,7 @@ namespace SkyRoof.AFC
       trackingPage.Controls.Add(layout);
 
       settingsGrid.Dock = DockStyle.Fill;
+      SettingsLanguage.EnsureRegistered();
       settingsGrid.SelectedObject = ctx.Settings.Afc;
       settingsGrid.BackColor = palette.Background;
       settingsGrid.ViewBackColor = palette.Surface;
@@ -331,6 +338,35 @@ namespace SkyRoof.AFC
       timer.Tick += (_, _) => RefreshDisplay();
       timer.Start();
       RefreshDisplay();
+    }
+
+    private static string T(string zh, string en) => SettingsLanguage.Text(zh, en);
+
+    private void RefreshLanguage()
+    {
+      if (renderedLanguage == SettingsLanguage.Current) return;
+      renderedLanguage = SettingsLanguage.Current;
+      tabs.TabPages[0].Text = T("实时追踪", "Live tracking");
+      tabs.TabPages[1].Text = T("高级设置", "Advanced settings");
+      levelCaption.Text = T("AFC 控制等级", "AFC control level");
+      string[] zhNames = { "多普勒预测", "残余频偏", "AFC 修正" };
+      string[] enNames = { "Predicted Doppler", "Residual offset", "AFC correction" };
+      string[] zhHelp = { "卫星下行预测值", "当前测量目标残差", "当前 RX 修正量" };
+      string[] enHelp = { "Predicted satellite downlink", "Measured target residual", "Current RX correction" };
+      for (int i = 0; i < 3; i++)
+      {
+        metricCaptions[i].Text = T(zhNames[i], enNames[i]);
+        metricHelp[i].Text = T(zhHelp[i], enHelp[i]);
+      }
+      offButton.Text = T("关闭", "OFF");
+      assistButton.Text = T("辅助", "ASSIST");
+      autoButton.Text = T("自动", "AUTO");
+      lockButton.Text = T("锁定当前", "LOCK");
+      centerButton.Text = T("居中并锁定", "CENTER & LOCK");
+      object? selected = settingsGrid.SelectedObject;
+      settingsGrid.SelectedObject = null;
+      settingsGrid.SelectedObject = selected;
+      tabs.Invalidate();
     }
 
     private void OnSpanChanged(int hz)
@@ -601,48 +637,42 @@ namespace SkyRoof.AFC
       if (Start() && wasAuto) owner.UpdateRxAfcCheckbox(true);
     }
 
-    // User-facing Chinese text belongs to the view; the controller retains
-    // stable English diagnostic identifiers for logging and regression tests.
+    // Stable controller diagnostic identifiers remain English.
     private static string StateText(AfcLockState state) => state switch
     {
-      AfcLockState.Off => "关闭",
-      AfcLockState.Acquiring => "捕获中",
-      AfcLockState.Locked => "已锁定",
-      AfcLockState.Coasting => "短时保持",
-      AfcLockState.Hold => "保持",
-      AfcLockState.Lost => "信号丢失",
-      AfcLockState.Fault => "故障",
+      AfcLockState.Off => T("关闭", "Off"),
+      AfcLockState.Acquiring => T("捕获中", "Acquiring"),
+      AfcLockState.Locked => T("已锁定", "Locked"),
+      AfcLockState.Coasting => T("短时保持", "Coasting"),
+      AfcLockState.Hold => T("保持", "Hold"),
+      AfcLockState.Lost => T("信号丢失", "Signal lost"),
+      AfcLockState.Fault => T("故障", "Fault"),
       _ => state.ToString()
     };
 
     private static string DetailText(string value) => value switch
     {
-      "Control level changed; reacquiring target" => "控制等级已切换，重新捕获目标",
-      "Awaiting fresh IF signal" => "等待新 IF 信号",
-      "Locking currently observed IF frequency" => "正在锁定当前 IF 频率",
-      "Centering selected IF signal" => "正在将所选 IF 信号移至中心",
-      "AFC disabled" => "AFC 已关闭",
-      "SSB relative drift assistance only; no absolute carrier" =>
-        "SSB 仅提供相对漂移辅助，缺少绝对载波参考",
-      "Signal ambiguous, weak, or reference absent; holding" =>
-        "信号不明确、过弱或缺少参考，暂时保持",
-      "Acquiring selected carrier" => "正在捕获所选载波",
-      "AFC divergence detected; automatic CAT writes stopped" =>
-        "检测到 AFC 发散，已停止自动 CAT 写频",
-      "PTT active: AFC frozen" => "正在发射，AFC 已冻结",
-      "Learning IF/CAT polarity from observed tuning" =>
-        "正在根据 CAT 调谐学习 IF 频率方向",
-      "Tracking reference" => "正在跟踪参考信号",
-      "IF input stale; automatic tuning stopped" =>
-        "IF 数据已过期，自动调谐已停止",
-      "No fresh IF measurement; holding correction" =>
-        "暂无新的 IF 测量，保持当前修正",
-      "Manual tune: AFC target rebased" => "检测到手动调谐，已重新定位 AFC 目标",
+      "Control level changed; reacquiring target" => T("控制等级已切换，重新捕获目标", "Control level changed; reacquiring target"),
+      "Awaiting fresh IF signal" => T("等待新 IF 信号", "Awaiting fresh IF signal"),
+      "Locking currently observed IF frequency" => T("正在锁定当前 IF 频率", "Locking currently observed IF frequency"),
+      "Centering selected IF signal" => T("正在将所选 IF 信号移至中心", "Centering selected IF signal"),
+      "AFC disabled" => T("AFC 已关闭", "AFC disabled"),
+      "SSB relative drift assistance only; no absolute carrier" => T("SSB 仅提供相对漂移辅助，缺少绝对载波参考", "SSB relative drift assistance only; no absolute carrier"),
+      "Signal ambiguous, weak, or reference absent; holding" => T("信号不明确、过弱或缺少参考，暂时保持", "Signal ambiguous, weak, or reference absent; holding"),
+      "Acquiring selected carrier" => T("正在捕获所选载波", "Acquiring selected carrier"),
+      "AFC divergence detected; automatic CAT writes stopped" => T("检测到 AFC 发散，已停止自动 CAT 写频", "AFC divergence detected; automatic CAT writes stopped"),
+      "PTT active: AFC frozen" => T("正在发射，AFC 已冻结", "PTT active: AFC frozen"),
+      "Learning IF/CAT polarity from observed tuning" => T("正在根据 CAT 调谐学习 IF 频率方向", "Learning IF/CAT polarity from observed tuning"),
+      "Tracking reference" => T("正在跟踪参考信号", "Tracking reference"),
+      "IF input stale; automatic tuning stopped" => T("IF 数据已过期，自动调谐已停止", "IF input stale; automatic tuning stopped"),
+      "No fresh IF measurement; holding correction" => T("暂无新的 IF 测量，保持当前修正", "No fresh IF measurement; holding correction"),
+      "Manual tune: AFC target rebased" => T("检测到手动调谐，已重新定位 AFC 目标", "Manual tune: AFC target rebased"),
       _ => value
     };
 
     private void RefreshDisplay()
     {
+      RefreshLanguage();
       owner.AfcController.Tick(DateTime.UtcNow);
       var cfg = ctx.Settings.Afc;
       spectrum.SetReferenceLevel(cfg.SpectrumRefLevelDb);
@@ -679,8 +709,8 @@ namespace SkyRoof.AFC
       inputStatus.Text = input.IsRunning
         ? double.IsFinite(inputRms) && inputRms > 0
           ? $"● IF RMS {20 * Math.Log10(inputRms):F0} dBFS"
-          : "● IF 采集已启动"
-        : "○ IF 未连接";
+          : T("● IF 采集已启动", "● IF capture running")
+        : T("○ IF 未连接", "○ IF disconnected");
       inputStatus.ForeColor = input.IsRunning ? palette.Good : palette.Muted;
       metrics[0].Text = $"{owner.PredictedDownlinkDopplerHz:+0;-0;0} Hz";
       metrics[1].Text = $"{s.ErrorHz:+0.0;-0.0;0} Hz";
@@ -688,15 +718,21 @@ namespace SkyRoof.AFC
       metrics[1].ForeColor = s.State == AfcLockState.Locked
         ? palette.Good : palette.Warning;
       stateLabel.Text = active
-        ? $"状态: {StateText(s.State)}   ·   置信度 {s.Confidence:P0}   ·   CAT {(freshCat ? "读回有效" : "等待读回")}"
-        : "状态: 关闭  ·  IF 输入尚未启动";
+        ? T(
+            $"状态: {StateText(s.State)}   ·   置信度 {s.Confidence:P0}   ·   CAT {(freshCat ? "读回有效" : "等待读回")}",
+            $"State: {StateText(s.State)}  ·  Confidence {s.Confidence:P0}  ·  CAT {(freshCat ? "readback OK" : "awaiting readback")}")
+        : T("状态: 关闭  ·  IF 输入尚未启动", "State: Off  ·  IF input not started");
       stateLabel.ForeColor = active &&
         s.State == AfcLockState.Locked ? palette.Good : palette.Warning;
       stateDetail.Text = active
-        ? $"{DetailText(s.Detail)}  ·  搜索 {cfg.TargetOffsetHz:+0;-0;0} Hz  ·  居中 {cfg.DesiredOffsetHz:+0;-0;0} Hz  ·  RF/IF 方向 {(s.MappingSign == 0 ? "待确认" : s.MappingSign.ToString("+0;-0"))}" +
-          $"  ·  底噪 {noiseFloorDb:F0} dBFS  ·  削波 {clipFraction:P1}"
-        : "请在「高级设置」配置真正的 12 kHz IF 输入，再启动 IF 采集。";
-      startButton.Text = active ? "停止 IF" : "启动 IF";
+        ? T(
+            $"{DetailText(s.Detail)}  ·  搜索 {cfg.TargetOffsetHz:+0;-0;0} Hz  ·  居中 {cfg.DesiredOffsetHz:+0;-0;0} Hz  ·  RF/IF 方向 {(s.MappingSign == 0 ? "待确认" : s.MappingSign.ToString("+0;-0"))}" +
+              $"  ·  底噪 {noiseFloorDb:F0} dBFS  ·  削波 {clipFraction:P1}",
+            $"{DetailText(s.Detail)}  ·  Search {cfg.TargetOffsetHz:+0;-0;0} Hz  ·  Center {cfg.DesiredOffsetHz:+0;-0;0} Hz  ·  RF/IF sign {(s.MappingSign == 0 ? "unknown" : s.MappingSign.ToString("+0;-0"))}" +
+              $"  ·  Noise {noiseFloorDb:F0} dBFS  ·  Clipping {clipFraction:P1}")
+        : T("请在「高级设置」配置真正的 12 kHz IF 输入，再启动 IF 采集。",
+            "Select a real 12 kHz IF input under Advanced settings, then start capture.");
+      startButton.Text = active ? T("停止 IF", "STOP IF") : T("启动 IF", "START IF");
       bool canLock = active && currentMode != AfcSignalMode.FM;
       lockButton.Enabled = centerButton.Enabled = canLock;
       spectrum.SetTargetInteraction(canLock);
@@ -713,9 +749,9 @@ namespace SkyRoof.AFC
       }
       controlHint.Text = level switch
       {
-        AfcControlMode.Auto => "自动修正仅作用于 RX；PTT 时冻结",
-        AfcControlMode.Assist => "仅监测 / 不进行 AFC 自动写频",
-        _ => "已关闭 AFC 自动控制"
+        AfcControlMode.Auto => T("自动修正仅作用于 RX；PTT 时冻结", "Automatic RX correction, frozen during PTT"),
+        AfcControlMode.Assist => T("仅监测 / 不进行 AFC 自动写频", "Monitor only; no automatic CAT tuning"),
+        _ => T("已关闭 AFC 自动控制", "Automatic AFC control disabled")
       };
     }
 

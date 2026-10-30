@@ -186,20 +186,24 @@ jobs:
           body: |
             SkyRoof Fork v.${{ steps.get_version.outputs.version }} (based on VE3NEA/SkyRoof v.1.56)
 
-            ### Improvements / 改进
-            - RC-3040S LAN rotator: improved AZ/EL speed readback, single-session WebSocket/60030 AT saves, identity checks and safe status recovery after fresh TCP/60020 feedback.
-            - Reduced confirmation friction: one Yes/No prompt; removed redundant typed authorization and obsolete DEMO controls.
-            - Added Direct / Precision stop / Trapezoidal / S-curve reference motion profiles and a simplified Motion Settings UI.
-            - Preserved IC-9700 LAN scope, satellite CAT/Doppler, CW Console and Pileup functionality.
-            - 修复速度保存后的虚假断连与管理安全锁显示；优化 WebSocket 写入、读回、旋转器快捷控制和界面布局。
+            ### English
+            - New Simplified Chinese / English selector in Settings; saved UI language and presentation-only PropertyGrid translations.
+            - AFC Live Tracking, Advanced Settings and operator diagnostic text support both languages.
+            - IC-9700 LAN Spectrum toolbar: START / STOP, CLEAR, SYNC, SETS; readable REF, VBW, AVG, SMOOTH, ZOOM labels.
+            - Includes DPI-responsive two-row scope toolbar refinements and MORE popup lifetime crash fix.
+            - CAT, AFC correction, Doppler and telemetry algorithms unchanged.
 
-            Read [full bilingual changelog](https://github.com/Iu-yang1/SkyRoof/blob/master/FORK-CHANGELOG.md)
-            and [fork documentation](https://iu-yang1.github.io/SkyRoof/).
+            ### 中文
+            - 设置页新增简体中文 / English 切换，保留原始配置键名及参数功能，界面语言可持久化。
+            - AFC 实时跟踪、控制状态、诊断信息与高级设置提供中英双语。
+            - IC-9700 LAN 频谱工具栏使用 START / STOP、CLEAR、SYNC、SETS 英文按钮。
+            - 包含 DPI 双行布局和 MORE 菜单对象释放异常修复。
+            - 较少使用的技术参数说明翻译仍在完善，不影响原有设备控制。
 
-            Note: a configured/read-back speed is not verified EEPROM persistence or a measured mechanical speed; software motion profiles do not guarantee firmware-level velocity or jerk control.
+            Full changelog / 完整更新记录:
+            https://github.com/Iu-yang1/SkyRoof/blob/master/FORK-CHANGELOG.md
 
-            When this release is marked pre-release, its executable is unsigned;
-            verify the downloaded installer before running it.
+            Unsigned installers are published as pre-releases. / 未签名安装包仅作为预发布版本提供。
           # body: This is an experimental build, please ignore.
           files:  install/SkyRoofSetup-v.${{ steps.get_version.outputs.version }}.exe
         env:

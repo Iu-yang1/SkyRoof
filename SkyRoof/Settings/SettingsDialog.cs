@@ -10,6 +10,10 @@ namespace SkyRoof
   {
     private readonly Context ctx;
     private readonly List<string> ChangedFields = new();
+    private UiLanguage appliedLanguage = UiLanguage.SimplifiedChinese;
+    private ComboBox? languageSelector;
+    private Label? languageLabel;
+
 
     internal SettingsDialog()
     {
@@ -20,12 +24,82 @@ namespace SkyRoof
     {
       InitializeComponent();
       this.ctx = ctx;
+      appliedLanguage = ctx.Settings.Ui.Language;
+      SettingsLanguage.Set(appliedLanguage);
       grid.SelectedObject = Utils.DeepClone(ctx.Settings);
+      InstallLanguageSelector();
 
       if (section == null)
         grid.CollapseAllGridItems();
       else
         grid.ExpandTopLevelProperties(grid.GetItemByFullName(section));
+    }
+
+    private void InstallLanguageSelector()
+    {
+      // Place the selector outside the PropertyGrid. It must remain reachable
+      // even when categories are collapsed, and is never serialized as a
+      // translated string or accidentally submitted as a radio setting.
+      var languageBar = new Panel
+      {
+        Dock = DockStyle.Top, Height = 40,
+        Padding = new Padding(8, 5, 8, 3),
+        BackColor = SystemColors.Control
+      };
+      languageLabel = new Label
+      {
+        AutoSize = false, Location = new Point(9, 9),
+        Width = 185, Height = 24,
+        TextAlign = ContentAlignment.MiddleLeft
+      };
+      languageSelector = new ComboBox
+      {
+        DropDownStyle = ComboBoxStyle.DropDownList,
+        Width = 171, Height = 28,
+        Anchor = AnchorStyles.Top | AnchorStyles.Right
+      };
+      languageSelector.Items.AddRange(new object[]
+      {
+        "简体中文", "English"
+      });
+      languageBar.Controls.Add(languageSelector);
+      languageBar.Controls.Add(languageLabel);
+      languageBar.Resize += (_, _) =>
+      {
+        if (languageSelector == null) return;
+        languageSelector.Left = Math.Max(194, languageBar.ClientSize.Width -
+          languageSelector.Width - 10);
+      };
+      languageSelector.SelectedIndex = appliedLanguage ==
+        UiLanguage.English ? 1 : 0;
+      languageSelector.SelectedIndexChanged += (_, _) =>
+      {
+        if (grid.SelectedObject is not Settings edited) return;
+        UiLanguage selected = languageSelector.SelectedIndex == 1
+          ? UiLanguage.English : UiLanguage.SimplifiedChinese;
+        edited.Ui.Language = selected;
+        SettingsLanguage.Set(selected);
+        // Rebuild labels while preserving the same edited settings instance.
+        // This avoids discarding uncommitted changes in other categories.
+        grid.SelectedObject = null;
+        grid.SelectedObject = edited;
+        RefreshLanguageCaptions();
+      };
+      Controls.Add(languageBar);
+      // Dock order: top bar precedes the fill PropertyGrid.
+      Controls.SetChildIndex(languageBar, 0);
+      RefreshLanguageCaptions();
+    }
+
+    private void RefreshLanguageCaptions()
+    {
+      Text = SettingsLanguage.Text("设置", "Settings");
+      if (languageLabel != null)
+        languageLabel.Text = SettingsLanguage.Text("界面语言", "Interface language");
+      applyBtn.Text = SettingsLanguage.Text("应用", "Apply");
+      cancelBtn.Text = SettingsLanguage.Text("取消", "Cancel");
+      okBtn.Text = SettingsLanguage.Text("确定", "OK");
+      resetToolStripMenuItem.Text = SettingsLanguage.Text("重置", "Reset");
     }
 
     private void SettingsDialog_Shown(object? sender, EventArgs e)
@@ -36,6 +110,10 @@ namespace SkyRoof
     private void SettingsDialog_FormClosing(object? sender, FormClosingEventArgs e)
     {
       ctx.Settings.Ui.SavePropertyGridLabelWidth("SettingsDialog", grid);
+      // Cancel must also undo a language preview. Apply commits the preview
+      // independently of subsequent edits, matching standard Settings UX.
+      if (DialogResult != DialogResult.OK)
+        SettingsLanguage.Set(appliedLanguage);
     }
 
     private void SelectSection(string section)
@@ -421,6 +499,12 @@ namespace SkyRoof
         ))
         ctx.Ft4ConsolePanel?.ApplySettings();
 
+      if (appliedLanguage != ctx.Settings.Ui.Language)
+      {
+        SettingsLanguage.Set(ctx.Settings.Ui.Language);
+        appliedLanguage = ctx.Settings.Ui.Language;
+        ctx.Settings.SaveToFile();
+      }
       ChangedFields.Clear();
     }
   }
