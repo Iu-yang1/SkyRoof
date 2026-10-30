@@ -209,3 +209,29 @@ remaining image discrepancies.
 ## Waterfall remapping under rapid Doppler motion
 
 The prior waterfall translated its entire mapped history whenever incoming scope coordinates shifted, even when only a partial serial waveform frame had arrived. Complete sweeps now anchor historical mapping. Large retunes invalidate the prior history instead of creating rectangular horizontal smears, while the AVG accumulator is reset when the RF coordinate changes. This prioritizes frequency correctness and reduces avoidable partial-frame work; the change does not establish a measured FPS gain. Native LAN complete-sweep throughput remains device/transport-dependent.
+
+## Two-row scope controls and compact status strip
+
+The docked spectrum panel now uses two stable, non-wrapping toolbars:
+**Radio** and **Display**. Radio controls retain MAIN/SUB, scope
+mode, SPAN/EDGE, EDGE editor, REF, sweep speed and VBW (some are
+radio-side CI-V writes). Display controls retain Start/Stop, Clear,
+HOLD, PEAK, WF, AVG, smoothing, zoom, SYNC and Settings. Tooltips
+explain effects and write permissions. For narrower Dock panels,
+control widths, fonts and spacing scale together, rather than wrapping
+a label away from its selector or adding scrollbars.
+
+The status strip contains concise transport, actual waterfall delivery
+rate and **read-only / backend offline / waiting sync / awaiting radio
+confirmation / timeout / synchronized** status. A queued CAT command
+is **not** a confirmed radio write. Detailed endpoints, raw CI-V stats,
+scope bins, sequence skips and queue information remain available
+from the **Diagnostics** button or the status context menu/double-click.
+Sequence skips must not be interpreted as the same number of lost
+complete waterfall sweeps.
+
+Toolbar colors use the active SkyRoof Light/Dark/System/GitHub theme.
+The spectrum itself retains its existing high-contrast instrument
+rendering. This changes UI layout and status presentation only,
+not the scope capture, assembler, frame mailbox, waterfall time
+mapping, HOLD, CAT/PTT or Doppler code.
