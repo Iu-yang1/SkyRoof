@@ -236,14 +236,43 @@ namespace SkyRoof
       Bitmap picture;
       try { picture = evt.Image.ToBitmap(); }
       catch { return; }
+      string? savedFile = null;
+      if (evt.Final && evt.ValidRows > 0)
+      {
+        try
+        {
+          string folder = Path.Combine(Utils.GetUserDataFolder(), "SstvImages");
+          Directory.CreateDirectory(folder);
+          string name = $"{DateTime.UtcNow:yyyyMMdd_HHmmss_fff}_Audio_{evt.Mode}_{evt.ImageId}";
+          savedFile = Path.Combine(folder, name + ".png");
+          picture.Save(savedFile, ImageFormat.Png);
+          string json = System.Text.Json.JsonSerializer.Serialize(new
+          {
+            Utc = DateTime.UtcNow,
+            Source = rxSourceBox.SelectedItem?.ToString() ?? "AF",
+            Mode = evt.Mode.ToString(),
+            evt.ValidRows,
+            evt.Image.Width,
+            evt.Image.Height,
+            evt.FromVis,
+            Call = ctx.Settings.User.Call ?? ""
+          });
+          File.WriteAllText(Path.Combine(folder, name + ".json"), json);
+        }
+        catch (Exception e)
+        {
+          Serilog.Log.Warning(e, "SSTV receive image could not be saved");
+        }
+      }
       try
       {
+        string? path = savedFile;
         BeginInvoke((Action)(() =>
         {
           using (picture)
           {
             if (!closed && !IsDisposed)
-              ShowReceivedSstv(picture, evt.Mode.ToString(), evt.Final, null);
+              ShowReceivedSstv(picture, evt.Mode.ToString(), evt.Final, path);
           }
         }));
       }
