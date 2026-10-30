@@ -17,8 +17,23 @@ namespace SkyRoof.AFC
   {
     private const int HistoryRows = 180;
     private const int HistoryWidth = 1024;
-    private const float MinDisplayDb = -8;
-    private const float MaxDisplayDb = 42;
+    // 60-dB visual span around the REF LEVEL: +15 dB by default.
+    // This display-only offset never touches the AFC error or DSP loop.
+    private const float VerticalRangeDb = 60f;
+    private const double DefaultReferenceDb = 15;
+    private const double ReferenceMinDb = -40;
+    private const double ReferenceMaxDb = 60;
+    private double referenceLevelDb = DefaultReferenceDb;
+    private static readonly int[] RsBa1WaterfallPalette =
+      IcomLanSpectrumView.BuildPalette(IcomScopeWaterfallPalette.Classic);
+    private static readonly Color RsBa1Trace = Color.FromArgb(44, 219, 88);
+    private static readonly Color RsBa1Peak = Color.FromArgb(255, 203, 74);
+    private static readonly Color ScopeText = Color.FromArgb(225, 236, 248);
+    private static readonly Color ScopeGrid = Color.FromArgb(59, 75, 95);
+    private Color SpectrumBackground => palette.Dark
+      ? Color.FromArgb(5, 10, 27) : Color.FromArgb(9, 22, 45);
+    private float DisplayTop => (float)(referenceLevelDb + 30);
+    private float DisplayBottom => (float)(referenceLevelDb - 30);
     private float[]? bins, heldPeaks;
     private double minHz = -6000, stepHz = 12000.0 / 511;
     private double? observedHz;
@@ -31,6 +46,7 @@ namespace SkyRoof.AFC
     private readonly Bitmap history = new(
       HistoryWidth, HistoryRows, PixelFormat.Format32bppArgb);
     private readonly int[] linePixels = new int[HistoryWidth];
+    private readonly float[][] historyLevels = new float[HistoryRows][];
     private AfcThemePalette palette = AfcThemePalette.Current;
     public event Action<double>? TargetSelected;
     public event Action<int>? SpanChanged;
@@ -45,16 +61,32 @@ namespace SkyRoof.AFC
       MinimumSize = new Size(180, 105);
       Cursor = Cursors.Cross;
       Font = new Font("Segoe UI", 9f);
-      BackColor = palette.Plot;
-      ForeColor = palette.Text;
+      BackColor = SpectrumBackground;
+      ForeColor = ScopeText;
     }
 
     internal void ApplyPalette(AfcThemePalette colors)
     {
       palette = colors;
-      BackColor = colors.Plot;
-      ForeColor = colors.Text;
-      ClearHistory();
+      BackColor = SpectrumBackground;
+      ForeColor = ScopeText;
+      RebuildHistoryColors();
+      Invalidate();
+    }
+
+    internal double ReferenceLevelDb => referenceLevelDb;
+
+    public void SetReferenceLevel(double value)
+    {
+      // Reject invalid configuration values without corrupting the raster.
+      if (!double.IsFinite(value)) value = DefaultReferenceDb;
+      value = Math.Clamp(value, ReferenceMinDb, ReferenceMaxDb);
+      if (Math.Abs(referenceLevelDb - value) < .01) return;
+      referenceLevelDb = value;
+      // Original dB rows are preserved so REF and theme changes re-color
+      // the existing history without erasing the operator's waterfall.
+      RebuildHistoryColors();
+      Invalidate();
     }
 
     public void SetTargetInteraction(bool allow)
@@ -96,8 +128,9 @@ namespace SkyRoof.AFC
       generation = long.MinValue;
       historyHead = -1;
       historyCount = 0;
+      Array.Clear(historyLevels);
       using (Graphics g = Graphics.FromImage(history))
-        g.Clear(palette.Plot);
+        g.Clear(Color.FromArgb(RsBa1WaterfallPalette[0]));
       Invalidate();
     }
 
@@ -207,42 +240,61 @@ namespace SkyRoof.AFC
 
     private void AppendHistory(float[] spectrum)
     {
+      historyHead = historyHead < 0 ? HistoryRows - 1 :
+        (historyHead + HistoryRows - 1) % HistoryRows;
+      historyCount = Math.Min(HistoryRows, historyCount + 1);
+      float[] raw = historyLevels[historyHead] ??= new float[HistoryWidth];
       for (int px = 0; px < HistoryWidth; px++)
       {
         double a = -6000 + px * (12000.0 / HistoryWidth);
         double b = -6000 + (px + 1) * (12000.0 / HistoryWidth);
-        linePixels[px] = HeatColor(PeakAt(spectrum, a, b)).ToArgb();
+        raw[px] = PeakAt(spectrum, a, b);
+        linePixels[px] = MapWaterfallColor(raw[px]);
       }
-      // Write rows in descending order so the two DrawImage segments
-      // always display newest first, even before the 180-row ring fills.
-      historyHead = historyHead < 0 ? HistoryRows - 1 :
-        (historyHead + HistoryRows - 1) % HistoryRows;
-      historyCount = Math.Min(HistoryRows, historyCount + 1);
+      WriteHistoryRow(historyHead, linePixels);
+    }
+
+    // Reuse IcomLanSpectrumView's exact RS-BA1 Classic LUT:
+    // navy -> blue -> cyan -> green/yellow -> white for high signal levels.
+    // REF increases/decreases visual headroom only. Noise-floor-relative
+    // 0 dB is dark blue when REF=+15; weak peaks should not bleach the
+    // waterfall into the white background of light SkyRoof themes.
+    internal static int MapWaterfallLevel(double db, double referenceDb)
+    {
+      if (!double.IsFinite(db)) return 0;
+      if (!double.IsFinite(referenceDb)) referenceDb = DefaultReferenceDb;
+      referenceDb = Math.Clamp(referenceDb, ReferenceMinDb, ReferenceMaxDb);
+      double floor = referenceDb - DefaultReferenceDb;
+      return Math.Clamp((int)Math.Round((db - floor) * 160.0 / 50.0), 0, 160);
+    }
+
+    internal static int WaterfallArgbAt(double db, double referenceDb) =>
+      RsBa1WaterfallPalette[MapWaterfallLevel(db, referenceDb)];
+
+    private int MapWaterfallColor(float db) =>
+      WaterfallArgbAt(db, referenceLevelDb);
+
+    private void WriteHistoryRow(int row, int[] pixels)
+    {
       BitmapData data = history.LockBits(
-        new Rectangle(0, historyHead, HistoryWidth, 1),
+        new Rectangle(0, row, HistoryWidth, 1),
         ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
-      try { Marshal.Copy(linePixels, 0, data.Scan0, linePixels.Length); }
+      try { Marshal.Copy(pixels, 0, data.Scan0, pixels.Length); }
       finally { history.UnlockBits(data); }
     }
 
-    private Color HeatColor(float db)
+    private void RebuildHistoryColors()
     {
-      double value = Math.Clamp((db - 1) / 36.0, 0, 1);
-      if (value < .04) return palette.Dark
-        ? Color.FromArgb(14, 23, 39) : Color.FromArgb(234, 241, 249);
-      double t = Math.Pow(value, .85);
-      int r = (int)(palette.Dark ? 17 + 227 * t : 233 - 112 * t);
-      int g = (int)(palette.Dark ? 37 + 187 * t : 240 - 86 * t);
-      int b = (int)(palette.Dark ? 73 + 102 * t : 250 - 38 * t);
-      if (t > .65)
+      using (Graphics g = Graphics.FromImage(history))
+        g.Clear(Color.FromArgb(RsBa1WaterfallPalette[0]));
+      for (int row = 0; row < HistoryRows; row++)
       {
-        double v = (t - .65) / .35;
-        r = (int)(r + (255 - r) * v);
-        g = (int)(g + (242 - g) * v);
-        b = (int)(b + (163 - b) * v);
+        float[]? raw = historyLevels[row];
+        if (raw == null) continue;
+        for (int i = 0; i < HistoryWidth; i++)
+          linePixels[i] = MapWaterfallColor(raw[i]);
+        WriteHistoryRow(row, linePixels);
       }
-      return Color.FromArgb(
-        Math.Clamp(r, 0, 255), Math.Clamp(g, 0, 255), Math.Clamp(b, 0, 255));
     }
 
     private void PaintWaterfall(Graphics g, RectangleF destination)
@@ -273,18 +325,18 @@ namespace SkyRoof.AFC
       base.OnPaint(e);
       Graphics g = e.Graphics;
       g.SmoothingMode = SmoothingMode.AntiAlias;
-      g.Clear(palette.Plot);
+      g.Clear(SpectrumBackground);
       RectangleF plot = Plot;
-      using var gridPen = new Pen(Color.FromArgb(palette.Dark ? 70 : 55, palette.Border));
-      using var tracePen = new Pen(palette.Trace, 1.5f);
-      using var peakPen = new Pen(palette.Warning, 1f) { DashStyle = DashStyle.Dot };
-      using var centerPen = new Pen(palette.Warning, 1.4f)
+      using var gridPen = new Pen(ScopeGrid);
+      using var tracePen = new Pen(RsBa1Trace, 1.5f);
+      using var peakPen = new Pen(RsBa1Peak, 1f) { DashStyle = DashStyle.Dot };
+      using var centerPen = new Pen(RsBa1Peak, 1.4f)
         { DashStyle = DashStyle.Dash };
-      using var observedPen = new Pen(palette.Good, 1.25f);
-      using var labelBrush = new SolidBrush(palette.Muted);
-      using var titleBrush = new SolidBrush(palette.Text);
-      using var fillBrush = new SolidBrush(Color.FromArgb(palette.Dark ? 35 : 22, palette.Trace));
-      g.DrawString("12 kHz IF · PSD（相对噪声地板 dB）", Font,
+      using var observedPen = new Pen(Color.FromArgb(105, 236, 207), 1.25f);
+      using var labelBrush = new SolidBrush(Color.FromArgb(166, 198, 223));
+      using var titleBrush = new SolidBrush(ScopeText);
+      using var fillBrush = new SolidBrush(Color.FromArgb(32, RsBa1Trace));
+      g.DrawString($"12 kHz IF · REF {referenceLevelDb:+0;-0;0} dB · PSD（相对底噪）", Font,
         titleBrush, new PointF(plot.Left, 7));
       if (canSelect && plot.Width > 350)
       {
@@ -298,7 +350,7 @@ namespace SkyRoof.AFC
       {
         float y = plot.Top + i * plot.Height / 5;
         g.DrawLine(gridPen, plot.Left, y, plot.Right, y);
-        g.DrawString((MaxDisplayDb + (MinDisplayDb - MaxDisplayDb) * i / 5).ToString("0"),
+        g.DrawString((DisplayTop + (DisplayBottom - DisplayTop) * i / 5).ToString("0"),
           Font, labelBrush, 7, y - 7);
       }
       for (int i = 0; i <= 6; i++)
@@ -318,9 +370,9 @@ namespace SkyRoof.AFC
         {
           double a = VisibleMin + (i - .5) * spanHz / pixels;
           double b = VisibleMin + (i + .5) * spanHz / pixels;
-          float db = Math.Clamp(PeakAt(values, a, b), MinDisplayDb, MaxDisplayDb);
+          float db = Math.Clamp(PeakAt(values, a, b), DisplayBottom, DisplayTop);
           points[i] = new PointF(plot.Left + i * plot.Width / pixels,
-            plot.Bottom - (db - MinDisplayDb) / (MaxDisplayDb - MinDisplayDb) * plot.Height);
+            plot.Bottom - (db - DisplayBottom) / VerticalRangeDb * plot.Height);
         }
         using var area = new GraphicsPath();
         area.AddLines(points);
@@ -336,9 +388,9 @@ namespace SkyRoof.AFC
           {
             double a = VisibleMin + (i - .5) * spanHz / pixels;
             double b = VisibleMin + (i + .5) * spanHz / pixels;
-            float db = Math.Clamp(PeakAt(heldPeaks, a, b), MinDisplayDb, MaxDisplayDb);
+            float db = Math.Clamp(PeakAt(heldPeaks, a, b), DisplayBottom, DisplayTop);
             points[i] = new PointF(plot.Left + i * plot.Width / pixels,
-              plot.Bottom - (db - MinDisplayDb) / (MaxDisplayDb - MinDisplayDb) * plot.Height);
+              plot.Bottom - (db - DisplayBottom) / VerticalRangeDb * plot.Height);
           }
           g.DrawLines(peakPen, points);
         }
@@ -346,7 +398,7 @@ namespace SkyRoof.AFC
       if (HasWaterfall)
       {
         var rect = WaterfallBounds;
-        using var waterfallBackground = new SolidBrush(palette.Plot);
+        using var waterfallBackground = new SolidBrush(Color.FromArgb(RsBa1WaterfallPalette[0]));
         g.FillRectangle(waterfallBackground, rect);
         PaintWaterfall(g, rect);
         g.DrawRectangle(gridPen, rect.Left, rect.Top, rect.Width, rect.Height);

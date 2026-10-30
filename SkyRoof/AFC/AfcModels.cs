@@ -61,6 +61,11 @@ namespace SkyRoof
     [DefaultValue(false)]
     public bool SsbPilotEnabled { get; set; } = false;
 
+    [DisplayName("IF spectrum REF LEVEL (dB)")]
+    [Description("Display-only reference level for the 12-kHz IF spectrum and waterfall. Default +15 dB. Raise it to reduce apparent signal brightness, lower it to reveal weaker peaks. Does not change receiver gain, the IF PCM, frequency estimates, confidence, or CAT control.")]
+    [DefaultValue(15.0)]
+    public double SpectrumRefLevelDb { get; set; } = 15;
+
     [DisplayName("Maximum AFC correction (Hz)")]
     [DefaultValue(2000.0)]
     public double MaxCorrectionHz { get; set; } = 2000;

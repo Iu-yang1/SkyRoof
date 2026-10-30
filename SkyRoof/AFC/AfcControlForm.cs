@@ -173,6 +173,7 @@ namespace SkyRoof.AFC
       spectrum.Dock = DockStyle.Fill;
       spectrum.Margin = new Padding(0, 2, 0, 0);
       spectrum.ApplyPalette(palette);
+      spectrum.SetReferenceLevel(ctx.Settings.Afc.SpectrumRefLevelDb);
       spectrum.TargetSelected += OnSpectrumTargetSelected;
       spectrum.SpanChanged += OnSpanChanged;
       spectrumBlock.Controls.Add(spectrumToolbar, 0, 0);
@@ -481,6 +482,8 @@ namespace SkyRoof.AFC
         else if (name == nameof(AfcSettings.Control))
           owner.AfcController.Configure(currentMode, EffectiveControl());
       }
+      if (name == nameof(AfcSettings.SpectrumRefLevelDb))
+        spectrum.SetReferenceLevel(ctx.Settings.Afc.SpectrumRefLevelDb);
       if (!AutoAllowed && ctx.Settings.Afc.Control == AfcControlMode.Auto)
         ctx.Settings.Afc.Control = AfcControlMode.Assist;
       owner.UpdateRxAfcCheckbox(active && EffectiveControl() == AfcControlMode.Auto);
@@ -602,6 +605,7 @@ namespace SkyRoof.AFC
     {
       owner.AfcController.Tick(DateTime.UtcNow);
       var cfg = ctx.Settings.Afc;
+      spectrum.SetReferenceLevel(cfg.SpectrumRefLevelDb);
       if (!ReferenceEquals(settingsGrid.SelectedObject, cfg))
         settingsGrid.SelectedObject = cfg;
       AfcSignalMode mode = owner.CurrentAfcMode;

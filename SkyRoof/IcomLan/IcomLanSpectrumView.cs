@@ -3007,7 +3007,7 @@ namespace SkyRoof
         160);
     }
 
-    private static int[] BuildPalette(
+    internal static int[] BuildPalette(
       IcomScopeWaterfallPalette paletteKind)
     {
       var palette =
