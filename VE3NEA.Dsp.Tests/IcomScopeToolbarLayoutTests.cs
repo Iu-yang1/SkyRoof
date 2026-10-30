@@ -11,22 +11,22 @@ namespace VE3NEA.Dsp.Tests;
 public sealed class IcomScopeToolbarLayoutTests
 {
   [Theory]
-  [InlineData(920, 820, 1.0f)]
-  [InlineData(820, 820, 1.0f)]
-  [InlineData(615, 820, .75f)]
-  [InlineData(400, 1000, .55f)]
-  public void CompactToolbarFitsWithoutWrappingOrHiddenControls(
-    int available, int required, float expected)
+  [InlineData(920, 820, false)]
+  [InlineData(820, 820, false)]
+  [InlineData(615, 820, true)]
+  [InlineData(400, 1000, true)]
+  public void ToolbarUsesExtraRowsInsteadOfScalingFonts(
+    int available, int required, bool expected)
   {
-    Assert.InRange(IcomScopeToolbarLayout.CalculateScale(available, required),
-      expected - .0001f, expected + .0001f);
+    Assert.Equal(expected,
+      IcomScopeToolbarLayout.RequiresAdditionalRows(available, required));
   }
 
   [Fact]
-  public void NoMeasurementFallsBackToIdentityScale()
+  public void UnknownMeasurementDoesNotTriggerExtraRows()
   {
-    Assert.Equal(1f, IcomScopeToolbarLayout.CalculateScale(0, 800));
-    Assert.Equal(1f, IcomScopeToolbarLayout.CalculateScale(900, 0));
+    Assert.False(IcomScopeToolbarLayout.RequiresAdditionalRows(0, 800));
+    Assert.False(IcomScopeToolbarLayout.RequiresAdditionalRows(900, 0));
   }
 
   [Theory]
@@ -73,11 +73,19 @@ public sealed class IcomScopeToolbarLayoutTests
   {
     const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
     var radio = typeof(IcomLanSpectrumPanel).GetField("RadioToolbar", flags);
+    var radioExtra = typeof(IcomLanSpectrumPanel).GetField(
+      "RadioSecondaryToolbar", flags);
     var display = typeof(IcomLanSpectrumPanel).GetField("DisplayToolbar", flags);
+    var displayExtra = typeof(IcomLanSpectrumPanel).GetField(
+      "DisplaySecondaryToolbar", flags);
     Assert.NotNull(radio);
+    Assert.NotNull(radioExtra);
     Assert.NotNull(display);
+    Assert.NotNull(displayExtra);
     Assert.Equal(typeof(FlowLayoutPanel), radio!.FieldType);
+    Assert.Equal(typeof(FlowLayoutPanel), radioExtra!.FieldType);
     Assert.Equal(typeof(FlowLayoutPanel), display!.FieldType);
+    Assert.Equal(typeof(FlowLayoutPanel), displayExtra!.FieldType);
   }
 
   [Fact]
