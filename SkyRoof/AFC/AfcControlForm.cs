@@ -598,9 +598,12 @@ namespace SkyRoof.AFC
           bool eligible = !explicitSign &&
             EffectiveControl() == AfcControlMode.Auto &&
             !owner.IsAfcTransmitting &&
-            snapshot.State == AfcLockState.Locked;
+            (snapshot.State == AfcLockState.Locked ||
+              polarityProbe.Active && snapshot.State == AfcLockState.Hold &&
+              (DateTime.UtcNow - snapshot.LastObservationUtc).TotalSeconds < 3);
           polarityProbe.Observe(observation, readback,
-            owner.IsAfcProbeReadbackConfirmedAt(observation.SampleUtc),
+            owner.IsAfcProbeReadbackConfirmedAt(observation.SampleUtc,
+              polarityProbe.PhaseStartedUtc),
             eligible, ctx.Settings.Cat.TuningStep, DateTime.UtcNow);
           if (polarityProbe.VerifiedSign != 0)
             owner.AfcController.ConfirmCalibratedSign(
@@ -726,7 +729,11 @@ namespace SkyRoof.AFC
       polarityProbe.Watchdog(DateTime.UtcNow,
         active && EffectiveControl() == AfcControlMode.Auto &&
         !owner.IsAfcTransmitting &&
-        owner.AfcController.Snapshot.State == AfcLockState.Locked &&
+        (owner.AfcController.Snapshot.State == AfcLockState.Locked ||
+         polarityProbe.Active &&
+           owner.AfcController.Snapshot.State == AfcLockState.Hold &&
+           (DateTime.UtcNow -
+             owner.AfcController.Snapshot.LastObservationUtc).TotalSeconds < 3) &&
         ctx.CatControl.Rx != null);
       owner.SetAfcCalibrationOffsetHz(polarityProbe.OffsetHz,
         polarityProbe.Active);
