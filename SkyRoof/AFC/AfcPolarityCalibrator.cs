@@ -120,6 +120,11 @@ namespace SkyRoof.AFC
           return;
         }
         probeHz = Math.Ceiling(amplitude / (double)tuningStepHz) * tuningStepHz;
+        if (probeHz > (observation.Mode == AfcSignalMode.FM ? 250 : 50))
+        {
+          Fail("CAT tuning step cannot fit the safe IF calibration span");
+          return;
+        }
         baselineCatHz = catReadbackHz;
         baselineIfHz = observation.IfOffsetHz;
         baselineSampleUtc = observation.SampleUtc;
