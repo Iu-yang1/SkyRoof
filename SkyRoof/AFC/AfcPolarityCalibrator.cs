@@ -128,7 +128,7 @@ namespace SkyRoof.AFC
         probeHz = Math.Ceiling(needed / tuningStepHz) * tuningStepHz;
         if (probeHz > maximum)
         {
-          Fail("No safe CAT probe amplitude resolves IF measurement noise");
+          Fail("CAT tuning step cannot resolve IF measurement noise within safe span");
           return;
         }
         baselineCatHz = catReadbackHz;
