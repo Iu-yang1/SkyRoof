@@ -37,6 +37,9 @@ namespace SkyRoof
     internal event Action? AfcTargetInvalidated;
     private AfcControlForm? AfcWindow;
     private double lastAfcExpectedRf;
+    private double afcCalibrationOffsetHz;
+    private bool afcCalibrationActive;
+    private bool afcRestorePending;
     private bool updatingRxAfcCheckbox;
     internal bool RxAfcChecked => RxAfcCheckbox.Checked;
     internal double PredictedDownlinkDopplerHz =>
@@ -74,6 +77,19 @@ namespace SkyRoof
       AfcCatTimeline.RecordReadback(catHz, utc);
     }
 
+    internal bool TryGetAfcLatestReadbackAge(out double ageSeconds)
+    {
+      return AfcCatTimeline.TryLatestReadback(DateTime.UtcNow, out _,
+        out ageSeconds);
+    }
+
+    internal bool IsAfcProbeReadbackConfirmedAt(DateTime sampleUtc)
+    {
+      return AfcCatTimeline.TryReadbackAt(sampleUtc, out long catHz) &&
+        AfcCatTimeline.ExpectedWriteSource(catHz, sampleUtc)
+          == AfcCatWriteSource.Calibration;
+    }
+
     internal bool IsAfcReadbackConfirmedAt(DateTime sampleUtc)
     {
       return AfcCatTimeline.TryReadbackAt(sampleUtc, out long catHz) &&
@@ -98,9 +114,43 @@ namespace SkyRoof
 
     private void InvalidateAfcTarget(string reason)
     {
-      AfcCatTimeline.Clear();
       AfcController.Reset(reason);
       AfcTargetInvalidated?.Invoke();
+      // Only clear chronology after restoring the temporary RX probe.
+      AfcCatTimeline.Clear();
+    }
+
+    /// <summary>
+    /// Calibration is a temporary layer added after the satellite Doppler
+    /// model. The normal CAT writer still owns all frequency commands.
+    /// Never apply an AFC probe to TX or persist it as a manual correction.
+    /// </summary>
+    internal void SetAfcCalibrationOffsetHz(double offset, bool active)
+    {
+      if (!double.IsFinite(offset) || Math.Abs(offset) > 100) return;
+      bool changed = Math.Abs(afcCalibrationOffsetHz - offset) >= .5;
+      afcCalibrationOffsetHz = offset;
+      afcCalibrationActive = active;
+      if (changed) afcRestorePending = true;
+      FlushAfcCalibrationRestoreIfSafe();
+    }
+
+    /// <summary>
+    /// A PTT edge or stalled IF stream may cancel the probe without any
+    /// subsequent IF callback. Keep restoring RX on the main UI clock
+    /// until CAT is available and the transmitter is unkeyed.
+    /// </summary>
+    internal void FlushAfcCalibrationRestoreIfSafe()
+    {
+      if (!afcRestorePending || ctx == null ||
+          ctx.CatControl.Rx == null || !RadioLink.HasDownlink ||
+          IsAfcTransmitting) return;
+      SendCatRxFrequency(RadioLink.CorrectedDownlinkFrequency + AfcRxOffset,
+        AfcCatWriteSource.Calibration);
+      if (ctx.Settings.Transverter.SdrOffsetEnabled)
+        XverterSetSlicerFrequency();
+      else SetSlicerFrequency();
+      afcRestorePending = false;
     }
 
     internal void ApplyAfcRxCorrection()
@@ -111,14 +161,16 @@ namespace SkyRoof
       if (AfcController.Snapshot.Control != AfcControlMode.Auto) return;
       double target = RadioLink.CorrectedDownlinkFrequency + AfcRxOffset;
       if (Math.Abs(target - lastAfcExpectedRf) < 1) return;
-      SendCatRxFrequency(target, AfcCatWriteSource.Afc);
+      SendCatRxFrequency(target, afcCalibrationActive
+        ? AfcCatWriteSource.Calibration : AfcCatWriteSource.Afc);
       if (ctx.Settings.Transverter.SdrOffsetEnabled)
         XverterSetSlicerFrequency();
       else SetSlicerFrequency();
     }
 
-    private double AfcRxOffset => ctx?.Settings.Afc.Enabled == true
-      ? AfcController.GetRxCorrection(IsAfcTransmitting) : 0;
+    private double AfcRxOffset => (ctx?.Settings.Afc.Enabled == true
+      ? AfcController.GetRxCorrection(IsAfcTransmitting) : 0) +
+        afcCalibrationOffsetHz;
 
     private void OpenAfcWindow()
     {
@@ -431,6 +483,7 @@ namespace SkyRoof
 
     internal void ClockTick()
     {
+      FlushAfcCalibrationRestoreIfSafe();
       if (RadioLink.IsTerrestrial) return;
       RadioLink.ObserveSatellite(ctx.SdrPasses);
       RadioLink.ComputeFrequencies();
@@ -456,12 +509,14 @@ namespace SkyRoof
       // sources rather than assuming any unexplained readback is a dial turn.
       if (AfcCatTimeline.ExpectedWriteSource(
             ctx.CatControl.Rx!.LastReadRxFrequency, DateTime.UtcNow)
-            is AfcCatWriteSource.Afc or AfcCatWriteSource.SatelliteModel)
+            is AfcCatWriteSource.Afc or AfcCatWriteSource.SatelliteModel
+              or AfcCatWriteSource.Calibration)
         return;
       double preTuneTarget = RadioLink.CorrectedDownlinkFrequency + AfcRxOffset;
       int delta = (int)Math.Round(catRf - preTuneTarget);
       if (delta == 0) return;
       AfcController.OnUserTune();
+      AfcWindow?.AbortPolarityCalibration();
       RadioLink.IncrementDownlinkFrequency(delta);
       RadioLinkToRadio();
       BeginInvoke(RadioLinkToUi);
@@ -610,6 +665,7 @@ namespace SkyRoof
         if (ctx.CatControl.Rx != null)
           SendCatRxFrequency(
             RadioLink.CorrectedDownlinkFrequency + AfcRxOffset,
+            afcCalibrationActive ? AfcCatWriteSource.Calibration :
             ctx.Settings.Afc.Enabled &&
               AfcController.Snapshot.Control == AfcControlMode.Auto &&
               Math.Abs(AfcRxOffset) > 0.5

@@ -1,3 +1,31 @@
+# SkyRoof Fork v.1.60 / SkyRoof Fork 1.60 版本说明
+
+Release date / 发布日期: 2026-10-30. Based on VE3NEA/SkyRoof v.1.56; AFC stabilization release.
+
+## English — changes since v.1.59
+
+- Fixed AFC's zero-correction lock by decoupling live RX CAT readback from Ignore Dial Knob; operator dial feedback remains disabled when requested.
+- Added bounded, self-restoring RX-only CAT/IF polarity calibration (two probe/restore cycles) before automatic frequency writes when polarity is unknown.
+- Prevented unverified Doppler-derived polarity from opening the AFC servo. Added PTT, stale IF, lost-lock and CAT timeout fail-safe handling and a deferred RX restoration path.
+- Added CAT readback freshness and polarity-probe states to the bilingual AFC console, along with unit tests and updated operator documentation.
+- No changes to TX frequency, persistent transponder/manual offsets, RIT/XIT, or the underlying satellite ephemeris model.
+- Automated synthetic/CAT-state tests do not replace IC-9700 real-radio IF/CAT timing verification.
+
+## 中文 — 相对 v.1.59 的变化
+
+- 修复 AFC 信号已锁定但修正仍为 0 Hz 的控制前置条件：将 RX CAT 实际频率读回从 Ignore Dial Knob 功能中独立出来。
+- 新增限时、可恢复的 RX-only RF/IF 方向自动标定，两组小幅调谐/回退均得到 CAT 读回和 IF 观测确认后，才开放自动 AFC 写频。
+- 卫星多普勒引起的普通频率变化不再单独作为开放 AFC 写频的方向证明；保留 PTT、失号、超时和 CAT 异常保护，并补充延迟回退路径。
+- AFC 中英界面新增 CAT 读回新鲜度和方向标定状态；加入回归测试与使用说明。
+- 不修改 TX、永久转发器修正、手动频偏、RIT/XIT 和卫星轨道模型。
+- 合成数据及 CAT 状态机通过测试不代表 IC-9700 实机完成验收，仍需 IF 与 CAT 联合测试。
+
+## Release process / 发布流程
+
+唯一版本来源：`Directory.Build.props` → `1.60`。合并至 master 后自动完成 Windows x64 构建、xUnit 测试与安装包发布；有签名能力时按原签名流程处理，否则依现有工作流发布未签名 pre-release。保留 v.1.59 以便回退。
+
+---
+
 # SkyRoof Fork v.1.59 / SkyRoof Fork 1.59 版本说明
 
 Release date / 发布日期: 2026-10-30. Source: `Iu-yang1/SkyRoof`, based on VE3NEA/SkyRoof v.1.56.

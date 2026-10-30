@@ -8,6 +8,14 @@ it does not edit transponder tuning, stored manual corrections, RIT, XIT,
 or uplink/TX frequency. IC-9700 USB and LAN IF output are documented in
 the [Icom IC-9700 manual](https://icomuk.co.uk/files/icom/PDF/productManual/IC-9700_ENG_Basic_6.pdf).
 
+## Automatic RX CAT/IF polarity calibration (v1.60)
+
+- With AFC Auto and RF/IF sign set to 0, the servo waits for a stable real 12-kHz IF reference and time-aligned RX CAT readbacks before a temporary RX-only calibration.
+- Two small CAT probe/restore cycles are required: normally 80 Hz for FM or 40 Hz for CW/SSB pilot, rounded to the configured CAT tuning step. All four acknowledged CAT/IF movements must agree in polarity. The probe is restored before AFC writes are enabled.
+- The probe is an ephemeral RX layer, never a saved satellite correction, RIT/XIT or TX write. Lost reference, PTT, timeout, satellite/mode changes or manual tuning cancel/restore the probe. Failed calibration blocks automatic correction until reset/reacquisition.
+- `Ignore Dial Knob` no longer suppresses the actual CAT RX frequency readings needed by AFC; it only suppresses dial-knob ownership feedback.
+- The console now distinguishes actual CAT readback freshness and polarity-calibration state from signal lock. Signal lock alone does not imply closed-loop AFC readiness.
+
 ## Updated P1–P4 operator interface
 
 The AFC console now has **Tracking** and **Advanced settings** tabs.

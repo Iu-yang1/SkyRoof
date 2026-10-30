@@ -153,11 +153,29 @@ namespace SkyRoof.AFC
       }
     }
 
+    /// <summary>
+    /// Accept a direction only after an independent, closed-loop CAT/IF
+    /// calibration has verified both probe and restore readbacks.
+    /// </summary>
+    public void ConfirmCalibratedSign(int sign)
+    {
+      if (sign != 1 && sign != -1) return;
+      lock (sync)
+      {
+        if (state.State == AfcLockState.Fault) return;
+        inferredSign = sign;
+        polarityCandidate = sign;
+        polarityVotes = 3;
+        state = state with { MappingSign = sign };
+      }
+    }
+
     public void Observe(AfcObservation obs, double catReadbackHz,
       int configuredSign, double maxCorrectionHz,
       double fmDeadbandHz, double toneDeadbandHz, bool transmitting,
       bool catReadbackIsTimeAligned = true,
-      bool confirmedOwnAfcReadback = false)
+      bool confirmedOwnAfcReadback = false,
+      bool calibrationInProgress = false)
     {
       lock (sync)
       {
@@ -271,7 +289,8 @@ namespace SkyRoof.AFC
           }
         }
         bool mayWrite = state.Control == AfcControlMode.Auto &&
-          confirmations >= 3 && sign != 0 && !transmitting;
+          confirmations >= 3 && sign != 0 && !transmitting &&
+          !calibrationInProgress;
         if (obs.Mode == AfcSignalMode.SSB && !obs.HasAbsoluteReference)
           mayWrite = false;
         if (mayWrite)

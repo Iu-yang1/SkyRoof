@@ -99,6 +99,13 @@ namespace SkyRoof
       Interlocked.Read(
         ref RejectedIcomScopeControlCountValue);
 
+    // Ignore Dial Knob affects operator feedback, not AFC's need to read
+    // the actual receiver frequency. The CAT worker remains the sole reader.
+    internal Func<bool>? AfcReadbackRequired;
+    public static bool ShouldReadRxFrequency(bool ignoreDialKnob,
+      bool afcReadbackRequired, bool receiverReadable) =>
+      receiverReadable && (!ignoreDialKnob || afcReadbackRequired);
+
     public event Action<long, DateTime>? RxReadbackSampled;
     public event EventHandler? RxTuned;
     public event EventHandler? TxTuned;
@@ -495,7 +502,8 @@ namespace SkyRoof
       if (!readFrequency.HasValue) return;
       long frequency = readFrequency.Value;
 
-      DialKnobSpinning = LastReadRxFrequency != 0 && // first read - ignore, no previous value
+      DialKnobSpinning = !IgnoreDialKnob &&
+        LastReadRxFrequency != 0 && // first read - ignore, no previous value
         IsDiff(frequency, LastReadRxFrequency) &&    // same freq as before, no change
         IsDiff(frequency, LastWrittenRxFrequency) && // new freq was written, ingnore
           IsDiff(frequency, LastWrittenTxFrequency); // tx freq read by accident, ignore
@@ -1312,7 +1320,9 @@ namespace SkyRoof
     private bool NeedToReadRxFrequency()
     {
       if (CatMode == OperatingMode.TxOnly) return false;
-      return !IgnoreDialKnob && (Ptt == false || CatMode == OperatingMode.RxOnly);
+      return ShouldReadRxFrequency(IgnoreDialKnob,
+        AfcReadbackRequired?.Invoke() == true,
+        Ptt == false || CatMode == OperatingMode.RxOnly);
     }
 
     private bool NeedToReadTxFrequency()

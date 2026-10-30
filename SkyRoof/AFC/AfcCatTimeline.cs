@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace SkyRoof.AFC
 {
-  public enum AfcCatWriteSource { SatelliteModel, Afc, Operator }
+  public enum AfcCatWriteSource { SatelliteModel, Afc, Operator, Calibration }
 
   /// <summary>
   /// Bounded CAT chronology. A request to write a frequency is NOT a readback
@@ -63,6 +63,31 @@ namespace SkyRoof.AFC
           catHz = 0;
           return false;
         }
+        return true;
+      }
+    }
+
+    /// <summary>
+    /// Diagnostic only: newest actual CAT RX read and its age. Not a
+    /// substitute for TryReadbackAt when making IF/CAT control decisions.
+    /// </summary>
+    public bool TryLatestReadback(DateTime nowUtc, out long catHz,
+      out double ageSeconds)
+    {
+      catHz = 0;
+      ageSeconds = double.PositiveInfinity;
+      if (nowUtc.Kind != DateTimeKind.Utc) return false;
+      lock (sync)
+      {
+        DateTime newest = default;
+        foreach (var entry in readbacks)
+          if (entry.Utc <= nowUtc && entry.Utc > newest)
+          {
+            newest = entry.Utc;
+            catHz = entry.CatHz;
+          }
+        if (newest == default) return false;
+        ageSeconds = (nowUtc - newest).TotalSeconds;
         return true;
       }
     }

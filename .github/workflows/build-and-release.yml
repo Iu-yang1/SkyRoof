@@ -191,14 +191,20 @@ jobs:
             - AFC Live Tracking, Advanced Settings and operator diagnostic text support both languages.
             - IC-9700 LAN Spectrum toolbar: START / STOP, CLEAR, SYNC, SETS; readable REF, VBW, AVG, SMOOTH, ZOOM labels.
             - Includes DPI-responsive two-row scope toolbar refinements and MORE popup lifetime crash fix.
-            - CAT, AFC correction, Doppler and telemetry algorithms unchanged.
+            - Fix: RX CAT frequency readback remains available to AFC even with Ignore Dial Knob.
+            - Add bounded two-cycle RX-only CAT/IF direction calibration with hardware readback, timeout/PTT safety, and frequency restoration before Auto AFC.
+            - Show CAT readback age and calibration progress in the bilingual AFC console; add regression tests.
+            - Preserve TX frequency and persistent satellite/transponder offsets.
 
             ### 中文
             - 设置页新增简体中文 / English 切换，保留原始配置键名及参数功能，界面语言可持久化。
             - AFC 实时跟踪、控制状态、诊断信息与高级设置提供中英双语。
             - IC-9700 LAN 频谱工具栏使用 START / STOP、CLEAR、SYNC、SETS 英文按钮。
             - 包含 DPI 双行布局和 MORE 菜单对象释放异常修复。
-            - 较少使用的技术参数说明翻译仍在完善，不影响原有设备控制。
+            - AFC 新增 RX CAT 实际频率读回解耦、自动 RF/IF 方向标定及恢复验证，修复信号锁定而修正量为零的问题。
+            - 校准仅作用于 RX；新增 CAT 读回时效、PTT 冻结、失号/超时回退和状态诊断。
+            - 保留原有中英界面和频谱 UI 调整，不改变 TX、永久转发器偏移或卫星轨道模型。
+            - IC-9700 实机闭环表现仍需联合 IF/CAT 验收。
 
             Full changelog / 完整更新记录:
             https://github.com/Iu-yang1/SkyRoof/blob/master/FORK-CHANGELOG.md
