@@ -123,7 +123,7 @@ namespace SkyRoof.SSTV
     private async Task RunAsync(ChannelReader<float[]> reader, CancellationToken token,
       SstvReceiveSource source, int version)
     {
-      using var decoder = new SstvDecoder();
+      SstvDecoder decoder = new();
       var ifDemod = new SstvIfAudioDemodulator();
       double fmPhase = 0;
       long lastDropped = 0;
@@ -146,7 +146,12 @@ namespace SkyRoof.SSTV
             // A gap invalidates SSTV scan timing; resync instead of joining
             // disconnected PCM into a plausible-looking corrupted image.
             lastDropped = droppedNow;
-            decoder.Flush();
+            decoder.ImageUpdated -= OnImage;
+            decoder.ImageCompleted -= OnImage;
+            decoder.Dispose();
+            decoder = new SstvDecoder();
+            decoder.ImageUpdated += OnImage;
+            decoder.ImageCompleted += OnImage;
             ifDemod.Reset();
             fmPhase = 0;
             // Keep receiving, but do not claim seamless scan timing.
@@ -172,7 +177,7 @@ namespace SkyRoof.SSTV
       {
         decoder.ImageUpdated -= OnImage;
         decoder.ImageCompleted -= OnImage;
-        // Dispose internally releases DSP resources without calling UI.
+        decoder.Dispose();
       }
     }
 
