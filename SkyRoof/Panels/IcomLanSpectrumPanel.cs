@@ -44,6 +44,7 @@ namespace SkyRoof
     private readonly FlowLayoutPanel DisplayToolbar = new();
     private readonly FlowLayoutPanel ScopeActionsToolbar = new();
     private readonly Button MoreScopeControlsBtn = new();
+    private readonly ScopeOwnedContextMenu MoreScopeMenu = new();
     private readonly Dictionary<string, FlowLayoutPanel> ScopeGroups = new();
     private readonly Dictionary<string, Control[]> ScopeGroupMembers = new();
     private TableLayoutPanel? SpectrumRootLayout;
@@ -140,6 +141,9 @@ namespace SkyRoof
       };
 
       FormClosing += IcomLanSpectrumPanel_FormClosing;
+      // The popup must outlive ToolStripDropDown's Closed/focus callbacks.
+      // Dispose it only with the owning form, never during menu.Closed.
+      Disposed += (_, _) => MoreScopeMenu.Dispose();
 
       UiTimer.Tick += (_, _) =>
       {
@@ -478,8 +482,16 @@ namespace SkyRoof
 
     private void ShowMoreScopeControlsMenu()
     {
-      var menu = new ContextMenuStrip();
-      ToolStripMenuItem settings = new("Spectrum settings…");
+      if (IsDisposed || Disposing || MoreScopeControlsBtn.IsDisposed ||
+          !MoreScopeControlsBtn.IsHandleCreated)
+        return;
+
+      // Build against the same panel-owned instance every time. A menu can
+      // be closed by focus changes during a ToolStrip event; disposing it
+      // synchronously in Closed was the source of ObjectDisposedException.
+      if (!MoreScopeMenu.Rebuild(menu =>
+      {
+        ToolStripMenuItem settings = new("Spectrum settings…");
       settings.Click += (_, _) => SettingsBtn.PerformClick();
       menu.Items.Add(settings);
       if (!ReadbackBtn.Visible)
@@ -548,8 +560,11 @@ namespace SkyRoof
           !ScopeGroups["r-vbw"].Visible)
         menu.Items.Add("REF / SPEED / VBW in Spectrum settings…", null,
           (_, _) => SettingsBtn.PerformClick());
-      menu.Closed += (_, _) => menu.Dispose();
-      menu.Show(MoreScopeControlsBtn, new Point(0, MoreScopeControlsBtn.Height));
+      }))
+        return;
+
+      MoreScopeMenu.Menu.Show(MoreScopeControlsBtn,
+        new Point(0, MoreScopeControlsBtn.Height));
     }
 
     private string ScopeToolbarDiagnostics()
@@ -3341,6 +3356,8 @@ namespace SkyRoof
 
     private void IcomLanSpectrumPanel_FormClosing(object? sender, FormClosingEventArgs e)
     {
+      if (!MoreScopeMenu.Menu.IsDisposed)
+        MoreScopeMenu.Menu.Close();
       ctx.CatControl.IcomScopeReadbackReceived -=
         CatControl_IcomScopeReadbackReceived;
       ctx.CatControl.IcomFixedEdgeReadbackReceived -=
