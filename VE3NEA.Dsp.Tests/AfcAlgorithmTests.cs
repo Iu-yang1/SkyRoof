@@ -445,6 +445,20 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void AFC_WatchdogReleasesProbeWithoutNewIfObservation()
+    {
+      var probe = new AfcPolarityCalibrator();
+      for (int k = 0; k < 3; k++)
+        probe.Observe(new(AfcSignalMode.FM, T0.AddMilliseconds(600 * k),
+          9, 95, 4, .95, true), 145000000, false, true, 10);
+      probe.OffsetHz.Should().Be(80);
+      probe.Watchdog(T0.AddSeconds(12), true);
+      probe.State.Should().Be(AfcPolarityCalibrator.Phase.Failed);
+      probe.OffsetHz.Should().Be(0);
+      probe.VerifiedSign.Should().Be(0);
+    }
+
+    [Fact]
     public void AFC_PreventsAutomaticWritesUntilProbeCompletes()
     {
       var controller = new AfcController();
