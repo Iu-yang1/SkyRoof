@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.IO;
 using System.Reflection;
 using System.Threading;
 using System.Windows.Forms;
@@ -11,22 +12,135 @@ namespace VE3NEA.Dsp.Tests;
 public sealed class IcomScopeToolbarLayoutTests
 {
   [Theory]
-  [InlineData(920, 820, 1.0f)]
-  [InlineData(820, 820, 1.0f)]
-  [InlineData(615, 820, .75f)]
-  [InlineData(400, 1000, .55f)]
-  public void CompactToolbarFitsWithoutWrappingOrHiddenControls(
-    int available, int required, float expected)
+  [InlineData(880, 100, ScopeToolbarDensity.Standard)]
+  [InlineData(880, 125, ScopeToolbarDensity.Compact)]
+  [InlineData(880, 150, ScopeToolbarDensity.Restricted)]
+  [InlineData(880, 200, ScopeToolbarDensity.Minimal)]
+  [InlineData(560, 100, ScopeToolbarDensity.Restricted)]
+  [InlineData(560, 125, ScopeToolbarDensity.Minimal)]
+  [InlineData(560, 150, ScopeToolbarDensity.Minimal)]
+  [InlineData(560, 200, ScopeToolbarDensity.Minimal)]
+  public void WidthBudgetSelectsTwoRowLayoutsWithoutShrinkingFonts(
+    int available, int percent, ScopeToolbarDensity expected)
   {
-    Assert.InRange(IcomScopeToolbarLayout.CalculateScale(available, required),
-      expected - .0001f, expected + .0001f);
+    int Scale(int size) => (int)Math.Ceiling(size * percent / 100.0);
+    ScopeToolbarDensity mode = IcomScopeToolbarLayout.Pick(
+      available,
+      Scale(810), Scale(855), Scale(580), Scale(625),
+      Scale(430), Scale(460), Scale(245), Scale(265));
+    Assert.Equal(expected, mode);
+
+    var selected = mode switch
+    {
+      ScopeToolbarDensity.Standard => (Scale(810), Scale(855)),
+      ScopeToolbarDensity.Compact => (Scale(580), Scale(625)),
+      ScopeToolbarDensity.Restricted => (Scale(430), Scale(460)),
+      _ => (Scale(245), Scale(265))
+    };
+    Assert.True(IcomScopeToolbarLayout.Fits(available,
+      selected.Item1, selected.Item2));
   }
 
   [Fact]
-  public void NoMeasurementFallsBackToIdentityScale()
+  public void NoWidthNeverClaimsStandardModeFits()
   {
-    Assert.Equal(1f, IcomScopeToolbarLayout.CalculateScale(0, 800));
-    Assert.Equal(1f, IcomScopeToolbarLayout.CalculateScale(900, 0));
+    Assert.Equal(ScopeToolbarDensity.Minimal,
+      IcomScopeToolbarLayout.Pick(0, 5, 5, 4, 4, 3, 3, 2, 2));
+  }
+
+  [Theory]
+  [InlineData(0, 50, 100, true)]
+  [InlineData(50, 50, 100, true)]
+  [InlineData(50, 51, 100, false)]
+  [InlineData(-1, 10, 100, false)]
+  public void BoundsCheckerDetectsHorizontalClipping(
+    int x, int width, int client, bool expected)
+  {
+    Assert.Equal(expected, IcomScopeToolbarLayout.IsWithin(x, width, client));
+  }
+
+  // P3: Windows CI creates a representative two-row rendering matrix at
+  // 100/125/150/200% font sizes and four dock widths. These are layout
+  // *fixtures*, not screenshots of a connected IC-9700 panel.
+  [Theory]
+  [InlineData(560, 100)]
+  [InlineData(560, 125)]
+  [InlineData(560, 150)]
+  [InlineData(560, 200)]
+  [InlineData(720, 100)]
+  [InlineData(720, 125)]
+  [InlineData(720, 150)]
+  [InlineData(720, 200)]
+  [InlineData(880, 100)]
+  [InlineData(880, 125)]
+  [InlineData(880, 150)]
+  [InlineData(880, 200)]
+  [InlineData(1200, 100)]
+  [InlineData(1200, 125)]
+  [InlineData(1200, 150)]
+  [InlineData(1200, 200)]
+  public void TwoRowFixtureRendersWithoutOverlap(
+    int dockWidth, int dpiPercent)
+  {
+    Exception? failure = null;
+    var t = new Thread(() =>
+    {
+      try
+      {
+        using var font = new Font("Segoe UI", 10f * dpiPercent / 100f);
+        using var pane = new Panel
+        {
+          Size = new Size(dockWidth, Math.Max(96, 90 * dpiPercent / 100)),
+          BackColor = Color.FromArgb(238, 246, 251)
+        };
+        int rowHeight = pane.Height / 2;
+        int[] fullWidths = { 810, 855 };
+        int[] compactWidths = { 580, 625 };
+        int[] restrictedWidths = { 430, 460 };
+        int[] minimalWidths = { 245, 265 };
+        int Scale(int size) => (int)Math.Ceiling(size * dpiPercent / 100.0);
+        var mode = IcomScopeToolbarLayout.Pick(dockWidth,
+          Scale(fullWidths[0]), Scale(fullWidths[1]),
+          Scale(compactWidths[0]), Scale(compactWidths[1]),
+          Scale(restrictedWidths[0]), Scale(restrictedWidths[1]),
+          Scale(minimalWidths[0]), Scale(minimalWidths[1]));
+        var selected = mode switch
+        {
+          ScopeToolbarDensity.Standard => fullWidths,
+          ScopeToolbarDensity.Compact => compactWidths,
+          ScopeToolbarDensity.Restricted => restrictedWidths,
+          _ => minimalWidths
+        };
+        for (int row = 0; row < 2; row++)
+        {
+          int total = Scale(selected[row]);
+          Assert.True(IcomScopeToolbarLayout.IsWithin(0, total, dockWidth));
+          var marker = new Label
+          {
+            Bounds = new Rectangle(0, row * rowHeight, total, rowHeight - 2),
+            Font = font, BorderStyle = BorderStyle.FixedSingle,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Text = row == 0 ? $"RADIO / {mode}" : $"DISPLAY / {mode}"
+          };
+          pane.Controls.Add(marker);
+        }
+        using var bitmap = new Bitmap(pane.Width, pane.Height);
+        pane.DrawToBitmap(bitmap, new Rectangle(Point.Empty, pane.Size));
+        string? dir = Environment.GetEnvironmentVariable(
+          "SKYROOF_SCOPE_LAYOUT_ARTIFACT_DIR");
+        if (!string.IsNullOrWhiteSpace(dir))
+        {
+          Directory.CreateDirectory(dir);
+          bitmap.Save(Path.Combine(dir,
+            $"scope-two-row-{dockWidth}px-dpi{dpiPercent}.png"));
+        }
+      }
+      catch (Exception ex) { failure = ex; }
+    });
+    t.SetApartmentState(ApartmentState.STA);
+    t.Start();
+    Assert.True(t.Join(TimeSpan.FromSeconds(10)));
+    if (failure != null) throw new Xunit.Sdk.XunitException(failure.ToString());
   }
 
   [Theory]
