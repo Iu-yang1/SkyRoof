@@ -601,7 +601,7 @@ namespace SkyRoof.AFC
             snapshot.State == AfcLockState.Locked;
           polarityProbe.Observe(observation, readback,
             owner.IsAfcProbeReadbackConfirmedAt(observation.SampleUtc),
-            eligible, ctx.Settings.Cat.TuningStep);
+            eligible, ctx.Settings.Cat.TuningStep, DateTime.UtcNow);
           if (polarityProbe.VerifiedSign != 0)
             owner.AfcController.ConfirmCalibratedSign(
               polarityProbe.VerifiedSign);
@@ -790,7 +790,8 @@ namespace SkyRoof.AFC
         AfcPolarityCalibrator.Phase.Probing => "方向校准: 测试调谐",
         AfcPolarityCalibrator.Phase.Restoring => "方向校准: 恢复并验证",
         AfcPolarityCalibrator.Phase.Complete => "方向校准: 已验证",
-        AfcPolarityCalibrator.Phase.Failed => "方向校准: 失败，已禁止自动修正",
+        AfcPolarityCalibrator.Phase.Failed =>
+          $"方向校准失败，禁止自动修正：{polarityProbe.Detail}",
         _ => "方向校准: 等待可靠 CAT/IF 数据"
       };
       string calibrationEn = polarityProbe.Detail;
