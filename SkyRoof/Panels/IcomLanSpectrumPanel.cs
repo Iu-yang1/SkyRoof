@@ -481,8 +481,11 @@ namespace SkyRoof
       settings.Click += (_, _) => SettingsBtn.PerformClick();
       menu.Items.Add(settings);
       if (!ReadbackBtn.Visible)
-        menu.Items.Add("Read back from IC-9700", null,
+      {
+        var readback = menu.Items.Add("Read back from IC-9700", null,
           (_, _) => RequestScopeReadback());
+        readback.Enabled = ReadbackBtn.Enabled;
+      }
       if (!ScopeGroups["d-clear"].Visible)
         menu.Items.Add("Clear spectrum", null, (_, _) =>
         {
@@ -515,11 +518,15 @@ namespace SkyRoof
           band.DropDownItems.Add(ScopeBandBox.Items[i].ToString(), null,
             (_, _) => ScopeBandBox.SelectedIndex = choice);
         }
+        band.Enabled = ScopeBandBox.Enabled;
         menu.Items.Add(band);
       }
       void LocalChoices(string caption, ComboBox box)
       {
-        var item = new ToolStripMenuItem(caption);
+        var item = new ToolStripMenuItem(caption)
+        {
+          Enabled = box.Enabled
+        };
         for (int i = 0; i < box.Items.Count; i++)
         {
           int choice = i;
