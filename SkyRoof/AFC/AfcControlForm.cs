@@ -565,7 +565,11 @@ namespace SkyRoof.AFC
               observation.Generation != input.Generation) return;
           var cfg = ctx.Settings.Afc;
           double readback = owner.GetAfcReadbackAt(observation.SampleUtc);
-          bool blocked = polarityProbe.BlocksAutomaticControl;
+          // An inferred sign from incidental Doppler motion is not proof.
+          // Only a deliberate, restored probe or an explicit operator
+          // mapping may open the automatic CAT servo.
+          bool blocked = cfg.RfIfSign == 0 &&
+            polarityProbe.State != AfcPolarityCalibrator.Phase.Complete;
           owner.AfcController.Observe(observation, readback,
             cfg.RfIfSign, Math.Clamp(cfg.MaxCorrectionHz, 1, 10000),
             Math.Clamp(cfg.FmDeadbandHz, 1, 500),
@@ -579,8 +583,7 @@ namespace SkyRoof.AFC
           bool eligible = cfg.RfIfSign == 0 &&
             EffectiveControl() == AfcControlMode.Auto &&
             !owner.IsAfcTransmitting &&
-            snapshot.State == AfcLockState.Locked &&
-            (polarityProbe.Active || snapshot.MappingSign == 0);
+            snapshot.State == AfcLockState.Locked;
           polarityProbe.Observe(observation, readback,
             owner.IsAfcProbeReadbackConfirmedAt(observation.SampleUtc),
             eligible, ctx.Settings.Cat.TuningStep);
