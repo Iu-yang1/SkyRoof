@@ -44,6 +44,8 @@ namespace SkyRoof
     internal bool RxAfcChecked => RxAfcCheckbox.Checked;
     internal double PredictedDownlinkDopplerHz =>
       -RadioLink.DownlinkFrequency * RadioLink.DopplerFactor;
+    internal double PredictedRxCatRateHzPerSecond =>
+      RadioLink.IsTerrestrial ? 0 : RadioLink.DownlinkDopplerRate;
 
     internal AfcSignalMode CurrentAfcMode =>
       (RadioLink.IsTerrestrial || RadioLink.TxCust == null
@@ -83,18 +85,18 @@ namespace SkyRoof
         out ageSeconds);
     }
 
-    internal bool IsAfcProbeReadbackConfirmedAt(DateTime sampleUtc)
+    internal bool IsAfcProbeReadbackConfirmedAt(DateTime sampleUtc,
+      DateTime phaseStartedUtc)
     {
-      return AfcCatTimeline.TryReadbackAt(sampleUtc, out long catHz) &&
-        AfcCatTimeline.ExpectedWriteSource(catHz, sampleUtc)
-          == AfcCatWriteSource.Calibration;
+      return AfcCatTimeline.TryAttributedReadbackAt(
+        sampleUtc, AfcCatWriteSource.Calibration, out _,
+        notBeforeUtc: phaseStartedUtc);
     }
 
     internal bool IsAfcReadbackConfirmedAt(DateTime sampleUtc)
     {
-      return AfcCatTimeline.TryReadbackAt(sampleUtc, out long catHz) &&
-        AfcCatTimeline.ExpectedWriteSource(catHz, sampleUtc)
-          == AfcCatWriteSource.Afc;
+      return AfcCatTimeline.TryAttributedReadbackAt(
+        sampleUtc, AfcCatWriteSource.Afc, out _);
     }
 
     internal double GetAfcReadbackAt(DateTime sampleUtc)
@@ -127,7 +129,9 @@ namespace SkyRoof
     /// </summary>
     internal void SetAfcCalibrationOffsetHz(double offset, bool active)
     {
-      if (!double.IsFinite(offset) || Math.Abs(offset) > 100) return;
+      // Upper bound must accommodate the 150-Hz FM polarity probe.
+      // Still much smaller than the user-configured AFC servo limit.
+      if (!double.IsFinite(offset) || Math.Abs(offset) > 250) return;
       bool changed = Math.Abs(afcCalibrationOffsetHz - offset) >= .5;
       afcCalibrationOffsetHz = offset;
       afcCalibrationActive = active;

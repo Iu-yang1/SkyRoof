@@ -381,33 +381,125 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
-    public void AFC_AutoProbeRequiresFourMatchingCATIFEdgesAndRestoresRX()
+    public void CAT_ProbeReadbackMustFollowWriteInsteadOfEarlierReadback()
+    {
+      var history = new AfcCatTimeline();
+      history.RecordReadback(145000150, T0);
+      history.RecordRequest(145000150, T0.AddMilliseconds(250),
+        AfcCatWriteSource.Calibration);
+      history.TryAttributedReadbackAt(T0.AddMilliseconds(400),
+        AfcCatWriteSource.Calibration, out _).Should().BeFalse(
+          "a request cannot be acknowledged by an older readback");
+      history.RecordReadback(145000150, T0.AddMilliseconds(700));
+      history.TryAttributedReadbackAt(T0.AddMilliseconds(900),
+        AfcCatWriteSource.Calibration, out long cat).Should().BeTrue();
+      cat.Should().Be(145000150);
+      history.TryAttributedReadbackAt(T0.AddMilliseconds(900),
+        AfcCatWriteSource.Calibration, out _,
+        notBeforeUtc: T0.AddMilliseconds(500)).Should().BeFalse(
+          "a current readback may not confirm an earlier phase's command");
+      history.RecordRequest(145000150, T0.AddMilliseconds(1050),
+        AfcCatWriteSource.Calibration);
+      history.RecordReadback(145000150, T0.AddMilliseconds(1300));
+      history.TryAttributedReadbackAt(T0.AddMilliseconds(1400),
+        AfcCatWriteSource.Calibration, out _,
+        notBeforeUtc: T0.AddMilliseconds(1000)).Should().BeTrue();
+    }
+
+    [Fact]
+    public void AFC_AutoProbeVerifiesSettledFMAndConfirmedReturn()
     {
       var probe = new AfcPolarityCalibrator();
-      // A positive CAT movement shifts this synthetic IF downward.
-      // Four independent CAT-acknowledged edges establish sign +1.
-      int i = 0;
-      void Sample(double cat, double ifHz, bool ack)
+      // IF window center lags actual CAT/processing time by ~1 second.
+      void Sample(double t, double cat, double ifHz, bool ack)
       {
-        probe.Observe(new(AfcSignalMode.FM, T0.AddMilliseconds(600 * i++),
-          27, ifHz, 4, .96, true), cat, ack, true, 10);
+        probe.Observe(new(AfcSignalMode.FM, T0.AddSeconds(t),
+          27, ifHz, 4, .76, true), cat, ack, true, 10,
+          T0.AddSeconds(t + 1.0));
       }
-      Sample(145000000, 110, false);
-      Sample(145000000, 110, false);
-      Sample(145000000, 110, false);
+      Sample(0, 145000000, 110, false);
+      Sample(.6, 145000000, 110, false);
+      Sample(1.2, 145000000, 110, false);
       probe.State.Should().Be(AfcPolarityCalibrator.Phase.Probing);
-      probe.OffsetHz.Should().Be(80);
-      Sample(145000080, 30, true);
+      probe.OffsetHz.Should().Be(150);
+
+      // A CAT readback taken near the command is NOT a settled IF window.
+      Sample(3.0, 145000150, -40, true);
+      probe.State.Should().Be(AfcPolarityCalibrator.Phase.Probing);
+      Sample(3.6, 145000150, -40, true);
+      Sample(4.2, 145000150, -40, true);
       probe.State.Should().Be(AfcPolarityCalibrator.Phase.Restoring);
       probe.OffsetHz.Should().Be(0);
-      Sample(145000000, 110, true);
-      probe.State.Should().Be(AfcPolarityCalibrator.Phase.Probing);
-      Sample(145000080, 30, true);
-      probe.VerifiedSign.Should().Be(0, "restore is not yet verified");
-      Sample(145000000, 110, true);
+      probe.VerifiedSign.Should().Be(0, "a one-way CAT move is insufficient");
+
+      Sample(6.6, 145000000, 110, true);
+      probe.VerifiedSign.Should().Be(0);
+      Sample(7.2, 145000000, 110, true);
       probe.State.Should().Be(AfcPolarityCalibrator.Phase.Complete);
       probe.OffsetHz.Should().Be(0);
       probe.VerifiedSign.Should().Be(1);
+    }
+
+    [Fact]
+    public void AFC_ProbeLearnsNegativeDirectionOnlyFromRoundTrip()
+    {
+      var probe = new AfcPolarityCalibrator();
+      void Sample(double t, double cat, double ifHz, bool ack)
+      {
+        probe.Observe(new(AfcSignalMode.FM, T0.AddSeconds(t),
+          32, ifHz, 3, .9, true), cat, ack, true, 10,
+          T0.AddSeconds(t + 1));
+      }
+      Sample(0, 145000000, 0, false);
+      Sample(.6, 145000000, 0, false);
+      Sample(1.2, 145000000, 0, false);
+      Sample(3.6, 145000150, 150, true);
+      Sample(4.2, 145000150, 150, true);
+      Sample(6.6, 145000000, 0, true);
+      Sample(7.2, 145000000, 0, true);
+      probe.State.Should().Be(AfcPolarityCalibrator.Phase.Complete);
+      probe.VerifiedSign.Should().Be(-1);
+    }
+
+    [Fact]
+    public void AFC_SatelliteDopplerTrackingDoesNotCorruptProbePolarity()
+    {
+      var probe = new AfcPolarityCalibrator();
+      const double rateHzPerSecond = 50;
+      // The satellite model moves CAT by 50 Hz/s independently of the
+      // one-shot 150-Hz probe, but the corrected IF reference is stable.
+      void Sample(double t, double temporaryOffset, double ifHz, bool ack)
+      {
+        double cat = 145000000 + rateHzPerSecond * t + temporaryOffset;
+        probe.Observe(new(AfcSignalMode.FM, T0.AddSeconds(t),
+          28, ifHz, 4, .91, true), cat, ack, true, 10,
+          T0.AddSeconds(t + 1), rateHzPerSecond);
+      }
+      Sample(0, 0, 110, false);
+      Sample(.6, 0, 110, false);
+      Sample(1.2, 0, 110, false);
+      probe.State.Should().Be(AfcPolarityCalibrator.Phase.Probing);
+      Sample(3.6, 150, -40, true);
+      Sample(4.2, 150, -40, true);
+      probe.State.Should().Be(AfcPolarityCalibrator.Phase.Restoring);
+      Sample(6.6, 0, 110, true);
+      Sample(7.2, 0, 110, true);
+      probe.VerifiedSign.Should().Be(1,
+        "normal model Doppler movement must not be treated as the probe step");
+      probe.OffsetHz.Should().Be(0);
+    }
+
+    [Fact]
+    public void AFC_ProbeRejectsCATStepWhoseRoundedSpanWouldExceedSafetyBounds()
+    {
+      var probe = new AfcPolarityCalibrator();
+      for (int k = 0; k < 3; k++)
+        probe.Observe(new(AfcSignalMode.FM, T0.AddMilliseconds(600 * k),
+          52, 100, 4, .9, true), 145000000, false, true, 149,
+          T0.AddMilliseconds(600*k + 1000));
+      probe.State.Should().Be(AfcPolarityCalibrator.Phase.Failed);
+      probe.OffsetHz.Should().Be(0);
+      probe.Detail.Should().Contain("tuning step");
     }
 
     [Fact]
@@ -416,16 +508,17 @@ namespace VE3NEA.Dsp.Tests
       var probe = new AfcPolarityCalibrator();
       for (int k = 0; k < 3; k++)
         probe.Observe(new(AfcSignalMode.FM, T0.AddMilliseconds(600 * k),
-          3, 100, 4, .95, true), 145000000, false, true, 10);
+          3, 100, 4, .95, true), 145000000, false, true, 10,
+          T0.AddMilliseconds(600*k + 1000));
       probe.State.Should().Be(AfcPolarityCalibrator.Phase.Probing);
-      probe.Observe(new(AfcSignalMode.FM, T0.AddSeconds(3),
-        3, 20, 4, .95, true), 145000080, false, true, 10);
+      probe.Observe(new(AfcSignalMode.FM, T0.AddSeconds(5),
+        3, -50, 4, .95, true), 145000150, false, true, 10,
+        T0.AddSeconds(6));
       probe.VerifiedSign.Should().Be(0);
-      probe.Observe(new(AfcSignalMode.FM, T0.AddSeconds(12),
-        3, 20, 4, .95, true), 145000080, false, true, 10);
+      probe.Watchdog(T0.AddSeconds(18), true);
       probe.State.Should().Be(AfcPolarityCalibrator.Phase.Failed);
       probe.OffsetHz.Should().Be(0);
-      probe.BlocksAutomaticControl.Should().BeTrue();
+      probe.Detail.Should().Contain("CAT probe");
     }
 
     [Fact]
@@ -434,10 +527,12 @@ namespace VE3NEA.Dsp.Tests
       var probe = new AfcPolarityCalibrator();
       for (int k = 0; k < 3; k++)
         probe.Observe(new(AfcSignalMode.CW, T0.AddMilliseconds(600 * k),
-          12, 50, 1, .99, true), 432080000, false, true, 10);
+          12, 50, 1, .99, true), 432080000, false, true, 10,
+          T0.AddMilliseconds(600*k + 300));
       probe.OffsetHz.Should().Be(40);
       probe.Observe(new(AfcSignalMode.CW, T0.AddSeconds(2),
-        12, 20, 1, .99, true), 432080040, true, false, 10);
+        12, 20, 1, .99, true), 432080040, true, false, 10,
+        T0.AddSeconds(2.3));
       probe.State.Should().Be(AfcPolarityCalibrator.Phase.Failed);
       probe.OffsetHz.Should().Be(0);
       probe.VerifiedSign.Should().Be(0);
@@ -451,9 +546,10 @@ namespace VE3NEA.Dsp.Tests
       var probe = new AfcPolarityCalibrator();
       for (int k = 0; k < 3; k++)
         probe.Observe(new(AfcSignalMode.FM, T0.AddMilliseconds(600 * k),
-          9, 95, 4, .95, true), 145000000, false, true, 10);
-      probe.OffsetHz.Should().Be(80);
-      probe.Watchdog(T0.AddSeconds(12), true);
+          9, 95, 4, .95, true), 145000000, false, true, 10,
+          T0.AddMilliseconds(600*k + 1000));
+      probe.OffsetHz.Should().Be(150);
+      probe.Watchdog(T0.AddSeconds(18), true);
       probe.State.Should().Be(AfcPolarityCalibrator.Phase.Failed);
       probe.OffsetHz.Should().Be(0);
       probe.VerifiedSign.Should().Be(0);

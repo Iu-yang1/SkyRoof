@@ -11,7 +11,9 @@ the [Icom IC-9700 manual](https://icomuk.co.uk/files/icom/PDF/productManual/IC-9
 ## Automatic RX CAT/IF polarity calibration (v1.60)
 
 - With AFC Auto and RF/IF sign set to 0, the servo waits for a stable real 12-kHz IF reference and time-aligned RX CAT readbacks before a temporary RX-only calibration.
-- Two small CAT probe/restore cycles are required: normally 80 Hz for FM or 40 Hz for CW/SSB pilot, rounded to the configured CAT tuning step. All four acknowledged CAT/IF movements must agree in polarity. The probe is restored before AFC writes are enabled.
+- One verified CAT probe/restore cycle is required: nominally 150 Hz for FM or 40 Hz for CW/SSB pilot, rounded to the configured CAT tuning step. Each edge requires an actual hardware readback and at least two settled IF observations. The return-to-original-frequency step must confirm the same sign before automatic AFC writes are permitted.
+- Expected satellite RX Doppler rate is removed from the CAT step comparison; normal Doppler tracking is not mistaken for a probe response.
+- A CAT request cannot acknowledge itself; the actual readback must follow the request within the same calibration phase. IF evidence is rejected until its averaging window has settled after CAT tuning. Failure text identifies the stage that timed out.
 - The probe is an ephemeral RX layer, never a saved satellite correction, RIT/XIT or TX write. Lost reference, PTT, timeout, satellite/mode changes or manual tuning cancel/restore the probe. Failed calibration blocks automatic correction until reset/reacquisition.
 - `Ignore Dial Knob` no longer suppresses the actual CAT RX frequency readings needed by AFC; it only suppresses dial-knob ownership feedback.
 - The console now distinguishes actual CAT readback freshness and polarity-calibration state from signal lock. Signal lock alone does not imply closed-loop AFC readiness.

@@ -598,10 +598,21 @@ namespace SkyRoof.AFC
           bool eligible = !explicitSign &&
             EffectiveControl() == AfcControlMode.Auto &&
             !owner.IsAfcTransmitting &&
-            snapshot.State == AfcLockState.Locked;
+            (snapshot.State == AfcLockState.Locked ||
+              polarityProbe.Active && snapshot.State == AfcLockState.Hold &&
+              (DateTime.UtcNow - snapshot.LastObservationUtc).TotalSeconds < 3);
+          var phaseBefore = polarityProbe.State;
+          bool probeAcknowledged = owner.IsAfcProbeReadbackConfirmedAt(
+            observation.SampleUtc, polarityProbe.PhaseStartedUtc);
           polarityProbe.Observe(observation, readback,
-            owner.IsAfcProbeReadbackConfirmedAt(observation.SampleUtc),
-            eligible, ctx.Settings.Cat.TuningStep);
+            probeAcknowledged, eligible, ctx.Settings.Cat.TuningStep,
+            DateTime.UtcNow, owner.PredictedRxCatRateHzPerSecond);
+          if (phaseBefore != polarityProbe.State)
+            Serilog.Log.Information(
+              "AFC polarity calibration: {Before} -> {After}, detail={Detail}, IF={If:F1} Hz, CAT={Cat:F0} Hz, readbackAck={Ack}, confidence={Confidence:P0}, sampleUtc={SampleUtc:o}",
+              phaseBefore, polarityProbe.State, polarityProbe.Detail,
+              observation.IfOffsetHz, readback, probeAcknowledged,
+              observation.Confidence, observation.SampleUtc);
           if (polarityProbe.VerifiedSign != 0)
             owner.AfcController.ConfirmCalibratedSign(
               polarityProbe.VerifiedSign);
@@ -726,7 +737,11 @@ namespace SkyRoof.AFC
       polarityProbe.Watchdog(DateTime.UtcNow,
         active && EffectiveControl() == AfcControlMode.Auto &&
         !owner.IsAfcTransmitting &&
-        owner.AfcController.Snapshot.State == AfcLockState.Locked &&
+        (owner.AfcController.Snapshot.State == AfcLockState.Locked ||
+         polarityProbe.Active &&
+           owner.AfcController.Snapshot.State == AfcLockState.Hold &&
+           (DateTime.UtcNow -
+             owner.AfcController.Snapshot.LastObservationUtc).TotalSeconds < 3) &&
         ctx.CatControl.Rx != null);
       owner.SetAfcCalibrationOffsetHz(polarityProbe.OffsetHz,
         polarityProbe.Active);
@@ -790,7 +805,8 @@ namespace SkyRoof.AFC
         AfcPolarityCalibrator.Phase.Probing => "方向校准: 测试调谐",
         AfcPolarityCalibrator.Phase.Restoring => "方向校准: 恢复并验证",
         AfcPolarityCalibrator.Phase.Complete => "方向校准: 已验证",
-        AfcPolarityCalibrator.Phase.Failed => "方向校准: 失败，已禁止自动修正",
+        AfcPolarityCalibrator.Phase.Failed =>
+          $"方向校准失败，禁止自动修正：{polarityProbe.Detail}",
         _ => "方向校准: 等待可靠 CAT/IF 数据"
       };
       string calibrationEn = polarityProbe.Detail;
