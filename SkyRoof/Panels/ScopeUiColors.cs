@@ -61,6 +61,30 @@ namespace SkyRoof
     }
   }
 
+  internal static class IcomScopeStatusSummary
+  {
+    /// <summary>
+    /// Compact text for the visible status strip. It never claims that a
+    /// queued CAT write has been confirmed just because its send succeeded.
+    /// Full packet counters remain in the existing diagnostic report.
+    /// </summary>
+    internal static string Format(
+      string transport, double waterfallFps, string controlPath,
+      bool readOnly, bool backendOnline, bool readbackConfirmed,
+      int pending, int timedOut)
+    {
+      string state =
+        readOnly ? "只读" :
+        !backendOnline ? "控制后端未连接" :
+        timedOut > 0 ? "操作超时" :
+        pending > 0 ? "等待电台确认" :
+        readbackConfirmed ? "已同步" : "待同步";
+      return $"{transport} · {Math.Max(0, waterfallFps):0.0} 帧/s · " +
+        $"控制 {controlPath}（{state}）" +
+        (pending > 0 ? $" · 待确认 {pending}" : "");
+    }
+  }
+
   internal static class IcomScopeToolbarLayout
   {
     /// <summary>
