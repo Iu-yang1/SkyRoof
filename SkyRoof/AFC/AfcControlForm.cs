@@ -316,9 +316,16 @@ namespace SkyRoof.AFC
       offButton.Click += (_, _) => SwitchControl(AfcControlMode.Off);
       assistButton.Click += (_, _) => SwitchControl(AfcControlMode.Assist);
       autoButton.Click += (_, _) => SwitchControl(AfcControlMode.Auto);
-      lockButton.Click += (_, _) => owner.AfcController.LockHere();
+      lockButton.Click += (_, _) =>
+      {
+        AbortPolarityCalibration();
+        owner.AfcController.LockHere();
+      };
       centerButton.Click += (_, _) =>
+      {
+        AbortPolarityCalibration();
         owner.AfcController.CenterOn(ctx.Settings.Afc.DesiredOffsetHz);
+      };
       owner.AfcTargetInvalidated += OnTargetInvalidated;
       input.ObservationAvailable += OnObservation;
       input.DisplayFrameAvailable += OnDisplayFrame;
@@ -543,6 +550,13 @@ namespace SkyRoof.AFC
       if (control == AfcControlMode.Auto && !AutoAllowed) return;
       if (control != AfcControlMode.Auto)
         AbortPolarityCalibration();
+      else if (polarityProbe.State == AfcPolarityCalibrator.Phase.Failed)
+      {
+        // Clicking AUTO again explicitly retries calibration. FM must
+        // reacquire its nominal 12-kHz center, not use LockHere().
+        AbortPolarityCalibration();
+        owner.AfcController.Reset("Retrying verified CAT/IF calibration");
+      }
       ctx.Settings.Afc.Control = control;
       owner.AfcController.Configure(currentMode, EffectiveControl());
       if (currentMode == AfcSignalMode.SSB && ctx.Settings.Afc.SsbPilotEnabled &&
