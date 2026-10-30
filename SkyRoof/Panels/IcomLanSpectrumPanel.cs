@@ -299,7 +299,17 @@ namespace SkyRoof
         (int)Math.Ceiling(36d * DeviceDpi / 96),
         ScopeGroupMembers.Values.SelectMany(c => c).Concat(
           new Control[] { MoreScopeControlsBtn })
-          .Max(c => c.Height + c.Margin.Vertical) + 4);
+          .Max(c => c.Height) + 10);
+      // Center each native Win32 control vertically without feeding previous
+      // margins into a future row-height calculation (avoids resize drift).
+      foreach (Control item in ScopeGroupMembers.Values.SelectMany(c => c)
+        .Concat(new Control[] { ReadbackBtn, SettingsBtn, MoreScopeControlsBtn }))
+      {
+        Padding old = item.Margin;
+        item.Margin = new Padding(old.Left,
+          Math.Max(1, (ScopeToolbarRowHeight - item.Height) / 2),
+          old.Right, 0);
+      }
       foreach (var (name, group) in ScopeGroups)
       {
         int width = 0;
@@ -445,13 +455,30 @@ namespace SkyRoof
       menu.Items.Add(settings);
       if (!ReadbackBtn.Visible)
         menu.Items.Add("Read back from IC-9700", null,
-          (_, _) => ReadbackBtn.PerformClick());
+          (_, _) => RequestScopeReadback());
       if (!ScopeGroups["d-clear"].Visible)
-        menu.Items.Add("Clear spectrum", null, (_, _) => ClearBtn.PerformClick());
+        menu.Items.Add("Clear spectrum", null, (_, _) =>
+        {
+          ScopeState.Clear();
+          SpectrumView.Clear();
+          RefreshScopeGeometryUi();
+        });
       if (!ScopeGroups["d-peak"].Visible)
-        menu.Items.Add("Toggle PEAK", null, (_, _) => PeakBtn.PerformClick());
+        menu.Items.Add("Toggle PEAK", null, (_, _) =>
+        {
+          PeakHold = !PeakHold;
+          SpectrumView.SetPeakHold(PeakHold);
+          UpdateDisplayButtons();
+        });
       if (!ScopeGroups["d-wf"].Visible)
-        menu.Items.Add("Toggle WF", null, (_, _) => WaterfallBtn.PerformClick());
+        menu.Items.Add("Toggle WF", null, (_, _) =>
+        {
+          var settings = ctx.Settings.IcomLanSpectrum;
+          settings.ShowWaterfall = !settings.ShowWaterfall;
+          SpectrumView.SetWaterfallVisible(settings.ShowWaterfall);
+          ctx.Settings.SaveToFile();
+          UpdateDisplayButtons();
+        });
       if (!ScopeGroups["r-band"].Visible)
       {
         var band = new ToolStripMenuItem("Scope band");
