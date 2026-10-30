@@ -884,9 +884,12 @@ namespace SkyRoof
         diagnosticsMenu;
       StatsLabel.ContextMenuStrip =
         diagnosticsMenu;
+      StatsLabel.DoubleClick += (_, _) => ShowSpectrumDiagnostics();
       DiagnosticsBtn.Text = "诊断";
       DiagnosticsBtn.Width = 64;
-      DiagnosticsBtn.Height = 25;
+      DiagnosticsBtn.Height = 24;
+      DiagnosticsBtn.Dock = DockStyle.Fill;
+      DiagnosticsBtn.Margin = new Padding(0);
       DiagnosticsBtn.Click += (_, _) => ShowSpectrumDiagnostics();
       DiagnosticsBtn.ContextMenuStrip = diagnosticsMenu;
       DiagnosticsBtn.FlatStyle = FlatStyle.Flat;
@@ -1336,7 +1339,8 @@ namespace SkyRoof
       RefreshScopeGeometryUi();
 
       StartStopBtn.Text = "启动";
-      StatusLabel.Text = "Spectrum capture stopped.";
+      StatusLabel.Text = "频谱采集已停止。";
+      StatsLabel.Text = "未连接 · 0.0 帧/s · 控制未同步";
     }
 
     private void RefreshSelectedScopeSnapshot()
@@ -1651,6 +1655,7 @@ namespace SkyRoof
         showSpan;
       FixedEdgeEditBtn.Visible =
         !showSpan;
+      FitToolbarsToWidth();
 
       bool previousUpdating =
         UpdatingScopeControlUi;
@@ -2642,16 +2647,13 @@ namespace SkyRoof
       // The detailed counters, remote address, dropped/rejected CAT writes,
       // sequence skips and 475-point packet format remain in Diagnostics.
       // Day-to-day UI contains only actionable state and live throughput.
-      StatsLabel.Text =
-        $"{transportSummary} · {WaterfallDeliveryFps:0.0} 帧/s · " +
-        $"控制 {FormatControlPath(resolvedControlPath)}" +
-        (resolvedControlPath == IcomScopeControlPath.ReadOnly
-          ? "（只读）"
-          : !ScopeReadbackCompletedForSession ? "（待同步）" : "（已同步）") +
-        (PendingScopeControls.Count > 0
-          ? $" · 待确认 {PendingScopeControls.Count}" : "") +
-        (unconfirmed.Length > 0
-          ? $" · 本轮超时 {unconfirmed.Length}" : "");
+      StatsLabel.Text = IcomScopeStatusSummary.Format(
+        transportSummary, WaterfallDeliveryFps,
+        FormatControlPath(resolvedControlPath),
+        resolvedControlPath == IcomScopeControlPath.ReadOnly,
+        scopeBackend != null,
+        ScopeReadbackCompletedForSession,
+        PendingScopeControls.Count, unconfirmed.Length);
       // Diagnostics tooltip updated after the full details are assembled below.
 
       LastDiagnosticsText =
@@ -2680,6 +2682,9 @@ namespace SkyRoof
           $"Duplicate chunks: {effectiveCapture.DuplicateChunkCount:N0}",
           $"Sequence resets: {effectiveCapture.SequenceResetCount:N0}",
           $"LAN length overflow packets: {effectiveCapture.LanLengthOverflowPacketCount:N0}");
+      ScopeTips.SetToolTip(StatsLabel,
+        "双击打开诊断详情。可查看连接端点、完整 CI-V 统计、序列缺口和 CAT 队列。");
+      ScopeTips.SetToolTip(StatusLabel, StatusLabel.Text);
 
       DateTime? last = effectiveCapture.LastScopeFrameUtc;
       bool scopeStale =
@@ -2733,7 +2738,7 @@ namespace SkyRoof
       MessageBox.Show(
         this,
         LastDiagnosticsText,
-        "Spectrum Diagnostics",
+        "频谱诊断",
         MessageBoxButtons.OK,
         MessageBoxIcon.Information);
     }
