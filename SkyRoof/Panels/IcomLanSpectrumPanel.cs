@@ -38,6 +38,12 @@ namespace SkyRoof
     private readonly Button SettingsBtn = new();
     private readonly Label StatusLabel = new();
     private readonly Label StatsLabel = new();
+    private readonly Button DiagnosticsBtn = new();
+    private readonly ToolTip ScopeTips = new() { AutoPopDelay = 18000, InitialDelay = 350 };
+    private readonly FlowLayoutPanel RadioToolbar = new();
+    private readonly FlowLayoutPanel DisplayToolbar = new();
+    private readonly Dictionary<Control, (int Width, float FontSize, Padding Margin)> ToolbarMetrics = new();
+    private float AppliedToolbarScale = -1;
     private readonly IcomLanSpectrumView SpectrumView = new();
     private readonly System.Windows.Forms.Timer UiTimer = new() { Interval = 500 };
     private readonly IcomScopeState ScopeState = new();
@@ -139,27 +145,50 @@ namespace SkyRoof
 
     private void BuildUi()
     {
+      var colors = ScopeUiColors.Current;
       var root = new TableLayoutPanel
       {
         Dock = DockStyle.Fill,
         ColumnCount = 1,
         RowCount = 4,
-        Padding = new Padding(8)
+        Padding = new Padding(8),
+        BackColor = colors.Background,
+        ForeColor = colors.Text
       };
       root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-      root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+      root.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
       root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
       root.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
       root.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
 
-      var toolbar = new FlowLayoutPanel
+      // Two stable, non-wrapping rows. Never separate ZOOM from its
+      // selector or let toolbar wrapping consume the waterfall's height.
+      var toolbar = new TableLayoutPanel
       {
         Dock = DockStyle.Fill,
-        AutoSize = true,
-        FlowDirection = FlowDirection.LeftToRight,
-        WrapContents = true,
-        Margin = new Padding(0, 0, 0, 6)
+        ColumnCount = 1, RowCount = 2,
+        Margin = new Padding(0, 0, 0, 2),
+        Padding = new Padding(0),
+        BackColor = colors.Background
       };
+      toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+      toolbar.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+      toolbar.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+      foreach (var bar in new[] { RadioToolbar, DisplayToolbar })
+      {
+        bar.Dock = DockStyle.Fill;
+        bar.WrapContents = false;
+        bar.AutoSize = false;
+        bar.FlowDirection = FlowDirection.LeftToRight;
+        bar.Padding = new Padding(2, 1, 2, 1);
+        bar.Margin = new Padding(0);
+        bar.BackColor = colors.Surface;
+        bar.ForeColor = colors.Text;
+      }
+      RadioToolbar.Controls.Add(RadioToolbar, 0, 0);
+      RadioToolbar.Controls.Add(DisplayToolbar, 0, 1);
+      RadioToolbar.Controls.Add(ScopeToolbarCaption("电台", colors));
+      DisplayToolbar.Controls.Add(ScopeToolbarCaption("显示", colors));
 
       ScopeBandBox.DropDownStyle = ComboBoxStyle.DropDownList;
       ScopeBandBox.Width = 84;
@@ -212,7 +241,7 @@ namespace SkyRoof
           RefreshScopeGeometryUi();
           UpdateScopeControlAvailability();
         };
-      toolbar.Controls.Add(ScopeBandBox);
+      RadioToolbar.Controls.Add(ScopeBandBox);
 
       ScopeModeBox.DropDownStyle =
         ComboBoxStyle.DropDownList;
@@ -274,7 +303,7 @@ namespace SkyRoof
               $"edge {edge}");
           }
         };
-      toolbar.Controls.Add(ScopeModeBox);
+      RadioToolbar.Controls.Add(ScopeModeBox);
 
       SpanEdgeBox.DropDownStyle =
         ComboBoxStyle.DropDownList;
@@ -321,7 +350,7 @@ namespace SkyRoof
               $"edge {edge}");
           }
         };
-      toolbar.Controls.Add(SpanEdgeBox);
+      RadioToolbar.Controls.Add(SpanEdgeBox);
 
       FixedEdgeEditBtn.Text = "EDGE…";
       FixedEdgeEditBtn.AutoSize = true;
@@ -340,10 +369,10 @@ namespace SkyRoof
       FixedEdgeEditBtn.ContextMenuStrip =
         fixedEdgeMenu;
 
-      toolbar.Controls.Add(
+      RadioToolbar.Controls.Add(
         FixedEdgeEditBtn);
 
-      toolbar.Controls.Add(
+      RadioToolbar.Controls.Add(
         new Label
         {
           AutoSize = true,
@@ -382,7 +411,7 @@ namespace SkyRoof
                   referenceDb),
             $"reference {referenceDb:+0.0;-0.0;0.0} dB");
         };
-      toolbar.Controls.Add(ReferenceBox);
+      RadioToolbar.Controls.Add(ReferenceBox);
 
       SweepSpeedBox.DropDownStyle =
         ComboBoxStyle.DropDownList;
@@ -420,9 +449,9 @@ namespace SkyRoof
                   speed),
             $"speed {SweepSpeedBox.SelectedItem}");
         };
-      toolbar.Controls.Add(SweepSpeedBox);
+      RadioToolbar.Controls.Add(SweepSpeedBox);
 
-      toolbar.Controls.Add(
+      RadioToolbar.Controls.Add(
         new Label
         {
           AutoSize = true,
@@ -467,15 +496,19 @@ namespace SkyRoof
                   vbw),
             $"VBW {VbwBox.SelectedItem}");
         };
-      toolbar.Controls.Add(VbwBox);
+      RadioToolbar.Controls.Add(VbwBox);
 
-      GeometryLabel.AutoSize = true;
-      GeometryLabel.Text = "Waiting for scope";
+      GeometryLabel.AutoSize = false;
+      GeometryLabel.Width = 114;
+      GeometryLabel.Height = 28;
+      GeometryLabel.AutoEllipsis = true;
+      GeometryLabel.TextAlign = ContentAlignment.MiddleLeft;
+      GeometryLabel.Text = "等待频谱";
       GeometryLabel.ForeColor = SystemColors.GrayText;
       GeometryLabel.Margin = new Padding(0, 7, 12, 0);
-      toolbar.Controls.Add(GeometryLabel);
+      RadioToolbar.Controls.Add(GeometryLabel);
 
-      StartStopBtn.Text = "Start";
+      StartStopBtn.Text = "启动";
       StartStopBtn.AutoSize = true;
       StartStopBtn.Margin = new Padding(0, 2, 6, 2);
       StartStopBtn.Click += (_, _) =>
@@ -485,9 +518,9 @@ namespace SkyRoof
         else
           StopCapture();
       };
-      toolbar.Controls.Add(StartStopBtn);
+      DisplayToolbar.Controls.Add(StartStopBtn);
 
-      ClearBtn.Text = "Clear";
+      ClearBtn.Text = "清空";
       ClearBtn.AutoSize = true;
       ClearBtn.Margin = new Padding(0, 2, 6, 2);
       ClearBtn.Click += (_, _) =>
@@ -496,7 +529,7 @@ namespace SkyRoof
         SpectrumView.Clear();
         RefreshScopeGeometryUi();
       };
-      toolbar.Controls.Add(ClearBtn);
+      DisplayToolbar.Controls.Add(ClearBtn);
 
       HoldBtn.Text = "HOLD";
       HoldBtn.AutoSize = true;
@@ -525,7 +558,7 @@ namespace SkyRoof
           }
         }
       };
-      toolbar.Controls.Add(HoldBtn);
+      DisplayToolbar.Controls.Add(HoldBtn);
 
       PeakBtn.Text = "PEAK";
       PeakBtn.AutoSize = true;
@@ -543,7 +576,7 @@ namespace SkyRoof
         null,
         (_, _) => SpectrumView.ClearPeakHold());
       PeakBtn.ContextMenuStrip = peakMenu;
-      toolbar.Controls.Add(PeakBtn);
+      DisplayToolbar.Controls.Add(PeakBtn);
 
       WaterfallBtn.Text = "WF";
       WaterfallBtn.AutoSize = true;
@@ -559,9 +592,9 @@ namespace SkyRoof
         ctx.Settings.SaveToFile();
         UpdateDisplayButtons();
       };
-      toolbar.Controls.Add(WaterfallBtn);
+      DisplayToolbar.Controls.Add(WaterfallBtn);
 
-      toolbar.Controls.Add(
+      DisplayToolbar.Controls.Add(
         new Label
         {
           AutoSize = true,
@@ -605,13 +638,13 @@ namespace SkyRoof
             sweeps);
           ctx.Settings.SaveToFile();
         };
-      toolbar.Controls.Add(AverageBox);
+      DisplayToolbar.Controls.Add(AverageBox);
 
-      toolbar.Controls.Add(
+      DisplayToolbar.Controls.Add(
         new Label
         {
           AutoSize = true,
-          Text = "SMOOTH:",
+          Text = "平滑:",
           Margin = new Padding(2, 7, 3, 0)
         });
 
@@ -651,13 +684,13 @@ namespace SkyRoof
             bins);
           ctx.Settings.SaveToFile();
         };
-      toolbar.Controls.Add(SmoothBox);
+      DisplayToolbar.Controls.Add(SmoothBox);
 
-      toolbar.Controls.Add(
+      DisplayToolbar.Controls.Add(
         new Label
         {
           AutoSize = true,
-          Text = "ZOOM:",
+          Text = "缩放:",
           Margin = new Padding(2, 7, 3, 0)
         });
 
@@ -688,18 +721,18 @@ namespace SkyRoof
           SpectrumView.SetZoomFactor(
             factor);
         };
-      toolbar.Controls.Add(ZoomBox);
+      DisplayToolbar.Controls.Add(ZoomBox);
 
-      ReadbackBtn.Text = "SYNC";
+      ReadbackBtn.Text = "同步";
       ReadbackBtn.AutoSize = true;
       ReadbackBtn.Margin =
         new Padding(0, 2, 6, 2);
       ReadbackBtn.Click +=
         (_, _) => RequestScopeReadback();
-      toolbar.Controls.Add(
+      DisplayToolbar.Controls.Add(
         ReadbackBtn);
 
-      SettingsBtn.Text = "Settings…";
+      SettingsBtn.Text = "设置";
       SettingsBtn.AutoSize = true;
       SettingsBtn.Margin = new Padding(0, 2, 0, 2);
       SettingsBtn.Click += (_, _) =>
@@ -708,6 +741,20 @@ namespace SkyRoof
           "SkyRoof.Settings.IcomLanSpectrum")
           .ShowDialog(this);
 
+      ScopeTips.SetToolTip(ScopeBandBox, "选择自动/主接收机/副接收机。只读来源仍可本地切换。");
+      ScopeTips.SetToolTip(ScopeModeBox, "电台频谱模式：CENTER / FIXED / SCROLL。需要可写 CAT 控制通道。");
+      ScopeTips.SetToolTip(SpanEdgeBox, "设置频谱跨度或固定边界预设；依当前模式自动切换。");
+      ScopeTips.SetToolTip(ReferenceBox, "向 IC-9700 写入频谱 REF 参考等级，须等待真实读回确认。");
+      ScopeTips.SetToolTip(SweepSpeedBox, "电台扫描速度；此项可能修改无线电设备状态。");
+      ScopeTips.SetToolTip(VbwBox, "电台视频带宽，需可写 CAT 通道。");
+      ScopeTips.SetToolTip(HoldBtn, "冻结本地频谱与瀑布图；释放时重新读取电台设置。");
+      ScopeTips.SetToolTip(PeakBtn, "本地峰值保持；右键可清除峰值历史。");
+      ScopeTips.SetToolTip(WaterfallBtn, "显示或隐藏本地瀑布图。");
+      ScopeTips.SetToolTip(AverageBox, "仅对本地频谱曲线进行完整 Sweep 平均；瀑布图不平均。");
+      ScopeTips.SetToolTip(SmoothBox, "仅对频谱/峰值曲线进行频率方向平滑。");
+      ScopeTips.SetToolTip(ZoomBox, "本地频谱缩放，不修改无线电 SPAN。");
+      ScopeTips.SetToolTip(ReadbackBtn, "从 IC-9700 读取频谱设置，不将本地值当作已确认写入。");
+      ScopeTips.SetToolTip(DiagnosticsBtn, "查看完整连接详情、序列缺口、CAT 队列与帧率统计。");
       var diagnosticsMenu =
         new ContextMenuStrip();
       diagnosticsMenu.Items.Add(
@@ -735,10 +782,22 @@ namespace SkyRoof
         diagnosticsMenu;
       StatsLabel.ContextMenuStrip =
         diagnosticsMenu;
+      DiagnosticsBtn.Text = "诊断";
+      DiagnosticsBtn.Width = 64;
+      DiagnosticsBtn.Height = 25;
+      DiagnosticsBtn.Click += (_, _) => ShowSpectrumDiagnostics();
+      DiagnosticsBtn.ContextMenuStrip = diagnosticsMenu;
+      DiagnosticsBtn.FlatStyle = FlatStyle.Flat;
+      DiagnosticsBtn.FlatAppearance.BorderColor = colors.Border;
+      DiagnosticsBtn.BackColor = colors.Surface;
+      DiagnosticsBtn.ForeColor = colors.Text;
 
-      toolbar.Controls.Add(SettingsBtn);
+      DisplayToolbar.Controls.Add(SettingsBtn);
 
       root.Controls.Add(toolbar, 0, 0);
+      InitializeToolbarLayout();
+      root.SizeChanged += (_, _) => FitToolbarsToWidth();
+      Shown += (_, _) => FitToolbarsToWidth();
 
       SpectrumView.Dock = DockStyle.Fill;
       SpectrumView.Margin = new Padding(0);
@@ -808,16 +867,28 @@ namespace SkyRoof
 
       StatusLabel.Dock = DockStyle.Fill;
       StatusLabel.TextAlign = ContentAlignment.MiddleLeft;
-      StatusLabel.ForeColor = SystemColors.GrayText;
+      StatusLabel.AutoEllipsis = true;
+      StatusLabel.ForeColor = colors.Muted;
       StatusLabel.Text =
-        "Stopped. Configure the spectrum source in Settings, then start capture.";
+        "已停止采集。请在“设置”中配置频谱来源，随后点击“启动”。";
       root.Controls.Add(StatusLabel, 0, 2);
 
       StatsLabel.Dock = DockStyle.Fill;
       StatsLabel.TextAlign = ContentAlignment.MiddleLeft;
-      StatsLabel.ForeColor = SystemColors.GrayText;
-      StatsLabel.Text = "Packets 0 · CI-V 0 · Scope 0 · 0.0 fps";
-      root.Controls.Add(StatsLabel, 0, 3);
+      StatsLabel.AutoEllipsis = true;
+      StatsLabel.ForeColor = colors.Muted;
+      StatsLabel.Text = "尚未连接频谱 · 0.0 帧/s";
+      var statusBar = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
+        Margin = Padding.Empty, Padding = Padding.Empty,
+        BackColor = colors.Background
+      };
+      statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+      statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
+      statusBar.Controls.Add(StatsLabel, 0, 0);
+      statusBar.Controls.Add(DiagnosticsBtn, 1, 0);
+      root.Controls.Add(statusBar, 0, 3);
 
       Controls.Add(root);
     }
@@ -1087,7 +1158,7 @@ namespace SkyRoof
       LastFixedEdgeConfirmationRequestUtc = DateTime.MinValue;
       LastScopeControlBackend = null;
 
-      StartStopBtn.Text = "Stop";
+      StartStopBtn.Text = "停止";
       StatusLabel.Text = settings.Source switch
       {
         IcomLanSpectrumSource.DirectLan =>
@@ -1176,7 +1247,7 @@ namespace SkyRoof
       UpdateDisplayButtons();
       RefreshScopeGeometryUi();
 
-      StartStopBtn.Text = "Start";
+      StartStopBtn.Text = "启动";
       StatusLabel.Text = "Spectrum capture stopped.";
     }
 
@@ -2480,15 +2551,20 @@ namespace SkyRoof
                 : " (waiting sync; manual controls available)"
               : "";
 
+      // The detailed counters, remote address, dropped/rejected CAT writes,
+      // sequence skips and 475-point packet format remain in Diagnostics.
+      // Day-to-day UI contains only actionable state and live throughput.
       StatsLabel.Text =
-        $"{FormatSpectrumSource(spectrumSettings.Source)} · " +
-        $"{transportSummary} · Ctrl {FormatControlPath(resolvedControlPath)}{controlHint} · " +
-        $"475 bins · {DisplayFps:0.0} upd/s · " +
-        $"{WaterfallDeliveryFps:0.0} WF/s · {health}" +
+        $"{transportSummary} · {WaterfallDeliveryFps:0.0} 帧/s · " +
+        $"控制 {FormatControlPath(resolvedControlPath)}" +
+        (resolvedControlPath == IcomScopeControlPath.ReadOnly
+          ? "（只读）"
+          : !ScopeReadbackCompletedForSession ? "（待同步）" : "（已同步）") +
         (PendingScopeControls.Count > 0
-          ? $" · Ctrl pending {PendingScopeControls.Count}" : "") +
-        (UnconfirmedScopeControlCount > 0
-          ? $" · Unconfirmed {UnconfirmedScopeControlCount}" : "");
+          ? $" · 待确认 {PendingScopeControls.Count}" : "") +
+        (unconfirmed.Length > 0
+          ? $" · 本轮超时 {unconfirmed.Length}" : "");
+      ScopeTips.SetToolTip(StatsLabel, LastDiagnosticsText);
 
       LastDiagnosticsText =
         string.Join(
