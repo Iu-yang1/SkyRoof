@@ -249,7 +249,7 @@ namespace SkyRoof
           string json = System.Text.Json.JsonSerializer.Serialize(new
           {
             Utc = DateTime.UtcNow,
-            Source = rxSourceBox.SelectedItem?.ToString() ?? "AF",
+            Source = "WASAPI AF/IF",
             Mode = evt.Mode.ToString(),
             evt.ValidRows,
             evt.Image.Width,
