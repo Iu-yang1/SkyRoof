@@ -171,9 +171,13 @@ namespace SkyRoof
         if (item is Label label)
         {
           label.AutoSize = false;
-          label.Width = item == GeometryLabel
-            ? PreferredGeometryWidth = 104
-            : IcomScopeToolbarLayout.PreferredWidth(item);
+          if (item == GeometryLabel)
+          {
+            PreferredGeometryWidth = 104;
+            label.Width = PreferredGeometryWidth;
+          }
+          else
+            label.Width = IcomScopeToolbarLayout.PreferredWidth(item);
           label.Height = 32;
           label.TextAlign = item == RadioToolbar.Controls[0] ||
             item == DisplayToolbar.Controls[0]
@@ -237,10 +241,10 @@ namespace SkyRoof
       int available = RadioToolbar.ClientSize.Width -
         RadioToolbar.Padding.Horizontal;
       int required = IcomScopeToolbarLayout.RequiredWidth(
-        RadioToolbar.Controls.Cast<Control>(), FixedEdgeEditBtn);
-      int shortage = Math.Max(0, required - available);
-      int width = Math.Max(MinimumGeometryWidth,
-        PreferredGeometryWidth - shortage);
+        RadioToolbar.Controls.Cast<Control>())
+        - GeometryLabel.Width + PreferredGeometryWidth;
+      int width = IcomScopeToolbarLayout.GeometryWidth(
+        available, required, PreferredGeometryWidth, MinimumGeometryWidth);
       if (GeometryLabel.Width != width)
         GeometryLabel.Width = width;
       ScopeTips.SetToolTip(GeometryLabel, GeometryLabel.Text);
@@ -612,6 +616,8 @@ namespace SkyRoof
       GeometryLabel.Text = "等待频谱";
       GeometryLabel.ForeColor = SystemColors.GrayText;
       GeometryLabel.Margin = new Padding(0, 7, 12, 0);
+      GeometryLabel.TextChanged += (_, _) =>
+        ScopeTips.SetToolTip(GeometryLabel, GeometryLabel.Text);
       RadioToolbar.Controls.Add(GeometryLabel);
 
       StartStopBtn.Text = "启动";
