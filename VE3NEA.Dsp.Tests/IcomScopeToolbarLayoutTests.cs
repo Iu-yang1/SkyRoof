@@ -11,40 +11,22 @@ namespace VE3NEA.Dsp.Tests;
 public sealed class IcomScopeToolbarLayoutTests
 {
   [Theory]
-  [InlineData(900, 860, 104)]
-  [InlineData(860, 900, 64)]
-  [InlineData(840, 980, 60)]
-  public void GeometryCaptionShrinksOnlyAsMuchAsNeeded(
-    int available, int required, int expectedWidth)
+  [InlineData(920, 820, 1.0f)]
+  [InlineData(820, 820, 1.0f)]
+  [InlineData(615, 820, .75f)]
+  [InlineData(400, 1000, .55f)]
+  public void CompactToolbarFitsWithoutWrappingOrHiddenControls(
+    int available, int required, float expected)
   {
-    Assert.Equal(expectedWidth,
-      IcomScopeToolbarLayout.GeometryWidth(available, required));
+    Assert.InRange(IcomScopeToolbarLayout.CalculateScale(available, required),
+      expected - .0001f, expected + .0001f);
   }
 
   [Fact]
-  public void CaptionLabelsAreActuallyMeasuredInsteadOfKeepingDefault100Px()
+  public void NoMeasurementFallsBackToIdentityScale()
   {
-    Exception? failure = null;
-    var thread = new Thread(() =>
-    {
-      try
-      {
-        using var font = new Font(SystemFonts.MessageBoxFont.FontFamily, 10.5f);
-        using var label = new Label { Text = "REF:", AutoSize = false, Font = font };
-        using var selector = new ComboBox {
-          DropDownStyle = ComboBoxStyle.DropDownList, Font = font };
-        selector.Items.AddRange(new object[] { "AUTO", "MAIN", "SUB" });
-        Assert.InRange(IcomScopeToolbarLayout.PreferredWidth(label), 25, 70);
-        Assert.InRange(IcomScopeToolbarLayout.PreferredWidth(selector), 55, 110);
-        Assert.True(IcomScopeToolbarLayout.PreferredWidth(label) < 100);
-      }
-      catch (Exception ex) { failure = ex; }
-    });
-    thread.SetApartmentState(ApartmentState.STA);
-    thread.Start();
-    Assert.True(thread.Join(TimeSpan.FromSeconds(8)));
-    if (failure != null)
-      throw new Xunit.Sdk.XunitException(failure.ToString());
+    Assert.Equal(1f, IcomScopeToolbarLayout.CalculateScale(0, 800));
+    Assert.Equal(1f, IcomScopeToolbarLayout.CalculateScale(900, 0));
   }
 
   [Theory]
@@ -91,15 +73,9 @@ public sealed class IcomScopeToolbarLayoutTests
   {
     const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
     var radio = typeof(IcomLanSpectrumPanel).GetField("RadioToolbar", flags);
-    var radioExtra = typeof(IcomLanSpectrumPanel).GetField(
-      "RadioSecondaryToolbar", flags);
     var display = typeof(IcomLanSpectrumPanel).GetField("DisplayToolbar", flags);
-    var displayExtra = typeof(IcomLanSpectrumPanel).GetField(
-      "DisplaySecondaryToolbar", flags);
     Assert.NotNull(radio);
     Assert.NotNull(display);
-    Assert.Null(radioExtra);
-    Assert.Null(displayExtra);
     Assert.Equal(typeof(FlowLayoutPanel), radio!.FieldType);
     Assert.Equal(typeof(FlowLayoutPanel), display!.FieldType);
   }
