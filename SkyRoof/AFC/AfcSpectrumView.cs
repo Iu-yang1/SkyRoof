@@ -256,9 +256,9 @@ namespace SkyRoof.AFC
 
     // Reuse IcomLanSpectrumView's exact RS-BA1 Classic LUT:
     // navy -> blue -> cyan -> green/yellow -> white for high signal levels.
-    // REF increases/decreases visual headroom only. Noise-floor-relative
-    // 0 dB is dark blue when REF=+15; weak peaks should not bleach the
-    // waterfall into the white background of light SkyRoof themes.
+    // REF adjusts visual headroom only; IF signal measurements are
+    // unaffected, and even light application themes retain a dark-blue
+    // instrument floor rather than bleaching the waterfall.
     internal static int MapWaterfallLevel(double db, double referenceDb)
     {
       if (!double.IsFinite(db)) return 0;
@@ -338,7 +338,7 @@ namespace SkyRoof.AFC
       using var labelBrush = new SolidBrush(Color.FromArgb(166, 198, 223));
       using var titleBrush = new SolidBrush(ScopeText);
       using var fillBrush = new SolidBrush(Color.FromArgb(32, RsBa1Trace));
-      g.DrawString($"12 kHz IF · REF {referenceLevelDb:+0;-0;0} dB · PSD（相对底噪）", Font,
+      g.DrawString($"12 kHz IF · REF {referenceLevelDb:+0;-0;0} dB · 频谱", Font,
         titleBrush, new PointF(plot.Left, 7));
       if (canSelect && plot.Width > 350)
       {

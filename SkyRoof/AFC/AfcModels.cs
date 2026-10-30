@@ -61,8 +61,8 @@ namespace SkyRoof
     [DefaultValue(false)]
     public bool SsbPilotEnabled { get; set; } = false;
 
-    [DisplayName("IF spectrum REF LEVEL (dB)")]
-    [Description("Display-only reference level for the 12-kHz IF spectrum and waterfall. Default +15 dB. Raise it to reduce apparent signal brightness, lower it to reveal weaker peaks. Does not change receiver gain, the IF PCM, frequency estimates, confidence, or CAT control.")]
+    [DisplayName("IF 频谱 REF LEVEL (dB)")]
+    [Description("12 kHz IF 频谱/瀑布图的显示参考等级，默认 +15 dB。提高数值使画面更暗，降低数值有助于观察较弱信号；只影响显示，不修改 IF 音频、频偏估计、置信度或 CAT 控制。")]
     [DefaultValue(15.0)]
     public double SpectrumRefLevelDb { get; set; } = 15;
 
