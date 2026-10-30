@@ -310,7 +310,11 @@ public sealed class RotatorControlTests
     {
         await using var server = new FakeRotctld((command, _) =>
             command == "p" ? "90.0\n30.0\n" : "RPRT 0\n");
-        using var engine = StartEngine(server.Port, 1.0);
+        // The simulated socket is local, but CI can pause its worker for
+        // longer than the default 500ms receive timeout under test load.
+        // A real reconnect intentionally clears LastWrittenBearing and
+        // resends the target, which must not be mistaken for failed coalescing.
+        using var engine = StartEngine(server.Port, 1.0, timeoutMs: 3000);
 
         engine.RotateTo(new SkyRoof.Bearing(
             90.1 * Math.PI / 180, 30.1 * Math.PI / 180));
@@ -326,6 +330,7 @@ public sealed class RotatorControlTests
         engine.RotateTo(new SkyRoof.Bearing(
             90.4 * Math.PI / 180, 30.4 * Math.PI / 180));
         await Task.Delay(180);
+        Assert.Equal(1, server.ConnectionCount); // No reconnect/resend in this case.
         Assert.Equal(1, server.Count("P 90.0 30.0"));
 
         engine.RotateTo(new SkyRoof.Bearing(
@@ -353,7 +358,8 @@ public sealed class RotatorControlTests
         await WaitUntilAsync(() => server.Count("P 90.2 30.2") == 1);
     }
 
-    private static RotatorControlEngine StartEngine(ushort port, double resolution = 0.1)
+    private static RotatorControlEngine StartEngine(
+        ushort port, double resolution = 0.1, int timeoutMs = 500)
     {
         var previous = SynchronizationContext.Current;
         SynchronizationContext.SetSynchronizationContext(new SynchronizationContext());
@@ -365,8 +371,8 @@ public sealed class RotatorControlTests
                 Port = port,
                 Delay = 25,
                 PositionCommandResolutionDegrees = resolution,
-                SendTimeout = 500,
-                ReceiveTimeout = 500,
+                SendTimeout = timeoutMs,
+                ReceiveTimeout = timeoutMs,
                 ReconnectDelay = 75
             });
         }
