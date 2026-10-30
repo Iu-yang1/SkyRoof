@@ -157,12 +157,12 @@ namespace SkyRoof
     private static Label ScopeToolbarCaption(string text, ScopeUiColors colors) =>
       new()
       {
-        Text = text, Width = 44, Height = 34,
+        Text = text, Width = 42, Height = 34,
         TextAlign = ContentAlignment.MiddleCenter,
         Font = new Font(SystemFonts.MessageBoxFont.FontFamily,
           ToolbarFontSizePt, FontStyle.Bold),
         ForeColor = colors.Muted,
-        Margin = new Padding(2, 3, 5, 1),
+        Margin = new Padding(2, 3, 3, 1),
         AutoSize = false
       };
 
@@ -199,9 +199,13 @@ namespace SkyRoof
         else if (item is Button button)
         {
           button.AutoSize = false;
-          item.Width = Math.Max(item == FixedEdgeEditBtn ? 76 : 60,
+          item.Width = Math.Max(item == FixedEdgeEditBtn ? 76 : 56,
             TextRenderer.MeasureText(button.Text, item.Font,
               Size.Empty, TextFormatFlags.NoPadding).Width + 20);
+          // Save horizontal space before sacrificing any font readability.
+          if (item.Margin.Right > 4)
+            item.Margin = new Padding(item.Margin.Left, item.Margin.Top,
+              4, item.Margin.Bottom);
         }
         else if (item is ComboBox combo)
         {
