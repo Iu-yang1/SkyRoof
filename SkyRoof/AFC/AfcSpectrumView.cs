@@ -235,7 +235,7 @@ namespace SkyRoof.AFC
       float peak = float.NegativeInfinity;
       for (int i = min; i <= max; i++)
         peak = Math.Max(peak, values[i]);
-      return float.IsFinite(peak) ? peak : MinDisplayDb;
+      return float.IsFinite(peak) ? peak : DisplayBottom;
     }
 
     private void AppendHistory(float[] spectrum)
