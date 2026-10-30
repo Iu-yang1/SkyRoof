@@ -39,6 +39,7 @@ namespace SkyRoof
     private double lastAfcExpectedRf;
     private double afcCalibrationOffsetHz;
     private bool afcCalibrationActive;
+    private bool afcRestorePending;
     private bool updatingRxAfcCheckbox;
     internal bool RxAfcChecked => RxAfcCheckbox.Checked;
     internal double PredictedDownlinkDopplerHz =>
@@ -130,13 +131,26 @@ namespace SkyRoof
       bool changed = Math.Abs(afcCalibrationOffsetHz - offset) >= .5;
       afcCalibrationOffsetHz = offset;
       afcCalibrationActive = active;
-      if (!changed || ctx == null || ctx.CatControl.Rx == null ||
-          !RadioLink.HasDownlink || IsAfcTransmitting) return;
+      if (changed) afcRestorePending = true;
+      FlushAfcCalibrationRestoreIfSafe();
+    }
+
+    /// <summary>
+    /// A PTT edge or stalled IF stream may cancel the probe without any
+    /// subsequent IF callback. Keep restoring RX on the main UI clock
+    /// until CAT is available and the transmitter is unkeyed.
+    /// </summary>
+    internal void FlushAfcCalibrationRestoreIfSafe()
+    {
+      if (!afcRestorePending || ctx == null ||
+          ctx.CatControl.Rx == null || !RadioLink.HasDownlink ||
+          IsAfcTransmitting) return;
       SendCatRxFrequency(RadioLink.CorrectedDownlinkFrequency + AfcRxOffset,
         AfcCatWriteSource.Calibration);
       if (ctx.Settings.Transverter.SdrOffsetEnabled)
         XverterSetSlicerFrequency();
       else SetSlicerFrequency();
+      afcRestorePending = false;
     }
 
     internal void ApplyAfcRxCorrection()
@@ -469,6 +483,7 @@ namespace SkyRoof
 
     internal void ClockTick()
     {
+      FlushAfcCalibrationRestoreIfSafe();
       if (RadioLink.IsTerrestrial) return;
       RadioLink.ObserveSatellite(ctx.SdrPasses);
       RadioLink.ComputeFrequencies();
