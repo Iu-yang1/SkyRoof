@@ -6,6 +6,8 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using SkyRoof.SSTV;
+using VE3NEA;
+using NAudio.CoreAudioApi;
 using VE3NEA.SkySSTV;
 using WeifenLuo.WinFormsUI.Docking;
 
@@ -19,6 +21,20 @@ namespace SkyRoof
   public sealed class SstvConsolePanel : DockContent
   {
     private readonly Context ctx;
+    private readonly SstvAudioReceiveSession receiveSession = new();
+    private readonly ComboBox rxSourceBox = new()
+    {
+      DropDownStyle = ComboBoxStyle.DropDownList, Width = 152
+    };
+    private readonly ComboBox rxDeviceBox = new()
+    {
+      DropDownStyle = ComboBoxStyle.DropDownList, Width = 280
+    };
+    private readonly Button rxToggleButton = new()
+    {
+      Text = "开始接收", Width = 96, Height = 30,
+      Margin = new Padding(4)
+    };
     private readonly TabControl tabs = new() { Dock = DockStyle.Fill };
     private readonly PictureBox rxPicture = new()
     {
@@ -67,6 +83,14 @@ namespace SkyRoof
       modeBox.DisplayMember = nameof(SstvModeSpec.Name);
       if (modeBox.Items.Count > 0) modeBox.SelectedIndex = 0;
       overlayText.Text = ctx.Settings.User.Call ?? "";
+      rxSourceBox.Items.AddRange(new object[]
+      {
+        "声卡 AF", "RS-BA1 回环 AF", "声卡 12 kHz IF", "回环 12 kHz IF"
+      });
+      rxSourceBox.SelectedIndexChanged += (_, _) => PopulateAudioDevices();
+      rxSourceBox.SelectedIndex = 0;
+      rxToggleButton.Click += (_, _) => ToggleReceive();
+      receiveSession.ImageAvailable += OnAudioReceived;
       overlayText.TextChanged += (_, _) => RefreshTxPreview();
       archiveList.DoubleClick += (_, _) => ShowSelectedHistory();
       ReloadHistory();
@@ -93,6 +117,9 @@ namespace SkyRoof
     {
       var page = new TabPage("接收 RX");
       var bar = Toolbar();
+      bar.Controls.Add(rxSourceBox);
+      bar.Controls.Add(rxDeviceBox);
+      bar.Controls.Add(rxToggleButton);
       bar.Controls.Add(Btn("保存图片", SaveReceivedImage));
       bar.Controls.Add(Btn("复制图片", () =>
       {
@@ -140,6 +167,74 @@ namespace SkyRoof
       page.Controls.Add(archiveList);
       page.Controls.Add(bar);
       tabs.TabPages.Add(page);
+    }
+
+    private void PopulateAudioDevices()
+    {
+      rxDeviceBox.Items.Clear();
+      try
+      {
+        bool loopback = rxSourceBox.SelectedIndex is 1 or 3;
+        foreach (AudioDeviceEntry d in Soundcard.ListDevices(
+          loopback ? DataFlow.Render : DataFlow.Capture))
+          rxDeviceBox.Items.Add(d);
+        rxDeviceBox.DisplayMember = nameof(AudioDeviceEntry.Name);
+        if (rxDeviceBox.Items.Count > 0) rxDeviceBox.SelectedIndex = 0;
+      }
+      catch (Exception ex)
+      {
+        rxStatus.Text = "无法列出音频设备: " + ex.Message;
+      }
+    }
+
+    private void ToggleReceive()
+    {
+      if (receiveSession.IsRunning)
+      {
+        receiveSession.Stop();
+        rxToggleButton.Text = "开始接收";
+        rxStatus.Text = "接收已停止";
+        return;
+      }
+      if (rxDeviceBox.SelectedItem is not AudioDeviceEntry device)
+      {
+        MessageBox.Show(this, "请选择接收音频设备。", "SSTV",
+          MessageBoxButtons.OK, MessageBoxIcon.Information);
+        return;
+      }
+      try
+      {
+        receiveSession.Start((SstvReceiveSource)rxSourceBox.SelectedIndex, device.Id);
+        rxToggleButton.Text = "停止接收";
+        rxStatus.Text = "正在等待 SSTV 信号...";
+      }
+      catch (Exception ex)
+      {
+        receiveSession.Stop();
+        MessageBox.Show(this, ex.Message, "无法启动接收",
+          MessageBoxButtons.OK, MessageBoxIcon.Warning);
+      }
+    }
+
+    private void OnAudioReceived(SstvImageEvent evt)
+    {
+      if (closed || !IsHandleCreated ||
+          (!evt.Final && evt.ValidRows % 12 != 0)) return;
+      Bitmap picture;
+      try { picture = evt.Image.ToBitmap(); }
+      catch { return; }
+      try
+      {
+        BeginInvoke((Action)(() =>
+        {
+          using (picture)
+          {
+            if (!closed && !IsDisposed)
+              ShowReceivedSstv(picture, evt.Mode.ToString(), evt.Final, null);
+          }
+        }));
+      }
+      catch (InvalidOperationException) { picture.Dispose(); }
     }
 
     private void LoadImage()
@@ -333,6 +428,7 @@ namespace SkyRoof
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
       closed = true;
+      receiveSession.Dispose();
       if (ctx.SstvConsolePanel == this) ctx.SstvConsolePanel = null;
       var oldRx = rxPicture.Image;
       rxPicture.Image = null;
