@@ -1,3 +1,29 @@
+# SkyRoof Fork v.1.61 / SkyRoof Fork 1.61 版本说明
+
+Release date / 发布日期: 2026-10-31. Corrective AFC calibration release following v.1.60.
+
+## English — changes since v.1.60
+
+- Corrected CAT request/readback attribution: a command is never treated as acknowledged by a readback captured before it, and each calibration phase is independently fenced.
+- Made the IF timing explicit: the FM estimator averages a 2-second window, so calibration now evaluates settled measurements after the real CAT request time instead of treating the window center as a new command timestamp.
+- Updated the conservative RX-only probe to 150 Hz for FM (40 Hz for CW/SSB pilot), requiring two stable IF samples on each of the probe and restore movements; the same measured direction must be verified on return.
+- Added more precise calibration failure details, bounded deadlines and a brief hold tolerance for momentary FM reference instability. PTT and lost tracking continue to abort and restore the temporary RX probe.
+- No TX, persistent transponder correction or orbit/ephemeris changes. IC-9700 real-radio validation is still required.
+
+## 中文 — 相对 v.1.60 的变化
+
+- 修正 CAT 写频请求与真实读回的时间归因，杜绝用下发之前的读回确认写频；每一阶段只接受该阶段下发后的硬件反馈。
+- 考虑 FM 频偏算法约 2 秒 IF 测量窗口，仅在命令生效后获得稳定 IF 观测，才判断调谐方向。
+- FM 采用 150 Hz 临时 RX 探针，CW/SSB 导频为 40 Hz；一次调谐和返回须各有两次稳定 IF 观测及真实 CAT 读回，完成返回验证后才启动闭环修正。
+- 增加失败原因、阶段超时诊断和短暂失号保持，不放宽 PTT 安全保护。所有校准只作用于 RX 临时修正，不保存频偏、不改 TX。
+- IC-9700 实机时序及 AFC 收敛仍需现场复测。
+
+## Release process / 发布流程
+
+Release version is `1.61` in `Directory.Build.props`. A successful Windows build, xUnit regression suite and installer payload verification are required before merging. Unsigned artifacts remain pre-releases.
+
+---
+
 # SkyRoof Fork v.1.60 / SkyRoof Fork 1.60 版本说明
 
 Release date / 发布日期: 2026-10-30. Based on VE3NEA/SkyRoof v.1.56; AFC stabilization release.
