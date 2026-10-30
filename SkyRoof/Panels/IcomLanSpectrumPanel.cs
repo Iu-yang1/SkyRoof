@@ -41,17 +41,8 @@ namespace SkyRoof
     private readonly Button DiagnosticsBtn = new();
     private readonly ToolTip ScopeTips = new() { AutoPopDelay = 18000, InitialDelay = 350 };
     private readonly FlowLayoutPanel RadioToolbar = new();
-    private readonly FlowLayoutPanel RadioSecondaryToolbar = new();
     private readonly FlowLayoutPanel DisplayToolbar = new();
-    private readonly FlowLayoutPanel DisplaySecondaryToolbar = new();
-    private Control[] RadioToolbarControls = [];
-    private Control[] DisplayToolbarControls = [];
-    private int RadioSplitIndex;
-    private int DisplaySplitIndex;
-    private bool CompactToolbarLayout;
-    private bool UpdatingToolbarLayout;
-    private TableLayoutPanel? SpectrumRootLayout;
-    private TableLayoutPanel? SpectrumToolbarLayout;
+    private int PreferredGeometryWidth;
     private readonly IcomLanSpectrumView SpectrumView = new();
     private readonly System.Windows.Forms.Timer UiTimer = new() { Interval = 500 };
     private readonly IcomScopeState ScopeState = new();
@@ -151,78 +142,61 @@ namespace SkyRoof
       UiTimer.Start();
     }
 
-    private const int ToolbarRowHeight = 44;
+    private const int ToolbarRowHeight = 40;
     private const float ToolbarFontSizePt = 10.5f;
+    private const int MinimumGeometryWidth = 60;
 
     private static Label ScopeToolbarCaption(string text, ScopeUiColors colors) =>
       new()
       {
-        Text = text, Width = 42, Height = 34,
+        Text = text,
         TextAlign = ContentAlignment.MiddleCenter,
         Font = new Font(SystemFonts.MessageBoxFont.FontFamily,
           ToolbarFontSizePt, FontStyle.Bold),
         ForeColor = colors.Muted,
-        Margin = new Padding(2, 3, 3, 1),
         AutoSize = false
       };
 
     private void InitializeToolbarLayout()
     {
-      RadioToolbarControls = RadioToolbar.Controls.Cast<Control>().ToArray();
-      DisplayToolbarControls = DisplayToolbar.Controls.Cast<Control>().ToArray();
-
-      // Keep a caption and its selector on the same row when space is tight.
-      RadioSplitIndex = Array.FindIndex(RadioToolbarControls,
-        c => c is Label { Text: "REF:" });
-      DisplaySplitIndex = Array.FindIndex(DisplayToolbarControls,
-        c => c is Label { Text: "平滑:" });
-      if (RadioSplitIndex < 0 || DisplaySplitIndex < 0)
-        throw new InvalidOperationException("Incomplete scope toolbar controls.");
-
       var colors = ScopeUiColors.Current;
-      foreach (Control item in RadioToolbarControls.Concat(DisplayToolbarControls))
+      foreach (FlowLayoutPanel bar in new[] { RadioToolbar, DisplayToolbar })
+      foreach (Control item in bar.Controls)
       {
-        // The old layout reduced *fonts* to 55% to fit the window.
-        // Measure at a readable fixed point size; never shrink text.
+        // Recalculate every width, especially labels: a new WinForms Label
+        // defaults to 100px, which used to leave enormous invisible gaps
+        // after AutoSize was disabled. Never retain that default width.
         item.Font = new Font(SystemFonts.MessageBoxFont.FontFamily,
           ToolbarFontSizePt, item.Font.Style);
         if (item is Label label)
         {
           label.AutoSize = false;
-          if (label.TextAlign == ContentAlignment.TopLeft)
-            label.TextAlign = ContentAlignment.MiddleLeft;
-          if (item != GeometryLabel)
-            item.Width = Math.Max(item.Width,
-              TextRenderer.MeasureText(label.Text, item.Font,
-                Size.Empty, TextFormatFlags.NoPadding).Width + 8);
+          if (item == GeometryLabel)
+          {
+            PreferredGeometryWidth = 104;
+            label.Width = PreferredGeometryWidth;
+          }
+          else
+            label.Width = IcomScopeToolbarLayout.PreferredWidth(item);
+          label.Height = 32;
+          label.TextAlign = item == RadioToolbar.Controls[0] ||
+            item == DisplayToolbar.Controls[0]
+              ? ContentAlignment.MiddleCenter
+              : ContentAlignment.MiddleLeft;
+          label.Margin = new Padding(0, 3, 2, 2);
         }
         else if (item is Button button)
         {
           button.AutoSize = false;
-          item.Width = Math.Max(item == FixedEdgeEditBtn ? 76 : 56,
-            TextRenderer.MeasureText(button.Text, item.Font,
-              Size.Empty, TextFormatFlags.NoPadding).Width + 20);
-          // Save horizontal space before sacrificing any font readability.
-          if (item.Margin.Right > 4)
-            item.Margin = new Padding(item.Margin.Left, item.Margin.Top,
-              4, item.Margin.Bottom);
+          button.Width = IcomScopeToolbarLayout.PreferredWidth(item);
+          button.Height = 33;
+          button.Margin = new Padding(0, 2, 3, 2);
         }
-        else if (item is ComboBox combo)
+        else
         {
-          int widestChoice = combo.Items.Cast<object>()
-            .Select(choice => TextRenderer.MeasureText(
-              choice.ToString() ?? string.Empty, item.Font,
-              Size.Empty, TextFormatFlags.NoPadding).Width)
-            .DefaultIfEmpty(0).Max();
-          item.Width = Math.Max(item.Width, widestChoice + 30);
+          item.Width = IcomScopeToolbarLayout.PreferredWidth(item);
+          item.Margin = new Padding(0, 5, 4, 2);
         }
-        else if (item is NumericUpDown)
-          item.Width = Math.Max(item.Width, 76);
-
-        if (item == GeometryLabel) item.Width = 126;
-        if (item is not ComboBox and not NumericUpDown)
-          item.Height = 34;
-
         if (item is ComboBox or NumericUpDown or Button)
         {
           item.BackColor = colors.Surface;
@@ -237,11 +211,9 @@ namespace SkyRoof
     private void ApplyThemeToToolbar()
     {
       ScopeUiColors colors = ScopeUiColors.Current;
-      foreach (FlowLayoutPanel bar in new[]
-        { RadioToolbar, RadioSecondaryToolbar, DisplayToolbar, DisplaySecondaryToolbar })
-        bar.BackColor = colors.Surface;
-
-      foreach (Control item in RadioToolbarControls.Concat(DisplayToolbarControls))
+      RadioToolbar.BackColor = DisplayToolbar.BackColor = colors.Surface;
+      foreach (Control item in RadioToolbar.Controls.Cast<Control>()
+        .Concat(DisplayToolbar.Controls.Cast<Control>()))
       {
         if (item is Label) item.ForeColor = colors.Muted;
         else if (item is Button button && button != HoldBtn &&
@@ -255,68 +227,27 @@ namespace SkyRoof
       UpdateDisplayButtons();
     }
 
-    private static void MoveToolbarControls(Control[] original, int splitIndex,
-      FlowLayoutPanel primary, FlowLayoutPanel secondary, bool compact)
-    {
-      for (int i = 0; i < original.Length; i++)
-      {
-        FlowLayoutPanel target = compact && i >= splitIndex
-          ? secondary : primary;
-        if (original[i].Parent != target)
-          target.Controls.Add(original[i]);
-      }
-    }
-
     private void FitToolbarsToWidth()
     {
-      if (UpdatingToolbarLayout || RadioToolbar.ClientSize.Width <= 0 ||
-        SpectrumRootLayout == null || SpectrumToolbarLayout == null ||
-        RadioToolbarControls.Length == 0)
+      if (RadioToolbar.ClientSize.Width <= 0 ||
+        DisplayToolbar.ClientSize.Width <= 0 ||
+        PreferredGeometryWidth == 0)
         return;
 
-      int available = Math.Min(RadioToolbar.ClientSize.Width,
-        DisplayToolbar.ClientSize.Width) - 8;
-      // Measure the two full logical groups, including controls moved to
-      // secondary rows. Fixed edge editing adds width only when visible.
-      int radio = RadioToolbarControls.Where(c => c.Visible ||
-          c == FixedEdgeEditBtn && FixedEdgeEditBtn.Visible)
-        .Sum(c => c.Width + c.Margin.Horizontal);
-      int display = DisplayToolbarControls
-        .Sum(c => c.Width + c.Margin.Horizontal);
-      bool compact = IcomScopeToolbarLayout.RequiresAdditionalRows(
-        available, Math.Max(radio, display));
-
-      if (compact == CompactToolbarLayout) return;
-      UpdatingToolbarLayout = true;
-      SpectrumRootLayout.SuspendLayout();
-      SpectrumToolbarLayout.SuspendLayout();
-      foreach (FlowLayoutPanel bar in new[]
-        { RadioToolbar, RadioSecondaryToolbar, DisplayToolbar, DisplaySecondaryToolbar })
-        bar.SuspendLayout();
-      try
-      {
-        CompactToolbarLayout = compact;
-        RadioSecondaryToolbar.Visible = compact;
-        DisplaySecondaryToolbar.Visible = compact;
-        MoveToolbarControls(RadioToolbarControls, RadioSplitIndex,
-          RadioToolbar, RadioSecondaryToolbar, compact);
-        MoveToolbarControls(DisplayToolbarControls, DisplaySplitIndex,
-          DisplayToolbar, DisplaySecondaryToolbar, compact);
-        SpectrumToolbarLayout.RowStyles[1].Height =
-          SpectrumToolbarLayout.RowStyles[3].Height =
-            compact ? ToolbarRowHeight : 0;
-        SpectrumRootLayout.RowStyles[0].Height =
-          (compact ? 4 : 2) * ToolbarRowHeight + 4;
-      }
-      finally
-      {
-        foreach (FlowLayoutPanel bar in new[]
-          { RadioToolbar, RadioSecondaryToolbar, DisplayToolbar, DisplaySecondaryToolbar })
-          bar.ResumeLayout(true);
-        SpectrumToolbarLayout.ResumeLayout(true);
-        SpectrumRootLayout.ResumeLayout(true);
-        UpdatingToolbarLayout = false;
-      }
+      // In the normal ~880px dock the controls fit at full 10.5pt.
+      // If the first row is a little too tight (DPI / FIXED edge mode),
+      // shorten only the read-only geometry caption, never the controls
+      // or their text. The full value remains accessible as a tooltip.
+      int available = RadioToolbar.ClientSize.Width -
+        RadioToolbar.Padding.Horizontal;
+      int required = IcomScopeToolbarLayout.RequiredWidth(
+        RadioToolbar.Controls.Cast<Control>())
+        - GeometryLabel.Width + PreferredGeometryWidth;
+      int width = IcomScopeToolbarLayout.GeometryWidth(
+        available, required, PreferredGeometryWidth, MinimumGeometryWidth);
+      if (GeometryLabel.Width != width)
+        GeometryLabel.Width = width;
+      ScopeTips.SetToolTip(GeometryLabel, GeometryLabel.Text);
     }
 
     private void BuildUi()
@@ -337,29 +268,24 @@ namespace SkyRoof
       root.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
       root.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
 
-      // Use two generous rows when docked wide, four rows when narrow.
-      // Neither mode scales down fonts or clips entire groups.
+      // Exactly two fixed-height rows. Never reparent the controls into
+      // four rows: it separates captions from their selectors, wastes
+      // waterfall space, and changes layout when the mode is switched.
       var toolbar = new TableLayoutPanel
       {
         Dock = DockStyle.Fill,
-        ColumnCount = 1, RowCount = 4,
+        ColumnCount = 1, RowCount = 2,
         Margin = new Padding(0, 0, 0, 2),
         Padding = Padding.Empty,
         BackColor = colors.Background
       };
-      SpectrumRootLayout = root;
-      SpectrumToolbarLayout = toolbar;
       toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
       toolbar.RowStyles.Add(new RowStyle(SizeType.Absolute, ToolbarRowHeight));
-      toolbar.RowStyles.Add(new RowStyle(SizeType.Absolute, 0));
       toolbar.RowStyles.Add(new RowStyle(SizeType.Absolute, ToolbarRowHeight));
-      toolbar.RowStyles.Add(new RowStyle(SizeType.Absolute, 0));
-      foreach (var bar in new[]
-        { RadioToolbar, RadioSecondaryToolbar, DisplayToolbar, DisplaySecondaryToolbar })
+      foreach (var bar in new[] { RadioToolbar, DisplayToolbar })
       {
         bar.Dock = DockStyle.Fill;
         bar.WrapContents = false;
-        bar.AutoScroll = false;
         bar.AutoSize = false;
         bar.FlowDirection = FlowDirection.LeftToRight;
         bar.Padding = new Padding(2, 1, 2, 1);
@@ -368,11 +294,7 @@ namespace SkyRoof
         bar.ForeColor = colors.Text;
       }
       toolbar.Controls.Add(RadioToolbar, 0, 0);
-      toolbar.Controls.Add(RadioSecondaryToolbar, 0, 1);
-      toolbar.Controls.Add(DisplayToolbar, 0, 2);
-      toolbar.Controls.Add(DisplaySecondaryToolbar, 0, 3);
-      RadioSecondaryToolbar.Visible = false;
-      DisplaySecondaryToolbar.Visible = false;
+      toolbar.Controls.Add(DisplayToolbar, 0, 1);
       RadioToolbar.Resize += (_, _) => FitToolbarsToWidth();
       DisplayToolbar.Resize += (_, _) => FitToolbarsToWidth();
       RadioToolbar.Controls.Add(ScopeToolbarCaption("电台", colors));
@@ -694,6 +616,8 @@ namespace SkyRoof
       GeometryLabel.Text = "等待频谱";
       GeometryLabel.ForeColor = SystemColors.GrayText;
       GeometryLabel.Margin = new Padding(0, 7, 12, 0);
+      GeometryLabel.TextChanged += (_, _) =>
+        ScopeTips.SetToolTip(GeometryLabel, GeometryLabel.Text);
       RadioToolbar.Controls.Add(GeometryLabel);
 
       StartStopBtn.Text = "启动";

@@ -88,12 +88,47 @@ namespace SkyRoof
   internal static class IcomScopeToolbarLayout
   {
     /// <summary>
-    /// Use secondary toolbar rows when the full controls cannot fit at
-    /// their readable font size. Never reduce the operator's font size.
+    /// Measure actual rendered text instead of retaining default WinForms
+    /// Label.Width (100px) and Button.Width (75px) from initialization.
+    /// These invisible gaps caused the previous four-row regression.
     /// </summary>
-    internal static bool RequiresAdditionalRows(int available, int required)
+    internal static int PreferredWidth(System.Windows.Forms.Control control)
     {
-      return available > 0 && required > available;
+      var font = control.Font;
+      int Measure(string text) => System.Windows.Forms.TextRenderer.MeasureText(
+        text, font, Size.Empty,
+        System.Windows.Forms.TextFormatFlags.NoPadding).Width;
+
+      if (control is System.Windows.Forms.Label label)
+        return Math.Max(28, Measure(label.Text) + 7);
+      if (control is System.Windows.Forms.Button button)
+        return Math.Max(48, Measure(button.Text) + 18);
+      if (control is System.Windows.Forms.ComboBox combo)
+        return Math.Max(55, combo.Items.Cast<object>()
+          .Select(value => Measure(value.ToString() ?? string.Empty))
+          .DefaultIfEmpty(0).Max() + 27);
+      if (control is System.Windows.Forms.NumericUpDown)
+        return 76;
+      return Math.Max(32, control.Width);
+    }
+
+    internal static int RequiredWidth(
+      IEnumerable<System.Windows.Forms.Control> controls,
+      System.Windows.Forms.Control? ignoredWhenHidden = null)
+    {
+      return controls.Where(c => c.Visible)
+        .Sum(c => c.Width + c.Margin.Horizontal);
+    }
+
+    // Deduct overflow against the full caption width, not its already
+    // shortened value, so repetitive refreshes cannot oscillate.
+    internal static int GeometryWidth(
+      int available, int requiredAtFullWidth,
+      int preferred = 104, int minimum = 60)
+    {
+      if (available <= 0) return preferred;
+      return Math.Max(minimum,
+        preferred - Math.Max(0, requiredAtFullWidth - available));
     }
   }
 }
