@@ -88,13 +88,12 @@ namespace SkyRoof
   internal static class IcomScopeToolbarLayout
   {
     /// <summary>
-    /// Keep two row groups intact and scale the entire toolbar rather than
-    /// wrapping controls, introducing scrollbars or hiding CAT operations.
+    /// Use secondary toolbar rows when the full controls cannot fit at
+    /// their readable font size. Never reduce the operator's font size.
     /// </summary>
-    internal static float CalculateScale(int available, int required)
+    internal static bool RequiresAdditionalRows(int available, int required)
     {
-      if (required <= 0 || available <= 0) return 1;
-      return Math.Clamp(available / (float)required, .55f, 1f);
+      return available > 0 && required > available;
     }
   }
 }
