@@ -42,8 +42,15 @@ namespace SkyRoof
     private readonly ToolTip ScopeTips = new() { AutoPopDelay = 18000, InitialDelay = 350 };
     private readonly FlowLayoutPanel RadioToolbar = new();
     private readonly FlowLayoutPanel DisplayToolbar = new();
-    private readonly Dictionary<Control, (int Width, float FontSize, Padding Margin)> ToolbarMetrics = new();
-    private float AppliedToolbarScale = -1;
+    private readonly FlowLayoutPanel ScopeActionsToolbar = new();
+    private readonly Button MoreScopeControlsBtn = new();
+    private readonly Dictionary<string, FlowLayoutPanel> ScopeGroups = new();
+    private readonly Dictionary<string, Control[]> ScopeGroupMembers = new();
+    private TableLayoutPanel? SpectrumRootLayout;
+    private TableLayoutPanel? SpectrumToolbarLayout;
+    private ScopeToolbarDensity ScopeLayoutDensity = ScopeToolbarDensity.Standard;
+    private bool UpdatingScopeLayout;
+    private int ScopeToolbarRowHeight;
     private readonly IcomLanSpectrumView SpectrumView = new();
     private readonly System.Windows.Forms.Timer UiTimer = new() { Interval = 500 };
     private readonly IcomScopeState ScopeState = new();
@@ -143,32 +150,79 @@ namespace SkyRoof
       UiTimer.Start();
     }
 
+    private const float ScopeOperatorFontPt = 10.0f;
+
     private static Label ScopeToolbarCaption(string text, ScopeUiColors colors) =>
       new()
       {
-        Text = text, Width = 34, Height = 28,
-        TextAlign = ContentAlignment.MiddleCenter,
-        Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 8.5f, FontStyle.Bold),
-        ForeColor = colors.Muted,
-        Margin = new Padding(2, 3, 5, 1),
-        AutoSize = false
+        Text = text, AutoSize = false,
+        TextAlign = ContentAlignment.MiddleLeft,
+        ForeColor = colors.Muted
       };
+
+    private static int ScopeTextWidth(string text, Font font) =>
+      TextRenderer.MeasureText(text, font, Size.Empty,
+        TextFormatFlags.NoPadding | TextFormatFlags.SingleLine).Width;
+
+    private static int ScopeGroupWidth(FlowLayoutPanel group) =>
+      group.Width + group.Margin.Horizontal;
+
+    private FlowLayoutPanel AddScopeGroup(
+      string name, FlowLayoutPanel destination, params Control[] controls)
+    {
+      var group = new FlowLayoutPanel
+      {
+        Name = "Scope_" + name,
+        WrapContents = false, AutoScroll = false, AutoSize = false,
+        FlowDirection = FlowDirection.LeftToRight,
+        Margin = new Padding(0, 0, 3, 0),
+        Padding = Padding.Empty, BackColor = ScopeUiColors.Current.Surface
+      };
+      foreach (Control item in controls)
+        group.Controls.Add(item); // Preserve the original event handlers.
+      ScopeGroups.Add(name, group);
+      ScopeGroupMembers.Add(name, controls);
+      destination.Controls.Add(group);
+      return group;
+    }
 
     private void InitializeToolbarLayout()
     {
-      var colors = ScopeUiColors.Current;
-      foreach (FlowLayoutPanel bar in new[] { RadioToolbar, DisplayToolbar })
-      foreach (Control item in bar.Controls)
+      ScopeUiColors colors = ScopeUiColors.Current;
+      var radio = RadioToolbar.Controls.Cast<Control>().ToArray();
+      var display = DisplayToolbar.Controls.Cast<Control>().ToArray();
+
+      // Font scaling is performed only by WinForms / Windows DPI.
+      // A smaller dock must never rewrite a control's Font.Size.
+      foreach (Control item in radio.Concat(display))
       {
-        // Preserve the original control widths and font size. Changing a
-        // DisplayLabel's AutoSize while laying out must not move its combo.
-        int originalWidth = item is Label label && label.AutoSize
-          ? Math.Max(item.PreferredSize.Width + 2, item.Width) : item.Width;
-        if (item is Label label2) label2.AutoSize = false;
-        if (item is Button button) button.AutoSize = false;
-        item.Width = originalWidth;
-        item.Height = Math.Min(30, Math.Max(22, item.Height));
-        ToolbarMetrics[item] = (originalWidth, item.Font.Size, item.Margin);
+        item.Font = new Font(SystemFonts.MessageBoxFont.FontFamily,
+          ScopeOperatorFontPt, item.Font.Style);
+        if (item is Label label)
+        {
+          label.AutoSize = false;
+          label.TextAlign = ContentAlignment.MiddleLeft;
+          item.Width = Math.Max(18, ScopeTextWidth(label.Text, item.Font) + 5);
+        }
+        else if (item is ComboBox combo)
+        {
+          int longest = combo.Items.Cast<object>()
+            .Select(v => ScopeTextWidth(v.ToString() ?? "", item.Font))
+            .DefaultIfEmpty(0).Max();
+          // Dropdown arrow, borders and focus inset occupy extra physical pixels.
+          item.Width = Math.Max(52, longest + 28);
+        }
+        else if (item is NumericUpDown)
+          item.Width = Math.Max(72, ScopeTextWidth("-20.0", item.Font) + 29);
+        else if (item is Button button)
+        {
+          button.AutoSize = false;
+          item.Width = Math.Max(38, ScopeTextWidth(button.Text, item.Font) + 17);
+        }
+
+        item.Height = item is ComboBox ? item.PreferredSize.Height
+          : Math.Max(item.Font.Height + 9, 27);
+        item.Margin = new Padding(0, 2, item is Label ? 2 : 3, 2);
         if (item is ComboBox or NumericUpDown or Button)
         {
           item.BackColor = colors.Surface;
@@ -177,15 +231,116 @@ namespace SkyRoof
         else if (item is Label)
           item.ForeColor = colors.Muted;
       }
+
+      Label R(string text) => radio.OfType<Label>().Single(c => c.Text == text);
+      Label D(string text) => display.OfType<Label>().Single(c => c.Text == text);
+
+      AddScopeGroup("r-title", RadioToolbar, radio[0]);
+      AddScopeGroup("r-band", RadioToolbar, ScopeBandBox);
+      AddScopeGroup("r-mode", RadioToolbar, ScopeModeBox);
+      AddScopeGroup("r-span", RadioToolbar, SpanEdgeBox, FixedEdgeEditBtn);
+      AddScopeGroup("r-ref", RadioToolbar, R("REF:"), ReferenceBox);
+      AddScopeGroup("r-speed", RadioToolbar, SweepSpeedBox);
+      AddScopeGroup("r-vbw", RadioToolbar, R("VBW:"), VbwBox);
+
+      AddScopeGroup("d-title", DisplayToolbar, display[0]);
+      AddScopeGroup("d-start", DisplayToolbar, StartStopBtn);
+      AddScopeGroup("d-clear", DisplayToolbar, ClearBtn);
+      AddScopeGroup("d-hold", DisplayToolbar, HoldBtn);
+      AddScopeGroup("d-peak", DisplayToolbar, PeakBtn);
+      AddScopeGroup("d-wf", DisplayToolbar, WaterfallBtn);
+      AddScopeGroup("d-avg", DisplayToolbar, D("AVG:"), AverageBox);
+      AddScopeGroup("d-smooth", DisplayToolbar, D("SMOOTH:"), SmoothBox);
+      AddScopeGroup("d-zoom", DisplayToolbar, D("ZOOM:"), ZoomBox);
+
+      // The frequency geometry is already shown in SpectrumView's heading.
+      // Retain its data source and make it available from the SPAN tooltip.
+      RadioToolbar.Controls.Remove(GeometryLabel);
+      GeometryLabel.Visible = false;
+      ScopeTips.SetToolTip(SpanEdgeBox, GeometryLabel.Text);
+
+      ScopeActionsToolbar.Controls.Add(SettingsBtn);
+      ScopeActionsToolbar.Controls.Add(ReadbackBtn);
+      MoreScopeControlsBtn.Text = "MORE";
+      MoreScopeControlsBtn.Font = new Font(SystemFonts.MessageBoxFont.FontFamily,
+        ScopeOperatorFontPt);
+      MoreScopeControlsBtn.AutoSize = false;
+      MoreScopeControlsBtn.Width =
+        ScopeTextWidth(MoreScopeControlsBtn.Text, MoreScopeControlsBtn.Font) + 18;
+      MoreScopeControlsBtn.Height = Math.Max(27, MoreScopeControlsBtn.Font.Height + 9);
+      MoreScopeControlsBtn.Margin = new Padding(0, 2, 3, 2);
+      MoreScopeControlsBtn.Click += (_, _) => ShowMoreScopeControlsMenu();
+      ScopeTips.SetToolTip(MoreScopeControlsBtn,
+        "Additional scope controls, including those omitted in the compact layout.");
+      ScopeActionsToolbar.Controls.Add(MoreScopeControlsBtn);
+
+      // Readback / Settings stay pinned to the right edge of the second row.
+      ScopeActionsToolbar.FlowDirection = FlowDirection.RightToLeft;
+      ScopeActionsToolbar.WrapContents = false;
+      ScopeActionsToolbar.AutoScroll = false;
+      ScopeActionsToolbar.Dock = DockStyle.Fill;
+      ScopeActionsToolbar.Margin = Padding.Empty;
+      ScopeActionsToolbar.Padding = new Padding(1, 0, 1, 0);
+      ScopeActionsToolbar.BackColor = colors.Surface;
+      ScopeActionsToolbar.ForeColor = colors.Text;
+      SpectrumToolbarLayout!.Controls.Add(ScopeActionsToolbar, 1, 1);
+      SpectrumToolbarLayout.ColumnStyles[1].Width = 1;
+
+      UpdateScopeGroupMeasurements();
       ApplyThemeToToolbar();
+      FitToolbarsToWidth();
+    }
+
+    private void UpdateScopeGroupMeasurements()
+    {
+      // All widths are actual current-device pixels, including Win32 native
+      // ComboBoxes. Never measure with a hard-coded 96 DPI font assumption.
+      ScopeToolbarRowHeight = Math.Max(
+        (int)Math.Ceiling(36d * DeviceDpi / 96),
+        ScopeGroupMembers.Values.SelectMany(c => c).Concat(
+          new Control[] { MoreScopeControlsBtn })
+          .Max(c => c.Height) + 10);
+      // Center each native Win32 control vertically without feeding previous
+      // margins into a future row-height calculation (avoids resize drift).
+      foreach (Control item in ScopeGroupMembers.Values.SelectMany(c => c)
+        .Concat(new Control[] { ReadbackBtn, SettingsBtn, MoreScopeControlsBtn }))
+      {
+        Padding old = item.Margin;
+        item.Margin = new Padding(old.Left,
+          Math.Max(1, (ScopeToolbarRowHeight - item.Height) / 2),
+          old.Right, 0);
+      }
+      foreach (var (name, group) in ScopeGroups)
+      {
+        int width = 0;
+        foreach (Control item in ScopeGroupMembers[name])
+        {
+          if (item == FixedEdgeEditBtn && SpanEdgeShowsSpan)
+            continue;
+          width += item.Width + item.Margin.Horizontal;
+        }
+        group.Width = Math.Max(1, width + group.Padding.Horizontal);
+        group.Height = ScopeToolbarRowHeight;
+      }
+      if (SpectrumRootLayout != null && SpectrumToolbarLayout != null)
+      {
+        SpectrumToolbarLayout.RowStyles[0].Height = ScopeToolbarRowHeight;
+        SpectrumToolbarLayout.RowStyles[1].Height = ScopeToolbarRowHeight;
+        SpectrumRootLayout.RowStyles[0].Height = ScopeToolbarRowHeight * 2 + 4;
+      }
     }
 
     private void ApplyThemeToToolbar()
     {
       ScopeUiColors colors = ScopeUiColors.Current;
-      RadioToolbar.BackColor = DisplayToolbar.BackColor = colors.Surface;
-      foreach (Control item in RadioToolbar.Controls.Cast<Control>()
-        .Concat(DisplayToolbar.Controls.Cast<Control>()))
+      foreach (FlowLayoutPanel bar in new[]
+        { RadioToolbar, DisplayToolbar, ScopeActionsToolbar })
+        bar.BackColor = colors.Surface;
+      foreach (FlowLayoutPanel group in ScopeGroups.Values)
+        group.BackColor = colors.Surface;
+
+      foreach (Control item in ScopeGroupMembers.Values.SelectMany(c => c)
+        .Concat(new Control[] { ReadbackBtn, SettingsBtn, MoreScopeControlsBtn }))
       {
         if (item is Label) item.ForeColor = colors.Muted;
         else if (item is Button button && button != HoldBtn &&
@@ -199,48 +354,190 @@ namespace SkyRoof
       UpdateDisplayButtons();
     }
 
+    private int GroupBudget(params string[] names) =>
+      names.Sum(name => ScopeGroupWidth(ScopeGroups[name]));
+
     private void FitToolbarsToWidth()
     {
-      if (RadioToolbar.ClientSize.Width <= 0 || ToolbarMetrics.Count == 0)
+      if (UpdatingScopeLayout || SpectrumRootLayout == null ||
+        SpectrumToolbarLayout == null || ScopeGroups.Count == 0 ||
+        RadioToolbar.ClientSize.Width <= 0)
         return;
-      int available = Math.Min(RadioToolbar.ClientSize.Width,
-        DisplayToolbar.ClientSize.Width) - 6;
-      // The fixed edge editor is present only in FIXED / SCROLL-F modes.
-      int radio = RadioToolbar.Controls.Cast<Control>()
-        .Where(c => c.Visible)
-        .Sum(c => ToolbarMetrics[c].Width + ToolbarMetrics[c].Margin.Horizontal);
-      int display = DisplayToolbar.Controls.Cast<Control>()
-        .Where(c => c.Visible)
-        .Sum(c => ToolbarMetrics[c].Width + ToolbarMetrics[c].Margin.Horizontal);
-      float scale = IcomScopeToolbarLayout.CalculateScale(
-        available, Math.Max(radio, display));
-      if (Math.Abs(AppliedToolbarScale - scale) < .025f) return;
-      AppliedToolbarScale = scale;
 
+      UpdatingScopeLayout = true;
+      SpectrumToolbarLayout.SuspendLayout();
       RadioToolbar.SuspendLayout();
       DisplayToolbar.SuspendLayout();
+      ScopeActionsToolbar.SuspendLayout();
       try
       {
-        foreach (var (control, original) in ToolbarMetrics)
+        UpdateScopeGroupMeasurements();
+        int available = Math.Min(
+          RadioToolbar.ClientSize.Width, SpectrumToolbarLayout.ClientSize.Width) - 6;
+
+        const string R = "r-title,r-band,r-mode,r-span,r-ref,r-speed,r-vbw";
+        const string D = "d-title,d-start,d-clear,d-hold,d-peak,d-wf,d-avg,d-smooth,d-zoom";
+        string[] standardRadio = R.Split(',');
+        string[] standardDisplay = D.Split(',');
+        string[] compactRadio = "r-band,r-mode,r-span,r-ref".Split(',');
+        string[] compactDisplay = "d-start,d-clear,d-hold,d-peak,d-wf,d-avg".Split(',');
+        string[] restrictedRadio = "r-band,r-mode,r-span".Split(',');
+        string[] restrictedDisplay = "d-start,d-hold,d-wf".Split(',');
+        string[] minimalRadio = "r-mode,r-span".Split(',');
+        string[] minimalDisplay = "d-start,d-hold".Split(',');
+
+        int actionStandard = ReadbackBtn.Width + ReadbackBtn.Margin.Horizontal +
+          SettingsBtn.Width + SettingsBtn.Margin.Horizontal + 4;
+        int actionMore = actionStandard + MoreScopeControlsBtn.Width +
+          MoreScopeControlsBtn.Margin.Horizontal;
+        int actionMinimal = SettingsBtn.Width + SettingsBtn.Margin.Horizontal +
+          MoreScopeControlsBtn.Width + MoreScopeControlsBtn.Margin.Horizontal + 4;
+        int groupPadding = RadioToolbar.Padding.Horizontal + 6;
+        int displayPadding = DisplayToolbar.Padding.Horizontal + 6;
+
+        var plan = IcomScopeToolbarLayout.Pick(
+          available,
+          GroupBudget(standardRadio) + groupPadding,
+          GroupBudget(standardDisplay) + displayPadding + actionStandard,
+          GroupBudget(compactRadio) + groupPadding,
+          GroupBudget(compactDisplay) + displayPadding + actionMore,
+          GroupBudget(restrictedRadio) + groupPadding,
+          GroupBudget(restrictedDisplay) + displayPadding + actionMore,
+          GroupBudget(minimalRadio) + groupPadding,
+          GroupBudget(minimalDisplay) + displayPadding + actionMinimal);
+
+        ScopeLayoutDensity = plan;
+        string[] radioKeep = plan switch
         {
-          int width = Math.Max(18, (int)Math.Floor(original.Width * scale));
-          control.Width = width;
-          control.Margin = new Padding(
-            (int)Math.Floor(original.Margin.Left * scale),
-            original.Margin.Top,
-            (int)Math.Floor(original.Margin.Right * scale),
-            original.Margin.Bottom);
-          float fontSize = Math.Max(6.5f, original.FontSize * scale);
-          if (Math.Abs(control.Font.Size - fontSize) > .2f)
-            control.Font = new Font(control.Font.FontFamily, fontSize,
-              control.Font.Style);
-        }
+          ScopeToolbarDensity.Standard => standardRadio,
+          ScopeToolbarDensity.Compact => compactRadio,
+          ScopeToolbarDensity.Restricted => restrictedRadio,
+          _ => minimalRadio
+        };
+        string[] displayKeep = plan switch
+        {
+          ScopeToolbarDensity.Standard => standardDisplay,
+          ScopeToolbarDensity.Compact => compactDisplay,
+          ScopeToolbarDensity.Restricted => restrictedDisplay,
+          _ => minimalDisplay
+        };
+        var rVisible = radioKeep.ToHashSet(StringComparer.Ordinal);
+        var dVisible = displayKeep.ToHashSet(StringComparer.Ordinal);
+        foreach (var (name, group) in ScopeGroups)
+          group.Visible = name.StartsWith("r-", StringComparison.Ordinal)
+            ? rVisible.Contains(name) : dVisible.Contains(name);
+
+        bool more = plan != ScopeToolbarDensity.Standard;
+        MoreScopeControlsBtn.Visible = more;
+        ReadbackBtn.Visible = plan != ScopeToolbarDensity.Minimal;
+        SpectrumToolbarLayout.ColumnStyles[1].Width =
+          more ? plan == ScopeToolbarDensity.Minimal ? actionMinimal : actionMore
+            : actionStandard;
+        // Do not leave previous panel widths when changing DockPanel tabs.
+        // Explicit right-side reservation is recomputed on each resize.
+        ScopeActionsToolbar.PerformLayout();
       }
       finally
       {
-        RadioToolbar.ResumeLayout(true);
+        ScopeActionsToolbar.ResumeLayout(true);
         DisplayToolbar.ResumeLayout(true);
+        RadioToolbar.ResumeLayout(true);
+        SpectrumToolbarLayout.ResumeLayout(true);
+        UpdatingScopeLayout = false;
       }
+    }
+
+    private void ShowMoreScopeControlsMenu()
+    {
+      var menu = new ContextMenuStrip();
+      ToolStripMenuItem settings = new("Spectrum settings…");
+      settings.Click += (_, _) => SettingsBtn.PerformClick();
+      menu.Items.Add(settings);
+      if (!ReadbackBtn.Visible)
+        menu.Items.Add("Read back from IC-9700", null,
+          (_, _) => RequestScopeReadback());
+      if (!ScopeGroups["d-clear"].Visible)
+        menu.Items.Add("Clear spectrum", null, (_, _) =>
+        {
+          ScopeState.Clear();
+          SpectrumView.Clear();
+          RefreshScopeGeometryUi();
+        });
+      if (!ScopeGroups["d-peak"].Visible)
+        menu.Items.Add("Toggle PEAK", null, (_, _) =>
+        {
+          PeakHold = !PeakHold;
+          SpectrumView.SetPeakHold(PeakHold);
+          UpdateDisplayButtons();
+        });
+      if (!ScopeGroups["d-wf"].Visible)
+        menu.Items.Add("Toggle WF", null, (_, _) =>
+        {
+          var settings = ctx.Settings.IcomLanSpectrum;
+          settings.ShowWaterfall = !settings.ShowWaterfall;
+          SpectrumView.SetWaterfallVisible(settings.ShowWaterfall);
+          ctx.Settings.SaveToFile();
+          UpdateDisplayButtons();
+        });
+      if (!ScopeGroups["r-band"].Visible)
+      {
+        var band = new ToolStripMenuItem("Scope band");
+        for (int i = 0; i < ScopeBandBox.Items.Count; i++)
+        {
+          int choice = i;
+          band.DropDownItems.Add(ScopeBandBox.Items[i].ToString(), null,
+            (_, _) => ScopeBandBox.SelectedIndex = choice);
+        }
+        menu.Items.Add(band);
+      }
+      void LocalChoices(string caption, ComboBox box)
+      {
+        var item = new ToolStripMenuItem(caption);
+        for (int i = 0; i < box.Items.Count; i++)
+        {
+          int choice = i;
+          var option = new ToolStripMenuItem(box.Items[i].ToString())
+          {
+            Checked = box.SelectedIndex == i
+          };
+          option.Click += (_, _) => box.SelectedIndex = choice;
+          item.DropDownItems.Add(option);
+        }
+        menu.Items.Add(item);
+      }
+      if (!ScopeGroups["d-avg"].Visible) LocalChoices("AVG", AverageBox);
+      if (!ScopeGroups["d-smooth"].Visible) LocalChoices("SMOOTH", SmoothBox);
+      if (!ScopeGroups["d-zoom"].Visible) LocalChoices("ZOOM", ZoomBox);
+      if (!ScopeGroups["r-ref"].Visible || !ScopeGroups["r-speed"].Visible ||
+          !ScopeGroups["r-vbw"].Visible)
+        menu.Items.Add("REF / SPEED / VBW in Spectrum settings…", null,
+          (_, _) => SettingsBtn.PerformClick());
+      menu.Closed += (_, _) => menu.Dispose();
+      menu.Show(MoreScopeControlsBtn, new Point(0, MoreScopeControlsBtn.Height));
+    }
+
+    private string ScopeToolbarDiagnostics()
+    {
+      var lines = new List<string>
+      {
+        $"Toolbar layout: {ScopeLayoutDensity}",
+        $"Toolbar DPI: {DeviceDpi}; MainForm DPI: {ctx.MainForm.DeviceDpi}",
+        $"Toolbar font: {ScopeOperatorFontPt:0.0} pt (never width-scaled)",
+        $"Toolbar client: {RadioToolbar.ClientSize.Width} × {ScopeToolbarRowHeight * 2} px",
+        $"Spectrum content: {SpectrumView.ClientSize.Width} × {SpectrumView.ClientSize.Height} px"
+      };
+      foreach (var (key, group) in ScopeGroups)
+      {
+        if (!group.Visible) continue;
+        var bar = group.Parent;
+        int right = group.Right + group.Margin.Right;
+        bool outOfBounds = bar != null &&
+          right > bar.ClientSize.Width - bar.Padding.Right;
+        lines.Add($"  {key}: x={group.Left}, w={group.Width}, right={right}, " +
+          $"container={bar?.ClientSize.Width}, clipped={outOfBounds}");
+      }
+      lines.Add($"Toolbar mode: {(SpanEdgeShowsSpan ? "SPAN" : "EDGE")}");
+      return string.Join(Environment.NewLine, lines);
     }
 
     private void BuildUi()
@@ -261,31 +558,33 @@ namespace SkyRoof
       root.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
       root.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
 
-      // Two stable, non-wrapping rows. Never separate ZOOM from its
-      // selector or let toolbar wrapping consume the waterfall's height.
+      // Two DPI-aware rows with separately reserved right-hand actions.
       var toolbar = new TableLayoutPanel
       {
-        Dock = DockStyle.Fill,
-        ColumnCount = 1, RowCount = 2,
-        Margin = new Padding(0, 0, 0, 2),
-        Padding = new Padding(0),
+        Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2,
+        Margin = new Padding(0, 0, 0, 2), Padding = Padding.Empty,
         BackColor = colors.Background
       };
+      SpectrumRootLayout = root;
+      SpectrumToolbarLayout = toolbar;
       toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+      toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 1));
       toolbar.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
       toolbar.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
       foreach (var bar in new[] { RadioToolbar, DisplayToolbar })
       {
         bar.Dock = DockStyle.Fill;
         bar.WrapContents = false;
+        bar.AutoScroll = false;
         bar.AutoSize = false;
         bar.FlowDirection = FlowDirection.LeftToRight;
         bar.Padding = new Padding(2, 1, 2, 1);
-        bar.Margin = new Padding(0);
+        bar.Margin = Padding.Empty;
         bar.BackColor = colors.Surface;
         bar.ForeColor = colors.Text;
       }
       toolbar.Controls.Add(RadioToolbar, 0, 0);
+      toolbar.SetColumnSpan(RadioToolbar, 2);
       toolbar.Controls.Add(DisplayToolbar, 0, 1);
       RadioToolbar.Resize += (_, _) => FitToolbarsToWidth();
       DisplayToolbar.Resize += (_, _) => FitToolbarsToWidth();
@@ -871,7 +1170,8 @@ namespace SkyRoof
           try
           {
             Clipboard.SetText(
-              LastDiagnosticsText);
+              LastDiagnosticsText + Environment.NewLine +
+              Environment.NewLine + ScopeToolbarDiagnostics());
           }
           catch (System.Runtime.InteropServices.ExternalException)
           {
@@ -903,6 +1203,11 @@ namespace SkyRoof
       InitializeToolbarLayout();
       root.SizeChanged += (_, _) => FitToolbarsToWidth();
       Shown += (_, _) => FitToolbarsToWidth();
+      DpiChanged += (_, _) =>
+      {
+        UpdateScopeGroupMeasurements();
+        FitToolbarsToWidth();
+      };
 
       SpectrumView.Dock = DockStyle.Fill;
       SpectrumView.Margin = new Padding(0);
@@ -1622,6 +1927,7 @@ namespace SkyRoof
         GeometryLabel.Text +=
           $" · {FormatSpanChoice(pendingGeometrySpan.SpanHz)} pending";
 
+      ScopeTips.SetToolTip(SpanEdgeBox, GeometryLabel.Text);
       UpdateScopeControlAvailability();
     }
 
@@ -1655,6 +1961,7 @@ namespace SkyRoof
         showSpan;
       FixedEdgeEditBtn.Visible =
         !showSpan;
+      UpdateScopeGroupMeasurements();
       FitToolbarsToWidth();
 
       bool previousUpdating =
@@ -2737,7 +3044,8 @@ namespace SkyRoof
     {
       MessageBox.Show(
         this,
-        LastDiagnosticsText,
+        LastDiagnosticsText + Environment.NewLine +
+          Environment.NewLine + ScopeToolbarDiagnostics(),
         "频谱诊断",
         MessageBoxButtons.OK,
         MessageBoxIcon.Information);
