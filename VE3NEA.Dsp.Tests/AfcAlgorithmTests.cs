@@ -394,6 +394,16 @@ namespace VE3NEA.Dsp.Tests
       history.TryAttributedReadbackAt(T0.AddMilliseconds(900),
         AfcCatWriteSource.Calibration, out long cat).Should().BeTrue();
       cat.Should().Be(145000150);
+      history.TryAttributedReadbackAt(T0.AddMilliseconds(900),
+        AfcCatWriteSource.Calibration, out _,
+        notBeforeUtc: T0.AddMilliseconds(500)).Should().BeFalse(
+          "a current readback may not confirm an earlier phase's command");
+      history.RecordRequest(145000150, T0.AddMilliseconds(1050),
+        AfcCatWriteSource.Calibration);
+      history.RecordReadback(145000150, T0.AddMilliseconds(1300));
+      history.TryAttributedReadbackAt(T0.AddMilliseconds(1400),
+        AfcCatWriteSource.Calibration, out _,
+        notBeforeUtc: T0.AddMilliseconds(1000)).Should().BeTrue();
     }
 
     [Fact]
