@@ -44,6 +44,8 @@ namespace SkyRoof
     internal bool RxAfcChecked => RxAfcCheckbox.Checked;
     internal double PredictedDownlinkDopplerHz =>
       -RadioLink.DownlinkFrequency * RadioLink.DopplerFactor;
+    internal double PredictedRxCatRateHzPerSecond =>
+      RadioLink.IsTerrestrial ? 0 : RadioLink.DownlinkDopplerRate;
 
     internal AfcSignalMode CurrentAfcMode =>
       (RadioLink.IsTerrestrial || RadioLink.TxCust == null
