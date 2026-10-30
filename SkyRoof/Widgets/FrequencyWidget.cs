@@ -83,10 +83,12 @@ namespace SkyRoof
         out ageSeconds);
     }
 
-    internal bool IsAfcProbeReadbackConfirmedAt(DateTime sampleUtc)
+    internal bool IsAfcProbeReadbackConfirmedAt(DateTime sampleUtc,
+      DateTime phaseStartedUtc)
     {
       return AfcCatTimeline.TryAttributedReadbackAt(
-        sampleUtc, AfcCatWriteSource.Calibration, out _);
+        sampleUtc, AfcCatWriteSource.Calibration, out _,
+        notBeforeUtc: phaseStartedUtc);
     }
 
     internal bool IsAfcReadbackConfirmedAt(DateTime sampleUtc)
