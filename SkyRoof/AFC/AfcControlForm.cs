@@ -601,10 +601,18 @@ namespace SkyRoof.AFC
             (snapshot.State == AfcLockState.Locked ||
               polarityProbe.Active && snapshot.State == AfcLockState.Hold &&
               (DateTime.UtcNow - snapshot.LastObservationUtc).TotalSeconds < 3);
+          var phaseBefore = polarityProbe.State;
+          bool probeAcknowledged = owner.IsAfcProbeReadbackConfirmedAt(
+            observation.SampleUtc, polarityProbe.PhaseStartedUtc);
           polarityProbe.Observe(observation, readback,
-            owner.IsAfcProbeReadbackConfirmedAt(observation.SampleUtc,
-              polarityProbe.PhaseStartedUtc),
-            eligible, ctx.Settings.Cat.TuningStep, DateTime.UtcNow);
+            probeAcknowledged, eligible, ctx.Settings.Cat.TuningStep,
+            DateTime.UtcNow);
+          if (phaseBefore != polarityProbe.State)
+            Serilog.Log.Information(
+              "AFC polarity calibration: {Before} -> {After}, detail={Detail}, IF={If:F1} Hz, CAT={Cat:F0} Hz, readbackAck={Ack}, confidence={Confidence:P0}, sampleUtc={SampleUtc:o}",
+              phaseBefore, polarityProbe.State, polarityProbe.Detail,
+              observation.IfOffsetHz, readback, probeAcknowledged,
+              observation.Confidence, observation.SampleUtc);
           if (polarityProbe.VerifiedSign != 0)
             owner.AfcController.ConfirmCalibratedSign(
               polarityProbe.VerifiedSign);
