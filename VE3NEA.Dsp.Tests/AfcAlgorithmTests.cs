@@ -571,7 +571,6 @@ namespace VE3NEA.Dsp.Tests
       controller.Snapshot.CorrectionHz.Should().BeGreaterThan(0);
     }
 
-  }
     [Fact]
     public void AFC_ProbeAcceptsSafeQuantized100HzRigStep()
     {
@@ -599,4 +598,5 @@ namespace VE3NEA.Dsp.Tests
       probe.VerifiedSign.Should().Be(1);
     }
 
+  }
 }
