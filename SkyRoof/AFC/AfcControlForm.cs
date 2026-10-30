@@ -582,7 +582,8 @@ namespace SkyRoof.AFC
           // An inferred sign from incidental Doppler motion is not proof.
           // Only a deliberate, restored probe or an explicit operator
           // mapping may open the automatic CAT servo.
-          bool blocked = cfg.RfIfSign == 0 &&
+          bool explicitSign = cfg.RfIfSign is 1 or -1;
+          bool blocked = !explicitSign &&
             polarityProbe.State != AfcPolarityCalibrator.Phase.Complete;
           owner.AfcController.Observe(observation, readback,
             cfg.RfIfSign, Math.Clamp(cfg.MaxCorrectionHz, 1, 10000),
@@ -594,7 +595,7 @@ namespace SkyRoof.AFC
               owner.IsAfcReadbackConfirmedAt(observation.SampleUtc),
             calibrationInProgress: blocked);
           var snapshot = owner.AfcController.Snapshot;
-          bool eligible = cfg.RfIfSign == 0 &&
+          bool eligible = !explicitSign &&
             EffectiveControl() == AfcControlMode.Auto &&
             !owner.IsAfcTransmitting &&
             snapshot.State == AfcLockState.Locked;
