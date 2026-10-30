@@ -1,3 +1,32 @@
+# SkyRoof Fork v.1.59 / SkyRoof Fork 1.59 版本说明
+
+Release date / 发布日期: 2026-10-30. Source: `Iu-yang1/SkyRoof`, based on VE3NEA/SkyRoof v.1.56.
+
+## English — changes since v.1.58
+
+- The IC-9700 LAN spectrum toolbar now uses compact English operator buttons: START/STOP, CLEAR, SYNC and SETS, while retaining REF, VBW, AVG, SMOOTH and ZOOM.
+- Initial bilingual Settings PropertyGrid interface, with an in-dialog 简体中文 / English selector. Language is saved to `UiSettings.Language` and does not change radio parameters or JSON field names.
+- AFC Live Tracking, control states, diagnosis messages and Advanced Settings labels support Chinese/English presentation; technical details and numerical settings keep their original semantics.
+- Includes recent responsive spectrum-toolbar and DPI improvements, and safe reusable MORE context-menu lifecycle handling.
+- Localized names and core controls are covered first; less common technical setting descriptions retain their original text until reviewed.
+- No change to CAT protocol, Doppler logic, IF demodulation or AFC correction algorithms.
+
+## 中文 — 相对 v.1.58 的变化
+
+- IC-9700 LAN 频谱工具栏采用紧凑英文操作按钮：START/STOP、CLEAR、SYNC、SETS，保留 REF、VBW、AVG、SMOOTH、ZOOM。
+- 设置窗口增加简体中文/English 语言选择，首批汉化设置分类、常用设置项和参数标签；语言设置可保存，不更改 JSON 字段或电台控制配置。
+- AFC 实时追踪页、控制状态、诊断说明和高级设置属性支持中英双语呈现。
+- 包含近期 DPI 响应式两行工具栏及 MORE 菜单生命周期异常修复。
+- 较少使用的技术设置说明文字仍逐步完善，本版不宣称全部设置说明均已完成翻译。
+- 不修改 CAT 协议、多普勒算法、IF 解调或 AFC 频率控制算法。
+
+## Release process / 发布流程
+
+唯一版本来源为 `Directory.Build.props` → `1.59`。合并至 master 后，Build and Release 自动完成 Windows x64 编译、测试、Inno Setup 安装包和 `v.1.59` Release。
+如未配置 SignPath，依照项目现有策略发布未签名的 **pre-release**，不得标为已签名正式版。
+
+---
+
 # SkyRoof Fork v.1.58 / SkyRoof Fork 1.58 版本说明
 
 Release date / 发布日期: 2026-10-24. Source: `Iu-yang1/SkyRoof`, based on VE3NEA/SkyRoof v.1.56.
