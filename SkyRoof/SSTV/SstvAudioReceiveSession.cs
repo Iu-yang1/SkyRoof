@@ -175,9 +175,9 @@ namespace SkyRoof.SSTV
           {
             double audio = intermediateIf ? ifDemod.Process(samples[i]) : samples[i];
             audio = Math.Clamp(double.IsFinite(audio) ? audio : 0, -1.0, 1.0);
-            int correction = ManualCorrectionHz;
-            if (correction != 0)
-              audio = shifter.Process((float)audio, correction);
+            // Advance Hilbert delay even at 0 Hz so UI tuning never picks
+            // up stale AF from a previous non-zero correction.
+            audio = shifter.Process((float)audio, ManualCorrectionHz);
             fmPhase += 2.0 * Math.PI * (FmDeviationHz / SampleRate) * audio;
             if (fmPhase > Math.PI) fmPhase -= 2 * Math.PI;
             if (fmPhase < -Math.PI) fmPhase += 2 * Math.PI;
