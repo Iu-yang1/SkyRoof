@@ -12,7 +12,7 @@ namespace SkyRoof.AFC
     public enum Phase { Waiting, Probing, Restoring, Complete, Failed }
 
     private long generation = -1;
-    private DateTime phaseStartedUtc;
+    private DateTime phaseStartedUtc, baselineSampleUtc, probedSampleUtc;
     private double baselineCatHz, baselineIfHz;
     private double probedCatHz, probedIfHz;
     private double previousWaitingIfHz = double.NaN;
@@ -39,7 +39,7 @@ namespace SkyRoof.AFC
     public void Reset()
     {
       generation = -1;
-      phaseStartedUtc = default;
+      phaseStartedUtc = baselineSampleUtc = probedSampleUtc = default;
       baselineCatHz = baselineIfHz = probedCatHz = probedIfHz = 0;
       previousWaitingIfHz = double.NaN;
       stableSamples = phaseVotes = candidateSign = 0;
@@ -58,7 +58,7 @@ namespace SkyRoof.AFC
     /// </summary>
     public void Observe(AfcObservation observation, double catReadbackHz,
       bool confirmedProbeReadback, bool eligible, int tuningStepHz,
-      DateTime nowUtc)
+      DateTime nowUtc, double predictedCatRateHzPerSecond = 0)
     {
       if (nowUtc.Kind != DateTimeKind.Utc)
         throw new ArgumentException("AFC calibration clock must be UTC");
@@ -68,6 +68,11 @@ namespace SkyRoof.AFC
         generation = observation.Generation;
       }
       if (State is Phase.Complete or Phase.Failed) return;
+      // Use the independent satellite model's RX tuning rate to remove the
+      // expected CAT movement between samples. Never infer direction from
+      // normal satellite Doppler tracking itself.
+      double catRate = double.IsFinite(predictedCatRateHzPerSecond)
+        ? Math.Clamp(predictedCatRateHzPerSecond, -500, 500) : 0;
 
       if (!eligible)
       {
@@ -117,6 +122,7 @@ namespace SkyRoof.AFC
         probeHz = Math.Ceiling(amplitude / (double)tuningStepHz) * tuningStepHz;
         baselineCatHz = catReadbackHz;
         baselineIfHz = observation.IfOffsetHz;
+        baselineSampleUtc = observation.SampleUtc;
         OffsetHz = probeHz;
         phaseStartedUtc = nowUtc;
         phaseVotes = candidateSign = 0;
@@ -135,7 +141,11 @@ namespace SkyRoof.AFC
       double expectedStep = State == Phase.Probing ? probeHz : -probeHz;
       double fromCat = State == Phase.Probing ? baselineCatHz : probedCatHz;
       double fromIf = State == Phase.Probing ? baselineIfHz : probedIfHz;
-      double catDelta = catReadbackHz - fromCat;
+      DateTime fromUtc = State == Phase.Probing
+        ? baselineSampleUtc : probedSampleUtc;
+      double expectedModelDelta =
+        catRate * (observation.SampleUtc - fromUtc).TotalSeconds;
+      double catDelta = catReadbackHz - fromCat - expectedModelDelta;
       double ifDelta = observation.IfOffsetHz - fromIf;
       double catTolerance = Math.Max(25, probeHz * .35);
       double ifTolerance = observation.Mode == AfcSignalMode.FM
@@ -168,6 +178,7 @@ namespace SkyRoof.AFC
       {
         probedCatHz = catReadbackHz;
         probedIfHz = observation.IfOffsetHz;
+        probedSampleUtc = observation.SampleUtc;
         OffsetHz = 0;
         State = Phase.Restoring;
         phaseStartedUtc = nowUtc;
@@ -176,7 +187,9 @@ namespace SkyRoof.AFC
 
       // Never publish the sign until the original RX was actually restored.
       double returnTolerance = observation.Mode == AfcSignalMode.FM ? 85 : 20;
-      if (Math.Abs(catReadbackHz - baselineCatHz) > catTolerance ||
+      double restoredCatDelta = catReadbackHz - baselineCatHz -
+        catRate * (observation.SampleUtc - baselineSampleUtc).TotalSeconds;
+      if (Math.Abs(restoredCatDelta) > catTolerance ||
           Math.Abs(observation.IfOffsetHz - baselineIfHz) > returnTolerance)
       {
         phaseVotes = 0;
