@@ -959,7 +959,7 @@ namespace SkyRoof
       GeometryLabel.Margin = new Padding(0, 7, 12, 0);
       RadioToolbar.Controls.Add(GeometryLabel);
 
-      StartStopBtn.Text = "启动";
+      StartStopBtn.Text = "START";
       StartStopBtn.AutoSize = true;
       StartStopBtn.Margin = new Padding(0, 2, 6, 2);
       StartStopBtn.Click += (_, _) =>
@@ -971,7 +971,7 @@ namespace SkyRoof
       };
       DisplayToolbar.Controls.Add(StartStopBtn);
 
-      ClearBtn.Text = "清空";
+      ClearBtn.Text = "CLEAR";
       ClearBtn.AutoSize = true;
       ClearBtn.Margin = new Padding(0, 2, 6, 2);
       ClearBtn.Click += (_, _) =>
@@ -1174,7 +1174,7 @@ namespace SkyRoof
         };
       DisplayToolbar.Controls.Add(ZoomBox);
 
-      ReadbackBtn.Text = "同步";
+      ReadbackBtn.Text = "SYNC";
       ReadbackBtn.AutoSize = true;
       ReadbackBtn.Margin =
         new Padding(0, 2, 6, 2);
@@ -1183,7 +1183,7 @@ namespace SkyRoof
       DisplayToolbar.Controls.Add(
         ReadbackBtn);
 
-      SettingsBtn.Text = "设置";
+      SettingsBtn.Text = "SETS";
       SettingsBtn.AutoSize = true;
       SettingsBtn.Margin = new Padding(0, 2, 0, 2);
       SettingsBtn.Click += (_, _) =>
@@ -1605,7 +1605,7 @@ namespace SkyRoof
       LastFixedEdgeConfirmationRequestUtc = DateTime.MinValue;
       LastScopeControlBackend = null;
 
-      StartStopBtn.Text = "停止";
+      StartStopBtn.Text = "STOP";
       StatusLabel.Text = settings.Source switch
       {
         IcomLanSpectrumSource.DirectLan =>
@@ -1694,7 +1694,7 @@ namespace SkyRoof
       UpdateDisplayButtons();
       RefreshScopeGeometryUi();
 
-      StartStopBtn.Text = "启动";
+      StartStopBtn.Text = "START";
       StatusLabel.Text = "频谱采集已停止。";
       StatsLabel.Text = "未连接 · 0.0 帧/s · 控制未同步";
     }
