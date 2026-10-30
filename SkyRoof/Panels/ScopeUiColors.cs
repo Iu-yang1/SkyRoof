@@ -96,6 +96,22 @@ namespace SkyRoof
   internal static class IcomScopeToolbarLayout
   {
     /// <summary>
+    /// Size an operator caption using WinForms' padded text renderer rather
+    /// than NoPadding glyph bounds. Labels draw using their own GDI text
+    /// padding, and the old 5px allowance clipped REF/AVG/SMOOTH/ZOOM
+    /// on high-DPI systems. Allow a small DPI-scaled safety inset.
+    /// </summary>
+    internal static int CaptionWidth(string text, Font font, int deviceDpi)
+    {
+      int dpi = Math.Max(96, deviceDpi);
+      int inset = (int)Math.Ceiling(8.0 * dpi / 96.0);
+      Size measured = System.Windows.Forms.TextRenderer.MeasureText(
+        text, font, Size.Empty,
+        System.Windows.Forms.TextFormatFlags.SingleLine);
+      return Math.Max(24, measured.Width + inset);
+    }
+
+    /// <summary>
     /// Evaluate complete, measured control groups in physical client pixels.
     /// Never reduce fonts, split a caption from its selector, wrap the rows,
     /// or claim a mode fits unless BOTH rows fit the dock width.
