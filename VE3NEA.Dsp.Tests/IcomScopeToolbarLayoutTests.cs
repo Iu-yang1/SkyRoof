@@ -13,6 +13,52 @@ namespace VE3NEA.Dsp.Tests;
 public sealed class IcomScopeToolbarLayoutTests
 {
   [Theory]
+  [InlineData("REF", 96)]
+  [InlineData("AVG", 120)]
+  [InlineData("SMOOTH", 144)]
+  [InlineData("ZOOM", 192)]
+  [InlineData("VBW:", 144)]
+  [InlineData("SMOOTH", 192)]
+  [InlineData("REF", 120)]
+  public void DpiCaptionWidthIncludesFullTextAndGdiPadding(
+    string caption, int dpi)
+  {
+    Exception? failure = null;
+    var thread = new Thread(() =>
+    {
+      try
+      {
+        using var font = new Font("Segoe UI", 10f * dpi / 96f);
+        using var label = new Label
+        {
+          Text = caption,
+          Font = font,
+          AutoSize = false,
+          TextAlign = ContentAlignment.MiddleLeft
+        };
+        int measured = TextRenderer.MeasureText(caption, font,
+          Size.Empty, TextFormatFlags.SingleLine).Width;
+        int width = IcomScopeToolbarLayout.CaptionWidth(caption, font, dpi);
+        label.Width = width;
+        label.Height = font.Height + 10;
+
+        Assert.True(width >= measured + (int)Math.Ceiling(8.0 * dpi / 96.0));
+        Assert.True(width > 0);
+        Assert.Equal(caption, label.Text);
+
+        using var bitmap = new Bitmap(width, label.Height);
+        label.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
+      }
+      catch (Exception ex) { failure = ex; }
+    });
+    thread.SetApartmentState(ApartmentState.STA);
+    thread.Start();
+    Assert.True(thread.Join(TimeSpan.FromSeconds(10)));
+    if (failure != null)
+      throw new Xunit.Sdk.XunitException(failure.ToString());
+  }
+
+  [Theory]
   [InlineData(880, 100, "Standard")]
   [InlineData(880, 125, "Compact")]
   [InlineData(880, 150, "Restricted")]

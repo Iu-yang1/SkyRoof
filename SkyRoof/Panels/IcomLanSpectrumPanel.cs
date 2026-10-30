@@ -156,14 +156,6 @@ namespace SkyRoof
 
     private const float ScopeOperatorFontPt = 10.0f;
 
-    private static Label ScopeToolbarCaption(string text, ScopeUiColors colors) =>
-      new()
-      {
-        Text = text, AutoSize = false,
-        TextAlign = ContentAlignment.MiddleLeft,
-        ForeColor = colors.Muted
-      };
-
     private static int ScopeTextWidth(string text, Font font) =>
       TextRenderer.MeasureText(text, font, Size.Empty,
         TextFormatFlags.NoPadding | TextFormatFlags.SingleLine).Width;
@@ -194,7 +186,8 @@ namespace SkyRoof
           item.Width = Math.Max(72, ScopeTextWidth("-20.0", item.Font) +
             SystemInformation.VerticalScrollBarWidth + 10);
         else if (item is Label label)
-          item.Width = Math.Max(18, ScopeTextWidth(label.Text, item.Font) + 5);
+          item.Width = IcomScopeToolbarLayout.CaptionWidth(
+            label.Text, label.Font, DeviceDpi);
         else if (item is Button button)
           item.Width = Math.Max(38, ScopeTextWidth(button.Text, item.Font) + 17);
       }
@@ -238,7 +231,8 @@ namespace SkyRoof
         {
           label.AutoSize = false;
           label.TextAlign = ContentAlignment.MiddleLeft;
-          item.Width = Math.Max(18, ScopeTextWidth(label.Text, item.Font) + 5);
+          item.Width = IcomScopeToolbarLayout.CaptionWidth(
+            label.Text, label.Font, DeviceDpi);
         }
         else if (item is ComboBox combo)
           item.Width = MeasureScopeComboWidth(combo);
@@ -265,23 +259,21 @@ namespace SkyRoof
       Label R(string text) => radio.OfType<Label>().Single(c => c.Text == text);
       Label D(string text) => display.OfType<Label>().Single(c => c.Text == text);
 
-      AddScopeGroup("r-title", RadioToolbar, radio[0]);
       AddScopeGroup("r-band", RadioToolbar, ScopeBandBox);
       AddScopeGroup("r-mode", RadioToolbar, ScopeModeBox);
       AddScopeGroup("r-span", RadioToolbar, SpanEdgeBox, FixedEdgeEditBtn);
-      AddScopeGroup("r-ref", RadioToolbar, R("REF:"), ReferenceBox);
+      AddScopeGroup("r-ref", RadioToolbar, R("REF"), ReferenceBox);
       AddScopeGroup("r-speed", RadioToolbar, SweepSpeedBox);
       AddScopeGroup("r-vbw", RadioToolbar, R("VBW:"), VbwBox);
 
-      AddScopeGroup("d-title", DisplayToolbar, display[0]);
       AddScopeGroup("d-start", DisplayToolbar, StartStopBtn);
       AddScopeGroup("d-clear", DisplayToolbar, ClearBtn);
       AddScopeGroup("d-hold", DisplayToolbar, HoldBtn);
       AddScopeGroup("d-peak", DisplayToolbar, PeakBtn);
       AddScopeGroup("d-wf", DisplayToolbar, WaterfallBtn);
-      AddScopeGroup("d-avg", DisplayToolbar, D("AVG:"), AverageBox);
-      AddScopeGroup("d-smooth", DisplayToolbar, D("SMOOTH:"), SmoothBox);
-      AddScopeGroup("d-zoom", DisplayToolbar, D("ZOOM:"), ZoomBox);
+      AddScopeGroup("d-avg", DisplayToolbar, D("AVG"), AverageBox);
+      AddScopeGroup("d-smooth", DisplayToolbar, D("SMOOTH"), SmoothBox);
+      AddScopeGroup("d-zoom", DisplayToolbar, D("ZOOM"), ZoomBox);
 
       // The frequency geometry is already shown in SpectrumView's heading.
       // Retain its data source and make it available from the SPAN tooltip.
@@ -408,8 +400,8 @@ namespace SkyRoof
         int available = Math.Min(
           RadioToolbar.ClientSize.Width, SpectrumToolbarLayout.ClientSize.Width) - 6;
 
-        const string R = "r-title,r-band,r-mode,r-span,r-ref,r-speed,r-vbw";
-        const string D = "d-title,d-start,d-clear,d-hold,d-peak,d-wf,d-avg,d-smooth,d-zoom";
+        const string R = "r-band,r-mode,r-span,r-ref,r-speed,r-vbw";
+        const string D = "d-start,d-clear,d-hold,d-peak,d-wf,d-avg,d-smooth,d-zoom";
         string[] standardRadio = R.Split(',');
         string[] standardDisplay = D.Split(',');
         string[] compactRadio = "r-band,r-mode,r-span,r-ref".Split(',');
@@ -648,8 +640,6 @@ namespace SkyRoof
       toolbar.Controls.Add(DisplayToolbar, 0, 1);
       RadioToolbar.Resize += (_, _) => FitToolbarsToWidth();
       DisplayToolbar.Resize += (_, _) => FitToolbarsToWidth();
-      RadioToolbar.Controls.Add(ScopeToolbarCaption("电台", colors));
-      DisplayToolbar.Controls.Add(ScopeToolbarCaption("显示", colors));
 
       ScopeBandBox.DropDownStyle = ComboBoxStyle.DropDownList;
       ScopeBandBox.Width = 84;
@@ -837,7 +827,7 @@ namespace SkyRoof
         new Label
         {
           AutoSize = true,
-          Text = "REF:",
+          Text = "REF",
           Margin =
             new Padding(0, 7, 3, 0)
         });
@@ -1059,7 +1049,7 @@ namespace SkyRoof
         new Label
         {
           AutoSize = true,
-          Text = "AVG:",
+          Text = "AVG",
           Margin = new Padding(2, 7, 3, 0)
         });
 
@@ -1105,7 +1095,7 @@ namespace SkyRoof
         new Label
         {
           AutoSize = true,
-          Text = "SMOOTH:",
+          Text = "SMOOTH",
           Margin = new Padding(2, 7, 3, 0)
         });
 
@@ -1151,7 +1141,7 @@ namespace SkyRoof
         new Label
         {
           AutoSize = true,
-          Text = "ZOOM:",
+          Text = "ZOOM",
           Margin = new Padding(2, 7, 3, 0)
         });
 
