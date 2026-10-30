@@ -113,16 +113,22 @@ namespace SkyRoof.AFC
 
         // A stronger FM test step makes the response identifiable even when
         // the finite FM discriminator window has a modest modulation bias.
-        int amplitude = observation.Mode == AfcSignalMode.FM ? 150 : 40;
-        if (tuningStepHz <= 0 || tuningStepHz > amplitude)
+        // Probe amplitude must be observable above the IF estimator's own
+        // uncertainty and quantized by the *actual* CAT tuning step. A 100 Hz
+        // configured rig step is not a reason to reject a safe 200 Hz test.
+        // Avoid tiny CW probes buried under a noisy/discrete IF estimator.
+        double nominal = observation.Mode == AfcSignalMode.FM ? 150 : 40;
+        double maximum = observation.Mode == AfcSignalMode.FM ? 250 : 150;
+        double needed = Math.Max(nominal, 4.0 * observation.SigmaHz);
+        if (tuningStepHz <= 0 || tuningStepHz > maximum)
         {
-          Fail("CAT tuning step is too coarse for a safe IF probe");
+          Fail("CAT step exceeds safe receive-only calibration span");
           return;
         }
-        probeHz = Math.Ceiling(amplitude / (double)tuningStepHz) * tuningStepHz;
-        if (probeHz > (observation.Mode == AfcSignalMode.FM ? 250 : 50))
+        probeHz = Math.Ceiling(needed / tuningStepHz) * tuningStepHz;
+        if (probeHz > maximum)
         {
-          Fail("CAT tuning step cannot fit the safe IF calibration span");
+          Fail("No safe CAT probe amplitude resolves IF measurement noise");
           return;
         }
         baselineCatHz = catReadbackHz;
