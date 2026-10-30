@@ -10,6 +10,17 @@ namespace VE3NEA.Dsp.Tests;
 
 public sealed class ScopeOwnedContextMenuTests
 {
+  private sealed class TrackedMenuItem : ToolStripMenuItem
+  {
+    internal bool DisposeCalled { get; private set; }
+
+    protected override void Dispose(bool disposing)
+    {
+      if (disposing) DisposeCalled = true;
+      base.Dispose(disposing);
+    }
+  }
+
   [Fact]
   public void SpectrumPanelUsesOwnedReusableMenu()
   {
@@ -23,13 +34,13 @@ public sealed class ScopeOwnedContextMenuTests
   public void RebuildAfterCloseDisposesOldItemsButNotMenu()
   {
     using var owner = new ScopeOwnedContextMenu();
-    ToolStripMenuItem? old = null;
+    TrackedMenuItem? old = null;
 
     for (int i = 0; i < 20; i++)
     {
       Assert.True(owner.Rebuild(menu =>
       {
-        var parent = new ToolStripMenuItem("Select");
+        var parent = new TrackedMenuItem { Text = "Select" };
         parent.DropDownItems.Add("Option " + i);
         menu.Items.Add(parent);
         if (i == 0) old = parent;
@@ -39,7 +50,9 @@ public sealed class ScopeOwnedContextMenuTests
     }
 
     Assert.NotNull(old);
-    Assert.True(old!.IsDisposed);
+    // ToolStripItem.IsDisposed is not a reliable disposal observation for
+    // unhosted items on all Windows Forms implementations. Track Dispose.
+    Assert.True(old!.DisposeCalled);
     owner.Dispose();
     Assert.True(owner.Menu.IsDisposed);
     Assert.False(owner.Rebuild(menu => menu.Items.Add("Disposed")));
