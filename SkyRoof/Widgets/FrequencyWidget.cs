@@ -129,7 +129,9 @@ namespace SkyRoof
     /// </summary>
     internal void SetAfcCalibrationOffsetHz(double offset, bool active)
     {
-      if (!double.IsFinite(offset) || Math.Abs(offset) > 100) return;
+      // Upper bound must accommodate the 150-Hz FM polarity probe.
+      // Still much smaller than the user-configured AFC servo limit.
+      if (!double.IsFinite(offset) || Math.Abs(offset) > 250) return;
       bool changed = Math.Abs(afcCalibrationOffsetHz - offset) >= .5;
       afcCalibrationOffsetHz = offset;
       afcCalibrationActive = active;
