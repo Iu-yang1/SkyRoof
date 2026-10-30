@@ -355,5 +355,110 @@ namespace VE3NEA.Dsp.Tests
       controller.Snapshot.State.Should().Be(AfcLockState.Acquiring);
     }
 
+    [Fact]
+    public void CAT_AfcReadbackIsIndependentOfIgnoreDialKnob()
+    {
+      CatControlEngine.ShouldReadRxFrequency(true, false, true)
+        .Should().BeFalse();
+      CatControlEngine.ShouldReadRxFrequency(true, true, true)
+        .Should().BeTrue();
+      CatControlEngine.ShouldReadRxFrequency(true, true, false)
+        .Should().BeFalse("PTT still prohibits RX polling in duplex mode");
+    }
+
+    [Fact]
+    public void CAT_DiagnosticsExposeAgeWithoutTreatingStaleReadsAsAligned()
+    {
+      var timeline = new AfcCatTimeline();
+      timeline.RecordReadback(145000000, T0);
+      timeline.TryLatestReadback(T0.AddSeconds(4), out long hz,
+        out double age).Should().BeTrue();
+      hz.Should().Be(145000000);
+      age.Should().BeApproximately(4, .001);
+      timeline.TryReadbackAt(T0.AddSeconds(4), out _)
+        .Should().BeFalse("an old readback cannot authorize AFC");
+    }
+
+    [Fact]
+    public void AFC_AutoProbeRequiresFourMatchingCATIFEdgesAndRestoresRX()
+    {
+      var probe = new AfcPolarityCalibrator();
+      // A positive CAT movement shifts this synthetic IF downward.
+      // Four independent CAT-acknowledged edges establish sign +1.
+      int i = 0;
+      void Sample(double cat, double ifHz, bool ack)
+      {
+        probe.Observe(new(AfcSignalMode.FM, T0.AddMilliseconds(600 * i++),
+          27, ifHz, 4, .96, true), cat, ack, true, 10);
+      }
+      Sample(145000000, 110, false);
+      Sample(145000000, 110, false);
+      Sample(145000000, 110, false);
+      probe.State.Should().Be(AfcPolarityCalibrator.Phase.Probing);
+      probe.OffsetHz.Should().Be(80);
+      Sample(145000080, 30, true);
+      probe.State.Should().Be(AfcPolarityCalibrator.Phase.Restoring);
+      probe.OffsetHz.Should().Be(0);
+      Sample(145000000, 110, true);
+      probe.State.Should().Be(AfcPolarityCalibrator.Phase.Probing);
+      Sample(145000080, 30, true);
+      probe.VerifiedSign.Should().Be(0, "restore is not yet verified");
+      Sample(145000000, 110, true);
+      probe.State.Should().Be(AfcPolarityCalibrator.Phase.Complete);
+      probe.OffsetHz.Should().Be(0);
+      probe.VerifiedSign.Should().Be(1);
+    }
+
+    [Fact]
+    public void AFC_ProbeDoesNotTrustMissingCatAcknowledgment()
+    {
+      var probe = new AfcPolarityCalibrator();
+      for (int k = 0; k < 3; k++)
+        probe.Observe(new(AfcSignalMode.FM, T0.AddMilliseconds(600 * k),
+          3, 100, 4, .95, true), 145000000, false, true, 10);
+      probe.State.Should().Be(AfcPolarityCalibrator.Phase.Probing);
+      probe.Observe(new(AfcSignalMode.FM, T0.AddSeconds(3),
+        3, 20, 4, .95, true), 145000080, false, true, 10);
+      probe.VerifiedSign.Should().Be(0);
+      probe.Observe(new(AfcSignalMode.FM, T0.AddSeconds(12),
+        3, 20, 4, .95, true), 145000080, false, true, 10);
+      probe.State.Should().Be(AfcPolarityCalibrator.Phase.Failed);
+      probe.OffsetHz.Should().Be(0);
+      probe.BlocksAutomaticControl.Should().BeTrue();
+    }
+
+    [Fact]
+    public void AFC_ProbeAbortsOnPttOrModeInvalidation()
+    {
+      var probe = new AfcPolarityCalibrator();
+      for (int k = 0; k < 3; k++)
+        probe.Observe(new(AfcSignalMode.CW, T0.AddMilliseconds(600 * k),
+          12, 50, 1, .99, true), 432080000, false, true, 10);
+      probe.OffsetHz.Should().Be(40);
+      probe.Observe(new(AfcSignalMode.CW, T0.AddSeconds(2),
+        12, 20, 1, .99, true), 432080040, true, false, 10);
+      probe.State.Should().Be(AfcPolarityCalibrator.Phase.Failed);
+      probe.OffsetHz.Should().Be(0);
+      probe.VerifiedSign.Should().Be(0);
+      probe.Reset();
+      probe.State.Should().Be(AfcPolarityCalibrator.Phase.Waiting);
+    }
+
+    [Fact]
+    public void AFC_PreventsAutomaticWritesUntilProbeCompletes()
+    {
+      var controller = new AfcController();
+      controller.Configure(AfcSignalMode.FM, AfcControlMode.Auto);
+      for (int k = 0; k < 5; k++)
+        controller.Observe(new(AfcSignalMode.FM, T0.AddMilliseconds(k * 600),
+          4, 100, 4, .95, true), 145000000, 1, 500, 20, 5,
+          false, calibrationInProgress: true);
+      controller.Snapshot.CorrectionHz.Should().Be(0);
+      controller.Observe(new(AfcSignalMode.FM, T0.AddSeconds(4),
+        4, 100, 4, .95, true), 145000000, 1, 500, 20, 5,
+        false, calibrationInProgress: false);
+      controller.Snapshot.CorrectionHz.Should().BeGreaterThan(0);
+    }
+
   }
 }
