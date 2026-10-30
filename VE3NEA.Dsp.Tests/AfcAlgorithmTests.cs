@@ -490,6 +490,19 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void AFC_ProbeRejectsCATStepWhoseRoundedSpanWouldExceedSafetyBounds()
+    {
+      var probe = new AfcPolarityCalibrator();
+      for (int k = 0; k < 3; k++)
+        probe.Observe(new(AfcSignalMode.FM, T0.AddMilliseconds(600 * k),
+          52, 100, 4, .9, true), 145000000, false, true, 149,
+          T0.AddMilliseconds(600*k + 1000));
+      probe.State.Should().Be(AfcPolarityCalibrator.Phase.Failed);
+      probe.OffsetHz.Should().Be(0);
+      probe.Detail.Should().Contain("tuning step");
+    }
+
+    [Fact]
     public void AFC_ProbeDoesNotTrustMissingCatAcknowledgment()
     {
       var probe = new AfcPolarityCalibrator();
