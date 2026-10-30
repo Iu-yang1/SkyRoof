@@ -148,6 +148,17 @@ namespace SkyRoof.AFC
       }
     }
 
+    /// <summary>
+    /// Also enforce the deadline when the IF callback stops completely.
+    /// Called on the UI timer; no audio observation is required to abort.
+    /// </summary>
+    public void Watchdog(DateTime nowUtc, bool eligible)
+    {
+      if (Active && (!eligible ||
+          (nowUtc - commandSampleUtc).TotalSeconds > 8))
+        Fail();
+    }
+
     private void Fail()
     {
       OffsetHz = 0; // caller must restore the normal RX model through CAT
