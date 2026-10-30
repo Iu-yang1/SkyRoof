@@ -82,6 +82,7 @@ namespace SkyRoof
         modeBox.Items.Add(mode);
       modeBox.DisplayMember = nameof(SstvModeSpec.Name);
       if (modeBox.Items.Count > 0) modeBox.SelectedIndex = 0;
+      modeBox.SelectedIndexChanged += (_, _) => RefreshTxPreview();
       overlayText.Text = ctx.Settings.User.Call ?? "";
       rxSourceBox.Items.AddRange(new object[]
       {
@@ -177,8 +178,7 @@ namespace SkyRoof
         bool loopback = rxSourceBox.SelectedIndex is 1 or 3;
         foreach (AudioDeviceEntry d in Soundcard.ListDevices(
           loopback ? DataFlow.Render : DataFlow.Capture))
-          rxDeviceBox.Items.Add(d);
-        rxDeviceBox.DisplayMember = nameof(AudioDeviceEntry.Name);
+          rxDeviceBox.Items.Add(new DeviceEntry(d.Id, d.Name));
         if (rxDeviceBox.Items.Count > 0) rxDeviceBox.SelectedIndex = 0;
       }
       catch (Exception ex)
@@ -196,7 +196,7 @@ namespace SkyRoof
         rxStatus.Text = "接收已停止";
         return;
       }
-      if (rxDeviceBox.SelectedItem is not AudioDeviceEntry device)
+      if (rxDeviceBox.SelectedItem is not DeviceEntry device)
       {
         MessageBox.Show(this, "请选择接收音频设备。", "SSTV",
           MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -235,6 +235,7 @@ namespace SkyRoof
         }));
       }
       catch (InvalidOperationException) { picture.Dispose(); }
+      catch (ObjectDisposedException) { picture.Dispose(); }
     }
 
     private void LoadImage()
@@ -395,7 +396,8 @@ namespace SkyRoof
       try
       {
         using var loaded = Image.FromFile(item.Path);
-        ShowReceivedSstv(new Bitmap(loaded), "历史记录", true, null);
+        using var preview = new Bitmap(loaded);
+        ShowReceivedSstv(preview, "历史记录", true, null);
         tabs.SelectedIndex = 0;
       }
       catch (Exception ex)
@@ -418,6 +420,11 @@ namespace SkyRoof
         MessageBox.Show(this, ex.Message, "无法读取图片",
           MessageBoxButtons.OK, MessageBoxIcon.Warning);
       }
+    }
+
+    private sealed record DeviceEntry(string Id, string Name)
+    {
+      public override string ToString() => Name;
     }
 
     private sealed record HistoryImage(string Path)
