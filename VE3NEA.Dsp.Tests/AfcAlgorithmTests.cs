@@ -572,4 +572,31 @@ namespace VE3NEA.Dsp.Tests
     }
 
   }
+    [Fact]
+    public void AFC_ProbeAcceptsSafeQuantized100HzRigStep()
+    {
+      var probe = new AfcPolarityCalibrator();
+      void Observe(double t, double cat, double ifHz, bool ack)
+      {
+        probe.Observe(new(AfcSignalMode.FM, T0.AddSeconds(t),
+          808, ifHz, 6, .95, true), cat, ack, true, 100,
+          T0.AddSeconds(t + 1.0));
+      }
+
+      Observe(0, 145000000, 80, false);
+      Observe(.6, 145000000, 80, false);
+      Observe(1.2, 145000000, 80, false);
+      probe.State.Should().Be(AfcPolarityCalibrator.Phase.Probing);
+      probe.OffsetHz.Should().Be(200,
+        "100 Hz CAT steps can provide a safe, clearly measurable 200 Hz round trip");
+
+      Observe(3.6, 145000200, -120, true);
+      Observe(4.2, 145000200, -120, true);
+      probe.State.Should().Be(AfcPolarityCalibrator.Phase.Restoring);
+      Observe(6.6, 145000000, 80, true);
+      Observe(7.2, 145000000, 80, true);
+      probe.State.Should().Be(AfcPolarityCalibrator.Phase.Complete);
+      probe.VerifiedSign.Should().Be(1);
+    }
+
 }
