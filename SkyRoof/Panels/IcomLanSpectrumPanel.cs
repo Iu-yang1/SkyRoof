@@ -334,7 +334,8 @@ namespace SkyRoof
       {
         Padding old = item.Margin;
         item.Margin = new Padding(old.Left,
-          Math.Max(1, (ScopeToolbarRowHeight - item.Height) / 2),
+          Math.Max(1, (ScopeToolbarRowHeight -
+            RadioToolbar.Padding.Vertical - item.Height) / 2),
           old.Right, 0);
       }
       foreach (var (name, group) in ScopeGroups)
@@ -347,7 +348,8 @@ namespace SkyRoof
           width += item.Width + item.Margin.Horizontal;
         }
         group.Width = Math.Max(1, width + group.Padding.Horizontal);
-        group.Height = ScopeToolbarRowHeight;
+        group.Height = Math.Max(1,
+          ScopeToolbarRowHeight - RadioToolbar.Padding.Vertical);
       }
       if (SpectrumRootLayout != null && SpectrumToolbarLayout != null)
       {
