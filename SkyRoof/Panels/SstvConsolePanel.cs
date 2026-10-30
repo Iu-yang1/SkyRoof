@@ -30,6 +30,11 @@ namespace SkyRoof
     {
       DropDownStyle = ComboBoxStyle.DropDownList, Width = 280
     };
+    private readonly NumericUpDown pitchCorrection = new()
+    {
+      Minimum = -500, Maximum = 500, Increment = 5,
+      DecimalPlaces = 0, Width = 72, Height = 30
+    };
     private readonly Button rxToggleButton = new()
     {
       Text = "开始接收", Width = 96, Height = 30,
@@ -91,6 +96,8 @@ namespace SkyRoof
       rxSourceBox.SelectedIndexChanged += (_, _) => PopulateAudioDevices();
       rxSourceBox.SelectedIndex = 0;
       rxToggleButton.Click += (_, _) => ToggleReceive();
+      pitchCorrection.ValueChanged += (_, _) =>
+        receiveSession.ManualCorrectionHz = (int)pitchCorrection.Value;
       receiveSession.ImageAvailable += OnAudioReceived;
       overlayText.TextChanged += (_, _) => RefreshTxPreview();
       archiveList.DoubleClick += (_, _) => ShowSelectedHistory();
@@ -121,6 +128,12 @@ namespace SkyRoof
       bar.Controls.Add(rxSourceBox);
       bar.Controls.Add(rxDeviceBox);
       bar.Controls.Add(rxToggleButton);
+      bar.Controls.Add(new Label
+      {
+        Text = "校频 Hz", Width = 57, Height = 30,
+        TextAlign = ContentAlignment.MiddleCenter
+      });
+      bar.Controls.Add(pitchCorrection);
       bar.Controls.Add(Btn("保存图片", SaveReceivedImage));
       bar.Controls.Add(Btn("复制图片", () =>
       {
