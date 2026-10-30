@@ -12,23 +12,23 @@ namespace VE3NEA.Dsp.Tests;
 public sealed class IcomScopeToolbarLayoutTests
 {
   [Theory]
-  [InlineData(880, 100, ScopeToolbarDensity.Standard)]
-  [InlineData(880, 125, ScopeToolbarDensity.Compact)]
-  [InlineData(880, 150, ScopeToolbarDensity.Restricted)]
-  [InlineData(880, 200, ScopeToolbarDensity.Minimal)]
-  [InlineData(560, 100, ScopeToolbarDensity.Restricted)]
-  [InlineData(560, 125, ScopeToolbarDensity.Minimal)]
-  [InlineData(560, 150, ScopeToolbarDensity.Minimal)]
-  [InlineData(560, 200, ScopeToolbarDensity.Minimal)]
+  [InlineData(880, 100, "Standard")]
+  [InlineData(880, 125, "Compact")]
+  [InlineData(880, 150, "Restricted")]
+  [InlineData(880, 200, "Minimal")]
+  [InlineData(560, 100, "Restricted")]
+  [InlineData(560, 125, "Minimal")]
+  [InlineData(560, 150, "Minimal")]
+  [InlineData(560, 200, "Minimal")]
   public void WidthBudgetSelectsTwoRowLayoutsWithoutShrinkingFonts(
-    int available, int percent, ScopeToolbarDensity expected)
+    int available, int percent, string expectedName)
   {
     int Scale(int size) => (int)Math.Ceiling(size * percent / 100.0);
     ScopeToolbarDensity mode = IcomScopeToolbarLayout.Pick(
       available,
       Scale(810), Scale(855), Scale(580), Scale(625),
       Scale(430), Scale(460), Scale(245), Scale(265));
-    Assert.Equal(expected, mode);
+    Assert.Equal(Enum.Parse<ScopeToolbarDensity>(expectedName), mode);
 
     var selected = mode switch
     {
