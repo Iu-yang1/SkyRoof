@@ -167,6 +167,38 @@ namespace SkyRoof
     private static int ScopeGroupWidth(FlowLayoutPanel group) =>
       group.Width + group.Margin.Horizontal;
 
+    private int MeasureScopeComboWidth(ComboBox combo)
+    {
+      int text = combo.Items.Cast<object>()
+        .Select(item => ScopeTextWidth(item.ToString() ?? "", combo.Font))
+        .DefaultIfEmpty(0).Max();
+      // Native ComboBox button size is OS/DPI-dependent, not a fixed 28px.
+      int chrome = SystemInformation.VerticalScrollBarWidth +
+        (int)Math.Ceiling(12d * DeviceDpi / 96);
+      return Math.Max(52, text + chrome);
+    }
+
+    private void RefreshScopeDynamicWidths()
+    {
+      // SPAN / EDGE contents are populated after the initial UI build.
+      // Measure again AFTER changing items, as well as after a DPI change.
+      foreach (Control item in ScopeGroupMembers.Values.SelectMany(x => x))
+      {
+        if (item is ComboBox combo)
+          item.Width = MeasureScopeComboWidth(combo);
+        else if (item is NumericUpDown)
+          item.Width = Math.Max(72, ScopeTextWidth("-20.0", item.Font) +
+            SystemInformation.VerticalScrollBarWidth + 10);
+        else if (item is Label label)
+          item.Width = Math.Max(18, ScopeTextWidth(label.Text, item.Font) + 5);
+        else if (item is Button button)
+          item.Width = Math.Max(38, ScopeTextWidth(button.Text, item.Font) + 17);
+      }
+      foreach (Control item in ScopeGroupMembers.Values.SelectMany(x => x))
+        item.Height = item is ComboBox ? item.PreferredSize.Height :
+          Math.Max(item.Font.Height + 9, 27);
+    }
+
     private FlowLayoutPanel AddScopeGroup(
       string name, FlowLayoutPanel destination, params Control[] controls)
     {
@@ -205,13 +237,7 @@ namespace SkyRoof
           item.Width = Math.Max(18, ScopeTextWidth(label.Text, item.Font) + 5);
         }
         else if (item is ComboBox combo)
-        {
-          int longest = combo.Items.Cast<object>()
-            .Select(v => ScopeTextWidth(v.ToString() ?? "", item.Font))
-            .DefaultIfEmpty(0).Max();
-          // Dropdown arrow, borders and focus inset occupy extra physical pixels.
-          item.Width = Math.Max(52, longest + 28);
-        }
+          item.Width = MeasureScopeComboWidth(combo);
         else if (item is NumericUpDown)
           item.Width = Math.Max(72, ScopeTextWidth("-20.0", item.Font) + 29);
         else if (item is Button button)
@@ -286,6 +312,7 @@ namespace SkyRoof
       SpectrumToolbarLayout!.Controls.Add(ScopeActionsToolbar, 1, 1);
       SpectrumToolbarLayout.ColumnStyles[1].Width = 1;
 
+      RefreshScopeDynamicWidths();
       UpdateScopeGroupMeasurements();
       ApplyThemeToToolbar();
       FitToolbarsToWidth();
@@ -307,7 +334,8 @@ namespace SkyRoof
       {
         Padding old = item.Margin;
         item.Margin = new Padding(old.Left,
-          Math.Max(1, (ScopeToolbarRowHeight - item.Height) / 2),
+          Math.Max(1, (ScopeToolbarRowHeight -
+            RadioToolbar.Padding.Vertical - item.Height) / 2),
           old.Right, 0);
       }
       foreach (var (name, group) in ScopeGroups)
@@ -320,7 +348,8 @@ namespace SkyRoof
           width += item.Width + item.Margin.Horizontal;
         }
         group.Width = Math.Max(1, width + group.Padding.Horizontal);
-        group.Height = ScopeToolbarRowHeight;
+        group.Height = Math.Max(1,
+          ScopeToolbarRowHeight - RadioToolbar.Padding.Vertical);
       }
       if (SpectrumRootLayout != null && SpectrumToolbarLayout != null)
       {
@@ -454,8 +483,11 @@ namespace SkyRoof
       settings.Click += (_, _) => SettingsBtn.PerformClick();
       menu.Items.Add(settings);
       if (!ReadbackBtn.Visible)
-        menu.Items.Add("Read back from IC-9700", null,
+      {
+        var readback = menu.Items.Add("Read back from IC-9700", null,
           (_, _) => RequestScopeReadback());
+        readback.Enabled = ReadbackBtn.Enabled;
+      }
       if (!ScopeGroups["d-clear"].Visible)
         menu.Items.Add("Clear spectrum", null, (_, _) =>
         {
@@ -488,11 +520,15 @@ namespace SkyRoof
           band.DropDownItems.Add(ScopeBandBox.Items[i].ToString(), null,
             (_, _) => ScopeBandBox.SelectedIndex = choice);
         }
+        band.Enabled = ScopeBandBox.Enabled;
         menu.Items.Add(band);
       }
       void LocalChoices(string caption, ComboBox box)
       {
-        var item = new ToolStripMenuItem(caption);
+        var item = new ToolStripMenuItem(caption)
+        {
+          Enabled = box.Enabled
+        };
         for (int i = 0; i < box.Items.Count; i++)
         {
           int choice = i;
@@ -523,7 +559,9 @@ namespace SkyRoof
         $"Toolbar layout: {ScopeLayoutDensity}",
         $"Toolbar DPI: {DeviceDpi}; MainForm DPI: {ctx.MainForm.DeviceDpi}",
         $"Toolbar font: {ScopeOperatorFontPt:0.0} pt (never width-scaled)",
-        $"Toolbar client: {RadioToolbar.ClientSize.Width} × {ScopeToolbarRowHeight * 2} px",
+        $"Dock client: {ClientSize.Width} × {ClientSize.Height} px",
+        $"Toolbar rows: {RadioToolbar.ClientSize.Width} / {DisplayToolbar.ClientSize.Width} × {ScopeToolbarRowHeight} px",
+        $"Right action reserve: {SpectrumToolbarLayout?.ColumnStyles[1].Width:0} px",
         $"Spectrum content: {SpectrumView.ClientSize.Width} × {SpectrumView.ClientSize.Height} px"
       };
       foreach (var (key, group) in ScopeGroups)
@@ -535,6 +573,13 @@ namespace SkyRoof
           right > bar.ClientSize.Width - bar.Padding.Right;
         lines.Add($"  {key}: x={group.Left}, w={group.Width}, right={right}, " +
           $"container={bar?.ClientSize.Width}, clipped={outOfBounds}");
+      }
+      foreach (Control item in ScopeActionsToolbar.Controls)
+      {
+        if (!item.Visible) continue;
+        lines.Add($"  action {item.Text}: x={item.Left}, w={item.Width}, " +
+          $"clipped={!IcomScopeToolbarLayout.IsWithin(
+            item.Left, item.Width, ScopeActionsToolbar.ClientSize.Width)}");
       }
       lines.Add($"Toolbar mode: {(SpanEdgeShowsSpan ? "SPAN" : "EDGE")}");
       return string.Join(Environment.NewLine, lines);
@@ -1205,6 +1250,7 @@ namespace SkyRoof
       Shown += (_, _) => FitToolbarsToWidth();
       DpiChanged += (_, _) =>
       {
+        RefreshScopeDynamicWidths();
         UpdateScopeGroupMeasurements();
         FitToolbarsToWidth();
       };
@@ -1961,8 +2007,6 @@ namespace SkyRoof
         showSpan;
       FixedEdgeEditBtn.Visible =
         !showSpan;
-      UpdateScopeGroupMeasurements();
-      FitToolbarsToWidth();
 
       bool previousUpdating =
         UpdatingScopeControlUi;
@@ -2003,6 +2047,9 @@ namespace SkyRoof
         UpdatingScopeControlUi =
           previousUpdating;
       }
+      RefreshScopeDynamicWidths();
+      UpdateScopeGroupMeasurements();
+      FitToolbarsToWidth();
     }
 
     private bool TryGetControlScope(

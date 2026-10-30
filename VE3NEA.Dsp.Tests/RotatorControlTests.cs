@@ -72,9 +72,14 @@ public sealed class RotatorControlTests
             command == "p"
                 ? "90.0\n30.0\n"
                 : "RPRT 0\n");
-        using var engine = StartEngine(server.Port);
+        // Wait for an acknowledged position read, not only receipt of the
+        // request by the fake TCP server. A loaded CI runner may delay the
+        // network worker beyond its default 500ms receive timeout.
+        using var engine = StartEngine(server.Port, timeoutMs: 3000);
 
-        await WaitUntilAsync(() => server.Count("p") >= 1);
+        await WaitUntilAsync(() =>
+            server.Count("p") >= 1 && engine.LastReadBearing != null);
+        Assert.Equal(1, server.ConnectionCount);
         engine.StartContinuousMove(
             (RotatorContinuousDirection)directionValue);
 
@@ -88,6 +93,8 @@ public sealed class RotatorControlTests
         engine.StopRotation();
         await WaitUntilAsync(() => server.Count("S") >= 1);
         Assert.Equal(1, server.Count("S"));
+        // A reconnect must not masquerade as a command coalescing success.
+        Assert.Equal(1, server.ConnectionCount);
     }
 
     [Fact]
