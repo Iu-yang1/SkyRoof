@@ -462,6 +462,34 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void AFC_SatelliteDopplerTrackingDoesNotCorruptProbePolarity()
+    {
+      var probe = new AfcPolarityCalibrator();
+      const double rateHzPerSecond = 50;
+      // The satellite model moves CAT by 50 Hz/s independently of the
+      // one-shot 150-Hz probe, but the corrected IF reference is stable.
+      void Sample(double t, double temporaryOffset, double ifHz, bool ack)
+      {
+        double cat = 145000000 + rateHzPerSecond * t + temporaryOffset;
+        probe.Observe(new(AfcSignalMode.FM, T0.AddSeconds(t),
+          28, ifHz, 4, .91, true), cat, ack, true, 10,
+          T0.AddSeconds(t + 1), rateHzPerSecond);
+      }
+      Sample(0, 0, 110, false);
+      Sample(.6, 0, 110, false);
+      Sample(1.2, 0, 110, false);
+      probe.State.Should().Be(AfcPolarityCalibrator.Phase.Probing);
+      Sample(3.6, 150, -40, true);
+      Sample(4.2, 150, -40, true);
+      probe.State.Should().Be(AfcPolarityCalibrator.Phase.Restoring);
+      Sample(6.6, 0, 110, true);
+      Sample(7.2, 0, 110, true);
+      probe.VerifiedSign.Should().Be(1,
+        "normal model Doppler movement must not be treated as the probe step");
+      probe.OffsetHz.Should().Be(0);
+    }
+
+    [Fact]
     public void AFC_ProbeDoesNotTrustMissingCatAcknowledgment()
     {
       var probe = new AfcPolarityCalibrator();
