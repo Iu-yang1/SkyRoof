@@ -37,6 +37,7 @@ namespace SkyRoof
     {
       InitializeComponent();
       ConfigureCwConsoleMenuItem();
+      ConfigureSstvConsoleMenuItem();
       ConfigureOnvifCameraMenu();
       ConfigureGitHubThemeMenuItems();
       AddOrbitSourceMenuItems();
@@ -1240,6 +1241,22 @@ namespace SkyRoof
         ctx.CwConsolePanel.Close();
     }
 
+    private void ConfigureSstvConsoleMenuItem()
+    {
+      var menu = new ToolStripMenuItem("SSTV RX / TX");
+      menu.Name = "SstvConsoleMNU";
+      menu.Click += (_, _) =>
+      {
+        if (ctx.SstvConsolePanel == null)
+          ShowFloatingPanel(new SstvConsolePanel(ctx));
+        else
+          ctx.SstvConsolePanel.Close();
+      };
+      int position = GroupViewPanelMNU.DropDownItems.IndexOf(CwConsoleMNU);
+      GroupViewPanelMNU.DropDownItems.Insert(
+        position >= 0 ? position + 1 : GroupViewPanelMNU.DropDownItems.Count, menu);
+    }
+
     private void RecorderMNU_Click(object sender, EventArgs e)
     {
       if (ctx.RecorderPanel == null)
@@ -1877,6 +1894,7 @@ namespace SkyRoof
         case "SkyRoof.QsoEntryPanel": return new QsoEntryPanel(ctx);
         case "SkyRoof.Ft4ConsolePanel": return new Ft4ConsolePanel(ctx);
         case "SkyRoof.CwConsolePanel": return new CwConsolePanel(ctx);
+        case "SkyRoof.SstvConsolePanel": return new SstvConsolePanel(ctx);
         case "SkyRoof.RecorderPanel": return new RecorderPanel(ctx);
         case "SkyRoof.QsoSchedulerPanel": return new QsoSchedulerPanel(ctx);
         case "SkyRoof.TelemetryPanel": return new TelemetryPanel(ctx);
