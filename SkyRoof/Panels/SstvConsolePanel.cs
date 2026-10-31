@@ -46,7 +46,8 @@ namespace SkyRoof
     };
     private readonly Button txSendButton = new()
     {
-      Text = "发射图片", Width = 90, Height = 30, Margin = new Padding(4)
+      Text = "发射图片", Width = 90, Height = 30, Margin = new Padding(4),
+      Enabled = false
     };
     private readonly Button txStopButton = new()
     {
@@ -194,6 +195,8 @@ namespace SkyRoof
       ReloadUserTemplates();
       archiveList.DoubleClick += (_, _) => ShowSelectedHistory();
       txSendButton.Click += (_, _) => _ = SendImageAsync();
+      txApproval.CheckedChanged += (_, _) => UpdateTxAvailability();
+      txOutputBox.SelectedIndexChanged += (_, _) => UpdateTxAvailability();
       txStopButton.Click += (_, _) => StopTransmit();
 
       PopulateTxOutputDevices();
@@ -560,6 +563,18 @@ namespace SkyRoof
       catch (Exception ex) { txStatus.Text = ex.Message; }
     }
 
+    private void UpdateTxAvailability()
+    {
+      if (closed || IsDisposed) return;
+      txSendButton.Enabled =
+        txOperationStop == null &&
+        !transmitSession.IsSending &&
+        txApproval.Checked &&
+        txPicture.Image is Bitmap &&
+        txOutputBox.SelectedItem is DeviceEntry &&
+        modeBox.SelectedItem is SstvTxModeProfile;
+    }
+
     private void StopTransmit()
     {
       txOperationStop?.Cancel();
@@ -639,9 +654,9 @@ namespace SkyRoof
         if (!closed)
         {
           txStopButton.Enabled = false;
-          txSendButton.Enabled = true;
           txApproval.Enabled = true;
           txApproval.Checked = false;
+          UpdateTxAvailability();
         }
       }
     }
@@ -1107,6 +1122,7 @@ namespace SkyRoof
       var old = txPicture.Image;
       txPicture.Image = newPicture;
       old?.Dispose();
+      UpdateTxAvailability();
     }
 
     private async Task ExportWaveAsync()
