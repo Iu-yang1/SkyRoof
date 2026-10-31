@@ -29,6 +29,16 @@ namespace SkyRoof
     {
       DropDownStyle = ComboBoxStyle.DropDownList, Width = 245
     };
+    private readonly CheckBox txCwId = new()
+    {
+      Text = "CW ID", AutoSize = true,
+      Padding = new Padding(2, 7, 2, 0)
+    };
+    private readonly CheckBox txFskId = new()
+    {
+      Text = "FSK ID", AutoSize = true,
+      Padding = new Padding(2, 7, 2, 0)
+    };
     private readonly CheckBox txApproval = new()
     {
       Text = "已确认频率 / 功率", AutoSize = true,
@@ -259,6 +269,8 @@ namespace SkyRoof
         TextAlign = ContentAlignment.MiddleCenter
       });
       transmit.Controls.Add(txOutputBox);
+      transmit.Controls.Add(txCwId);
+      transmit.Controls.Add(txFskId);
       transmit.Controls.Add(txApproval);
       transmit.Controls.Add(txSendButton);
       transmit.Controls.Add(txStopButton);
@@ -516,8 +528,13 @@ namespace SkyRoof
         RefreshTxPreview();
         using var snapshot = new Bitmap(txPicture.Image!);
         txStatus.Text = "正在准备 SSTV 图片...";
+        SstvIdOptions? stationId = txCwId.Checked || txFskId.Checked
+          ? new SstvIdOptions(ctx.Settings.User.Call ?? "",
+            txCwId.Checked, txFskId.Checked)
+          : null;
         await Task.Run(() =>
-          SstvRgbWaveExporter.Export(snapshot, spec, temporaryWave, operation.Token),
+          SstvRgbWaveExporter.Export(snapshot, spec, temporaryWave,
+            operation.Token, stationId),
           operation.Token);
         operation.Token.ThrowIfCancellationRequested();
         if (closed) return;
@@ -1004,7 +1021,12 @@ namespace SkyRoof
       txStatus.Text = "正在生成 SSTV 音频...";
       try
       {
-        await Task.Run(() => SstvRgbWaveExporter.Export(snapshot, spec, save.FileName));
+        SstvIdOptions? stationId = txCwId.Checked || txFskId.Checked
+          ? new SstvIdOptions(ctx.Settings.User.Call ?? "",
+            txCwId.Checked, txFskId.Checked)
+          : null;
+        await Task.Run(() => SstvRgbWaveExporter.Export(
+          snapshot, spec, save.FileName, default, stationId));
         if (!closed) txStatus.Text = "音频已保存";
       }
       catch (Exception ex)

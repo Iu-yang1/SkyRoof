@@ -16,7 +16,8 @@ namespace SkyRoof.SSTV
   public static class SstvRgbWaveExporter
   {
     public static void Export(Bitmap source, SstvRgbTxSpec spec, string outputPath,
-      CancellationToken cancellationToken = default)
+      CancellationToken cancellationToken = default,
+      SstvIdOptions? stationId = null)
     {
       ArgumentNullException.ThrowIfNull(source);
       ArgumentNullException.ThrowIfNull(spec);
@@ -80,6 +81,7 @@ namespace SkyRoof.SSTV
         }
         else throw new InvalidOperationException("Unknown SSTV RGB transmit layout.");
       }
+      SstvTxIdentifier.Append(osc, stationId);
       osc.Flush();
     }
 
@@ -98,14 +100,15 @@ namespace SkyRoof.SSTV
     }
 
     public static void Export(Bitmap source, SstvTxModeProfile mode, string outputPath,
-      CancellationToken cancellationToken = default)
+      CancellationToken cancellationToken = default,
+      SstvIdOptions? stationId = null)
     {
       if (mode.Native is SstvMode standard)
-        SstvWaveExporter.Export(source, standard, outputPath, cancellationToken);
+        SstvWaveExporter.Export(source, standard, outputPath, cancellationToken, stationId);
       else if (mode.Rgb is { } rgb)
-        Export(source, rgb, outputPath, cancellationToken);
+        Export(source, rgb, outputPath, cancellationToken, stationId);
       else if (mode.Extra is { } extra)
-        SstvExtraWaveExporter.Export(source, extra, outputPath, cancellationToken);
+        SstvExtraWaveExporter.Export(source, extra, outputPath, cancellationToken, stationId);
       else
         throw new NotSupportedException("SSTV transmit mode not supported.");
     }

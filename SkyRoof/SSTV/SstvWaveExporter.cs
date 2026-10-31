@@ -22,7 +22,8 @@ namespace SkyRoof.SSTV
     private const double TwoPi = 2 * Math.PI;
 
     public static void Export(Bitmap source, SstvMode mode, string outputPath,
-      CancellationToken cancellationToken = default)
+      CancellationToken cancellationToken = default,
+      SstvIdOptions? stationId = null)
     {
       ArgumentNullException.ThrowIfNull(source);
       if (string.IsNullOrWhiteSpace(outputPath)) throw new ArgumentException("Output path required", nameof(outputPath));
@@ -80,6 +81,7 @@ namespace SkyRoof.SSTV
         else
           throw new NotSupportedException($"SSTV layout {spec.Layout} is not available for WAV export");
       }
+      SstvTxIdentifier.Append(oscillator, stationId);
       oscillator.Flush();
     }
 

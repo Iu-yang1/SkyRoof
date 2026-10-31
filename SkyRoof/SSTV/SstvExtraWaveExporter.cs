@@ -20,7 +20,8 @@ namespace SkyRoof.SSTV
     private const double NarrowWhite = 2300;
 
     public static void Export(Bitmap source, SstvExtraTxSpec mode, string destination,
-      CancellationToken cancellationToken = default)
+      CancellationToken cancellationToken = default,
+      SstvIdOptions? stationId = null)
     {
       ArgumentNullException.ThrowIfNull(source);
       ArgumentNullException.ThrowIfNull(mode);
@@ -133,6 +134,7 @@ namespace SkyRoof.SSTV
           default: throw new NotSupportedException(mode.Layout.ToString());
         }
       }
+      SstvTxIdentifier.Append(osc, stationId);
       osc.Flush();
     }
 
