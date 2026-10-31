@@ -51,7 +51,10 @@ namespace SkyRoof.SSTV
       // Never release a PTT lease asserted by another SkyRoof module.
       if (Volatile.Read(ref ownPttRequested) != 0)
       {
-        if (!TryConfirmPreviousRelease())
+        // During an active transmission, OFF must always be requested.
+        // Only skip it when a *previously unconfirmed* release has
+        // subsequently received fresh hardware RX evidence.
+        if (!RequiresPttVerification || !TryConfirmPreviousRelease())
           ctx.FrequencyControl?.ReleaseApplicationPtt();
       }
     }
