@@ -29,6 +29,16 @@ namespace SkyRoof.SSTV
       using var source = Image.FromFile(path);
       if ((long)source.Width * source.Height > MaxPixels)
         throw new InvalidDataException("图片分辨率过大");
+      return ScaleForEditing(source, maxDimension);
+    }
+
+    public static Bitmap ScaleForEditing(Image source, int maxDimension = 2048)
+    {
+      if (source == null) throw new ArgumentNullException(nameof(source));
+      if (maxDimension < 320 || maxDimension > 4096)
+        throw new ArgumentOutOfRangeException(nameof(maxDimension));
+      if ((long)source.Width * source.Height > MaxPixels)
+        throw new InvalidDataException("图片分辨率过大");
       float scale = Math.Min(1f,
         Math.Min((float)maxDimension / source.Width, (float)maxDimension / source.Height));
       int width = Math.Max(1, (int)Math.Round(source.Width * scale));
