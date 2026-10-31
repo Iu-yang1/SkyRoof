@@ -560,7 +560,11 @@ namespace SkyRoof
           txOutputBox.Items.Add(new DeviceEntry(d.Id, d.Name));
         if (txOutputBox.Items.Count > 0) txOutputBox.SelectedIndex = 0;
       }
-      catch (Exception ex) { txStatus.Text = ex.Message; }
+      catch (Exception ex)
+      {
+        Serilog.Log.Warning(ex, "Could not enumerate SSTV TX audio endpoints");
+        txStatus.Text = "发射声卡不可用，请检查 Windows 音频设备";
+      }
     }
 
     private void UpdateTxAvailability()
@@ -674,7 +678,8 @@ namespace SkyRoof
       }
       catch (Exception ex)
       {
-        rxStatus.Text = "无法列出音频设备: " + ex.Message;
+        Serilog.Log.Warning(ex, "Could not enumerate SSTV RX audio endpoints");
+        rxStatus.Text = "接收声卡不可用，请检查 Windows 音频设备";
       }
     }
 
