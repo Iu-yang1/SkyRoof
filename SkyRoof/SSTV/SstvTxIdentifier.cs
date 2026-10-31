@@ -34,7 +34,7 @@ namespace SkyRoof.SSTV
         ['9'] = "----.", ['/'] = "-..-."
       };
 
-    public static void Append(
+    internal static void Append(
       SstvWaveExporter.WaveOscillator oscillator, SstvIdOptions? options)
     {
       if (options == null || (!options.IncludeFsk && !options.IncludeCw))
