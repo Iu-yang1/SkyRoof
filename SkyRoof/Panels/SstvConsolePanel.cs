@@ -170,6 +170,7 @@ namespace SkyRoof
       receiveSession.ImageAvailable += OnAudioReceived;
       receiveSession.RasterImageAvailable += OnRasterReceived;
       receiveSession.VisSynchronized += OnVisSynchronized;
+      receiveSession.FskStationIdentified += OnLiveFskStationIdentified;
       overlayText.TextChanged += (_, _) => RefreshTxPreview();
       qsoCall.TextChanged += (_, _) => RefreshTxPreview();
       templateBox.Items.AddRange(new object[]
@@ -676,6 +677,22 @@ namespace SkyRoof
       rxStatus.Text = $"已请求手动开始 {mode.Name}，等待扫描行";
     }
 
+    private void OnLiveFskStationIdentified(string callsign)
+    {
+      if (closed || IsDisposed || !IsHandleCreated) return;
+      try
+      {
+        BeginInvoke((Action)(() =>
+        {
+          if (closed || IsDisposed) return;
+          if (string.IsNullOrWhiteSpace(qsoCall.Text))
+            qsoCall.Text = callsign;
+          rxStatus.Text = $"收到 FSK 台站标识：{callsign}（需核对）";
+        }));
+      }
+      catch (InvalidOperationException) { }
+    }
+
     private void OnVisSynchronized(SstvVisAfcLock header)
     {
       if (closed || !IsHandleCreated) return;
@@ -1178,6 +1195,7 @@ namespace SkyRoof
       replayStop?.Cancel();
       receiveSession.RasterImageAvailable -= OnRasterReceived;
       receiveSession.VisSynchronized -= OnVisSynchronized;
+      receiveSession.FskStationIdentified -= OnLiveFskStationIdentified;
       receiveSession.Dispose();
       if (ctx.SstvConsolePanel == this) ctx.SstvConsolePanel = null;
       var oldRx = rxPicture.Image;
