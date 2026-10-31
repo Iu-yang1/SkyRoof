@@ -35,7 +35,48 @@ namespace SkyRoof.AFC
     private int write, used, busy;
     private long generation, lastAnalysisMs;
     private DateTime lastUtc;
+    private long totalSamples, scheduledAnalyses, completedAnalyses, failedAnalyses;
+    private DateTime lastResultUtc;
+    private AfcObservation? latestObservation;
     private bool disposed;
+
+    /// <summary>
+    /// Pipeline health independent from display FFT; a visible spectrum does
+    /// not prove that a 0.5–2 second AFC measurement was ever completed.
+    /// </summary>
+    public readonly record struct PipelineStatus(
+      long Samples, int BufferedSamples, long Scheduled, long Completed,
+      long Failed, DateTime LastMeasurementUtc, AfcObservation? LastObservation);
+
+    public PipelineStatus Diagnostics
+    {
+      get
+      {
+        lock (sync) return new(totalSamples, used, scheduledAnalyses,
+          completedAnalyses, failedAnalyses, lastResultUtc, latestObservation);
+      }
+    }
+
+    /// <summary>
+    /// Audio callback times can repeat when the device reports several
+    /// adjacent blocks with the same timestamp resolution. Such duplicates
+    /// are not new PCM generations and must not discard the IF accumulator.
+    /// A genuine backwards jump is still recognized as a discontinuity.
+    /// </summary>
+    internal static DateTime NormalizePacketUtc(DateTime incoming, DateTime previous,
+      int samples, out bool discontinuity)
+    {
+      discontinuity = false;
+      if (incoming.Kind != DateTimeKind.Utc)
+        incoming = incoming.Kind == DateTimeKind.Unspecified
+          ? DateTime.SpecifyKind(incoming, DateTimeKind.Utc)
+          : incoming.ToUniversalTime();
+      if (previous == default || incoming > previous) return incoming;
+      if ((previous - incoming).TotalMilliseconds <= 250)
+        return previous.AddSeconds(Math.Max(1, samples) / 48000.0);
+      discontinuity = true;
+      return incoming;
+    }
     private AfcSignalProcessing processor = new();
     private AfcSignalMode mode;
     private bool pilot;
@@ -74,6 +115,9 @@ namespace SkyRoof.AFC
         generation++;
         write = used = 0;
         lastUtc = default;
+        lastResultUtc = default;
+        latestObservation = null;
+        totalSamples = scheduledAnalyses = completedAnalyses = failedAnalyses = 0;
         lastDisplayMs = 0;
         processor = newProcessor;
         mode = signalMode;
@@ -130,6 +174,7 @@ namespace SkyRoof.AFC
         if (disposed || e.Count <= 0) return;
         float[]? pcm = null, displayPcm = null;
         long gen = 0;
+        DateTime packetUtc;
         AfcSignalMode selected = default;
         bool refPresent = false;
         double expected = 0;
@@ -137,13 +182,17 @@ namespace SkyRoof.AFC
         lock (sync)
         {
           if (disposed) return;
-          if (lastUtc != default && e.Utc <= lastUtc)
+          int accepted = Math.Min(e.Count, e.Data.Length);
+          packetUtc = NormalizePacketUtc(e.Utc, lastUtc, accepted,
+            out bool discontinuity);
+          if (discontinuity)
           {
             generation++;
             write = used = 0;
           }
-          lastUtc = e.Utc;
-          for (int i = 0; i < Math.Min(e.Count, e.Data.Length); i++)
+          lastUtc = packetUtc;
+          totalSamples += accepted;
+          for (int i = 0; i < accepted; i++)
           {
             buffer[write] = e.Data[i];
             write = (write + 1) % buffer.Length;
@@ -168,6 +217,7 @@ namespace SkyRoof.AFC
               Interlocked.CompareExchange(ref busy, 1, 0) == 0)
           {
             lastAnalysisMs = tick;
+            scheduledAnalyses++;
             pcm = new float[used];
             int start = (write - used + buffer.Length) % buffer.Length;
             for (int i = 0; i < used; i++)
@@ -178,7 +228,6 @@ namespace SkyRoof.AFC
           }
           analyzer = processor;
         }
-        DateTime packetUtc = e.Utc;
         if (displayPcm != null)
         {
           float[] displayData = displayPcm;
@@ -213,11 +262,18 @@ namespace SkyRoof.AFC
             DateTime analysisUtc = packetUtc.AddSeconds(-centerLagSeconds);
             AfcObservation obs = analyzer.Analyze(data, selected, analysisUtc,
               version, expected, refPresent);
-            lock (sync) if (disposed || version != generation) return;
+            lock (sync)
+            {
+              if (disposed || version != generation) return;
+              completedAnalyses++;
+              lastResultUtc = obs.SampleUtc;
+              latestObservation = obs;
+            }
             ObservationAvailable?.Invoke(obs);
           }
           catch (Exception ex)
           {
+            lock (sync) failedAnalyses++;
             if (!disposed) Log.Warning(ex, "AFC IF DSP failed");
           }
           finally { Interlocked.Exchange(ref busy, 0); }
