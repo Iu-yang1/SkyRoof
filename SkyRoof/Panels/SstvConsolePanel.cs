@@ -90,7 +90,11 @@ namespace SkyRoof
     private readonly SstvToneSpectrumView rxSpectrum = new()
     {
       Dock = DockStyle.Bottom,
-      Height = 106
+      Height = 74
+    };
+    private readonly SstvTxToneReference rxToneReference = new()
+    {
+      Dock = DockStyle.Bottom, Height = 90
     };
     private readonly PictureBox rxPicture = new()
     {
@@ -393,6 +397,7 @@ namespace SkyRoof
       actions.Controls.Add(Btn("接收记录", () => { ReloadHistory(); tabs.SelectedIndex = 2; }));
       page.Controls.Add(rxPicture);
       page.Controls.Add(rxSpectrum);
+      page.Controls.Add(rxToneReference);
       page.Controls.Add(rxStatus);
       page.Controls.Add(actions);
       page.Controls.Add(tuning);
@@ -462,7 +467,7 @@ namespace SkyRoof
       main.Controls.Add(left, 0, 0);
 
       var right = new Panel { Dock = DockStyle.Fill };
-      var tone = new SstvTxToneReference { Height = 76 };
+      var tone = new SstvTxToneReference { Height = 90 };
       var rightContent = new Panel { Dock = DockStyle.Fill };
       var modeColumn = new Panel { Dock = DockStyle.Left, Width = 130 };
       var modeHeader = new Label
@@ -627,7 +632,22 @@ namespace SkyRoof
         SizeMode = PictureBoxSizeMode.StretchImage,
         Margin = new Padding(3), Cursor = Cursors.Hand
       };
-      tile.Click += (_, _) => action();
+      // Mouse Click fires for both left and right buttons. Never treat a
+      // right-click as selecting/re-importing a picture.
+      tile.MouseUp += (_, e) =>
+      {
+        if (e.Button == MouseButtons.Left) action();
+        else if (e.Button == MouseButtons.Right)
+          tile.ContextMenuStrip?.Show(tile, e.Location);
+      };
+      var context = new ContextMenuStrip();
+      context.Items.Add("设为当前发送图片", null, (_, _) => action());
+      context.Items.Add("打开图库 / 历史", null, (_, _) =>
+      {
+        ReloadHistory();
+        tabs.SelectedIndex = 2;
+      });
+      tile.ContextMenuStrip = context;
       txThumbnailTips.SetToolTip(tile, title);
       txThumbnailStrip.Controls.Add(tile);
     }
@@ -656,7 +676,7 @@ namespace SkyRoof
           Bitmap image = txRecentImages[i];
           AddTxThumbnail(image, i == 0 ? "当前图片" : "近期编辑图片", () =>
           {
-            SetTxImage(new Bitmap(image));
+            RecallTxImage(new Bitmap(image));
           });
         }
         string folder = Path.Combine(Utils.GetUserDataFolder(), "SstvImages");
@@ -672,7 +692,7 @@ namespace SkyRoof
               try
               {
                 using var loaded = Image.FromFile(file);
-                SetTxImage(new Bitmap(loaded));
+                RecallTxImage(new Bitmap(loaded));
               }
               catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
                 or ArgumentException)
@@ -696,9 +716,12 @@ namespace SkyRoof
     {
       var page = new TabPage("图库 / 历史");
       var bar = Toolbar();
-      bar.Controls.Add(Btn("刷新", ReloadHistory));
-      bar.Controls.Add(Btn("查看", ShowSelectedHistory));
-      bar.Controls.Add(Btn("用作发送图片", UseSelectedHistoryForTx, 135));
+      bar.Controls.Add(Btn("刷新", ReloadHistory, 70));
+      bar.Controls.Add(Btn("导入图片", ImportHistoryImage, 90));
+      bar.Controls.Add(Btn("导出图片", ExportHistoryImage, 90));
+      bar.Controls.Add(Btn("删除图片", DeleteHistoryImage, 90));
+      bar.Controls.Add(Btn("查看", ShowSelectedHistory, 70));
+      bar.Controls.Add(Btn("用作发送图片", UseSelectedHistoryForTx, 125));
       page.Controls.Add(archiveList);
       page.Controls.Add(bar);
       tabs.TabPages.Add(page);
@@ -1371,17 +1394,23 @@ namespace SkyRoof
         stack.Push(newestFirst[i]);
     }
 
-    private void SetTxImage(Bitmap image)
+    private void SetTxImage(Bitmap image) => ReplaceTxImage(image, remember: true);
+
+    // Selecting an already-present thumbnail changes the editor selection;
+    // it is not another import and must not append a history entry.
+    private void RecallTxImage(Bitmap image) => ReplaceTxImage(image, remember: false);
+
+    private void ReplaceTxImage(Bitmap image, bool remember)
     {
       var old = txBase;
       if (old != null) PushHistory(undoImages, old);
       txBase = image;
       old?.Dispose();
-      RememberTxImage(image);
+      if (remember) RememberTxImage(image);
       ClearHistory(redoImages);
       RefreshTxPreview();
       txStatus.Text = "图片已加载，可以编辑或保存 SSTV 音频";
-      RefreshTxThumbnails();
+      if (remember) RefreshTxThumbnails();
       tabs.SelectedIndex = 1;
     }
 
