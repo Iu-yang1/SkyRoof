@@ -363,6 +363,7 @@ namespace SkyRoof
                 Picture = Path.GetFileName(pictureFile)
               }));
             ShowReceivedSstv(image, resolved.Name, true, pictureFile);
+            await IdentifyRecordedFskIdAsync(dialog.FileName, stop.Token);
           }
           return;
         }
@@ -380,7 +381,11 @@ namespace SkyRoof
             }
             catch (InvalidOperationException) { }
           }, stop.Token);
-        if (!closed) rxStatus.Text = "录音解析已完成";
+        if (!closed)
+        {
+          rxStatus.Text = "录音解析已完成";
+          await IdentifyRecordedFskIdAsync(dialog.FileName, stop.Token);
+        }
       }
       catch (OperationCanceledException)
       {
@@ -397,6 +402,20 @@ namespace SkyRoof
         if (ReferenceEquals(replayStop, stop)) replayStop = null;
         stop.Dispose();
       }
+    }
+
+    /// <summary>
+    /// Decoded FSK station ID is a hint to the operator, not proof of
+    /// a two-way QSO. QSO records still require explicit manual saving.
+    /// </summary>
+    private async Task IdentifyRecordedFskIdAsync(
+      string path, CancellationToken token)
+    {
+      string? call = await Task.Run(
+        () => SstvFskIdDecoder.DecodeWaveSuffix(path), token);
+      if (closed || IsDisposed || string.IsNullOrWhiteSpace(call)) return;
+      qsoCall.Text = call;
+      rxStatus.Text = $"录音中的台站标识：{call}（请核对）";
     }
 
     private string QsoLogPath =>
