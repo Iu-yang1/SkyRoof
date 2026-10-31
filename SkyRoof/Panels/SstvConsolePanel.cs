@@ -5,6 +5,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Threading;
 using SkyRoof.SSTV;
 using VE3NEA;
 using NAudio.CoreAudioApi;
@@ -86,6 +87,7 @@ namespace SkyRoof
       Dock = DockStyle.Bottom, Height = 28, TextAlign = ContentAlignment.MiddleLeft,
       Text = "选择图片和模式，即可保存 SSTV 音频"
     };
+    private CancellationTokenSource? replayStop;
     private Bitmap? txBase;
     private bool closed;
 
@@ -157,6 +159,7 @@ namespace SkyRoof
         TextAlign = ContentAlignment.MiddleCenter
       });
       bar.Controls.Add(pitchCorrection);
+      bar.Controls.Add(Btn("导入 WAV", () => _ = ReplayWavAsync()));
       bar.Controls.Add(Btn("保存图片", SaveReceivedImage));
       bar.Controls.Add(Btn("复制图片", () =>
       {
@@ -208,6 +211,59 @@ namespace SkyRoof
       page.Controls.Add(archiveList);
       page.Controls.Add(bar);
       tabs.TabPages.Add(page);
+    }
+
+    private async Task ReplayWavAsync()
+    {
+      if (replayStop != null)
+      {
+        replayStop.Cancel();
+        return;
+      }
+      using var dialog = new OpenFileDialog
+      {
+        Filter = "WAV 音频文件|*.wav",
+        Title = "打开 SSTV 录音"
+      };
+      if (dialog.ShowDialog(this) != DialogResult.OK) return;
+      receiveSession.Stop();
+      rxToggleButton.Text = "开始接收";
+      var stop = new CancellationTokenSource();
+      replayStop = stop;
+      try
+      {
+        rxStatus.Text = "正在解析 SSTV 录音...";
+        await SstvWaveReceiver.DecodeAsync(dialog.FileName, OnAudioReceived,
+          progress =>
+          {
+            if (closed || !IsHandleCreated) return;
+            try
+            {
+              BeginInvoke((Action)(() =>
+              {
+                if (!closed)
+                  rxStatus.Text = $"正在解析 SSTV 录音 · {progress:P0}";
+              }));
+            }
+            catch (InvalidOperationException) { }
+          }, stop.Token);
+        if (!closed) rxStatus.Text = "录音解析已完成";
+      }
+      catch (OperationCanceledException)
+      {
+        if (!closed) rxStatus.Text = "录音解析已停止";
+      }
+      catch (Exception ex)
+      {
+        if (!closed)
+          MessageBox.Show(this, ex.Message, "无法解析 SSTV 录音",
+            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+      }
+      finally
+      {
+        if (ReferenceEquals(replayStop, stop)) replayStop = null;
+        stop.Dispose();
+      }
     }
 
     private void PopulateTxOutputDevices()
@@ -582,6 +638,7 @@ namespace SkyRoof
     {
       closed = true;
       transmitSession.Dispose();
+      replayStop?.Cancel();
       receiveSession.Dispose();
       if (ctx.SstvConsolePanel == this) ctx.SstvConsolePanel = null;
       var oldRx = rxPicture.Image;
