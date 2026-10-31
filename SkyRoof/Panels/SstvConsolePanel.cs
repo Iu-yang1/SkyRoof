@@ -307,7 +307,7 @@ namespace SkyRoof
       }
       if (MessageBox.Show(this,
         $"确认通过所选声卡输出并启动电台 PTT 发送 {spec.Name}？" +
-        "\\n\\n开始后可随时点击“停止发射”。",
+        "\n\n开始后可随时点击“停止发射”。",
         "确认 SSTV 发射", MessageBoxButtons.YesNo,
         MessageBoxIcon.Warning) != DialogResult.Yes) return;
 
