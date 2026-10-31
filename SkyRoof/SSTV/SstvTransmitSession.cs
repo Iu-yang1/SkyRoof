@@ -19,6 +19,7 @@ namespace SkyRoof.SSTV
     private readonly Context ctx;
     private CancellationTokenSource? stop;
     private int sending;
+    private int ownPttRequested;
     private bool disposed;
 
     public bool IsSending => Volatile.Read(ref sending) != 0;
@@ -27,9 +28,9 @@ namespace SkyRoof.SSTV
     public void RequestStop()
     {
       stop?.Cancel();
-      // This request only releases SkyRoof-owned PTT; a second independent
-      // controller's transmission must never be forcibly unkeyed.
-      ctx.FrequencyControl?.ReleaseApplicationPtt();
+      // Never release a PTT lease asserted by another SkyRoof module.
+      if (Volatile.Read(ref ownPttRequested) != 0)
+        ctx.FrequencyControl?.ReleaseApplicationPtt();
     }
 
     private (SstvTxGuard Guard, double LoHz) CaptureGuard(bool approved)
@@ -131,8 +132,11 @@ namespace SkyRoof.SSTV
 
         var cat = ctx.CatControl.Tx!;
         DateTime requestedUtc = DateTime.UtcNow;
-        ctx.FrequencyControl.SetPtt(true);
+        // Publish ownership intent before issuing the asynchronous CAT write
+        // so STOP can cancel a still-pending PTT-ON request.
+        Interlocked.Exchange(ref ownPttRequested, 1);
         pttRequested = true;
+        ctx.FrequencyControl.SetPtt(true);
         bool acknowledged = false;
         for (int attempt = 0; attempt < 35; attempt++)
         {
@@ -187,6 +191,7 @@ namespace SkyRoof.SSTV
         // ownership-aware release. Never leave the rig keyed on exception.
         if (pttRequested)
           ctx.FrequencyControl.ReleaseApplicationPtt();
+        Interlocked.Exchange(ref ownPttRequested, 0);
         stop = null;
         local.Dispose();
         Interlocked.Exchange(ref sending, 0);
