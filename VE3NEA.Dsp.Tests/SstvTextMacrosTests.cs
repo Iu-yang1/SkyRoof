@@ -20,6 +20,26 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void ExpandsRsvAndContactMacrosWithBackwardCompatibleRstAliases()
+    {
+      var data = new SstvMacroContext("BG5JSU", "OL79WQ", "HB9Q",
+        "RS-44", "Robot 36", 145965000, 435625000,
+        new DateTime(2026, 10, 31, 1, 2, 3, DateTimeKind.Utc))
+      {
+        RstSent = "595", RstReceived = "575",
+        ContactName = "Dan", ContactQth = "JN47", Notes = "73 via moon"
+      };
+      string text = SstvTextMacros.Expand(
+        "{RSV_TX}|{RSV_RX}|{RST_TX}|{RST_RX}|{NAME}|{QTH}|{NOTE}|{HHMMSS}|{TXMHZ}|{RXMHZ}",
+        data);
+      Assert.Equal("595|575|595|575|Dan|JN47|73 via moon|01:02:03|145.965000|435.625000", text);
+      Assert.Contains(SstvTextMacros.Catalog,
+        item => item.Token == "{RSV_TX}");
+      Assert.DoesNotContain(SstvTextMacros.Catalog,
+        item => item.Token == "{RST_TX}");
+    }
+
+    [Fact]
     public void RejectsOverlongOrNonUtcPictureMacros()
     {
       var utc = new SstvMacroContext("", "", "", "", "", 0, 0, DateTime.UtcNow);
