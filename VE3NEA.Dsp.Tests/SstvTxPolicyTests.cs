@@ -87,10 +87,10 @@ namespace VE3NEA.Dsp.Tests
     public void TransverterCatOffsetIsPartOfArmedAndCurrentFrequency()
     {
       var guard = SstvTxPolicy.Validate("sat", "tx", false, true,
-        true, true, Slicer.Mode.USB, 1296000000, 1160000000,
-        136000000, true, false, false, true, Now);
+        true, true, Slicer.Mode.USB, 435000000, 300000000,
+        135000000, true, false, false, true, Now);
       Assert.True(SstvTxPolicy.StillSafe(guard, "sat", "tx", true,
-        true, 1296000550, 1160000000, 136000550, true,
+        true, 435000550, 300000000, 135000550, true,
         Now.AddMilliseconds(500), Now.AddSeconds(1)));
     }
   }
