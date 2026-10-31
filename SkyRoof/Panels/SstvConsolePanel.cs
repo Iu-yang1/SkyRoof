@@ -1848,6 +1848,104 @@ namespace SkyRoof
       rxPicture.Image.Save(save.FileName, ImageFormat.Png);
     }
 
+    private string HistoryFolder =>
+      Path.Combine(Utils.GetUserDataFolder(), "SstvImages");
+
+    private void ImportHistoryImage()
+    {
+      using var dialog = new OpenFileDialog
+      {
+        Title = "导入 SSTV 图库图片",
+        Filter = "图片文件|*.png;*.jpg;*.jpeg;*.bmp;*.gif|所有文件|*.*",
+        Multiselect = false, CheckFileExists = true
+      };
+      if (dialog.ShowDialog(this) != DialogResult.OK) return;
+      try
+      {
+        string imported = SstvImageLibrary.Import(HistoryFolder, dialog.FileName);
+        ReloadHistory();
+        for (int i = 0; i < archiveList.Items.Count; i++)
+        {
+          if (archiveList.Items[i] is HistoryImage item &&
+              string.Equals(item.Path, imported, StringComparison.OrdinalIgnoreCase))
+          {
+            archiveList.SelectedIndex = i;
+            break;
+          }
+        }
+        RefreshTxThumbnails();
+        txStatus.Text = "图片已导入图库";
+      }
+      catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+        or ArgumentException or System.Runtime.InteropServices.ExternalException)
+      {
+        MessageBox.Show(this, ex.Message, "导入图片失败",
+          MessageBoxButtons.OK, MessageBoxIcon.Warning);
+      }
+    }
+
+    private void ExportHistoryImage()
+    {
+      if (archiveList.SelectedItem is not HistoryImage item)
+      {
+        MessageBox.Show(this, "请在图库中选中要导出的图片。", "SSTV",
+          MessageBoxButtons.OK, MessageBoxIcon.Information);
+        return;
+      }
+      using var dialog = new SaveFileDialog
+      {
+        Title = "导出图库图片",
+        Filter = "PNG 图片|*.png",
+        FileName = Path.GetFileName(item.Path),
+        AddExtension = true, DefaultExt = "png"
+      };
+      if (dialog.ShowDialog(this) != DialogResult.OK) return;
+      try
+      {
+        SstvImageLibrary.Export(item.Path, dialog.FileName);
+        txStatus.Text = "图片已导出";
+      }
+      catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+        or ArgumentException)
+      {
+        MessageBox.Show(this, ex.Message, "导出图片失败",
+          MessageBoxButtons.OK, MessageBoxIcon.Warning);
+      }
+    }
+
+    private void DeleteHistoryImage()
+    {
+      if (archiveList.SelectedItem is not HistoryImage item)
+      {
+        MessageBox.Show(this, "请在图库中选中要删除的图片。", "SSTV",
+          MessageBoxButtons.OK, MessageBoxIcon.Information);
+        return;
+      }
+      if (MessageBox.Show(this, $"确定删除图库图片“{Path.GetFileName(item.Path)}”？",
+        "删除 SSTV 图片", MessageBoxButtons.YesNo,
+        MessageBoxIcon.Question, MessageBoxDefaultButton.Button2)
+          != DialogResult.Yes) return;
+      try
+      {
+        if (!SstvImageLibrary.Delete(HistoryFolder, item.Path))
+        {
+          txStatus.Text = "图片已经不存在";
+        }
+        else
+        {
+          txStatus.Text = "图片已从图库删除";
+        }
+        ReloadHistory();
+        RefreshTxThumbnails();
+      }
+      catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+        or InvalidOperationException or ArgumentException)
+      {
+        MessageBox.Show(this, ex.Message, "删除图片失败",
+          MessageBoxButtons.OK, MessageBoxIcon.Warning);
+      }
+    }
+
     private void ReloadHistory()
     {
       if (closed) return;
@@ -1889,7 +1987,7 @@ namespace SkyRoof
       try
       {
         using var loaded = Image.FromFile(item.Path);
-        SetTxImage(new Bitmap(loaded));
+        RecallTxImage(new Bitmap(loaded));
       }
       catch (Exception ex)
       {
