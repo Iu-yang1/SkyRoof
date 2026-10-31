@@ -190,6 +190,8 @@ jobs:
             SkyRoof Fork v.${{ steps.get_version.outputs.version }} (based on VE3NEA/SkyRoof v.1.56)
 
             ### English
+            - Fix AFC FM frequency measurement starvation when consecutive 12-kHz IF audio buffers repeat hardware timestamps; preserve PCM until the measurement window fills.
+            - Show IF measurement status and unverified FM offset candidates instead of reporting a missing measurement as 0 Hz.
             - SSTV editor now supports up to eight independently movable/colorable/sizeable text layers, duplicate and delete layers, and an insertable macro menu for callsigns, RSV, QTH, time and MHz.
             - Image loading downscales large originals, clipboard images use the same bounded pipeline, and thumbnails reuse cached image previews.
             - SSTV gallery: thumbnail left-click reuses an existing picture without adding duplicates; right-click opens actions; history tab can import/export/delete images.
@@ -211,6 +213,8 @@ jobs:
             - Preserve TX frequency and persistent satellite/transponder offsets.
 
             ### 中文
+            - 修复 AFC 12 kHz IF 音频时间戳重复时错误清空测频缓冲，解决频谱显示正常但 FM 测频无法启动的问题。
+            - 增加测量状态和未经验证的 FM IF 候选频偏显示；未测量时不再误报 0 Hz。
             - SSTV 图片编辑器现支持最多八个独立文字图层，允许复制、删除、缩放、拖动与更改文字颜色；变量菜单新增呼号、RSV、QTH、UTC 与 MHz。
             - 优化大尺寸图片加载、剪贴板图像处理和缩略图缓存，减少重复解码与生成。
             - 修复 SSTV 缩略图左右键导致重复新增的问题；图库／历史增加导入、导出及删除图片。
