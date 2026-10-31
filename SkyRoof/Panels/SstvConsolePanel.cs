@@ -159,15 +159,17 @@ namespace SkyRoof
         TextAlign = ContentAlignment.MiddleCenter
       });
       bar.Controls.Add(pitchCorrection);
-      bar.Controls.Add(Btn("导入 WAV", () => _ = ReplayWavAsync()));
-      bar.Controls.Add(Btn("保存图片", SaveReceivedImage));
-      bar.Controls.Add(Btn("复制图片", () =>
+      var actions = Toolbar();
+      actions.Controls.Add(Btn("导入 WAV", () => _ = ReplayWavAsync()));
+      actions.Controls.Add(Btn("保存图片", SaveReceivedImage));
+      actions.Controls.Add(Btn("复制图片", () =>
       {
         if (rxPicture.Image != null) Clipboard.SetImage(rxPicture.Image);
       }));
-      bar.Controls.Add(Btn("接收记录", () => { ReloadHistory(); tabs.SelectedIndex = 2; }));
+      actions.Controls.Add(Btn("接收记录", () => { ReloadHistory(); tabs.SelectedIndex = 2; }));
       page.Controls.Add(rxPicture);
       page.Controls.Add(rxStatus);
+      page.Controls.Add(actions);
       page.Controls.Add(bar);
       tabs.TabPages.Add(page);
     }
@@ -191,12 +193,19 @@ namespace SkyRoof
       });
       bar.Controls.Add(overlayText);
       bar.Controls.Add(Btn("保存音频 WAV", () => _ = ExportWaveAsync(), 116));
-      bar.Controls.Add(txOutputBox);
-      bar.Controls.Add(txApproval);
-      bar.Controls.Add(txSendButton);
-      bar.Controls.Add(txStopButton);
+      var transmit = Toolbar();
+      transmit.Controls.Add(new Label
+      {
+        Text = "发射声卡", Width = 66, Height = 30,
+        TextAlign = ContentAlignment.MiddleCenter
+      });
+      transmit.Controls.Add(txOutputBox);
+      transmit.Controls.Add(txApproval);
+      transmit.Controls.Add(txSendButton);
+      transmit.Controls.Add(txStopButton);
       page.Controls.Add(txPicture);
       page.Controls.Add(txStatus);
+      page.Controls.Add(transmit);
       page.Controls.Add(bar);
       tabs.TabPages.Add(page);
     }
