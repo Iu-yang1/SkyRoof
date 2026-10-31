@@ -211,8 +211,21 @@ namespace SkyRoof
       foreach (SstvTxModeProfile mode in SstvTxModeProfile.All)
         modeBox.Items.Add(mode);
       modeBox.DisplayMember = nameof(SstvTxModeProfile.Name);
+      txQuickModes.Items.AddRange(SstvTxModeProfile.All.Cast<object>().ToArray());
       if (modeBox.Items.Count > 0) modeBox.SelectedIndex = 0;
-      modeBox.SelectedIndexChanged += (_, _) => RefreshTxPreview();
+      txQuickModes.SelectedIndex = modeBox.SelectedIndex;
+      modeBox.SelectedIndexChanged += (_, _) =>
+      {
+        if (txQuickModes.SelectedIndex != modeBox.SelectedIndex)
+          txQuickModes.SelectedIndex = modeBox.SelectedIndex;
+        RefreshTxPreview();
+      };
+      txQuickModes.SelectedIndexChanged += (_, _) =>
+      {
+        if (txQuickModes.SelectedIndex >= 0 &&
+            modeBox.SelectedIndex != txQuickModes.SelectedIndex)
+          modeBox.SelectedIndex = txQuickModes.SelectedIndex;
+      };
       myCallInput.Text = ctx.Settings.User.Call ?? "";
       overlayText.Text = "";
       textLayerBox.Items.AddRange(new object[]
@@ -233,9 +246,27 @@ namespace SkyRoof
       myCallInput.TextChanged += (_, _) => RefreshTxPreview();
       theirCallInput.TextChanged += (_, _) =>
       {
-        if (string.IsNullOrWhiteSpace(qsoCall.Text))
-          qsoCall.Text = theirCallInput.Text;
+        if (!syncingQsoEntry)
+        {
+          syncingQsoEntry = true;
+          try { qsoCall.Text = theirCallInput.Text; }
+          finally { syncingQsoEntry = false; }
+        }
         RefreshTxPreview();
+      };
+      txQsoNote.TextChanged += (_, _) =>
+      {
+        if (syncingQsoEntry) return;
+        syncingQsoEntry = true;
+        try { qsoNotes.Text = txQsoNote.Text; }
+        finally { syncingQsoEntry = false; }
+      };
+      qsoNotes.TextChanged += (_, _) =>
+      {
+        if (syncingQsoEntry) return;
+        syncingQsoEntry = true;
+        try { txQsoNote.Text = qsoNotes.Text; }
+        finally { syncingQsoEntry = false; }
       };
       txPicture.MouseDown += OnTxPictureMouseDown;
       txPicture.MouseMove += OnTxPictureMouseMove;
@@ -270,8 +301,12 @@ namespace SkyRoof
       overlayText.TextChanged += (_, _) => RefreshTxPreview();
       qsoCall.TextChanged += (_, _) =>
       {
-        if (string.IsNullOrWhiteSpace(theirCallInput.Text))
-          theirCallInput.Text = qsoCall.Text;
+        if (!syncingQsoEntry)
+        {
+          syncingQsoEntry = true;
+          try { theirCallInput.Text = qsoCall.Text; }
+          finally { syncingQsoEntry = false; }
+        }
         RefreshTxPreview();
       };
       templateBox.Items.AddRange(new object[]
@@ -299,6 +334,7 @@ namespace SkyRoof
 
       PopulateTxOutputDevices();
       ReloadHistory();
+      RefreshTxThumbnails();
       ReloadQsoLog();
     }
 
@@ -722,7 +758,7 @@ namespace SkyRoof
         RadioLink link = ctx.FrequencyControl?.RadioLink ?? new RadioLink();
         var selected = modeBox.SelectedItem as SstvTxModeProfile;
         var record = new SstvQsoRecord(
-          DateTime.UtcNow, call, ctx.Settings.User.Call ?? "",
+          DateTime.UtcNow, call, myCallInput.Text.Trim().ToUpperInvariant(),
           lastReceivedMode ?? selected?.Name ?? "SSTV",
           link.IsTerrestrial ? "" : link.Sat?.name ?? "",
           link.IsTerrestrial ? 0 : link.CorrectedUplinkFrequency,
@@ -1211,6 +1247,7 @@ namespace SkyRoof
       ClearHistory(redoImages);
       RefreshTxPreview();
       txStatus.Text = "图片已加载，可以编辑或保存 SSTV 音频";
+      RefreshTxThumbnails();
       tabs.SelectedIndex = 1;
     }
 
@@ -1529,7 +1566,7 @@ namespace SkyRoof
       // widget has not yet been initialized or no satellite is selected.
       RadioLink radio = ctx.FrequencyControl?.RadioLink ?? new RadioLink();
       var macros = new SstvMacroContext(
-        ctx.Settings.User.Call ?? "", ctx.Settings.User.Square ?? "",
+        myCallInput.Text.Trim().ToUpperInvariant(), ctx.Settings.User.Square ?? "",
         (string.IsNullOrWhiteSpace(theirCallInput.Text)
           ? qsoCall.Text : theirCallInput.Text).Trim().ToUpperInvariant(),
         radio.IsTerrestrial ? "" : radio.Sat?.name ?? "",
