@@ -137,14 +137,22 @@ namespace SkyRoof.SSTV
         for (int i = 0; i < n; i++) WriteSample(frequency);
       }
 
-      internal void Scan(double[] values, double milliseconds)
+      internal void Scan(double[] values, double milliseconds) =>
+        ScanValues(values, milliseconds, SstvTones.Black, SstvTones.White);
+
+      internal void ScanValues(double[] values, double milliseconds,
+        double blackHz, double whiteHz)
       {
         if (values.Length == 0) throw new ArgumentException("Empty scan", nameof(values));
+        if (!double.IsFinite(blackHz) || !double.IsFinite(whiteHz) ||
+          blackHz >= whiteHz) throw new ArgumentException("Invalid SSTV tone range");
         int n = Samples(milliseconds);
         for (int i = 0; i < n; i++)
         {
-          int index = (int)((long)i * values.Length / Math.Max(1, n));
-          WriteSample(SstvTones.ValueToFreq(values[Math.Min(values.Length - 1, index)]));
+          int index = Math.Min(values.Length - 1,
+            (int)((long)i * values.Length / Math.Max(1, n)));
+          double value = Math.Clamp(values[index], 0, 255);
+          WriteSample(blackHz + value / 255.0 * (whiteHz - blackHz));
         }
       }
 
