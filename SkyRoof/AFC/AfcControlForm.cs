@@ -789,15 +789,22 @@ namespace SkyRoof.AFC
         : T("○ IF 未连接", "○ IF disconnected");
       inputStatus.ForeColor = input.IsRunning ? palette.Good : palette.Muted;
       var pipeline = input.Diagnostics;
-      bool measured = s.LastObservationUtc != default && s.Confidence >= .6 &&
-        s.State is AfcLockState.Acquiring or AfcLockState.Locked or AfcLockState.Hold;
+      AfcObservation latest = pipeline.LastObservation.GetValueOrDefault();
+      bool validLatestReference = pipeline.LastObservation.HasValue &&
+        latest.Generation == input.Generation && latest.Mode == currentMode &&
+        latest.HasAbsoluteReference && !latest.Ambiguous &&
+        latest.Confidence >= .6;
+      bool measured = validLatestReference &&
+        s.LastObservationUtc != default &&
+        (s.State is AfcLockState.Acquiring or AfcLockState.Locked or AfcLockState.Hold);
       metrics[0].Text = $"{owner.PredictedDownlinkDopplerHz:+0;-0;0} Hz";
       AfcObservation candidate = pipeline.LastObservation.GetValueOrDefault();
       bool freshCandidate = pipeline.LastObservation.HasValue &&
         candidate.Mode == currentMode &&
         candidate.Generation == input.Generation &&
         (DateTime.UtcNow - candidate.SampleUtc).TotalSeconds < 4 &&
-        double.IsFinite(candidate.IfOffsetHz);
+        double.IsFinite(candidate.IfOffsetHz) &&
+        double.IsFinite(candidate.SigmaHz) && candidate.Confidence > .05;
       // Expose the raw measured FM IF offset when confidence prevents lock.
       // This is a diagnostic only, not a residual eligible for CAT AFC.
       metrics[1].Text = measured ? $"{s.ErrorHz:+0.0;-0.0;0} Hz" :
