@@ -58,6 +58,7 @@ namespace VE3NEA.Dsp.Tests
           Assert.False(Field<CheckBox>(panel, "txApproval").Checked);
           Assert.False(Field<Button>(panel, "txStopButton").Enabled);
           Assert.False(Field<Button>(panel, "txSendButton").Enabled);
+          Assert.Equal(-1, Field<ComboBox>(panel, "txOutputBox").SelectedIndex);
           Assert.True(Field<CheckBox>(panel, "autoVisCorrection").Checked);
           Assert.Equal(500m, Field<NumericUpDown>(panel, "pitchCorrection").Maximum);
           Assert.Equal(-500m, Field<NumericUpDown>(panel, "pitchCorrection").Minimum);
