@@ -210,16 +210,17 @@ namespace SkyRoof
       var page = new TabPage("接收 RX");
       var bar = Toolbar();
       bar.Controls.Add(rxSourceBox);
-      bar.Controls.Add(rxModeBox);
       bar.Controls.Add(rxDeviceBox);
       bar.Controls.Add(rxToggleButton);
-      bar.Controls.Add(new Label
+      var tuning = Toolbar();
+      tuning.Controls.Add(rxModeBox);
+      tuning.Controls.Add(new Label
       {
         Text = "校频 Hz", Width = 57, Height = 30,
         TextAlign = ContentAlignment.MiddleCenter
       });
-      bar.Controls.Add(pitchCorrection);
-      bar.Controls.Add(autoVisCorrection);
+      tuning.Controls.Add(pitchCorrection);
+      tuning.Controls.Add(autoVisCorrection);
       var actions = Toolbar();
       actions.Controls.Add(Btn("导入 WAV", () => _ = ReplayWavAsync()));
       actions.Controls.Add(Btn("手动开始", ManualStartReceive, 98));
@@ -232,6 +233,7 @@ namespace SkyRoof
       page.Controls.Add(rxPicture);
       page.Controls.Add(rxStatus);
       page.Controls.Add(actions);
+      page.Controls.Add(tuning);
       page.Controls.Add(bar);
       tabs.TabPages.Add(page);
     }
@@ -247,8 +249,6 @@ namespace SkyRoof
       bar.Controls.Add(Btn("旋转", RotateImage, 60));
       bar.Controls.Add(Btn("镜像", MirrorImage, 60));
       bar.Controls.Add(Btn("裁剪", CropImage, 60));
-      bar.Controls.Add(templateBox);
-      bar.Controls.Add(Btn("保存模板", SaveUserTemplate, 95));
       var format = Toolbar();
       format.Controls.Add(new Label
       {
@@ -256,13 +256,16 @@ namespace SkyRoof
         TextAlign = ContentAlignment.MiddleCenter
       });
       format.Controls.Add(modeBox);
-      bar.Controls.Add(new Label
+      format.Controls.Add(templateBox);
+      format.Controls.Add(Btn("保存模板", SaveUserTemplate, 95));
+      format.Controls.Add(Btn("保存音频 WAV", () => _ = ExportWaveAsync(), 116));
+      var overlay = Toolbar();
+      overlay.Controls.Add(new Label
       {
         Text = "文字", Width = 36, Height = 30,
         TextAlign = ContentAlignment.MiddleCenter
       });
-      format.Controls.Add(overlayText);
-      format.Controls.Add(Btn("保存音频 WAV", () => _ = ExportWaveAsync(), 116));
+      overlay.Controls.Add(overlayText);
       var transmit = Toolbar();
       transmit.Controls.Add(new Label
       {
@@ -272,12 +275,15 @@ namespace SkyRoof
       transmit.Controls.Add(txOutputBox);
       transmit.Controls.Add(txCwId);
       transmit.Controls.Add(txFskId);
-      transmit.Controls.Add(txApproval);
-      transmit.Controls.Add(txSendButton);
-      transmit.Controls.Add(txStopButton);
+      var txActions = Toolbar();
+      txActions.Controls.Add(txApproval);
+      txActions.Controls.Add(txSendButton);
+      txActions.Controls.Add(txStopButton);
       page.Controls.Add(txPicture);
       page.Controls.Add(txStatus);
+      page.Controls.Add(txActions);
       page.Controls.Add(transmit);
+      page.Controls.Add(overlay);
       page.Controls.Add(format);
       page.Controls.Add(bar);
       tabs.TabPages.Add(page);
