@@ -101,6 +101,8 @@ namespace SkyRoof.SSTV
         SstvWaveExporter.Export(source, standard, outputPath);
       else if (mode.Rgb is { } rgb)
         Export(source, rgb, outputPath);
+      else if (mode.Extra is { } extra)
+        SstvExtraWaveExporter.Export(source, extra, outputPath);
       else
         throw new NotSupportedException("SSTV transmit mode not supported.");
     }
