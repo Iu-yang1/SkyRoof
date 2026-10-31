@@ -16,6 +16,8 @@ namespace SkyRoof.SSTV
     public const long FrequencyToleranceHz = 250;
     public const double MaximumAudioDurationSeconds = 540;
     public const int MaximumPttReadbackAgeMs = 1500;
+    public const string PttReleaseUnconfirmedMessage =
+      "PTT 状态未确认！请立即检查电台是否仍在发射；收到新的 CAT RX 读回前禁止再次发射。";
 
     public static SstvTxGuard Validate(
       string? satelliteId, string? transmitterId,
