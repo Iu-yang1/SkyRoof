@@ -39,6 +39,15 @@ namespace SkyRoof.SSTV
     private int epoch;
     private int dropped;
     private int manualCorrectionHz;
+    private int autoVisCorrectionHz;
+    private bool autoVisEnabled = true;
+    public bool AutoVisEnabled
+    {
+      get => Volatile.Read(ref autoVisEnabled);
+      set => Volatile.Write(ref autoVisEnabled, value);
+    }
+    public int AutoVisCorrectionHz => Volatile.Read(ref autoVisCorrectionHz);
+    public event Action<SstvVisAfcLock>? VisSynchronized;
     public int ManualCorrectionHz
     {
       get => Volatile.Read(ref manualCorrectionHz);
@@ -80,6 +89,7 @@ namespace SkyRoof.SSTV
         channel = queue;
         cancel = stop;
         Interlocked.Exchange(ref dropped, 0);
+        Interlocked.Exchange(ref autoVisCorrectionHz, 0);
         worker = Task.Run(() => RunAsync(queue.Reader, stop.Token, source, version));
       }
       try
@@ -136,6 +146,16 @@ namespace SkyRoof.SSTV
       SstvDecoder decoder = new();
       var ifDemod = new SstvIfAudioDemodulator();
       var shifter = new SstvAfFrequencyShifter();
+      var visDetector = new SstvVisAfcDetector();
+      visDetector.Reset(version);
+      visDetector.VisLocked += detected =>
+      {
+        if (Volatile.Read(ref epoch) != version) return;
+        if (AutoVisEnabled)
+          Volatile.Write(ref autoVisCorrectionHz,
+            Math.Clamp((int)Math.Round(-detected.OffsetHz), -500, 500));
+        VisSynchronized?.Invoke(detected);
+      };
       double fmPhase = 0;
       long lastDropped = 0;
       void OnImage(SstvImageEvent evt)
@@ -165,19 +185,28 @@ namespace SkyRoof.SSTV
             decoder.ImageCompleted += OnImage;
             ifDemod.Reset();
             shifter.Reset();
+            visDetector.Reset(version);
+            Volatile.Write(ref autoVisCorrectionHz, 0);
             fmPhase = 0;
             // Keep receiving, but do not claim seamless scan timing.
           }
           var iq = new Complex32[samples.Length];
+          var af = new float[samples.Length];
           bool intermediateIf = source is SstvReceiveSource.Capture12kIf or
             SstvReceiveSource.Loopback12kIf;
           for (int i = 0; i < samples.Length; i++)
           {
             double audio = intermediateIf ? ifDemod.Process(samples[i]) : samples[i];
-            audio = Math.Clamp(double.IsFinite(audio) ? audio : 0, -1.0, 1.0);
-            // Advance Hilbert delay even at 0 Hz so UI tuning never picks
-            // up stale AF from a previous non-zero correction.
-            audio = shifter.Process((float)audio, ManualCorrectionHz);
+            af[i] = (float)Math.Clamp(double.IsFinite(audio) ? audio : 0, -1.0, 1.0);
+          }
+          // Detect the full VIS sequence on UNCORRECTED AF so the NCO
+          // does not introduce self-referential tone estimates.
+          visDetector.Process(af);
+          int correction = Math.Clamp(ManualCorrectionHz +
+            (AutoVisEnabled ? AutoVisCorrectionHz : 0), -500, 500);
+          for (int i = 0; i < af.Length; i++)
+          {
+            double audio = shifter.Process(af[i], correction);
             fmPhase += 2.0 * Math.PI * (FmDeviationHz / SampleRate) * audio;
             if (fmPhase > Math.PI) fmPhase -= 2 * Math.PI;
             if (fmPhase < -Math.PI) fmPhase += 2 * Math.PI;
