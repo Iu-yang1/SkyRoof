@@ -13,6 +13,18 @@ namespace SkyRoof.SSTV
   public sealed class SstvTxToneReference : Control
   {
     public static readonly int[] ReferenceFrequencies = { 1200, 1500, 1900, 2300 };
+    private float[]? spectrumLevels;
+
+    // RX may render the incoming AF/IF spectrum in the otherwise black
+    // lower strip; TX leaves that strip blank. The reference geometry and
+    // numeric markers stay identical in both views.
+    public void SetLevels(float[] levels)
+    {
+      if (levels == null || levels.Length != SstvToneSpectrum.BinCount)
+        throw new ArgumentException("Invalid SSTV spectrum length", nameof(levels));
+      spectrumLevels = (float[])levels.Clone();
+      Invalidate();
+    }
 
     public SstvTxToneReference()
     {
@@ -51,6 +63,19 @@ namespace SkyRoof.SSTV
         orange.Right, orange.Bottom + 1);
       g.FillRectangle(blackBrush, black);
       g.DrawRectangle(border, black);
+      if (spectrumLevels is { Length: > 1 } bins)
+      {
+        using var livePen = new Pen(Color.FromArgb(68, 192, 241), 1.5f);
+        var points = new PointF[bins.Length];
+        for (int i = 0; i < bins.Length; i++)
+        {
+          float x = black.Left + i * black.Width / (float)(bins.Length - 1);
+          float strength = MathF.Sqrt(Math.Clamp(bins[i], 0, 1));
+          points[i] = new PointF(x, black.Bottom - 2 -
+            strength * Math.Max(1, black.Height - 4));
+        }
+        g.DrawLines(livePen, points);
+      }
 
       foreach (int frequency in ReferenceFrequencies)
       {
