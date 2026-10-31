@@ -17,7 +17,14 @@ namespace SkyRoof.SSTV
   public sealed record SstvQsoRecord(
     DateTime Utc, string Call, string MyCall, string SstvMode,
     string SatelliteName, double TxHz, double RxHz, string PictureFile,
-    string Notes);
+    string Notes)
+  {
+    // Optional for backward-compatible parsing of previously saved QSO logs.
+    public string? RstSent { get; init; }
+    public string? RstReceived { get; init; }
+    public string? ContactName { get; init; }
+    public string? ContactQth { get; init; }
+  }
 
   public static class SstvQsoLogStore
   {
@@ -74,6 +81,10 @@ namespace SkyRoof.SSTV
         Field("CALL", q.Call);
         Field("STATION_CALLSIGN", q.MyCall);
         Field("MODE", "SSTV");
+        if (!string.IsNullOrWhiteSpace(q.RstSent)) Field("RST_SENT", q.RstSent);
+        if (!string.IsNullOrWhiteSpace(q.RstReceived)) Field("RST_RCVD", q.RstReceived);
+        if (!string.IsNullOrWhiteSpace(q.ContactName)) Field("NAME", q.ContactName);
+        if (!string.IsNullOrWhiteSpace(q.ContactQth)) Field("QTH", q.ContactQth);
         Field("APP_SKYROOF_SSTV_MODE", q.SstvMode);
         if (q.TxHz > 0) Field("FREQ", (q.TxHz / 1e6).ToString("0.000000", CultureInfo.InvariantCulture));
         if (q.RxHz > 0) Field("FREQ_RX", (q.RxHz / 1e6).ToString("0.000000", CultureInfo.InvariantCulture));
