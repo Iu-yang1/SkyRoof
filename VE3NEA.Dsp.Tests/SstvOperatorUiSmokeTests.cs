@@ -206,8 +206,8 @@ namespace VE3NEA.Dsp.Tests
           Assert.Contains("导入图片", historyButtons);
           Assert.Contains("导出图片", historyButtons);
           Assert.Contains("删除图片", historyButtons);
-          Assert.Contains(receive.Controls.OfType<SstvToneSpectrumView>(),
-            view => view.Height >= 90);
+          Assert.Contains(receive.Controls.OfType<SstvTxToneReference>(),
+            view => view.Height >= 80);
           var rxPicture = Field<PictureBox>(panel, "rxPicture");
           rxPicture.Tag = "old-image.png";
           panel.ShowReceivedSstv(image, "Martin 1", false, null);
