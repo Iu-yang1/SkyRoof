@@ -1,3 +1,31 @@
+# SkyRoof Fork v.1.62 / SkyRoof Fork 1.62 版本说明
+
+Release date / 发布日期: 2026-10-31. SSTV Console integration release.
+
+## English — changes since v.1.61
+
+- New dockable SSTV Console: receive, transmit, image gallery, UTC QSO log and ADIF export.
+- 43 transmit modes with standard and extended VIS/N-VIS, selectable WASAPI audio output, station ID, PNG/template editing and 48-kHz mono WAV export.
+- AF capture, RS-BA1/Windows loopback and 12-kHz IF SSTV reception; VIS AFC, manual fine tuning and slant correction.
+- Satellite uplink CAT/PTT uses current Doppler frequency during a picture, preserving STOP across an in-flight CAT request. Esc stops the SSTV operation.
+- Virtual IC-9700 CAT TCP simulator exercises key/stop, interrupted PTT ACK and reconnect; a five-minute virtual satellite pass exercises Doppler updates.
+- Corrected MC110-N scan timing and optimized cached CAT-state sampling and SSTV STOP feedback.
+
+## 中文 — 相对 v.1.61 的变化
+
+- 新增可停靠 SSTV 控制台，包含接收、发射、图库、UTC 通联日志和 ADIF 导出。
+- 支持 43 种 SSTV 图片发射模式、标准与扩展 VIS/N-VIS、指定 WASAPI 发射声卡、台站识别、图片模板编辑及 48 kHz 单声道 WAV 导出。
+- 提供 AF 声卡采集、RS-BA1/Windows 回环、12 kHz IF 接收，支持 VIS 自动校频、手动微调与倾斜校正。
+- 卫星 CAT/PTT 发射期间跟随当前多普勒频率，修复 CAT 指令尚未返回时 STOP 丢失的问题；Esc 可停止 SSTV。
+- 增加虚拟 IC-9700 TCP CAT 测试，覆盖按键/停止、PTT 应答丢失与重新连接，并进行五分钟多普勒模拟。
+- 修正 MC110-N 行扫描时间，降低冗余缓存状态检查频率，优化停止操作反馈。
+
+## Release process / 发布流程
+
+源代码版本为 `Directory.Build.props` 中的 `1.62`；使用 Windows x64 自动构建、测试及安装包发布流程。
+
+---
+
 # SkyRoof Fork v.1.61 / SkyRoof Fork 1.61 版本说明
 
 Release date / 发布日期: 2026-10-31. Corrective AFC calibration release following v.1.60.
