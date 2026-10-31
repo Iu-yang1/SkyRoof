@@ -714,18 +714,39 @@ namespace SkyRoof
         }
         string folder = Path.Combine(Utils.GetUserDataFolder(), "SstvImages");
         if (!Directory.Exists(folder)) return;
+        var visibleFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (string file in Directory.EnumerateFiles(folder, "*.png")
           .OrderByDescending(File.GetLastWriteTimeUtc).Take(24))
         {
           try
           {
-            using var source = Image.FromFile(file);
-            AddTxThumbnail(source, Path.GetFileNameWithoutExtension(file), () =>
+            visibleFiles.Add(file);
+            var fileInfo = new FileInfo(file);
+            if (!archivedThumbnailCache.TryGetValue(file, out var cached) ||
+                cached.Utc != fileInfo.LastWriteTimeUtc || cached.Size != fileInfo.Length)
             {
-              try
+              if (cached.Image != null)
+                cached.Image.Dispose();
+              using var source = Image.FromFile(file);
+              const int thumbWidth = 112, thumbHeight = 72;
+              var preview = new Bitmap(thumbWidth, thumbHeight);
+              using (var gr = Graphics.FromImage(preview))
               {
-                RecallTxImage(SstvImageLibrary.LoadForEditing(file));
+                gr.Clear(Color.FromArgb(31, 35, 42));
+                gr.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                float scale = Math.Min((float)thumbWidth / source.Width,
+                  (float)thumbHeight / source.Height);
+                int width = Math.Max(1, (int)(source.Width * scale));
+                int height = Math.Max(1, (int)(source.Height * scale));
+                gr.DrawImage(source, new Rectangle(
+                  (thumbWidth - width) / 2, (thumbHeight - height) / 2, width, height));
               }
+              cached = (fileInfo.LastWriteTimeUtc, fileInfo.Length, preview);
+              archivedThumbnailCache[file] = cached;
+            }
+            AddTxThumbnail(cached.Image, Path.GetFileNameWithoutExtension(file), () =>
+            {
+              try { RecallTxImage(SstvImageLibrary.LoadForEditing(file)); }
               catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
                 or ArgumentException)
               {
@@ -735,6 +756,12 @@ namespace SkyRoof
           }
           catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
             or ArgumentException) { }
+        }
+        foreach (string stale in archivedThumbnailCache.Keys
+          .Where(key => !visibleFiles.Contains(key)).ToArray())
+        {
+          archivedThumbnailCache[stale].Image.Dispose();
+          archivedThumbnailCache.Remove(stale);
         }
       }
       catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -1421,7 +1448,9 @@ namespace SkyRoof
 
     private static void PushHistory(Stack<Bitmap> stack, Bitmap image)
     {
-      stack.Push(new Bitmap(image));
+      // Transfer ownership of the previous bitmap instead of cloning
+      // multi-megabyte images for every edit/undo operation.
+      stack.Push(image);
       if (stack.Count <= HistoryLimit) return;
       Bitmap[] newestFirst = stack.ToArray();
       stack.Clear();
@@ -1442,7 +1471,6 @@ namespace SkyRoof
       var old = txBase;
       if (old != null) PushHistory(undoImages, old);
       txBase = image;
-      old?.Dispose();
       if (remember) RememberTxImage(image);
       ClearHistory(redoImages);
       RefreshTxPreview();
@@ -1813,7 +1841,6 @@ namespace SkyRoof
     {
       if (txBase == null || !undoImages.TryPop(out Bitmap? prior)) return;
       PushHistory(redoImages, txBase);
-      txBase.Dispose();
       txBase = prior;
       RefreshTxPreview();
     }
@@ -1822,7 +1849,6 @@ namespace SkyRoof
     {
       if (txBase == null || !redoImages.TryPop(out Bitmap? next)) return;
       PushHistory(undoImages, txBase);
-      txBase.Dispose();
       txBase = next;
       RefreshTxPreview();
     }
@@ -2194,6 +2220,8 @@ namespace SkyRoof
       txBase?.Dispose();
       foreach (Control child in txThumbnailStrip.Controls)
         if (child is PictureBox thumb) { thumb.Image?.Dispose(); thumb.Image = null; }
+      foreach (var cached in archivedThumbnailCache.Values) cached.Image.Dispose();
+      archivedThumbnailCache.Clear();
       foreach (Bitmap thumb in txRecentImages) thumb.Dispose();
       txRecentImages.Clear();
       txThumbnailTips.Dispose();
