@@ -18,12 +18,20 @@ namespace VE3NEA.Dsp.Tests
           new DateTime(2026, 10, 31, 1, 2, 3, DateTimeKind.Utc),
           "BG5JSU", "BG5JSU", "Robot 36",
           "RS-44", 145965000, 435625000,
-          "SSTV_image.png", "SSTV image received");
+          "SSTV_image.png", "SSTV image received")
+        {
+          RstSent = "595", RstReceived = "579",
+          ContactName = "Dan", ContactQth = "Switzerland"
+        };
         SstvQsoLogStore.Append(file, q);
         SstvQsoRecord loaded = Assert.Single(SstvQsoLogStore.Read(file));
         Assert.Equal(q, loaded);
         string adif = SstvQsoLogStore.ExportAdif(new[] { loaded });
         Assert.Contains("<MODE:4>SSTV", adif);
+        Assert.Contains("<RST_SENT:3>595", adif);
+        Assert.Contains("<RST_RCVD:3>579", adif);
+        Assert.Contains("<NAME:3>Dan", adif);
+        Assert.Contains("<QTH:11>Switzerland", adif);
         Assert.Contains("<QSO_DATE:8>20261031", adif);
         Assert.Contains("<TIME_ON:6>010203", adif);
         Assert.Contains("<PROP_MODE:3>SAT", adif);
