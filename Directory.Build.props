@@ -3,7 +3,7 @@
   <!-- The single source of truth for the release version. Bump it here and nowhere else:
        MSBuild applies it to every project in the solution automatically, and the CI workflow
        runs build/Set-Version.ps1 to propagate it to the installer script and the docs. -->
-  <!-- Rebuild official v1.62 with repaired FM IF frequency measurement buffer and timestamp continuity. -->
+  <!-- Official v1.62 AFC FM measurement hotfix: publish merged PR #135 (IF PCM timestamp continuity and frequency candidate diagnostics). -->
   <PropertyGroup>
     <Product>SkyRoof</Product>
     <Version>1.62</Version>
