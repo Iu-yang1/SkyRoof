@@ -573,6 +573,21 @@ namespace SkyRoof
     private void UpdateTxAvailability()
     {
       if (closed || IsDisposed) return;
+      // A timed-out OFF command must remain visible to the operator and
+      // prohibit a new TX until a subsequent, fresh hardware RX readback.
+      bool releaseWasUnconfirmed = transmitSession.RequiresPttVerification;
+      if (!transmitSession.VerifyPreviousPttRelease())
+      {
+        txSendButton.Enabled = false;
+        txStatus.Text = SstvTxPolicy.PttReleaseUnconfirmedMessage;
+        if (txApproval.Checked) txApproval.Checked = false;
+        return;
+      }
+      if (releaseWasUnconfirmed)
+      {
+        txStatus.Text = "CAT 已确认电台返回接收状态，请重新核对发射频率与功率。";
+        txApproval.Checked = false;
+      }
       txSendButton.Enabled =
         txOperationStop == null &&
         !transmitSession.IsSending &&
@@ -619,6 +634,7 @@ namespace SkyRoof
       txSendButton.Enabled = false;
       txStopButton.Enabled = true;
       txApproval.Enabled = false;
+      bool criticalPttAlertShown = false;
       try
       {
         // Refresh macros at the actual send instant, before taking a
@@ -643,15 +659,25 @@ namespace SkyRoof
       }
       catch (OperationCanceledException)
       {
-        if (!closed) txStatus.Text = "发射已停止";
+        if (!closed)
+          txStatus.Text = transmitSession.RequiresPttVerification
+            ? SstvTxPolicy.PttReleaseUnconfirmedMessage : "发射已停止";
       }
       catch (Exception ex)
       {
         if (!closed)
         {
-          txStatus.Text = "发射未完成";
-          MessageBox.Show(this, ex.Message, "SSTV 发射已终止",
-            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+          bool pttUnconfirmed = transmitSession.RequiresPttVerification;
+          txStatus.Text = pttUnconfirmed
+            ? SstvTxPolicy.PttReleaseUnconfirmedMessage : "发射未完成";
+          MessageBox.Show(this,
+            pttUnconfirmed
+              ? SstvTxPolicy.PttReleaseUnconfirmedMessage + "\n\n" + ex.Message
+              : ex.Message,
+            pttUnconfirmed ? "PTT 状态未确认" : "SSTV 发射已终止",
+            MessageBoxButtons.OK,
+            pttUnconfirmed ? MessageBoxIcon.Error : MessageBoxIcon.Warning);
+          criticalPttAlertShown = pttUnconfirmed;
         }
       }
       finally
@@ -664,6 +690,16 @@ namespace SkyRoof
           txApproval.Enabled = true;
           txApproval.Checked = false;
           UpdateTxAvailability();
+          // Cancellation is not a successful STOP acknowledgement. Preserve
+          // this alarm even if the cancellation catch said "stopped".
+          if (transmitSession.RequiresPttVerification)
+          {
+            txStatus.Text = SstvTxPolicy.PttReleaseUnconfirmedMessage;
+            if (!criticalPttAlertShown)
+              MessageBox.Show(this, SstvTxPolicy.PttReleaseUnconfirmedMessage,
+                "PTT 状态未确认", MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+          }
         }
       }
     }
