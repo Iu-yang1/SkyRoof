@@ -120,6 +120,26 @@ namespace VE3NEA.Dsp.Tests
           tabs.SelectedIndex = 3;
           Assert.Equal("通联日志", tabs.SelectedTab?.Text);
 
+          // ESC should immediately cancel the pending SSTV operation,
+          // update the status and disable repeated STOP activation.
+          using (var virtualSend = new CancellationTokenSource())
+          {
+            typeof(SstvConsolePanel).GetField("txOperationStop",
+              BindingFlags.NonPublic | BindingFlags.Instance)!
+              .SetValue(panel, virtualSend);
+            var stopButton = Field<Button>(panel, "txStopButton");
+            stopButton.Enabled = true;
+            typeof(SstvConsolePanel).GetMethod("OnKeyDown",
+              BindingFlags.NonPublic | BindingFlags.Instance)!
+              .Invoke(panel, new object[] { new KeyEventArgs(Keys.Escape) });
+            Assert.True(virtualSend.IsCancellationRequested);
+            Assert.False(stopButton.Enabled);
+            Assert.Contains("正在停止", Field<Label>(panel, "txStatus").Text);
+            typeof(SstvConsolePanel).GetField("txOperationStop",
+              BindingFlags.NonPublic | BindingFlags.Instance)!
+              .SetValue(panel, null);
+          }
+
           // Simulate a prior OFF timeout without touching any real CAT device.
           // Merely ticking operator approval must not rearm an unknown PTT.
           var txSession = Field<SstvTransmitSession>(panel, "transmitSession");
