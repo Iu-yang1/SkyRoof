@@ -12,13 +12,15 @@ namespace SkyRoof.SSTV
   /// </summary>
   public sealed record SstvTxModeProfile(
     string Name, int Width, int Height, SstvMode? Native,
-    SstvRgbTxSpec? Rgb)
+    SstvRgbTxSpec? Rgb, SstvExtraTxSpec? Extra = null)
   {
     public static readonly IReadOnlyList<SstvTxModeProfile> All =
       SstvModes.All
         .Select(x => new SstvTxModeProfile(x.Name, x.Width, x.Height, x.Mode, null))
         .Concat(SstvRgbTxSpec.All.Select(x =>
           new SstvTxModeProfile(x.Name, x.Width, x.Height, null, x)))
+        .Concat(SstvExtraTxSpec.All.Select(x =>
+          new SstvTxModeProfile(x.Name, x.Width, x.Height, null, null, x)))
         .ToArray();
     public override string ToString() => Name;
   }
