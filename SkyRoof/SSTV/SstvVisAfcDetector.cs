@@ -149,7 +149,7 @@ namespace SkyRoof.SSTV
           break;
 
         case Stage.Start:
-          if (Near(hz, 1200 + measuredOffset, 135) && shortCount <= 8)
+          if (Near(hz, 1200 + measuredOffset, 65) && shortCount <= 8)
             shortCount++;
           else if (shortCount >= 4 && NearBit(hz) != 0)
           {
@@ -165,7 +165,7 @@ namespace SkyRoof.SSTV
           break;
 
         case Stage.Stop:
-          if (Near(hz, 1200 + measuredOffset, 130))
+          if (Near(hz, 1200 + measuredOffset, 65))
           {
             shortCount++;
             if (shortCount >= 4)
