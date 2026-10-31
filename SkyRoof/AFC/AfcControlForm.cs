@@ -792,10 +792,19 @@ namespace SkyRoof.AFC
       bool measured = s.LastObservationUtc != default && s.Confidence >= .6 &&
         s.State is AfcLockState.Acquiring or AfcLockState.Locked or AfcLockState.Hold;
       metrics[0].Text = $"{owner.PredictedDownlinkDopplerHz:+0;-0;0} Hz";
+      bool freshCandidate = pipeline.LastObservation is { } candidate &&
+        candidate.Mode == currentMode &&
+        candidate.Generation == input.Generation &&
+        (DateTime.UtcNow - candidate.SampleUtc).TotalSeconds < 4 &&
+        double.IsFinite(candidate.IfOffsetHz);
+      // Expose the raw measured FM IF offset when confidence prevents lock.
+      // This is a diagnostic only, not a residual eligible for CAT AFC.
       metrics[1].Text = measured ? $"{s.ErrorHz:+0.0;-0.0;0} Hz" :
+        freshCandidate ? T($"候选 {candidate.IfOffsetHz:+0;-0;0} Hz",
+          $"Candidate {candidate.IfOffsetHz:+0;-0;0} Hz") :
         T("未测量", "No fix");
       metrics[2].Text = $"{s.CorrectionHz:+0.0;-0.0;0} Hz";
-      metrics[1].ForeColor = s.State == AfcLockState.Locked
+      metrics[1].ForeColor = measured && s.State == AfcLockState.Locked
         ? palette.Good : palette.Warning;
       string measureZh, measureEn;
       if (pipeline.Completed == 0)
