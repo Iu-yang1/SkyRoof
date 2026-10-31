@@ -42,6 +42,10 @@ namespace SkyRoof
       Text = "停止发射", Width = 90, Height = 30, Margin = new Padding(4),
       Enabled = false
     };
+    private readonly ComboBox rxModeBox = new()
+    {
+      DropDownStyle = ComboBoxStyle.DropDownList, Width = 178
+    };
     private readonly ComboBox rxSourceBox = new()
     {
       DropDownStyle = ComboBoxStyle.DropDownList, Width = 152
@@ -122,6 +126,10 @@ namespace SkyRoof
       });
       rxSourceBox.SelectedIndexChanged += (_, _) => PopulateAudioDevices();
       rxSourceBox.SelectedIndex = 0;
+      rxModeBox.Items.Add("自动识别 Robot/PD");
+      foreach (SstvTxModeProfile profile in SstvTxModeProfile.All)
+        if (profile.Native == null) rxModeBox.Items.Add(profile);
+      rxModeBox.SelectedIndex = 0;
       rxToggleButton.Click += (_, _) => ToggleReceive();
       pitchCorrection.ValueChanged += (_, _) =>
         receiveSession.ManualCorrectionHz = (int)pitchCorrection.Value;
@@ -159,6 +167,7 @@ namespace SkyRoof
       var page = new TabPage("接收 RX");
       var bar = Toolbar();
       bar.Controls.Add(rxSourceBox);
+      bar.Controls.Add(rxModeBox);
       bar.Controls.Add(rxDeviceBox);
       bar.Controls.Add(rxToggleButton);
       bar.Controls.Add(new Label
@@ -251,6 +260,30 @@ namespace SkyRoof
       try
       {
         rxStatus.Text = "正在解析 SSTV 录音...";
+        if (rxModeBox.SelectedItem is SstvTxModeProfile manual)
+        {
+          using Bitmap image = await Task.Run(
+            () => SstvOfflineRasterDecoder.Decode(dialog.FileName, manual),
+            stop.Token);
+          if (!closed)
+          {
+            string gallery = Path.Combine(Utils.GetUserDataFolder(), "SstvImages");
+            Directory.CreateDirectory(gallery);
+            string name = $"SSTV_{DateTime.UtcNow:yyyyMMdd_HHmmss_fff}_{manual.Name.Replace(' ', '_')}";
+            string pictureFile = Path.Combine(gallery, name + ".png");
+            image.Save(pictureFile, ImageFormat.Png);
+            File.WriteAllText(Path.Combine(gallery, name + ".json"),
+              System.Text.Json.JsonSerializer.Serialize(new
+              {
+                Utc = DateTime.UtcNow,
+                Source = "导入的 WAV",
+                Mode = manual.Name,
+                Picture = Path.GetFileName(pictureFile)
+              }));
+            ShowReceivedSstv(image, manual.Name, true, pictureFile);
+          }
+          return;
+        }
         await SstvWaveReceiver.DecodeAsync(dialog.FileName, OnAudioReceived,
           progress =>
           {
