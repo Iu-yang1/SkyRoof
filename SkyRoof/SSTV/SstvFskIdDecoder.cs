@@ -73,38 +73,39 @@ namespace SkyRoof.SSTV
       return null;
     }
 
+    private static int? ReadByte(ReadOnlySpan<float> audio,
+      int separatorStart, int byteIndex)
+    {
+      int result = 0;
+      for (int bit = 0; bit < 6; bit++)
+      {
+        int center = separatorStart + SymbolSamples +
+          (byteIndex * 6 + bit) * SymbolSamples +
+          SymbolSamples / 2;
+        int begin = center - FiveMs / 2;
+        if (begin < 0 || begin + FiveMs > audio.Length)
+          return null;
+        double hz = SstvVisAfcDetector.EstimatePitch(
+          audio.Slice(begin, FiveMs));
+        if (Near(hz, 1900, 75)) result |= 1 << bit;
+        else if (!Near(hz, 2100, 75)) return null;
+      }
+      return result;
+    }
+
     private static string? TryReadPayload(
       ReadOnlySpan<float> audio, int separatorStart)
     {
-      int? ReadByte(int byteIndex)
-      {
-        int result = 0;
-        for (int bit = 0; bit < 6; bit++)
-        {
-          int center = separatorStart + SymbolSamples +
-            (byteIndex * 6 + bit) * SymbolSamples +
-            SymbolSamples / 2;
-          int begin = center - FiveMs / 2;
-          if (begin < 0 || begin + FiveMs > audio.Length)
-            return null;
-          double hz = SstvVisAfcDetector.EstimatePitch(
-            audio.Slice(begin, FiveMs));
-          if (Near(hz, 1900, 75)) result |= 1 << bit;
-          else if (!Near(hz, 2100, 75)) return null;
-        }
-        return result;
-      }
-
-      if (ReadByte(0) != 0x2A) return null;
+      if (ReadByte(audio, separatorStart, 0) != 0x2A) return null;
       int checksum = 0;
       var callsign = new System.Text.StringBuilder();
       for (int i = 1; i <= 17; i++)
       {
-        int? symbol = ReadByte(i);
+        int? symbol = ReadByte(audio, separatorStart, i);
         if (symbol == null) return null;
         if (symbol == 0x01)
         {
-          if (ReadByte(i + 1) != checksum) return null;
+          if (ReadByte(audio, separatorStart, i + 1) != checksum) return null;
           string call = callsign.ToString();
           return Regex.IsMatch(call, @"^[A-Z0-9/]{3,16}$")
             ? call : null;
