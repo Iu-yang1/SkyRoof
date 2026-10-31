@@ -115,6 +115,38 @@ namespace SkyRoof
     {
       Width = 110, DropDownStyle = ComboBoxStyle.DropDownList
     };
+    private readonly TextBox myCallInput = new()
+    {
+      Width = 116, MaxLength = 60, PlaceholderText = "己方呼号"
+    };
+    private readonly TextBox theirCallInput = new()
+    {
+      Width = 116, MaxLength = 60, PlaceholderText = "对方呼号"
+    };
+    private readonly ComboBox textLayerBox = new()
+    {
+      Width = 114, DropDownStyle = ComboBoxStyle.DropDownList
+    };
+    private readonly NumericUpDown textSizeBox = new()
+    {
+      Width = 66, Minimum = 2, Maximum = 25, Increment = 0.5m,
+      DecimalPlaces = 1
+    };
+    private readonly Button textColorButton = new()
+    {
+      Text = "文字颜色", Width = 88, Height = 30,
+      Margin = new Padding(4)
+    };
+    private readonly SstvTextLayer[] textLayers =
+    {
+      SstvTextLayer.MyCallDefault,
+      SstvTextLayer.TheirCallDefault,
+      SstvTextLayer.CustomDefault
+    };
+    private readonly RectangleF[] textBounds = new RectangleF[3];
+    private bool movingText;
+    private bool updatingTextControls;
+    private PointF textDragOffset;
     private readonly Stack<Bitmap> undoImages = new();
     private readonly Stack<Bitmap> redoImages = new();
     private const int HistoryLimit = 10;
@@ -168,7 +200,38 @@ namespace SkyRoof
       modeBox.DisplayMember = nameof(SstvTxModeProfile.Name);
       if (modeBox.Items.Count > 0) modeBox.SelectedIndex = 0;
       modeBox.SelectedIndexChanged += (_, _) => RefreshTxPreview();
-      overlayText.Text = ctx.Settings.User.Call ?? "";
+      myCallInput.Text = ctx.Settings.User.Call ?? "";
+      overlayText.Text = "";
+      textLayerBox.Items.AddRange(new object[]
+      {
+        "己方呼号", "对方呼号", "自定义文字"
+      });
+      textLayerBox.SelectedIndex = 0;
+      textLayerBox.SelectedIndexChanged += (_, _) => UpdateTextEditorControls();
+      textSizeBox.ValueChanged += (_, _) =>
+      {
+        if (updatingTextControls) return;
+        int index = Math.Max(0, textLayerBox.SelectedIndex);
+        textLayers[index] = textLayers[index] with
+          { SizePercent = (float)textSizeBox.Value };
+        RefreshTxPreview();
+      };
+      textColorButton.Click += (_, _) => PickTextColor();
+      myCallInput.TextChanged += (_, _) => RefreshTxPreview();
+      theirCallInput.TextChanged += (_, _) =>
+      {
+        if (string.IsNullOrWhiteSpace(qsoCall.Text))
+          qsoCall.Text = theirCallInput.Text;
+        RefreshTxPreview();
+      };
+      txPicture.MouseDown += OnTxPictureMouseDown;
+      txPicture.MouseMove += OnTxPictureMouseMove;
+      txPicture.MouseUp += (_, _) => movingText = false;
+      txPicture.MouseWheel += OnTxPictureMouseWheel;
+      txPicture.MouseEnter += (_, _) => txPicture.Focus();
+      txPicture.TabStop = true;
+      txPicture.Paint += (_, e) => DrawTextSelection(e.Graphics);
+      UpdateTextEditorControls();
       rxSourceBox.Items.AddRange(new object[]
       {
         "声卡 AF", "RS-BA1 回环 AF", "声卡 12 kHz IF", "回环 12 kHz IF"
@@ -176,8 +239,10 @@ namespace SkyRoof
       rxSourceBox.SelectedIndexChanged += (_, _) => PopulateAudioDevices();
       rxSourceBox.SelectedIndex = 0;
       rxModeBox.Items.Add("自动识别 SSTV");
+      // Display every TX mode in RX. Robot/PD are decoded by SkySignals;
+      // remaining profiles use the manual/live raster receiver.
       foreach (SstvTxModeProfile profile in SstvTxModeProfile.All)
-        if (profile.Native == null) rxModeBox.Items.Add(profile);
+        rxModeBox.Items.Add(profile);
       rxModeBox.SelectedIndex = 0;
       rxToggleButton.Click += (_, _) => ToggleReceive();
       pitchCorrection.ValueChanged += (_, _) =>
@@ -190,7 +255,12 @@ namespace SkyRoof
       receiveSession.SpectrumAvailable += OnSpectrumAvailable;
       receiveSession.FskStationIdentified += OnLiveFskStationIdentified;
       overlayText.TextChanged += (_, _) => RefreshTxPreview();
-      qsoCall.TextChanged += (_, _) => RefreshTxPreview();
+      qsoCall.TextChanged += (_, _) =>
+      {
+        if (string.IsNullOrWhiteSpace(theirCallInput.Text))
+          theirCallInput.Text = qsoCall.Text;
+        RefreshTxPreview();
+      };
       templateBox.Items.AddRange(new object[]
       {
         "经典呼号", "QSL 卡片", "卫星横幅", "纯图片"
@@ -199,7 +269,7 @@ namespace SkyRoof
       templateBox.SelectedIndexChanged += (_, _) =>
       {
         if (templateBox.SelectedItem is SstvUserTemplate selected)
-          overlayText.Text = selected.OverlayText;
+          ApplyUserTemplate(selected);
         RefreshTxPreview();
       };
       ReloadUserTemplates();
@@ -295,15 +365,47 @@ namespace SkyRoof
       });
       format.Controls.Add(modeBox);
       format.Controls.Add(templateBox);
-      format.Controls.Add(Btn("保存模板", SaveUserTemplate, 95));
-      format.Controls.Add(Btn("保存音频 WAV", () => _ = ExportWaveAsync(), 116));
+      format.Controls.Add(Btn("保存模板", SaveUserTemplate, 88));
+      format.Controls.Add(Btn("删除模板", DeleteUserTemplate, 88));
+      format.Controls.Add(Btn("保存音频 WAV", () => _ = ExportWaveAsync(), 114));
       var overlay = Toolbar();
       overlay.Controls.Add(new Label
       {
-        Text = "文字", Width = 36, Height = 30,
+        Text = "己方", Width = 37, Height = 30,
+        TextAlign = ContentAlignment.MiddleCenter
+      });
+      overlay.Controls.Add(myCallInput);
+      overlay.Controls.Add(new Label
+      {
+        Text = "对方", Width = 37, Height = 30,
+        TextAlign = ContentAlignment.MiddleCenter
+      });
+      overlay.Controls.Add(theirCallInput);
+      overlay.Controls.Add(new Label
+      {
+        Text = "文字", Width = 37, Height = 30,
         TextAlign = ContentAlignment.MiddleCenter
       });
       overlay.Controls.Add(overlayText);
+      var textTools = Toolbar();
+      textTools.Controls.Add(new Label
+      {
+        Text = "编辑对象", Width = 65, Height = 30,
+        TextAlign = ContentAlignment.MiddleCenter
+      });
+      textTools.Controls.Add(textLayerBox);
+      textTools.Controls.Add(new Label
+      {
+        Text = "字号 %", Width = 56, Height = 30,
+        TextAlign = ContentAlignment.MiddleCenter
+      });
+      textTools.Controls.Add(textSizeBox);
+      textTools.Controls.Add(textColorButton);
+      textTools.Controls.Add(new Label
+      {
+        Text = "拖动图片上的文字；滚轮调整字号", Width = 225,
+        Height = 30, TextAlign = ContentAlignment.MiddleLeft
+      });
       var transmit = Toolbar();
       transmit.Controls.Add(new Label
       {
@@ -321,6 +423,7 @@ namespace SkyRoof
       page.Controls.Add(txStatus);
       page.Controls.Add(txActions);
       page.Controls.Add(transmit);
+      page.Controls.Add(textTools);
       page.Controls.Add(overlay);
       page.Controls.Add(format);
       page.Controls.Add(bar);
@@ -788,6 +891,11 @@ namespace SkyRoof
       {
         MessageBox.Show(this, "请先启动接收声卡。", "SSTV",
           MessageBoxButtons.OK, MessageBoxIcon.Information);
+        return;
+      }
+      if (mode.Native != null)
+      {
+        rxStatus.Text = $"{mode.Name} 由 SkySignals 自动识别解码，请等待 VIS 同步";
         return;
       }
       receiveSession.ManualStart(mode);
