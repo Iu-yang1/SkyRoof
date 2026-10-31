@@ -103,6 +103,54 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void FM_OffCenter12kHzIf_ReportsLargeCarrierOffsetDespiteWeakAdjacentTone()
+    {
+      const int fs = 48000;
+      var pcm = new float[fs];
+      for (int i = 0; i < fs; i++)
+      {
+        double t = i / (double)fs;
+        double carrier = 2 * Math.PI * (12000 + 820) * t +
+          1.2 * Math.Sin(2 * Math.PI * 300 * t);
+        pcm[i] = (float)(.38 * Math.Cos(carrier) +
+          .025 * Math.Cos(2 * Math.PI * (12000 - 4300) * t));
+      }
+      var result = new AfcSignalProcessing().Analyze(pcm,
+        AfcSignalMode.FM, T0, generation: 501);
+      result.IfOffsetHz.Should().BeApproximately(820, 45,
+        "a large FM 12-kHz IF offset must not silently appear as zero");
+      result.Confidence.Should().BeGreaterThan(.35,
+        "the energy and FM phase slope are strongly coherent");
+      result.HasAbsoluteReference.Should().BeTrue();
+    }
+
+    [Fact]
+    public void IF_DuplicatePacketTimestampsDoNotInvalidateAccumulatedPcm()
+    {
+      // Windows virtual audio can deliver several consecutive blocks with
+      // the same timestamp. Treating <= as a device reset prevents the
+      // 0.5-second AFC window from ever filling, while the short display
+      // FFT still works. Test the normalization with duplicate callbacks.
+      var method = typeof(AfcIfInput).GetMethod("NormalizePacketUtc",
+        System.Reflection.BindingFlags.Static |
+        System.Reflection.BindingFlags.NonPublic);
+      method.Should().NotBeNull();
+      var repeated = T0.AddMilliseconds(33);
+      DateTime previous = repeated;
+      for (int i = 0; i < 40; i++)
+      {
+        object[] args = { repeated, previous, 1600, false };
+        previous = (DateTime)method!.Invoke(null, args)!;
+        ((bool)args[3]).Should().BeFalse();
+        if (i > 0) previous.Should().BeAfter(repeated);
+      }
+      object[] backwards = { T0.AddSeconds(-2), previous, 1600, false };
+      method!.Invoke(null, backwards);
+      ((bool)backwards[3]).Should().BeTrue(
+        "a genuine backwards jump is an IF discontinuity");
+    }
+
+    [Fact]
     public void CW_LocalTargetGate_IgnoresDistantStrongerCarrier()
     {
       const int fs = 48000;
