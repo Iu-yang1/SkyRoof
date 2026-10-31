@@ -12,7 +12,7 @@ namespace SkyRoof.SSTV
   /// Manually triggered SSTV WAV transmission on a dedicated WASAPI endpoint.
   /// No automatic CQ. Radio CAT writer remains the existing SkyRoof CAT engine;
   /// cancellation and every fault path request an ownership-aware PTT release.
-  /// Real RF tests are required before treating this as production-ready.
+  /// Integrates with the existing CAT worker; no second PTT polling thread.
   /// </summary>
   public sealed class SstvTransmitSession : IDisposable
   {
@@ -177,9 +177,9 @@ namespace SkyRoof.SSTV
         pttRequested = true;
         ctx.FrequencyControl.SetPtt(true);
         bool acknowledged = false;
-        for (int attempt = 0; attempt < 35; attempt++)
+        for (int attempt = 0; attempt < 20; attempt++)
         {
-          await Task.Delay(100, local.Token);
+          await Task.Delay(200, local.Token);
           if (cat.Ptt &&
               cat.LastPttOnHardwareReadbackUtc >= requestedUtc &&
               CheckLiveGuard(guard))
@@ -211,7 +211,7 @@ namespace SkyRoof.SSTV
             throw new InvalidOperationException(
               "卫星或发射机状态变化，已紧急停止发射。");
           Task done = await Task.WhenAny(playbackCompleted.Task,
-            Task.Delay(120, local.Token));
+            Task.Delay(300, local.Token));
           if (done == playbackCompleted.Task)
           {
             Exception? failure = await playbackCompleted.Task;
@@ -245,7 +245,7 @@ namespace SkyRoof.SSTV
               releaseRequestUtc.Ticks);
             ctx.FrequencyControl.ReleaseApplicationPtt();
             var radio = ctx.CatControl.Tx;
-            for (int attempt = 0; attempt < 40; attempt++)
+            for (int attempt = 0; attempt < 25; attempt++)
             {
               if (radio != null &&
                   SstvTxPolicy.HasConfirmedPttOff(
@@ -256,7 +256,7 @@ namespace SkyRoof.SSTV
                 confirmedOff = true;
                 break;
               }
-              await Task.Delay(100); // release watchdog is not user-cancelable
+              await Task.Delay(200); // reads cached CAT state; no extra network polling
             }
           }
         }
