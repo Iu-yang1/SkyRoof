@@ -134,6 +134,7 @@ namespace SkyRoof
     private CancellationTokenSource? replayStop;
     private CancellationTokenSource? txOperationStop;
     private Bitmap? txBase;
+    private string? lastReceivedMode;
     private bool closed;
 
     public SstvConsolePanel(Context ctx)
@@ -466,9 +467,11 @@ namespace SkyRoof
         TextAlign = ContentAlignment.MiddleCenter
       });
       bar.Controls.Add(qsoNotes);
-      bar.Controls.Add(Btn("保存通联", SaveQsoRecord, 96));
-      bar.Controls.Add(Btn("导出 ADIF", ExportQsoAdif, 106));
+      var actions = Toolbar();
+      actions.Controls.Add(Btn("保存通联", SaveQsoRecord, 96));
+      actions.Controls.Add(Btn("导出 ADIF", ExportQsoAdif, 106));
       page.Controls.Add(qsoList);
+      page.Controls.Add(actions);
       page.Controls.Add(bar);
       tabs.TabPages.Add(page);
     }
@@ -494,11 +497,13 @@ namespace SkyRoof
       try
       {
         string call = qsoCall.Text.Trim().ToUpperInvariant();
-        var link = ctx.FrequencyControl.RadioLink;
+        // Logging and image review must also work before any radio is
+        // connected. Prefer the actual received mode over a TX selection.
+        RadioLink link = ctx.FrequencyControl?.RadioLink ?? new RadioLink();
         var selected = modeBox.SelectedItem as SstvTxModeProfile;
         var record = new SstvQsoRecord(
           DateTime.UtcNow, call, ctx.Settings.User.Call ?? "",
-          selected?.Name ?? "SSTV",
+          lastReceivedMode ?? selected?.Name ?? "SSTV",
           link.IsTerrestrial ? "" : link.Sat?.name ?? "",
           link.IsTerrestrial ? 0 : link.CorrectedUplinkFrequency,
           link.CorrectedDownlinkFrequency,
@@ -1152,10 +1157,14 @@ namespace SkyRoof
       rxPicture.Image = next;
       old?.Dispose();
       rxStatus.Text = final ? $"接收完成 · {mode}" : $"正在接收 · {mode}";
-      if (final && !string.IsNullOrEmpty(savedFile))
+      // Never associate a new partial picture with the previous received
+      // image in QSO logging. Keep the actual RX mode for the next log.
+      rxPicture.Tag = final ? savedFile : null;
+      if (final)
       {
-        rxPicture.Tag = savedFile;
-        ReloadHistory();
+        lastReceivedMode = mode;
+        if (!string.IsNullOrWhiteSpace(savedFile))
+          ReloadHistory();
       }
     }
 
