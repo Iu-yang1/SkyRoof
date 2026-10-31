@@ -159,6 +159,10 @@ namespace SkyRoof
       Padding = new Padding(4)
     };
     private readonly TextBox txQsoNote = new() { MaxLength = 256 };
+    private readonly TextBox txRstSent = new() { Text = "595", MaxLength = 8 };
+    private readonly TextBox txRstReceived = new() { Text = "595", MaxLength = 8 };
+    private readonly TextBox txContactName = new() { MaxLength = 64 };
+    private readonly TextBox txContactQth = new() { MaxLength = 96 };
     private bool syncingQsoEntry;
     private readonly ToolTip txThumbnailTips = new();
     private readonly Stack<Bitmap> undoImages = new();
@@ -528,8 +532,12 @@ namespace SkyRoof
       Heading("QSO / 台站信息");
       Field("MY", myCallInput);
       Field("HIS", theirCallInput);
-      Field("文字", overlayText);
+      Field("RST TX", txRstSent);
+      Field("RST RX", txRstReceived);
+      Field("姓名", txContactName);
+      Field("QTH", txContactQth);
       Field("备注", txQsoNote);
+      Field("文字", overlayText);
       Buttons(Btn("通联日志", () =>
       {
         qsoCall.Text = theirCallInput.Text;
@@ -876,7 +884,13 @@ namespace SkyRoof
           link.IsTerrestrial ? 0 : link.CorrectedUplinkFrequency,
           link.CorrectedDownlinkFrequency,
           rxPicture.Tag as string ?? "",
-          qsoNotes.Text.Trim());
+          qsoNotes.Text.Trim())
+        {
+          RstSent = txRstSent.Text.Trim(),
+          RstReceived = txRstReceived.Text.Trim(),
+          ContactName = txContactName.Text.Trim(),
+          ContactQth = txContactQth.Text.Trim()
+        };
         SstvQsoLogStore.Append(QsoLogPath, record);
         qsoCall.Clear();
         qsoNotes.Clear();
