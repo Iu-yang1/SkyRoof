@@ -4,6 +4,10 @@ Release date / 发布日期: 2026-10-31. SSTV Console integration release.
 
 ## English — changes since v.1.61
 
+- v1.62 replacement build: RX mode dropdown now includes all 43 TX profile names (Robot/PD remain native auto-decoded).
+- TX editor has separate MY/DX callsign and custom caption layers, independent font colors/sizes and mouse dragging.
+- Existing user templates can be deleted; saved layouts persist per-layer positions, color, size and callsigns without breaking older template JSON.
+
 - New dockable SSTV Console: receive, transmit, image gallery, UTC QSO log and ADIF export.
 - 43 transmit modes with standard and extended VIS/N-VIS, selectable WASAPI audio output, station ID, PNG/template editing and 48-kHz mono WAV export.
 - AF capture, RS-BA1/Windows loopback and 12-kHz IF SSTV reception; VIS AFC, manual fine tuning and slant correction.
@@ -12,6 +16,10 @@ Release date / 发布日期: 2026-10-31. SSTV Console integration release.
 - Corrected MC110-N scan timing and optimized cached CAT-state sampling and SSTV STOP feedback.
 
 ## 中文 — 相对 v.1.61 的变化
+
+- v1.62 替换构建：RX 模式下拉框补全全部 43 种 TX 制式，Robot/PD 仍使用原生自动 VIS 解码。
+- TX 独立己方呼号、对方呼号及自由文字三图层，支持分别设置字体大小、颜色和鼠标拖动定位。
+- 增加自定义模板删除，保存呼号和每层位置、字号、颜色，兼容已有模板文件。
 
 - 新增可停靠 SSTV 控制台，包含接收、发射、图库、UTC 通联日志和 ADIF 导出。
 - 支持 43 种 SSTV 图片发射模式、标准与扩展 VIS/N-VIS、指定 WASAPI 发射声卡、台站识别、图片模板编辑及 48 kHz 单声道 WAV 导出。
