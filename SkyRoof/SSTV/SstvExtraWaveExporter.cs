@@ -156,7 +156,7 @@ namespace SkyRoof.SSTV
       return values;
     }
 
-    private static void EmitHeader(SstvWaveExporter.WaveOscillator osc,
+    internal static void EmitHeader(SstvWaveExporter.WaveOscillator osc,
       SstvExtraTxSpec spec)
     {
       if (spec.Narrow)

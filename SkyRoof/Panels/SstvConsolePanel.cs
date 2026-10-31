@@ -285,16 +285,22 @@ namespace SkyRoof
       try
       {
         rxStatus.Text = "正在解析 SSTV 录音...";
-        if (rxModeBox.SelectedItem is SstvTxModeProfile manual)
+        SstvVisModeIdentity? identified = await Task.Run(
+          () => SstvVisModeIdentifier.DetectWave(dialog.FileName), stop.Token);
+        SstvTxModeProfile? manual = rxModeBox.SelectedItem as SstvTxModeProfile;
+        SstvTxModeProfile? resolved = manual ?? identified?.Profile;
+        if (resolved != null && resolved.Native == null)
         {
           using Bitmap image = await Task.Run(
-            () => SstvOfflineRasterDecoder.Decode(dialog.FileName, manual),
-            stop.Token);
+            () => SstvOfflineRasterDecoder.Decode(
+              dialog.FileName, resolved,
+              identified?.LeadingAudio ?? default,
+              identified?.FrequencyOffsetHz ?? 0), stop.Token);
           if (!closed)
           {
             string gallery = Path.Combine(Utils.GetUserDataFolder(), "SstvImages");
             Directory.CreateDirectory(gallery);
-            string name = $"SSTV_{DateTime.UtcNow:yyyyMMdd_HHmmss_fff}_{manual.Name.Replace(' ', '_')}";
+            string name = $"SSTV_{DateTime.UtcNow:yyyyMMdd_HHmmss_fff}_{resolved.Name.Replace(' ', '_')}";
             string pictureFile = Path.Combine(gallery, name + ".png");
             image.Save(pictureFile, ImageFormat.Png);
             File.WriteAllText(Path.Combine(gallery, name + ".json"),
@@ -302,10 +308,10 @@ namespace SkyRoof
               {
                 Utc = DateTime.UtcNow,
                 Source = "导入的 WAV",
-                Mode = manual.Name,
+                Mode = resolved.Name,
                 Picture = Path.GetFileName(pictureFile)
               }));
-            ShowReceivedSstv(image, manual.Name, true, pictureFile);
+            ShowReceivedSstv(image, resolved.Name, true, pictureFile);
           }
           return;
         }

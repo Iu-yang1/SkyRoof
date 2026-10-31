@@ -64,7 +64,8 @@ namespace SkyRoof.SSTV
   /// </summary>
   public static class SstvOfflineRasterDecoder
   {
-    public static Bitmap Decode(string wavPath, SstvTxModeProfile profile)
+    public static Bitmap Decode(string wavPath, SstvTxModeProfile profile,
+      TimeSpan leadingAudio = default, double pitchCorrectionHz = 0)
     {
       ArgumentNullException.ThrowIfNull(profile);
       using var wave = new WaveFileReader(wavPath);
@@ -94,12 +95,16 @@ namespace SkyRoof.SSTV
         throw new NotSupportedException(
           "Robot/PD live receiver is provided by SkySignals; select another manual decode mode.");
 
-      double expected = (header + lines * lineMs) / 1000;
+      if (leadingAudio < TimeSpan.Zero || leadingAudio.TotalSeconds > 120 ||
+          !double.IsFinite(pitchCorrectionHz) || Math.Abs(pitchCorrectionHz) > 2000)
+        throw new ArgumentOutOfRangeException(nameof(pitchCorrectionHz));
+      double leadingMs = leadingAudio.TotalMilliseconds;
+      double expected = (leadingMs + header + lines * lineMs) / 1000;
       if (wave.TotalTime.TotalSeconds + .02 < expected)
         throw new InvalidDataException(
           "录音时长不足以解码所选 SSTV 模式的完整图像。");
 
-      int discarded = checked((int)Math.Round(header * 48) * 2);
+      int discarded = checked((int)Math.Round((leadingMs + header) * 48) * 2);
       byte[] skip = new byte[8192];
       while (discarded > 0)
       {
@@ -111,10 +116,10 @@ namespace SkyRoof.SSTV
       var picture = new Bitmap(profile.Width, profile.Height);
       try
       {
-        long previous = (long)Math.Round(header * 48);
+        long previous = (long)Math.Round((leadingMs + header) * 48);
         for (int line = 0; line < lines; line++)
         {
-          long next = (long)Math.Round((header + (line + 1) * lineMs) * 48);
+          long next = (long)Math.Round((leadingMs + header + (line + 1) * lineMs) * 48);
           int samples = checked((int)(next - previous));
           previous = next;
           byte[] bytes = new byte[samples * 2];
@@ -129,7 +134,7 @@ namespace SkyRoof.SSTV
           for (int n = 0; n < samples; n++)
           {
             short pcm = (short)(bytes[2 * n] | bytes[2 * n + 1] << 8);
-            hz[n] = (float)demod.Process(pcm / 32768f);
+            hz[n] = (float)(demod.Process(pcm / 32768f) - pitchCorrectionHz);
           }
 
           int width = profile.Width;
