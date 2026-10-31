@@ -1,45 +1,47 @@
-# SSTV Console (Development Preview)
+# SkyRoof SSTV Console — operator preview
 
-> **Not a release.** This section documents the SkyRoof draft pull request [#130](https://github.com/Iu-yang1/SkyRoof/pull/130). It does not certify on-air TX or full MMSSTV compatibility.
+> **Development build only.** This describes the open Draft [PR #130](https://github.com/Iu-yang1/SkyRoof/pull/130), not a released or fully hardware-validated SSTV application.
 
-## Open the SSTV workspace
+## SSTV workspace
 
-Choose **View → SSTV RX / TX**. The workspace has three user-facing pages: **Receive**, **Transmit**, and **Gallery**. Dock it beside the satellite waterfall or use it as a floating window.
+Open **View → SSTV RX / TX** and select a page: **Receive**, **Transmit**, **Gallery**, or **QSO Log**. Windows can be docked or floated, with concise operator-facing controls.
 
-### Receive a live signal
+### Receive and tune
 
-1. Select the AF capture endpoint, RS-BA1 playback-loopback endpoint, or real **12 kHz IF** endpoint. The selected endpoint must contain the actual radio receive audio.
-2. Click **Start Receive**, then tune your receiver normally. Select **Stop Receive** when finished.
-3. If the whole SSTV AF spectrum is consistently shifted, set the manual **Hz** correction (±500 Hz). This changes RX audio only; it does not retune radio CAT or uplink frequencies.
-4. The current SkySignals backend automatically recognizes Robot 36/72 and PD 50/90/120/160/180/240/290 where decoding confidence permits. The decoder may not recognize other MMSSTV modes.
-5. Use **Import WAV** to decode a 48 kHz / 16-bit mono WAV (max seven minutes). Completed pictures are archived with UTC metadata under the user-data `SstvImages` folder.
+Choose a live capture endpoint: AF, RS-BA1 playback loopback, real 12-kHz IF, or IF loopback. Select **Start Receive**. The SkySignals Robot/PD decoder and new RGB/extended/narrowband VIS raster receiver share the audio stream. The latter is experimental and has separate partial-image and end-to-end tests.
 
-**Important:** Loopback captures the entire selected Windows playback endpoint, not exclusively the RS-BA1 process. A dedicated playback endpoint avoids other applications mixing in.
+**Automatic frequency correction** (on by default) recognizes validated standard VIS leaders and applies a software AF-pitch correction before Robot/PD demodulation; the extra raster receiver additionally tracks residual sync tone during successive image rows. Manual `校频 Hz` shifts receive AF by ±500 Hz. Neither SSTV subsystem changes satellite uplink or persistent transponder frequency. SkyRoof's independent CAT/IF sign calibrator is unchanged in ownership.
 
-### Prepare an image
+When a VIS preamble is lost to fading, choose an explicit RGB/extended mode and click **Manual Start** near the picture start. Select **Import WAV** to decode a recorded 48-kHz 16-bit mono picture. The imported file is automatically identified by valid 8-bit VIS, extended 16-bit VIS, or N-VIS-24, unless an operator selected a manual mode. Capture can begin after a short silence or a leading audio sequence. Save and browse images with their UTC mode/source metadata.
 
-Open a PNG/JPEG or paste one from the clipboard. The preview resizes the image to the selected mode and can overlay your callsign or a short message. Export **SSTV WAV** to test the waveform without transmitting. Robot/PD waveforms contain standard 8-bit VIS headers and continuous-phase image audio.
+**Caveats:** Automatic mode identification does not guarantee correct decoding during fading, frequency drift, multipath, clock slant, or partial scan-line loss. Live RX and offline RX have different acquisition paths. RS-BA1 loopback captures a whole playback endpoint, including any other applications on it. Prefer a dedicated audio endpoint.
 
-### Experimental on-air transmission
+### Create an image
 
-The draft branch has a guarded TX implementation; **do not treat it as an IC-9700-tested release**. The TX button requires explicit user approval, an above-horizon satellite with a 2 m/70 cm amateur uplink, USB or FM mode, a working TX CAT backend that reports its **actual TX frequency and hardware PTT state**, and a dedicated playback endpoint routed to the radio transmit audio input.
+Open/paste, crop-to-mode ratio, rotate, mirror, undo/redo. Select a classic callsign, QSL card, satellite banner, or plain image; save custom reusable templates with overlay text. Macros: `{CALL}`, `{MYGRID}`, `{HISCALL}`, `{SAT}`, `{MODE}`, `{UTC}`, `{DATE}`, `{TXHZ}`, `{RXHZ}`. Supported sender modes are the 43 named MMSSTV Robot, PD, Scottie, Martin, SC2, P, MP, MR, ML and MP-N/MC-N variants; all produce WAV via a dedicated offline encoder. VIS may be standard 8-bit, extended 16-bit, or narrow N-VIS 24-bit as appropriate.
 
-PTT is requested only after WAV generation and WASAPI initialization. The code then waits for a fresh hardware PTT acknowledgement, checks the expected TX CAT frequency, and transmits. A frequency mismatch, loss of satellite observation, PTT readback timeout, audio failure, duration limit, STOP, or window close requests ownership-aware PTT release. CAT Doppler updates are not frozen for the entire image.
+**Save SSTV WAV** exports audio without using CAT/PTT. The **Transmit** controls additionally select a dedicated audio playback device, require explicit band/power approval and an extra confirmation, and provide **Stop**. These remain an **experimental RF pathway**.
 
-**Before any RF test:** verify the physical wiring and audio injection route into the radio; start with a dummy load, low power, and a spectrum/monitor receiver; confirm PTT and output after STOP. Remote application PTT readback is not equivalent to measuring RF energy or spectral purity. Never assume a failed CAT ACK proves the transmitter is unkeyed.
+### QSO Log
 
-## Current compatibility boundary
+Save a QSO only after manually entering a valid partner callsign. Store UTC, satellite, selected SSTV mode, TX/RX frequencies and an optional received picture. Export ADIF. Receiving a picture alone does not automatically create a QSO.
 
-- RX: Robot 36/72 + PD family using the existing SkySignals decoder; 12 kHz real-IF frontend requires one clean sideband.
-- TX: Robot 36/72 + PD family, plus Scottie 1/2/DX, Martin 1/2 and SC2 60/120/180 RGB family, 48 kHz mono WAV and experimental guarded on-air playback. RGB modes use timing and VIS definitions audited against MMSSTV Main.cpp. **This addition does not extend RX compatibility.**
-- Still missing: Martin/Scottie/SC2 **RX**, AVT/P3/P5/P7/MP/MR/ML/extended/N-VIS receive-and-transmit parity, full image editor/templates/macros, automated VIS/sync-driven SSTV AF AFC, independent IC-9700 bench verification, and dedicated long-run on-air fault-injection tests.
+### CAT/PTT and satellite safety
 
-No stable Release should be made until the source-to-target compatibility matrix, CAT/PTT real-radio checks, and production acceptance pass.
+For an experimental transmission the code requires a supported active VHF/UHF satellite uplink, USB/FM mode, selected audio output, live CAT actual TX-frequency readback, available application PTT lease, and hardware PTT readback. A watchdog monitors satellite visibility, frequency and Doppler, mode changes, device failure and user STOP. Exceptions request release of the application's own PTT, not any unrelated application's lease. **Application PTT and CAT readback are not equivalent to independent RF output measurement.**
 
-## Source and licensing
+**Before using an IC-9700 for RF**, a supervised dummy-load test must verify the actual RS-BA1/USB/LAN audio injection route, low-power spectrum, RF level, safe STOP, PTT OFF after CAT interruption and watchdog expiry, and long transmissions with continuous uplink Doppler. Those physical tests have NOT been performed by this development branch.
 
-- [MMSSTV protocol reference](https://github.com/n5ac/mmsstv)
-- [SkySignals SSTV decoder](https://github.com/VE3NEA/VE3NEA.SkySignals)
-- [SSTV integration and acceptance plan](../architecture/sstv-console-integration-plan.md)
+## Compatibility and release gates
 
-SkyRoof remains AGPLv3; incorporate upstream material only with corresponding attribution and license compliance.
+The 43 transmit code paths and streaming/mode-based receive paths exist, but **MMSSTV full feature parity is not yet independently demonstrated**. The MMSSTV reference also includes AVT sync/phase, RX slant and sample-clock calibration, many filter/denoise/presentation controls, FSK/CW identification, legacy repeater/contest/QSL integration, and OLE/COM functionality. Mode tables and waveform unit tests are not a substitute for a reference golden audio corpus and independent demodulator comparisons for *every* mode under AWGN, Doppler, QSB, fading and clock drift. Real IC-9700 hardware tests remain mandatory for a stable RF-capable Release.
+
+The [P0–P4 audit plan](../architecture/sstv-console-integration-plan.md) tracks remaining acceptance criteria. **Do not merge to master or label a stable Release before they pass.**
+
+## Reference and licensing
+
+- [MM-SSTV source](https://github.com/n5ac/mmsstv)
+- [SkySignals decoder](https://github.com/VE3NEA/VE3NEA.SkySignals)
+- [PR and current Windows CI](https://github.com/Iu-yang1/SkyRoof/pull/130)
+
+SkyRoof remains AGPLv3. Third-party implementation and mode definitions require appropriate copyright and license attribution.
