@@ -118,6 +118,19 @@ namespace VE3NEA.Dsp.Tests
           Assert.Contains("接收完成", Field<Label>(panel, "rxStatus").Text);
           tabs.SelectedIndex = 3;
           Assert.Equal("通联日志", tabs.SelectedTab?.Text);
+
+          // Simulate a prior OFF timeout without touching any real CAT device.
+          // Merely ticking operator approval must not rearm an unknown PTT.
+          var txSession = Field<SstvTransmitSession>(panel, "transmitSession");
+          typeof(SstvTransmitSession).GetField("releaseUnconfirmed",
+            BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(txSession, 1);
+          var approval = Field<CheckBox>(panel, "txApproval");
+          approval.Checked = true;
+          Invoke(panel, "UpdateTxAvailability");
+          Assert.False(approval.Checked);
+          Assert.False(Field<Button>(panel, "txSendButton").Enabled);
+          Assert.Equal(SstvTxPolicy.PttReleaseUnconfirmedMessage,
+            Field<Label>(panel, "txStatus").Text);
         }
         catch (Exception ex) { failure = ex; }
       });
