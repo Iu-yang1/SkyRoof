@@ -202,7 +202,7 @@ namespace SkyRoof
     private static FlowLayoutPanel Toolbar() => new()
     {
       Dock = DockStyle.Top, Height = 43, WrapContents = false,
-      AutoScroll = true, Padding = new Padding(6, 2, 6, 2)
+      AutoScroll = false, Padding = new Padding(6, 2, 6, 2)
     };
 
     private void BuildRxTab()
@@ -249,19 +249,20 @@ namespace SkyRoof
       bar.Controls.Add(Btn("裁剪", CropImage, 60));
       bar.Controls.Add(templateBox);
       bar.Controls.Add(Btn("保存模板", SaveUserTemplate, 95));
-      bar.Controls.Add(new Label
+      var format = Toolbar();
+      format.Controls.Add(new Label
       {
         Text = "模式", Width = 36, Height = 30,
         TextAlign = ContentAlignment.MiddleCenter
       });
-      bar.Controls.Add(modeBox);
+      format.Controls.Add(modeBox);
       bar.Controls.Add(new Label
       {
         Text = "文字", Width = 36, Height = 30,
         TextAlign = ContentAlignment.MiddleCenter
       });
-      bar.Controls.Add(overlayText);
-      bar.Controls.Add(Btn("保存音频 WAV", () => _ = ExportWaveAsync(), 116));
+      format.Controls.Add(overlayText);
+      format.Controls.Add(Btn("保存音频 WAV", () => _ = ExportWaveAsync(), 116));
       var transmit = Toolbar();
       transmit.Controls.Add(new Label
       {
@@ -277,6 +278,7 @@ namespace SkyRoof
       page.Controls.Add(txPicture);
       page.Controls.Add(txStatus);
       page.Controls.Add(transmit);
+      page.Controls.Add(format);
       page.Controls.Add(bar);
       tabs.TabPages.Add(page);
     }
@@ -322,8 +324,10 @@ namespace SkyRoof
           using Bitmap image = await Task.Run(
             () => SstvOfflineRasterDecoder.Decode(
               dialog.FileName, resolved,
-              identified?.LeadingAudio ?? default,
-              identified?.FrequencyOffsetHz ?? 0), stop.Token);
+              identified?.Profile.Name == resolved.Name
+                ? identified.Value.LeadingAudio : default,
+              identified?.Profile.Name == resolved.Name
+                ? identified.Value.FrequencyOffsetHz : 0), stop.Token);
           if (!closed)
           {
             string gallery = Path.Combine(Utils.GetUserDataFolder(), "SstvImages");
