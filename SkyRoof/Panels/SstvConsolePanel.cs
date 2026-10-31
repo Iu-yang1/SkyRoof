@@ -87,11 +87,6 @@ namespace SkyRoof
       Margin = new Padding(4)
     };
     private readonly TabControl tabs = new() { Dock = DockStyle.Fill };
-    private readonly SstvToneSpectrumView rxSpectrum = new()
-    {
-      Dock = DockStyle.Bottom,
-      Height = 74
-    };
     private readonly SstvTxToneReference rxToneReference = new()
     {
       Dock = DockStyle.Bottom, Height = 90
@@ -396,7 +391,6 @@ namespace SkyRoof
       }));
       actions.Controls.Add(Btn("接收记录", () => { ReloadHistory(); tabs.SelectedIndex = 2; }));
       page.Controls.Add(rxPicture);
-      page.Controls.Add(rxSpectrum);
       page.Controls.Add(rxToneReference);
       page.Controls.Add(rxStatus);
       page.Controls.Add(actions);
@@ -1217,7 +1211,7 @@ namespace SkyRoof
         BeginInvoke((Action)(() =>
         {
           if (!closed && !IsDisposed)
-            rxSpectrum.SetLevels(levels);
+            rxToneReference.SetLevels(levels);
         }));
       }
       catch (InvalidOperationException) { }
