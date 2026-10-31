@@ -70,6 +70,8 @@ namespace SkyRoof.SSTV
       {
         double offset = Mean(pitches, f + 8, f + 52) - 1900;
         if (!double.IsFinite(offset) || Math.Abs(offset) > 160 ||
+            !Match(pitches, f, f + 4, 1900 + offset, 85, .75) ||
+            (f > 0 && Math.Abs(pitches[f - 1] - (1900 + offset)) < 85) ||
             !Match(pitches, f + 10, f + 52, 1900 + offset, 85, .85) ||
             !Match(pitches, f + 60, f + 62, 1200 + offset, 90, .5) ||
             !Match(pitches, f + 72, f + 110, 1900 + offset, 85, .85) ||
@@ -112,6 +114,8 @@ namespace SkyRoof.SSTV
       {
         double offset = Mean(p, f + 8, f + 52) - 1900;
         if (!double.IsFinite(offset) || Math.Abs(offset) > 160 ||
+            !Match(p, f, f + 4, 1900 + offset, 85, .75) ||
+            (f > 0 && Math.Abs(p[f - 1] - (1900 + offset)) < 85) ||
             !Match(p, f + 10, f + 52, 1900 + offset, 85, .85) ||
             !Match(p, f + 64, f + 76, 2100 + offset, 85, .75) ||
             !Match(p, f + 81, f + 84, 1900 + offset, 85, .5))
