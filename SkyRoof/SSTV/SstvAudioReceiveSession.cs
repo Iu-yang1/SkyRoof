@@ -165,6 +165,7 @@ namespace SkyRoof.SSTV
         }
         else bitmap.Dispose();
       };
+      var manualShifter = new SstvAfFrequencyShifter();
       var shifter = new SstvAfFrequencyShifter();
       var visDetector = new SstvVisAfcDetector();
       visDetector.Reset(version);
@@ -204,6 +205,7 @@ namespace SkyRoof.SSTV
             decoder.ImageUpdated += OnImage;
             decoder.ImageCompleted += OnImage;
             ifDemod.Reset();
+            manualShifter.Reset();
             shifter.Reset();
             raster.Reset();
             visDetector.Reset(version);
@@ -215,20 +217,25 @@ namespace SkyRoof.SSTV
           var af = new float[samples.Length];
           bool intermediateIf = source is SstvReceiveSource.Capture12kIf or
             SstvReceiveSource.Loopback12kIf;
+          // Operator correction must precede *both* VIS acquisition and
+          // the extended live raster decoder. Previously it affected only
+          // the native Robot/PD branch, so ±300 Hz satellite tuning errors
+          // could not be recovered by manual tune for RGB modes.
+          int manualHz = ManualCorrectionHz;
           for (int i = 0; i < samples.Length; i++)
           {
             double audio = intermediateIf ? ifDemod.Process(samples[i]) : samples[i];
-            af[i] = (float)Math.Clamp(double.IsFinite(audio) ? audio : 0, -1.0, 1.0);
+            float clean = (float)Math.Clamp(double.IsFinite(audio) ? audio : 0, -1.0, 1.0);
+            af[i] = manualShifter.Process(clean, manualHz);
           }
-          // Detect the full VIS sequence on UNCORRECTED AF so the NCO
-          // does not introduce self-referential tone estimates.
+          // VIS offset is now estimated relative to the manually centered
+          // AF. Do not include that manual correction again downstream.
           visDetector.Process(af);
           SstvTxModeProfile? forced =
             Interlocked.Exchange(ref manuallyRequestedMode, null);
           if (forced != null) raster.ForceMode(forced);
           raster.Process(af);
-          int correction = Math.Clamp(ManualCorrectionHz +
-            (AutoVisEnabled ? AutoVisCorrectionHz : 0), -500, 500);
+          int correction = AutoVisEnabled ? AutoVisCorrectionHz : 0;
           for (int i = 0; i < af.Length; i++)
           {
             double audio = shifter.Process(af[i], correction);
