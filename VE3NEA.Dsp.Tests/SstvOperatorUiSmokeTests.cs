@@ -72,10 +72,21 @@ namespace VE3NEA.Dsp.Tests
           var template = Field<ComboBox>(panel, "templateBox");
           template.SelectedItem = "QSL 卡片";
           Field<TextBox>(panel, "overlayText").Text = "CQ SSTV {UTC}";
-          Invoke(panel, "RotateImage");
-          Invoke(panel, "UndoImage");
-          Invoke(panel, "RedoImage");
-          Invoke(panel, "CropImage");
+          // Exercise actual WinForms Click events, not only private
+          // methods. This catches broken button wiring and disabled controls.
+          Button Action(string text) =>
+            tabs.TabPages[1].Controls.OfType<FlowLayoutPanel>()
+              .SelectMany(row => row.Controls.OfType<Button>())
+              .Single(button => button.Text == text);
+          Action("旋转").PerformClick();
+          Assert.Equal(120, Field<Bitmap>(panel, "txBase").Width);
+          Action("撤销").PerformClick();
+          Assert.Equal(200, Field<Bitmap>(panel, "txBase").Width);
+          Action("重做").PerformClick();
+          Assert.Equal(120, Field<Bitmap>(panel, "txBase").Width);
+          Action("裁剪").PerformClick();
+          Assert.Equal(120, Field<Bitmap>(panel, "txBase").Width);
+          Assert.True(Field<Bitmap>(panel, "txBase").Height <= 120);
           Assert.NotNull(Field<PictureBox>(panel, "txPicture").Image);
 
           var mode = Field<ComboBox>(panel, "modeBox");
