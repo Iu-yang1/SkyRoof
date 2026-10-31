@@ -17,6 +17,25 @@ namespace SkyRoof.SSTV
     public const int BinCount = (MaxHz - MinHz) / BinStepHz + 1;
     private const int SampleRate = 48000;
     private const int WindowSamples = 2048;
+    private static readonly double[] Hann = CreateHann();
+    private static readonly double[] Coefficients = CreateCoefficients();
+
+    private static double[] CreateHann()
+    {
+      var window = new double[WindowSamples];
+      for (int i = 0; i < window.Length; i++)
+        window[i] = .5 - .5 * Math.Cos(2 * Math.PI * i / (WindowSamples - 1));
+      return window;
+    }
+
+    private static double[] CreateCoefficients()
+    {
+      var result = new double[BinCount];
+      for (int i = 0; i < result.Length; i++)
+        result[i] = 2 * Math.Cos(2 * Math.PI *
+          (MinHz + i * BinStepHz) / SampleRate);
+      return result;
+    }
 
     public static float[] Measure(ReadOnlySpan<float> samples)
     {
@@ -25,15 +44,12 @@ namespace SkyRoof.SSTV
       ReadOnlySpan<float> audio = samples.Slice(samples.Length - WindowSamples);
       for (int b = 0; b < levels.Length; b++)
       {
-        double freq = MinHz + b * BinStepHz;
-        double omega = 2 * Math.PI * freq / SampleRate;
-        double coeff = 2 * Math.Cos(omega);
+        double coeff = Coefficients[b];
         double prev = 0, prev2 = 0;
         for (int n = 0; n < WindowSamples; n++)
         {
           if (!float.IsFinite(audio[n])) return new float[BinCount];
-          double taper = .5 - .5 * Math.Cos(2 * Math.PI * n / (WindowSamples - 1));
-          double value = audio[n] * taper + coeff * prev - prev2;
+          double value = audio[n] * Hann[n] + coeff * prev - prev2;
           prev2 = prev;
           prev = value;
         }
