@@ -7,6 +7,8 @@ namespace SkyRoof.SSTV
   /// corner in normalized canvas coordinates; size is percent of canvas width.
   /// Stored independently of the source bitmap and reused by every TX mode.
   /// </summary>
+  public sealed record SstvAdditionalCaption(string Text, SstvTextLayer Style);
+
   public sealed record SstvTextLayer(float X, float Y, float SizePercent, int ColorArgb)
   {
     public static SstvTextLayer MyCallDefault => new(.04f, .69f, 6.5f, unchecked((int)0xFFFFFFFF));
