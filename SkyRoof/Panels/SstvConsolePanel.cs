@@ -2033,7 +2033,7 @@ namespace SkyRoof
       }
     }
 
-    private void SaveReceivedImage()
+    private async void SaveReceivedImage()
     {
       if (rxPicture.Image == null) return;
       using var save = new SaveFileDialog
@@ -2042,7 +2042,29 @@ namespace SkyRoof
         FileName = $"SSTV_{DateTime.Now:yyyyMMdd_HHmmss}.png"
       };
       if (save.ShowDialog(this) != DialogResult.OK) return;
-      rxPicture.Image.Save(save.FileName, ImageFormat.Png);
+      try
+      {
+        string target = save.FileName;
+        string? original = rxPicture.Tag as string;
+        if (!string.IsNullOrWhiteSpace(original) && File.Exists(original))
+        {
+          // Decoded images are already persisted as PNG, so copying the
+          // original avoids another GDI+ encode on the WinForms thread.
+          await Task.Run(() => SstvImageLibrary.Export(original, target));
+        }
+        else
+        {
+          using var snapshot = new Bitmap(rxPicture.Image);
+          await Task.Run(() => snapshot.Save(target, ImageFormat.Png));
+        }
+        if (!closed) rxStatus.Text = "图片已保存";
+      }
+      catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+        or System.Runtime.InteropServices.ExternalException or ArgumentException)
+      {
+        if (!closed) MessageBox.Show(this, ex.Message, "保存图片失败",
+          MessageBoxButtons.OK, MessageBoxIcon.Warning);
+      }
     }
 
     private string HistoryFolder =>
