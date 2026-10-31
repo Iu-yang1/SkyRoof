@@ -631,8 +631,8 @@ namespace SkyRoof
       tile.MouseUp += (_, e) =>
       {
         if (e.Button == MouseButtons.Left) action();
-        else if (e.Button == MouseButtons.Right)
-          tile.ContextMenuStrip?.Show(tile, e.Location);
+        // WinForms displays ContextMenuStrip itself on a right click.
+        // Do not explicitly Show() here, or the menu opens twice.
       };
       var context = new ContextMenuStrip();
       context.Items.Add("设为当前发送图片", null, (_, _) => action());
