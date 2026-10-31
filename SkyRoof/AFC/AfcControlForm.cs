@@ -792,7 +792,8 @@ namespace SkyRoof.AFC
       bool measured = s.LastObservationUtc != default && s.Confidence >= .6 &&
         s.State is AfcLockState.Acquiring or AfcLockState.Locked or AfcLockState.Hold;
       metrics[0].Text = $"{owner.PredictedDownlinkDopplerHz:+0;-0;0} Hz";
-      bool freshCandidate = pipeline.LastObservation is { } candidate &&
+      AfcObservation candidate = pipeline.LastObservation.GetValueOrDefault();
+      bool freshCandidate = pipeline.LastObservation.HasValue &&
         candidate.Mode == currentMode &&
         candidate.Generation == input.Generation &&
         (DateTime.UtcNow - candidate.SampleUtc).TotalSeconds < 4 &&
