@@ -677,10 +677,12 @@ namespace SkyRoof
     {
       stack.Push(new Bitmap(image));
       if (stack.Count <= HistoryLimit) return;
-      Bitmap[] old = stack.Reverse().ToArray();
-      ClearHistory(stack);
-      for (int i = 1; i < old.Length; i++) stack.Push(old[i]);
-      old[0].Dispose();
+      Bitmap[] newestFirst = stack.ToArray();
+      stack.Clear();
+      for (int i = HistoryLimit; i < newestFirst.Length; i++)
+        newestFirst[i].Dispose();
+      for (int i = HistoryLimit - 1; i >= 0; i--)
+        stack.Push(newestFirst[i]);
     }
 
     private void SetTxImage(Bitmap image)
