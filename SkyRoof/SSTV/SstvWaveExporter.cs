@@ -144,6 +144,26 @@ namespace SkyRoof.SSTV
         for (int i = 0; i < n; i++) WriteSample(frequency);
       }
 
+      internal void KeyedTone(double hz, double milliseconds)
+      {
+        if (hz <= 0 || !double.IsFinite(hz))
+          throw new ArgumentOutOfRangeException(nameof(hz));
+        int length = Samples(milliseconds);
+        int fade = Math.Min(240, length / 3); // 5 ms on each side
+        for (int n = 0; n < length; n++)
+        {
+          double envelope = 1;
+          if (fade > 0)
+          {
+            if (n < fade)
+              envelope = Math.Sin(.5 * Math.PI * n / fade);
+            else if (n >= length - fade)
+              envelope = Math.Sin(.5 * Math.PI * (length - n - 1) / fade);
+          }
+          WriteSample(hz, envelope);
+        }
+      }
+
       internal void Scan(double[] values, double milliseconds) =>
         ScanValues(values, milliseconds, SstvTones.Black, SstvTones.White);
 
@@ -169,11 +189,20 @@ namespace SkyRoof.SSTV
         return Math.Max(0, checked((int)(Math.Round(idealSamples) - sampleCount)));
       }
 
-      private void WriteSample(double frequency)
+      private void WriteSample(double frequency, double gain = 1)
       {
-        phase += TwoPi * frequency / SampleRate;
-        if (phase >= TwoPi) phase -= TwoPi;
-        short pcm = (short)Math.Round(Math.Sin(phase) * (short.MaxValue * PeakLevel));
+        if (!double.IsFinite(frequency) || frequency < 0 ||
+            !double.IsFinite(gain) || gain < 0 || gain > 1)
+          throw new ArgumentOutOfRangeException(nameof(frequency));
+        // Zero-Hz is a SILENCE marker, never a held-phase DC level. Radio
+        // microphone ports must not receive a DC plateau during CW gaps.
+        if (frequency > 0)
+        {
+          phase += TwoPi * frequency / SampleRate;
+          if (phase >= TwoPi) phase -= TwoPi;
+        }
+        short pcm = frequency == 0 ? (short)0 :
+          (short)Math.Round(Math.Sin(phase) * (short.MaxValue * PeakLevel * gain));
         bytes[pending++] = (byte)pcm;
         bytes[pending++] = (byte)(pcm >> 8);
         sampleCount++;
