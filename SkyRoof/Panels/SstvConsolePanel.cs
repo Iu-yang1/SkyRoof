@@ -105,9 +105,9 @@ namespace SkyRoof
       BuildRxTab();
       BuildTxTab();
       BuildHistoryTab();
-      foreach (SstvModeSpec mode in SstvModes.All)
+      foreach (SstvTxModeProfile mode in SstvTxModeProfile.All)
         modeBox.Items.Add(mode);
-      modeBox.DisplayMember = nameof(SstvModeSpec.Name);
+      modeBox.DisplayMember = nameof(SstvTxModeProfile.Name);
       if (modeBox.Items.Count > 0) modeBox.SelectedIndex = 0;
       modeBox.SelectedIndexChanged += (_, _) => RefreshTxPreview();
       overlayText.Text = ctx.Settings.User.Call ?? "";
@@ -292,7 +292,7 @@ namespace SkyRoof
       if (transmitSession.IsSending ||
           txOutputBox.SelectedItem is not DeviceEntry output ||
           txPicture.Image is not Bitmap image ||
-          modeBox.SelectedItem is not SstvModeSpec spec)
+          modeBox.SelectedItem is not SstvTxModeProfile spec)
       {
         if (!transmitSession.IsSending)
           MessageBox.Show(this, "请先选择图片、发送模式及发射声卡。", "SSTV",
@@ -321,7 +321,7 @@ namespace SkyRoof
         using var snapshot = new Bitmap(image);
         txStatus.Text = "正在准备 SSTV 图片...";
         await Task.Run(() =>
-          SstvWaveExporter.Export(snapshot, spec.Mode, temporaryWave));
+          SstvRgbWaveExporter.Export(snapshot, spec, temporaryWave));
         if (closed) return;
         await transmitSession.SendWavAsync(
           temporaryWave, output.Id, txApproval.Checked,
@@ -495,7 +495,7 @@ namespace SkyRoof
     private Bitmap? RenderTxPreview()
     {
       if (txBase == null) return null;
-      SstvModeSpec spec = modeBox.SelectedItem as SstvModeSpec ?? SstvModes.All[0];
+      SstvTxModeProfile spec = modeBox.SelectedItem as SstvTxModeProfile ?? SstvTxModeProfile.All[0];
       var canvas = new Bitmap(spec.Width, spec.Height, PixelFormat.Format32bppArgb);
       using var g = Graphics.FromImage(canvas);
       g.SmoothingMode = SmoothingMode.AntiAlias;
@@ -528,7 +528,7 @@ namespace SkyRoof
     private async Task ExportWaveAsync()
     {
       if (txPicture.Image is not Bitmap preview ||
-          modeBox.SelectedItem is not SstvModeSpec spec)
+          modeBox.SelectedItem is not SstvTxModeProfile spec)
       {
         MessageBox.Show(this, "请先打开或粘贴图片。", "SSTV",
           MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -545,7 +545,7 @@ namespace SkyRoof
       txStatus.Text = "正在生成 SSTV 音频...";
       try
       {
-        await Task.Run(() => SstvWaveExporter.Export(snapshot, spec.Mode, save.FileName));
+        await Task.Run(() => SstvRgbWaveExporter.Export(snapshot, spec, save.FileName));
         if (!closed) txStatus.Text = "音频已保存";
       }
       catch (Exception ex)
