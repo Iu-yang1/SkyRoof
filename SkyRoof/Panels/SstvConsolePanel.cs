@@ -4,6 +4,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Threading;
 using SkyRoof.SSTV;
@@ -85,6 +86,13 @@ namespace SkyRoof
       DropDownStyle = ComboBoxStyle.DropDownList, Width = 145
     };
     private readonly TextBox overlayText = new() { Width = 165 };
+    private readonly ComboBox templateBox = new()
+    {
+      Width = 110, DropDownStyle = ComboBoxStyle.DropDownList
+    };
+    private readonly Stack<Bitmap> undoImages = new();
+    private readonly Stack<Bitmap> redoImages = new();
+    private const int HistoryLimit = 10;
     private readonly ListBox archiveList = new() { Dock = DockStyle.Fill };
     private readonly ListBox qsoList = new() { Dock = DockStyle.Fill };
     private readonly TextBox qsoCall = new() { Width = 130 };
@@ -142,6 +150,12 @@ namespace SkyRoof
       receiveSession.ImageAvailable += OnAudioReceived;
       receiveSession.VisSynchronized += OnVisSynchronized;
       overlayText.TextChanged += (_, _) => RefreshTxPreview();
+      templateBox.Items.AddRange(new object[]
+      {
+        "经典呼号", "QSL 卡片", "卫星横幅", "纯图片"
+      });
+      templateBox.SelectedIndex = 0;
+      templateBox.SelectedIndexChanged += (_, _) => RefreshTxPreview();
       archiveList.DoubleClick += (_, _) => ShowSelectedHistory();
       txSendButton.Click += (_, _) => _ = SendImageAsync();
       txStopButton.Click += (_, _) => transmitSession.RequestStop();
@@ -203,6 +217,12 @@ namespace SkyRoof
       var bar = Toolbar();
       bar.Controls.Add(Btn("打开图片", LoadImage));
       bar.Controls.Add(Btn("粘贴", PasteImage, 65));
+      bar.Controls.Add(Btn("撤销", UndoImage, 60));
+      bar.Controls.Add(Btn("重做", RedoImage, 60));
+      bar.Controls.Add(Btn("旋转", RotateImage, 60));
+      bar.Controls.Add(Btn("镜像", MirrorImage, 60));
+      bar.Controls.Add(Btn("裁剪", CropImage, 60));
+      bar.Controls.Add(templateBox);
       bar.Controls.Add(new Label
       {
         Text = "模式", Width = 36, Height = 30,
@@ -648,13 +668,80 @@ namespace SkyRoof
       }
     }
 
+    private static void ClearHistory(Stack<Bitmap> history)
+    {
+      while (history.TryPop(out Bitmap? entry)) entry.Dispose();
+    }
+
+    private static void PushHistory(Stack<Bitmap> stack, Bitmap image)
+    {
+      stack.Push(new Bitmap(image));
+      if (stack.Count <= HistoryLimit) return;
+      Bitmap[] old = stack.Reverse().ToArray();
+      ClearHistory(stack);
+      for (int i = 1; i < old.Length; i++) stack.Push(old[i]);
+      old[0].Dispose();
+    }
+
     private void SetTxImage(Bitmap image)
     {
       var old = txBase;
+      if (old != null) PushHistory(undoImages, old);
       txBase = image;
       old?.Dispose();
+      ClearHistory(redoImages);
       RefreshTxPreview();
       tabs.SelectedIndex = 1;
+    }
+
+    private void UndoImage()
+    {
+      if (txBase == null || !undoImages.TryPop(out Bitmap? prior)) return;
+      PushHistory(redoImages, txBase);
+      txBase.Dispose();
+      txBase = prior;
+      RefreshTxPreview();
+    }
+
+    private void RedoImage()
+    {
+      if (txBase == null || !redoImages.TryPop(out Bitmap? next)) return;
+      PushHistory(undoImages, txBase);
+      txBase.Dispose();
+      txBase = next;
+      RefreshTxPreview();
+    }
+
+    private void RotateImage()
+    {
+      if (txBase == null) return;
+      var bitmap = new Bitmap(txBase);
+      bitmap.RotateFlip(RotateFlipType.Rotate90FlipNone);
+      SetTxImage(bitmap);
+    }
+
+    private void MirrorImage()
+    {
+      if (txBase == null) return;
+      var bitmap = new Bitmap(txBase);
+      bitmap.RotateFlip(RotateFlipType.RotateNoneFlipX);
+      SetTxImage(bitmap);
+    }
+
+    private void CropImage()
+    {
+      if (txBase == null) return;
+      var mode = modeBox.SelectedItem as SstvTxModeProfile;
+      double aspect = mode == null ? 4.0 / 3 : (double)mode.Width / mode.Height;
+      int w = txBase.Width, h = txBase.Height;
+      if ((double)w / h > aspect) w = Math.Max(1, (int)(h * aspect));
+      else h = Math.Max(1, (int)(w / aspect));
+      Rectangle crop = new((txBase.Width - w) / 2,
+        (txBase.Height - h) / 2, w, h);
+      var result = new Bitmap(w, h);
+      using (var g = Graphics.FromImage(result))
+        g.DrawImage(txBase, new Rectangle(0, 0, w, h), crop, GraphicsUnit.Pixel);
+      SetTxImage(result);
     }
 
     private Bitmap? RenderTxPreview()
@@ -667,7 +754,27 @@ namespace SkyRoof
       g.InterpolationMode = InterpolationMode.HighQualityBicubic;
       g.Clear(Color.Black);
       g.DrawImage(txBase, new Rectangle(0, 0, canvas.Width, canvas.Height));
-      if (!string.IsNullOrWhiteSpace(overlayText.Text))
+      string template = templateBox.SelectedItem?.ToString() ?? "经典呼号";
+      if (template == "QSL 卡片")
+      {
+        using var panel = new SolidBrush(Color.FromArgb(205, 16, 27, 43));
+        g.FillRectangle(panel, 0, canvas.Height * .77f,
+          canvas.Width, canvas.Height * .23f);
+        using var captionFont = new Font(FontFamily.GenericSansSerif,
+          Math.Max(9f, canvas.Width / 38f), FontStyle.Bold);
+        g.DrawString("SSTV QSL", captionFont, Brushes.LightSkyBlue,
+          canvas.Width * .035f, canvas.Height * .785f);
+      }
+      else if (template == "卫星横幅")
+      {
+        using var panel = new SolidBrush(Color.FromArgb(200, 9, 30, 57));
+        g.FillRectangle(panel, 0, 0, canvas.Width, canvas.Height * .16f);
+        using var captionFont = new Font(FontFamily.GenericSansSerif,
+          Math.Max(9f, canvas.Width / 40f), FontStyle.Bold);
+        g.DrawString("SATELLITE SSTV", captionFont, Brushes.White,
+          canvas.Width * .035f, canvas.Height * .035f);
+      }
+      if (template != "纯图片" && !string.IsNullOrWhiteSpace(overlayText.Text))
       {
         float fontSize = Math.Max(12f, canvas.Width / 19f);
         using var font = new Font(FontFamily.GenericSansSerif, fontSize, FontStyle.Bold);
@@ -827,6 +934,8 @@ namespace SkyRoof
       txPicture.Image = null;
       oldTx?.Dispose();
       txBase?.Dispose();
+      ClearHistory(undoImages);
+      ClearHistory(redoImages);
       base.OnFormClosed(e);
     }
   }
