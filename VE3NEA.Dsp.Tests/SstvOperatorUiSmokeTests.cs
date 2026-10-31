@@ -67,6 +67,7 @@ namespace VE3NEA.Dsp.Tests
           Invoke(panel, "SetTxImage", new Bitmap(image));
           Assert.Equal(1, tabs.SelectedIndex);
           Assert.NotNull(Field<PictureBox>(panel, "txPicture").Image);
+          Assert.Contains("图片已加载", Field<Label>(panel, "txStatus").Text);
           Assert.False(Field<Button>(panel, "txSendButton").Enabled,
             "an imported image must never silently arm RF PTT");
           var template = Field<ComboBox>(panel, "templateBox");
