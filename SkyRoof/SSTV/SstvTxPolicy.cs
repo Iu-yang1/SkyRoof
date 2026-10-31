@@ -54,19 +54,19 @@ namespace SkyRoof.SSTV
 
     /// <summary>
     /// A PTT-OFF command ACK is not sufficient for a safe completion
-    /// message. Require an independent hardware-state read after our own
-    /// PTT-ON request and a fresh RX observation.
+    /// message. Require an independent hardware-state read after the current
+    /// PTT-OFF request, backed by a fresh hardware RX observation.
     /// </summary>
     public static bool HasConfirmedPttOff(
       bool pttState, bool applicationMayOwnPtt,
-      DateTime lastHardwareReadUtc, DateTime pttOnRequestedUtc,
+      DateTime lastHardwareReadUtc, DateTime pttOffRequestedUtc,
       DateTime nowUtc)
     {
       return !pttState && !applicationMayOwnPtt &&
         lastHardwareReadUtc.Kind == DateTimeKind.Utc &&
-        pttOnRequestedUtc.Kind == DateTimeKind.Utc &&
+        pttOffRequestedUtc.Kind == DateTimeKind.Utc &&
         nowUtc.Kind == DateTimeKind.Utc &&
-        lastHardwareReadUtc >= pttOnRequestedUtc &&
+        lastHardwareReadUtc >= pttOffRequestedUtc &&
         lastHardwareReadUtc <= nowUtc &&
         (nowUtc - lastHardwareReadUtc).TotalMilliseconds <= MaximumPttReadbackAgeMs;
     }
