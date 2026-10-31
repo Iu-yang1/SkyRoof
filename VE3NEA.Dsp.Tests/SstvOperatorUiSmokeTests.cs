@@ -53,6 +53,7 @@ namespace VE3NEA.Dsp.Tests
           Assert.Equal(43, Field<ComboBox>(panel, "modeBox").Items.Count);
           Assert.False(Field<CheckBox>(panel, "txApproval").Checked);
           Assert.False(Field<Button>(panel, "txStopButton").Enabled);
+          Assert.False(Field<Button>(panel, "txSendButton").Enabled);
           Assert.True(Field<CheckBox>(panel, "autoVisCorrection").Checked);
           Assert.Equal(500m, Field<NumericUpDown>(panel, "pitchCorrection").Maximum);
           Assert.Equal(-500m, Field<NumericUpDown>(panel, "pitchCorrection").Minimum);
@@ -62,6 +63,8 @@ namespace VE3NEA.Dsp.Tests
           Invoke(panel, "SetTxImage", new Bitmap(image));
           Assert.Equal(1, tabs.SelectedIndex);
           Assert.NotNull(Field<PictureBox>(panel, "txPicture").Image);
+          Assert.False(Field<Button>(panel, "txSendButton").Enabled,
+            "an imported image must never silently arm RF PTT");
           var template = Field<ComboBox>(panel, "templateBox");
           template.SelectedItem = "QSL 卡片";
           Field<TextBox>(panel, "overlayText").Text = "CQ SSTV {UTC}";
