@@ -52,6 +52,21 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void EmergencyPttOffBypassesCtcssWriteFailure()
+    {
+      // CTCSS failures must never suppress UNKEY, but still inhibit KEY.
+      MethodInfo method = typeof(CatControlEngine).GetMethod(
+        "ShouldAttemptPtt", BindingFlags.NonPublic | BindingFlags.Static)!;
+      Assert.NotNull(method);
+      bool Run(bool toneReady, bool? pending) =>
+        (bool)method.Invoke(null, new object?[] { toneReady, pending })!;
+      Assert.True(Run(false, false));
+      Assert.False(Run(false, true));
+      Assert.True(Run(true, true));
+      Assert.True(Run(true, false));
+    }
+
+    [Fact]
     public void RejectsStaleFutureOrNonUtcReadback()
     {
       Assert.False(SstvTxPolicy.HasConfirmedPttOff(
