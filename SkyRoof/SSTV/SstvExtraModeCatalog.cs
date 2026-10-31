@@ -69,7 +69,7 @@ namespace SkyRoof.SSTV
       new SstvExtraTxSpec("MP73-N", SstvExtraLayout.NarrowMp, 0x02, 140, 9, 1, 320, 256),
       new SstvExtraTxSpec("MP110-N", SstvExtraLayout.NarrowMp, 0x04, 212, 9, 1, 320, 256),
       new SstvExtraTxSpec("MP140-N", SstvExtraLayout.NarrowMp, 0x05, 270, 9, 1, 320, 256),
-      new SstvExtraTxSpec("MC110-N", SstvExtraLayout.NarrowMc, 0x14, 140, 8, .5, 320, 256),
+      new SstvExtraTxSpec("MC110-N", SstvExtraLayout.NarrowMc, 0x14, 143, 8, .5, 320, 256),
       new SstvExtraTxSpec("MC140-N", SstvExtraLayout.NarrowMc, 0x15, 180, 8, .5, 320, 256),
       new SstvExtraTxSpec("MC180-N", SstvExtraLayout.NarrowMc, 0x16, 232, 8, .5, 320, 256),
     };
