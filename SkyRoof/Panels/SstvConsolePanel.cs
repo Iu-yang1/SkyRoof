@@ -1558,13 +1558,131 @@ namespace SkyRoof
       }
     }
 
+    private sealed record MacroEntry(string Token, string Label)
+    {
+      public override string ToString() => Label + "  " + Token;
+    }
+
+    private int TextLayerCount => 3 + extraCaptions.Count;
+
+    private SstvTextLayer GetTextLayer(int index) =>
+      index < 3 ? textLayers[index] : extraCaptions[index - 3].Style;
+
+    private void SetTextLayer(int index, SstvTextLayer style)
+    {
+      if (index < 3) textLayers[index] = style.Normalized();
+      else extraCaptions[index - 3] =
+        extraCaptions[index - 3] with { Style = style.Normalized() };
+    }
+
+    private string GetCaptionText(int index) => index switch
+    {
+      0 => myCallInput.Text,
+      1 => theirCallInput.Text,
+      2 => overlayText.Text,
+      _ => extraCaptions[index - 3].Text
+    };
+
+    private void SetCaptionText(int index, string text)
+    {
+      switch (index)
+      {
+        case 0: myCallInput.Text = text; break;
+        case 1: theirCallInput.Text = text; break;
+        case 2: overlayText.Text = text; break;
+        default:
+          extraCaptions[index - 3] =
+            extraCaptions[index - 3] with { Text = text };
+          break;
+      }
+    }
+
+    private void SyncActiveCaptionText()
+    {
+      if (textLayerBox.SelectedIndex < 0 || updatingTextControls) return;
+      updatingTextControls = true;
+      try { activeCaptionInput.Text = GetCaptionText(textLayerBox.SelectedIndex); }
+      finally { updatingTextControls = false; }
+    }
+
+    private void AddTextLayer()
+    {
+      if (TextLayerCount >= MaxTextLayers)
+      {
+        txStatus.Text = "最多可创建 8 个文字图层";
+        return;
+      }
+      int next = extraCaptions.Count;
+      extraCaptions.Add(new SstvAdditionalCaption("",
+        SstvTextLayer.CustomDefault with
+        {
+          Y = Math.Clamp(.12f + .11f * next, 0, .9f),
+          X = .08f
+        }));
+      textLayerBox.Items.Add("文字图层 " + (next + 4));
+      textLayerBox.SelectedIndex = TextLayerCount - 1;
+      RefreshTxPreview();
+    }
+
+    private void DuplicateTextLayer()
+    {
+      if (TextLayerCount >= MaxTextLayers)
+      {
+        txStatus.Text = "最多可创建 8 个文字图层";
+        return;
+      }
+      int selected = Math.Max(0, textLayerBox.SelectedIndex);
+      SstvTextLayer source = GetTextLayer(selected);
+      extraCaptions.Add(new SstvAdditionalCaption(GetCaptionText(selected),
+        (source with { X = source.X + .025f, Y = source.Y + .035f }).Normalized()));
+      textLayerBox.Items.Add("文字图层 " + TextLayerCount);
+      textLayerBox.SelectedIndex = TextLayerCount - 1;
+      RefreshTxPreview();
+    }
+
+    private void RemoveTextLayer()
+    {
+      int selected = textLayerBox.SelectedIndex;
+      if (selected < 3)
+      {
+        txStatus.Text = "三个基础图层不可删除，可清空文字或删除附加图层";
+        return;
+      }
+      extraCaptions.RemoveAt(selected - 3);
+      textLayerBox.Items.RemoveAt(selected);
+      for (int i = 3; i < textLayerBox.Items.Count; i++)
+        textLayerBox.Items[i] = "文字图层 " + (i + 1);
+      textLayerBox.SelectedIndex = Math.Min(selected, TextLayerCount - 1);
+      RefreshTxPreview();
+    }
+
+    private void InsertSelectedMacro()
+    {
+      if (macroSelector.SelectedItem is not MacroEntry macro) return;
+      int index = textLayerBox.SelectedIndex;
+      if (index < 0) return;
+      string current = GetCaptionText(index);
+      if (current.Length + macro.Token.Length > 512)
+      {
+        txStatus.Text = "文字长度已达上限";
+        return;
+      }
+      int position = Math.Clamp(activeCaptionInput.SelectionStart, 0, current.Length);
+      SetCaptionText(index, current.Insert(position, macro.Token));
+      SyncActiveCaptionText();
+      activeCaptionInput.Focus();
+      activeCaptionInput.SelectionStart = position + macro.Token.Length;
+      RefreshTxPreview();
+    }
+
     private void UpdateTextEditorControls()
     {
       if (textLayerBox.SelectedIndex < 0) return;
       updatingTextControls = true;
       try
       {
-        var style = textLayers[textLayerBox.SelectedIndex].Normalized();
+        var style = GetTextLayer(textLayerBox.SelectedIndex).Normalized();
+        activeCaptionInput.Text = GetCaptionText(textLayerBox.SelectedIndex);
         textSizeBox.Value = Math.Clamp((decimal)style.SizePercent,
           textSizeBox.Minimum, textSizeBox.Maximum);
         textColorButton.BackColor = Color.FromArgb(style.ColorArgb);
@@ -1582,10 +1700,11 @@ namespace SkyRoof
       using var dialog = new ColorDialog
       {
         FullOpen = true,
-        Color = Color.FromArgb(textLayers[index].ColorArgb)
+        Color = Color.FromArgb(GetTextLayer(index).ColorArgb)
       };
       if (dialog.ShowDialog(this) != DialogResult.OK) return;
-      textLayers[index] = textLayers[index] with { ColorArgb = dialog.Color.ToArgb() };
+      SetTextLayer(index, GetTextLayer(index) with
+        { ColorArgb = dialog.Color.ToArgb() });
       UpdateTextEditorControls();
       RefreshTxPreview();
     }
