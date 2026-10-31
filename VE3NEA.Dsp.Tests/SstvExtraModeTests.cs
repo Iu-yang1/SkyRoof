@@ -42,6 +42,39 @@ namespace VE3NEA.Dsp.Tests
       Assert.InRange(Math.Abs(spec.LineMs - lineMs), 0, .0005);
     }
 
+    // Independent protocol constants from n5ac/mmsstv mode.txt, not
+    // regenerated from our encoder/decoder catalog. Catch shared timing
+    // mistakes that can pass an internal TX-to-RX round trip.
+    [Theory]
+    [InlineData("MP73", 0x2523, 140.0)]
+    [InlineData("MP115", 0x2923, 223.0)]
+    [InlineData("MP140", 0x2A23, 270.0)]
+    [InlineData("MP175", 0x2C23, 340.0)]
+    [InlineData("MR73", 0x4523, 138.0)]
+    [InlineData("MR90", 0x4623, 171.0)]
+    [InlineData("MR115", 0x4923, 220.0)]
+    [InlineData("MR140", 0x4A23, 269.0)]
+    [InlineData("MR175", 0x4C23, 337.0)]
+    [InlineData("ML180", 0x8523, 176.5)]
+    [InlineData("ML240", 0x8623, 236.5)]
+    [InlineData("ML280", 0x8923, 277.5)]
+    [InlineData("ML320", 0x8A23, 317.5)]
+    [InlineData("MP73-N", 0x02, 140.0)]
+    [InlineData("MP110-N", 0x04, 212.0)]
+    [InlineData("MP140-N", 0x05, 270.0)]
+    [InlineData("MC110-N", 0x14, 143.0)]
+    [InlineData("MC140-N", 0x15, 180.0)]
+    [InlineData("MC180-N", 0x16, 232.0)]
+    public void PublishedExtendedModeScanTimingsAreNotSelfReferential(
+      string name, int vis, double scanMs)
+    {
+      SstvExtraTxSpec mode = Assert.Single(SstvExtraTxSpec.All,
+        x => x.Name == name);
+      Assert.Equal(vis, mode.VisCode);
+      Assert.Equal(scanMs, mode.ScanMs, precision: 3);
+      Assert.Equal(mode.Width == 640 ? 496 : 256, mode.Height);
+    }
+
     [Theory]
     [InlineData("Robot BW 8")]
     [InlineData("MP73")]
