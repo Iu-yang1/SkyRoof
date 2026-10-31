@@ -257,7 +257,7 @@ namespace SkyRoof
     protected bool SendWriteCommand(string command)
     {
       var reply = SendCommand(command);
-      if (reply == "RPRT 0\n") return true;
+      if (reply.TrimEnd('\r', '\n') == "RPRT 0") return true;
       BadReply(reply);
       return false;
     }
@@ -267,7 +267,7 @@ namespace SkyRoof
       var reply = SendCommand(command);
       if (reply.EndsWith("\n"))
       {
-        reply = reply.Substring(0, reply.Length - 1);
+        reply = reply.TrimEnd('\r', '\n');
         if (log) Log.Information($"Reply from {GetType().Name} ctld: {reply}");
         return reply;
       }
