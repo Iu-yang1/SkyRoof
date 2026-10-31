@@ -10,6 +10,35 @@ namespace VE3NEA.Dsp.Tests
   public sealed class SstvImageLibraryTests
   {
     [Fact]
+    public void LargePicturesAreScaledBeforeEditingAndPngImportSkipsReencoding()
+    {
+      string root = Path.Combine(Path.GetTempPath(),
+        "SkyRoofSstvPerf-" + Guid.NewGuid().ToString("N"));
+      try
+      {
+        Directory.CreateDirectory(root);
+        string original = Path.Combine(root, "big.png");
+        using (var bitmap = new Bitmap(2600, 1500))
+        {
+          using var g = Graphics.FromImage(bitmap);
+          g.Clear(Color.MediumVioletRed);
+          bitmap.Save(original, ImageFormat.Png);
+        }
+        using var scaled = SstvImageLibrary.LoadForEditing(original, 1024);
+        Assert.True(scaled.Width <= 1024 && scaled.Height <= 1024);
+        Assert.Equal(PixelFormat.Format32bppArgb, scaled.PixelFormat);
+        using var scaledClipboard = SstvImageLibrary.ScaleForEditing(scaled, 640);
+        Assert.True(scaledClipboard.Width <= 640 && scaledClipboard.Height <= 640);
+        string imported = SstvImageLibrary.Import(Path.Combine(root, "gallery"), original);
+        Assert.Equal(File.ReadAllBytes(original), File.ReadAllBytes(imported));
+      }
+      finally
+      {
+        try { Directory.Delete(root, recursive: true); } catch (IOException) { }
+      }
+    }
+
+    [Fact]
     public void ImportExportAndDeleteImageOnlyInsideGallery()
     {
       string root = Path.Combine(Path.GetTempPath(),
