@@ -379,10 +379,13 @@ namespace VE3NEA.Dsp.Tests
       interlock.FailDuringSend =
         true;
 
+      // Disarm can become visible before the mock keyer's asynchronous
+      // STOP call finishes. Await the observable safety effect as well.
       await WaitUntilAsync(
         () =>
           !controller.State.Sending &&
-          !controller.State.Armed);
+          !controller.State.Armed &&
+          factory.Session.StopCalls == 1);
 
       factory.Session.StopCalls
         .Should().Be(1);
