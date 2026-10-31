@@ -20,7 +20,27 @@ namespace SkyRoof.SSTV
     private CancellationTokenSource? stop;
     private int sending;
     private int ownPttRequested;
+    private int releaseUnconfirmed;
+    private long latestOwnPttRequestUtcTicks;
     private bool disposed;
+
+    public bool RequiresPttVerification => Volatile.Read(ref releaseUnconfirmed) != 0;
+
+    private bool TryConfirmPreviousRelease()
+    {
+      if (!RequiresPttVerification) return true;
+      var cat = ctx.CatControl?.Tx;
+      long ticks = Interlocked.Read(ref latestOwnPttRequestUtcTicks);
+      if (cat == null || ticks <= 0 ||
+          !SstvTxPolicy.HasConfirmedPttOff(
+            cat.Ptt, cat.PttMayBeOwnedByApplication,
+            cat.LastPttHardwareReadbackUtc,
+            new DateTime(ticks, DateTimeKind.Utc), DateTime.UtcNow))
+        return false;
+      Interlocked.Exchange(ref releaseUnconfirmed, 0);
+      Interlocked.Exchange(ref ownPttRequested, 0);
+      return true;
+    }
 
     public bool IsSending => Volatile.Read(ref sending) != 0;
     public SstvTransmitSession(Context ctx) => this.ctx = ctx;
@@ -30,7 +50,10 @@ namespace SkyRoof.SSTV
       stop?.Cancel();
       // Never release a PTT lease asserted by another SkyRoof module.
       if (Volatile.Read(ref ownPttRequested) != 0)
-        ctx.FrequencyControl?.ReleaseApplicationPtt();
+      {
+        if (!TryConfirmPreviousRelease())
+          ctx.FrequencyControl?.ReleaseApplicationPtt();
+      }
     }
 
     private (SstvTxGuard Guard, double LoHz) CaptureGuard(bool approved)
@@ -90,6 +113,9 @@ namespace SkyRoof.SSTV
       Action<string>? status = null, CancellationToken cancellationToken = default)
     {
       ObjectDisposedException.ThrowIf(disposed, this);
+      if (!TryConfirmPreviousRelease())
+        throw new InvalidOperationException(
+          "先前 SSTV 发射未确认解除 PTT。请在电台上确认已停止发射及 CAT 读回，然后重试。");
       if (Interlocked.CompareExchange(ref sending, 1, 0) != 0)
         throw new InvalidOperationException("已有 SSTV 图片正在发送。");
       CancellationTokenSource local = CancellationTokenSource.CreateLinkedTokenSource(
@@ -140,6 +166,7 @@ namespace SkyRoof.SSTV
         var cat = ctx.CatControl.Tx!;
         DateTime requestedUtc = DateTime.UtcNow;
         pttRequestUtc = requestedUtc;
+        Interlocked.Exchange(ref latestOwnPttRequestUtcTicks, requestedUtc.Ticks);
         // Publish ownership intent before issuing the asynchronous CAT write
         // so STOP can cancel a still-pending PTT-ON request.
         Interlocked.Exchange(ref ownPttRequested, 1);
@@ -228,7 +255,11 @@ namespace SkyRoof.SSTV
         }
         finally
         {
-          Interlocked.Exchange(ref ownPttRequested, 0);
+          // If the radio did not explicitly report RX, preserve the
+          // emergency STOP path and prevent rekeying on the next send.
+          Interlocked.Exchange(ref releaseUnconfirmed, confirmedOff ? 0 : 1);
+          if (confirmedOff)
+            Interlocked.Exchange(ref ownPttRequested, 0);
           stop = null;
           local.Dispose();
           Interlocked.Exchange(ref sending, 0);
