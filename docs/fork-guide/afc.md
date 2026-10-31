@@ -61,6 +61,14 @@ frequency estimates, AFC confidence, CAT readback, or RX control.
 Vertical dB labels are display levels, **not hardware-calibrated dBm**.
 The scope heading reads “12 kHz IF · REF +15 dB · 频谱”.
 
+## Debugging an active IF spectrum with no FM frequency estimate
+
+The waterfall/display path uses about 8192 PCM samples, but the independent AFC measurement requires at least 24000 PCM samples. Older releases could reset the accumulation on repeated WASAPI source timestamps, leaving a visible live IF spectrum while the frequency estimate remained uninitialized. The measurement path now advances duplicate-timestamp packets by sample count and resets only on genuine backwards input-clock discontinuities.
+
+The AFC live page distinguishes **waiting for PCM**, **measurement queued/running**, **worker failures**, **unverified numeric FM IF offset**, and **valid measured residual**. An unverified offset remains diagnostic only and never permits automatic CAT tuning. An unmeasured residual is not silently shown as zero.
+
+For FM, a large spectral peak is not automatically the FM carrier center: the IF phase discriminator estimates the center offset from multiple windows and quality checks. An unverified RF/IF sign blocks automatic frequency correction, not the read-only offset measurement.
+
 ## Getting started
 
 1. On IC-9700 choose `SET > Connectors > USB AF/IF Output > Output Select > IF`
