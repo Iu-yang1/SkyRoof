@@ -86,6 +86,9 @@ namespace SkyRoof
     };
     private readonly TextBox overlayText = new() { Width = 165 };
     private readonly ListBox archiveList = new() { Dock = DockStyle.Fill };
+    private readonly ListBox qsoList = new() { Dock = DockStyle.Fill };
+    private readonly TextBox qsoCall = new() { Width = 130 };
+    private readonly TextBox qsoNotes = new() { Width = 250 };
     private readonly Label rxStatus = new()
     {
       Dock = DockStyle.Bottom, Height = 30, TextAlign = ContentAlignment.MiddleLeft,
@@ -114,6 +117,7 @@ namespace SkyRoof
       BuildRxTab();
       BuildTxTab();
       BuildHistoryTab();
+      BuildQsoTab();
       foreach (SstvTxModeProfile mode in SstvTxModeProfile.All)
         modeBox.Items.Add(mode);
       modeBox.DisplayMember = nameof(SstvTxModeProfile.Name);
@@ -143,6 +147,7 @@ namespace SkyRoof
       txStopButton.Click += (_, _) => transmitSession.RequestStop();
       PopulateTxOutputDevices();
       ReloadHistory();
+      ReloadQsoLog();
     }
 
     private static Button Btn(string text, Action action, int width = 95)
@@ -315,6 +320,102 @@ namespace SkyRoof
         if (ReferenceEquals(replayStop, stop)) replayStop = null;
         stop.Dispose();
       }
+    }
+
+    private string QsoLogPath =>
+      SstvQsoLogStore.DefaultLogPath(Utils.GetUserDataFolder());
+
+    private void BuildQsoTab()
+    {
+      var page = new TabPage("通联日志");
+      var bar = Toolbar();
+      bar.Controls.Add(new Label
+      {
+        Text = "对方呼号", Width = 73, Height = 30,
+        TextAlign = ContentAlignment.MiddleCenter
+      });
+      bar.Controls.Add(qsoCall);
+      bar.Controls.Add(new Label
+      {
+        Text = "备注", Width = 40, Height = 30,
+        TextAlign = ContentAlignment.MiddleCenter
+      });
+      bar.Controls.Add(qsoNotes);
+      bar.Controls.Add(Btn("保存通联", SaveQsoRecord, 96));
+      bar.Controls.Add(Btn("导出 ADIF", ExportQsoAdif, 106));
+      page.Controls.Add(qsoList);
+      page.Controls.Add(bar);
+      tabs.TabPages.Add(page);
+    }
+
+    private void ReloadQsoLog()
+    {
+      qsoList.BeginUpdate();
+      try
+      {
+        qsoList.Items.Clear();
+        foreach (var record in SstvQsoLogStore.Read(QsoLogPath, 256))
+          qsoList.Items.Add(new QsoEntry(record));
+      }
+      catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+      {
+        txStatus.Text = "通联日志暂时无法读取";
+      }
+      finally { qsoList.EndUpdate(); }
+    }
+
+    private void SaveQsoRecord()
+    {
+      try
+      {
+        string call = qsoCall.Text.Trim().ToUpperInvariant();
+        var link = ctx.FrequencyControl.RadioLink;
+        var selected = modeBox.SelectedItem as SstvTxModeProfile;
+        var record = new SstvQsoRecord(
+          DateTime.UtcNow, call, ctx.Settings.User.Call ?? "",
+          selected?.Name ?? "SSTV",
+          link.IsTerrestrial ? "" : link.Sat?.name ?? "",
+          link.IsTerrestrial ? 0 : link.CorrectedUplinkFrequency,
+          link.CorrectedDownlinkFrequency,
+          rxPicture.Tag as string ?? "",
+          qsoNotes.Text.Trim());
+        SstvQsoLogStore.Append(QsoLogPath, record);
+        qsoCall.Clear();
+        qsoNotes.Clear();
+        ReloadQsoLog();
+      }
+      catch (Exception ex)
+      {
+        MessageBox.Show(this, ex.Message, "无法保存通联记录",
+          MessageBoxButtons.OK, MessageBoxIcon.Warning);
+      }
+    }
+
+    private void ExportQsoAdif()
+    {
+      using var save = new SaveFileDialog
+      {
+        Filter = "ADIF 通联日志|*.adi",
+        FileName = $"SSTV_{DateTime.Now:yyyyMMdd}.adi"
+      };
+      if (save.ShowDialog(this) != DialogResult.OK) return;
+      try
+      {
+        File.WriteAllText(save.FileName,
+          SstvQsoLogStore.ExportAdif(SstvQsoLogStore.Read(QsoLogPath, 100000)),
+          new System.Text.UTF8Encoding(false));
+      }
+      catch (Exception ex)
+      {
+        MessageBox.Show(this, ex.Message, "无法导出 ADIF",
+          MessageBoxButtons.OK, MessageBoxIcon.Warning);
+      }
+    }
+
+    private sealed record QsoEntry(SstvQsoRecord Record)
+    {
+      public override string ToString() =>
+        $"{Record.Utc:yyyy-MM-dd HH:mm} UTC  {Record.Call}  {Record.SstvMode}  {Record.SatelliteName}";
     }
 
     private void PopulateTxOutputDevices()
@@ -632,7 +733,11 @@ namespace SkyRoof
       rxPicture.Image = next;
       old?.Dispose();
       rxStatus.Text = final ? $"接收完成 · {mode}" : $"正在接收 · {mode}";
-      if (final && !string.IsNullOrEmpty(savedFile)) ReloadHistory();
+      if (final && !string.IsNullOrEmpty(savedFile))
+      {
+        rxPicture.Tag = savedFile;
+        ReloadHistory();
+      }
     }
 
     private void SaveReceivedImage()
