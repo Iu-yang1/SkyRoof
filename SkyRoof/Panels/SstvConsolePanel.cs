@@ -147,6 +147,7 @@ namespace SkyRoof
     private bool movingText;
     private bool updatingTextControls;
     private PointF textDragOffset;
+    private readonly List<Bitmap> txRecentImages = new();
     private readonly ListBox txQuickModes = new()
     {
       Dock = DockStyle.Fill, IntegralHeight = false, BorderStyle = BorderStyle.None
@@ -563,6 +564,117 @@ namespace SkyRoof
       page.Controls.Add(txStatus);
       page.Controls.Add(bar);
       tabs.TabPages.Add(page);
+    }
+
+    /// <summary>
+    /// Keep an MMSSTV-style strip of user images. Session images are capped
+    /// and downscaled to SSTV resolution; archived PNGs are read on demand,
+    /// never locked or kept at original camera resolution.
+    /// </summary>
+    private void RememberTxImage(Bitmap source)
+    {
+      const int maxDimension = 640;
+      float scale = Math.Min(1f, Math.Min((float)maxDimension / source.Width,
+        (float)maxDimension / source.Height));
+      int width = Math.Max(1, (int)Math.Round(source.Width * scale));
+      int height = Math.Max(1, (int)Math.Round(source.Height * scale));
+      var picture = new Bitmap(width, height);
+      using (var g = Graphics.FromImage(picture))
+      {
+        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+        g.DrawImage(source, new Rectangle(0, 0, width, height));
+      }
+      txRecentImages.Insert(0, picture);
+      while (txRecentImages.Count > 12)
+      {
+        int last = txRecentImages.Count - 1;
+        txRecentImages[last].Dispose();
+        txRecentImages.RemoveAt(last);
+      }
+    }
+
+    private void AddTxThumbnail(Image picture, string title, Action action)
+    {
+      var small = new Bitmap(112, 72);
+      using (var g = Graphics.FromImage(small))
+      {
+        g.Clear(Color.FromArgb(31, 35, 42));
+        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+        float zoom = Math.Min(112f / picture.Width, 72f / picture.Height);
+        int width = Math.Max(1, (int)Math.Round(picture.Width * zoom));
+        int height = Math.Max(1, (int)Math.Round(picture.Height * zoom));
+        g.DrawImage(picture, new Rectangle((112 - width) / 2,
+          (72 - height) / 2, width, height));
+      }
+      var tile = new PictureBox
+      {
+        Size = new Size(112, 72), Image = small,
+        SizeMode = PictureBoxSizeMode.StretchImage,
+        Margin = new Padding(3), Cursor = Cursors.Hand
+      };
+      tile.Click += (_, _) => action();
+      txThumbnailTips.SetToolTip(tile, title);
+      txThumbnailStrip.Controls.Add(tile);
+    }
+
+    private void RefreshTxThumbnails()
+    {
+      if (closed || txThumbnailStrip.IsDisposed) return;
+      txThumbnailStrip.SuspendLayout();
+      try
+      {
+        foreach (Control child in txThumbnailStrip.Controls)
+        {
+          if (child is PictureBox thumb)
+          {
+            thumb.Image?.Dispose();
+            thumb.Image = null;
+          }
+          child.Dispose();
+        }
+        txThumbnailStrip.Controls.Clear();
+        // Snapshot selection is intentionally by index; the list remains
+        // owned by the panel and each image is retained until evicted.
+        for (int i = 0; i < txRecentImages.Count; i++)
+        {
+          Bitmap image = txRecentImages[i];
+          AddTxThumbnail(image, i == 0 ? "当前图片" : "近期编辑图片", () =>
+          {
+            if (!image.Equals(null))
+              SetTxImage(new Bitmap(image));
+          });
+        }
+        string folder = Path.Combine(Utils.GetUserDataFolder(), "SstvImages");
+        if (!Directory.Exists(folder)) return;
+        foreach (string file in Directory.EnumerateFiles(folder, "*.png")
+          .OrderByDescending(File.GetLastWriteTimeUtc).Take(24))
+        {
+          try
+          {
+            using var source = Image.FromFile(file);
+            AddTxThumbnail(source, Path.GetFileNameWithoutExtension(file), () =>
+            {
+              try
+              {
+                using var loaded = Image.FromFile(file);
+                SetTxImage(new Bitmap(loaded));
+              }
+              catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                or ArgumentException)
+              {
+                txStatus.Text = $"图片无法打开：{ex.Message}";
+              }
+            });
+          }
+          catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+            or ArgumentException) { }
+        }
+      }
+      catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+      {
+        txStatus.Text = $"图库无法读取：{ex.Message}";
+      }
+      finally { txThumbnailStrip.ResumeLayout(); }
     }
 
     private void BuildHistoryTab()
@@ -1244,6 +1356,7 @@ namespace SkyRoof
       if (old != null) PushHistory(undoImages, old);
       txBase = image;
       old?.Dispose();
+      RememberTxImage(image);
       ClearHistory(redoImages);
       RefreshTxPreview();
       txStatus.Text = "图片已加载，可以编辑或保存 SSTV 音频";
@@ -1764,6 +1877,11 @@ namespace SkyRoof
       txPicture.Image = null;
       oldTx?.Dispose();
       txBase?.Dispose();
+      foreach (Control child in txThumbnailStrip.Controls)
+        if (child is PictureBox thumb) { thumb.Image?.Dispose(); thumb.Image = null; }
+      foreach (Bitmap thumb in txRecentImages) thumb.Dispose();
+      txRecentImages.Clear();
+      txThumbnailTips.Dispose();
       ClearHistory(undoImages);
       ClearHistory(redoImages);
       base.OnFormClosed(e);
