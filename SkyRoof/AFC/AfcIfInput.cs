@@ -136,6 +136,10 @@ namespace SkyRoof.AFC
         {
           generation++;
           write = used = 0;
+          lastResultUtc = default;
+          latestObservation = null;
+          scheduledAnalyses = completedAnalyses = failedAnalyses = 0;
+          lastAnalysisMs = 0;
         }
         mode = signalMode;
         pilot = ssbPilot;
@@ -151,7 +155,10 @@ namespace SkyRoof.AFC
       {
         generation++;
         write = used = 0;
-        lastUtc = default;
+        lastUtc = lastResultUtc = default;
+        latestObservation = null;
+        scheduledAnalyses = completedAnalyses = failedAnalyses = 0;
+        lastAnalysisMs = 0;
       }
     }
 
@@ -163,7 +170,10 @@ namespace SkyRoof.AFC
       {
         generation++;
         write = used = 0;
-        lastUtc = default;
+        lastUtc = lastResultUtc = default;
+        latestObservation = null;
+        scheduledAnalyses = completedAnalyses = failedAnalyses = 0;
+        lastAnalysisMs = 0;
       }
     }
 
@@ -189,6 +199,10 @@ namespace SkyRoof.AFC
           {
             generation++;
             write = used = 0;
+            lastResultUtc = default;
+            latestObservation = null;
+            scheduledAnalyses = completedAnalyses = failedAnalyses = 0;
+            lastAnalysisMs = 0;
           }
           lastUtc = packetUtc;
           totalSamples += accepted;
