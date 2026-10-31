@@ -147,6 +147,19 @@ namespace SkyRoof
     private bool movingText;
     private bool updatingTextControls;
     private PointF textDragOffset;
+    private readonly ListBox txQuickModes = new()
+    {
+      Dock = DockStyle.Fill, IntegralHeight = false, BorderStyle = BorderStyle.None
+    };
+    private readonly FlowLayoutPanel txThumbnailStrip = new()
+    {
+      Dock = DockStyle.Fill, WrapContents = false, AutoScroll = true,
+      BackColor = Color.FromArgb(30, 33, 39),
+      Padding = new Padding(4)
+    };
+    private readonly TextBox txQsoNote = new() { MaxLength = 256 };
+    private bool syncingQsoEntry;
+    private readonly ToolTip txThumbnailTips = new();
     private readonly Stack<Bitmap> undoImages = new();
     private readonly Stack<Bitmap> redoImages = new();
     private const int HistoryLimit = 10;
@@ -346,6 +359,12 @@ namespace SkyRoof
       tabs.TabPages.Add(page);
     }
 
+    /// <summary>
+    /// MMSSTV-inspired TX workspace: large picture at left, vertical
+    /// mode picker and station/QSO/caption controls at right, image thumbnails
+    /// underneath. All controls stay in the same native WinForms tab and
+    /// preserve the existing audio/PTT model.
+    /// </summary>
     private void BuildTxTab()
     {
       var page = new TabPage("发送 TX");
@@ -357,75 +376,155 @@ namespace SkyRoof
       bar.Controls.Add(Btn("旋转", RotateImage, 60));
       bar.Controls.Add(Btn("镜像", MirrorImage, 60));
       bar.Controls.Add(Btn("裁剪", CropImage, 60));
-      var format = Toolbar();
-      format.Controls.Add(new Label
+
+      // The photo archive is always visible, as in the original MMSSTV
+      // workspace. The height drops at narrow/minimized dock sizes.
+      var galleryGroup = new GroupBox
       {
-        Text = "模式", Width = 36, Height = 30,
-        TextAlign = ContentAlignment.MiddleCenter
-      });
-      format.Controls.Add(modeBox);
-      format.Controls.Add(templateBox);
-      format.Controls.Add(Btn("保存模板", SaveUserTemplate, 88));
-      format.Controls.Add(Btn("删除模板", DeleteUserTemplate, 88));
-      format.Controls.Add(Btn("保存音频 WAV", () => _ = ExportWaveAsync(), 114));
-      var overlay = Toolbar();
-      overlay.Controls.Add(new Label
+        Text = "图片库 / 最近图片", Dock = DockStyle.Bottom, Height = 146
+      };
+      galleryGroup.Controls.Add(txThumbnailStrip);
+      var galleryBar = new FlowLayoutPanel
       {
-        Text = "己方", Width = 37, Height = 30,
-        TextAlign = ContentAlignment.MiddleCenter
-      });
-      overlay.Controls.Add(myCallInput);
-      overlay.Controls.Add(new Label
+        Dock = DockStyle.Right, Width = 65, WrapContents = false,
+        FlowDirection = FlowDirection.TopDown, Padding = Padding.Empty
+      };
+      galleryBar.Controls.Add(Btn("刷新", RefreshTxThumbnails, 56));
+      galleryBar.Controls.Add(Btn("图库", () => tabs.SelectedIndex = 2, 56));
+      galleryGroup.Controls.Add(galleryBar);
+      page.Resize += (_, _) =>
       {
-        Text = "对方", Width = 37, Height = 30,
-        TextAlign = ContentAlignment.MiddleCenter
-      });
-      overlay.Controls.Add(theirCallInput);
-      overlay.Controls.Add(new Label
+        if (!page.IsDisposed)
+          galleryGroup.Height = page.ClientSize.Height < 510 ? 94 : 146;
+      };
+
+      var main = new TableLayoutPanel
       {
-        Text = "文字", Width = 37, Height = 30,
-        TextAlign = ContentAlignment.MiddleCenter
-      });
-      overlay.Controls.Add(overlayText);
-      var textTools = Toolbar();
-      textTools.Controls.Add(new Label
+        Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
+        Margin = Padding.Empty, Padding = Padding.Empty
+      };
+      main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45));
+      main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55));
+      main.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+      var left = new Panel { Dock = DockStyle.Fill };
+      var actions = new FlowLayoutPanel
       {
-        Text = "编辑对象", Width = 65, Height = 30,
-        TextAlign = ContentAlignment.MiddleCenter
-      });
-      textTools.Controls.Add(textLayerBox);
-      textTools.Controls.Add(new Label
+        Dock = DockStyle.Bottom, Height = 78,
+        WrapContents = true, AutoScroll = true, Padding = new Padding(2)
+      };
+      actions.Controls.Add(txApproval);
+      actions.Controls.Add(txSendButton);
+      actions.Controls.Add(txStopButton);
+      actions.Controls.Add(Btn("保存 WAV", () => _ = ExportWaveAsync(), 82));
+      left.Controls.Add(txPicture);
+      left.Controls.Add(actions);
+      main.Controls.Add(left, 0, 0);
+
+      var right = new Panel { Dock = DockStyle.Fill };
+      var tone = new SstvTxToneReference { Height = 76 };
+      var rightContent = new Panel { Dock = DockStyle.Fill };
+      var modeColumn = new Panel { Dock = DockStyle.Left, Width = 130 };
+      var modeHeader = new Label
       {
-        Text = "字号 %", Width = 56, Height = 30,
-        TextAlign = ContentAlignment.MiddleCenter
-      });
-      textTools.Controls.Add(textSizeBox);
-      textTools.Controls.Add(textColorButton);
-      textTools.Controls.Add(new Label
+        Dock = DockStyle.Top, Height = 27,
+        Text = "TX 模式", TextAlign = ContentAlignment.MiddleCenter,
+        Font = new Font(Font, FontStyle.Bold)
+      };
+      modeColumn.Controls.Add(txQuickModes);
+      modeColumn.Controls.Add(modeHeader);
+      var rightEditor = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+      var settingsGrid = new TableLayoutPanel
       {
-        Text = "拖动文字；滚轮调整字号", Width = 170,
-        Height = 30, TextAlign = ContentAlignment.MiddleLeft
-      });
-      var transmit = Toolbar();
-      transmit.Controls.Add(new Label
+        Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        ColumnCount = 2, RowCount = 0, Padding = new Padding(5, 2, 5, 6)
+      };
+      settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 68));
+      settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+      rightEditor.Controls.Add(settingsGrid);
+
+      void Heading(string text)
       {
-        Text = "发射声卡", Width = 66, Height = 30,
-        TextAlign = ContentAlignment.MiddleCenter
+        int r = settingsGrid.RowCount++;
+        settingsGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 29));
+        var header = new Label
+        {
+          Text = text, Dock = DockStyle.Fill,
+          TextAlign = ContentAlignment.MiddleLeft,
+          Font = new Font(Font, FontStyle.Bold)
+        };
+        settingsGrid.Controls.Add(header, 0, r);
+        settingsGrid.SetColumnSpan(header, 2);
+      }
+      void Field(string name, Control input)
+      {
+        int r = settingsGrid.RowCount++;
+        settingsGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        settingsGrid.Controls.Add(new Label
+        {
+          Text = name, Dock = DockStyle.Fill,
+          TextAlign = ContentAlignment.MiddleLeft
+        }, 0, r);
+        input.Dock = DockStyle.Fill;
+        input.Margin = new Padding(1, 4, 2, 3);
+        settingsGrid.Controls.Add(input, 1, r);
+      }
+      void Buttons(params Control[] controls)
+      {
+        int r = settingsGrid.RowCount++;
+        settingsGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 39));
+        var row = new FlowLayoutPanel
+        {
+          Dock = DockStyle.Fill, WrapContents = false, AutoScroll = true,
+          Margin = Padding.Empty
+        };
+        row.Controls.AddRange(controls);
+        settingsGrid.Controls.Add(row, 0, r);
+        settingsGrid.SetColumnSpan(row, 2);
+      }
+
+      Heading("模式与模板");
+      Field("模式", modeBox);
+      Field("模板", templateBox);
+      Buttons(Btn("保存模板", SaveUserTemplate, 88),
+        Btn("删除模板", DeleteUserTemplate, 88));
+
+      Heading("QSO / 台站信息");
+      Field("MY", myCallInput);
+      Field("HIS", theirCallInput);
+      Field("文字", overlayText);
+      Field("备注", txQsoNote);
+      Buttons(Btn("通联日志", () =>
+      {
+        qsoCall.Text = theirCallInput.Text;
+        qsoNotes.Text = txQsoNote.Text;
+        tabs.SelectedIndex = 3;
+      }, 88));
+
+      Heading("图片文字样式");
+      Field("对象", textLayerBox);
+      Field("字号 %", textSizeBox);
+      Buttons(textColorButton);
+      Buttons(new Label
+      {
+        Text = "拖动预览文字定位，滚轮调整大小",
+        Height = 30, AutoSize = true,
+        TextAlign = ContentAlignment.MiddleLeft
       });
-      transmit.Controls.Add(txOutputBox);
-      transmit.Controls.Add(txCwId);
-      transmit.Controls.Add(txFskId);
-      var txActions = Toolbar();
-      txActions.Controls.Add(txApproval);
-      txActions.Controls.Add(txSendButton);
-      txActions.Controls.Add(txStopButton);
-      page.Controls.Add(txPicture);
+
+      Heading("音频与识别");
+      Field("声卡", txOutputBox);
+      Buttons(txCwId, txFskId);
+
+      rightContent.Controls.Add(rightEditor);
+      rightContent.Controls.Add(modeColumn);
+      right.Controls.Add(rightContent);
+      right.Controls.Add(tone);
+      main.Controls.Add(right, 1, 0);
+
+      // Keep top editing actions discoverable at any window size.
+      page.Controls.Add(main);
+      page.Controls.Add(galleryGroup);
       page.Controls.Add(txStatus);
-      page.Controls.Add(txActions);
-      page.Controls.Add(transmit);
-      page.Controls.Add(textTools);
-      page.Controls.Add(overlay);
-      page.Controls.Add(format);
       page.Controls.Add(bar);
       tabs.TabPages.Add(page);
     }
