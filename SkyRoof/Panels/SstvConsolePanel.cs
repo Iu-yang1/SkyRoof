@@ -1573,6 +1573,7 @@ namespace SkyRoof
       textLayers[0] = (selected.MyCallStyle ?? SstvTextLayer.MyCallDefault).Normalized();
       textLayers[1] = (selected.TheirCallStyle ?? SstvTextLayer.TheirCallDefault).Normalized();
       textLayers[2] = (selected.OverlayStyle ?? SstvTextLayer.CustomDefault).Normalized();
+      textLayerBox.SelectedIndex = 0;
       extraCaptions.Clear();
       extraCaptions.AddRange((selected.ExtraCaptions ?? Array.Empty<SstvAdditionalCaption>())
         .Take(5).Select(x => x with { Style = x.Style.Normalized() }));
@@ -1699,6 +1700,7 @@ namespace SkyRoof
         txStatus.Text = "三个基础图层不可删除，可清空文字或删除附加图层";
         return;
       }
+      textLayerBox.SelectedIndex = 0;
       extraCaptions.RemoveAt(selected - 3);
       textLayerBox.Items.RemoveAt(selected);
       for (int i = 3; i < textLayerBox.Items.Count; i++)
@@ -1728,7 +1730,8 @@ namespace SkyRoof
 
     private void UpdateTextEditorControls()
     {
-      if (textLayerBox.SelectedIndex < 0) return;
+      if (textLayerBox.SelectedIndex < 0 || textLayerBox.SelectedIndex >= TextLayerCount)
+        return;
       updatingTextControls = true;
       try
       {
