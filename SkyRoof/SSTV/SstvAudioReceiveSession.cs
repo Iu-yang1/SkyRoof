@@ -55,6 +55,7 @@ namespace SkyRoof.SSTV
     }
     public int AutoVisCorrectionHz => Volatile.Read(ref autoVisCorrectionHz);
     public event Action<SstvVisAfcLock>? VisSynchronized;
+    public event Action<float[]>? SpectrumAvailable;
     public event Action<string>? FskStationIdentified;
     public int ManualCorrectionHz
     {
@@ -196,6 +197,8 @@ namespace SkyRoof.SSTV
       };
       double fmPhase = 0;
       long lastDropped = 0;
+      var spectrumWindow = new float[2048];
+      int spectrumWrite = 0, spectrumFilled = 0, spectrumInterval = 0;
       void OnImage(SstvImageEvent evt)
       {
         if (!disposed && Volatile.Read(ref epoch) == version)
@@ -230,6 +233,8 @@ namespace SkyRoof.SSTV
             visDetector.Reset(version);
             Volatile.Write(ref autoVisCorrectionHz, 0);
             fmPhase = 0;
+            spectrumWrite = spectrumFilled = spectrumInterval = 0;
+            Array.Clear(spectrumWindow);
             // Keep receiving, but do not claim seamless scan timing.
           }
           var iq = new Complex32[samples.Length];
@@ -246,6 +251,26 @@ namespace SkyRoof.SSTV
             double audio = intermediateIf ? ifDemod.Process(samples[i]) : samples[i];
             float clean = (float)Math.Clamp(double.IsFinite(audio) ? audio : 0, -1.0, 1.0);
             af[i] = manualShifter.Process(clean, manualHz);
+          }
+          // Show the operator the same AF that enters the VIS detector:
+          // live 900–2400 Hz tone power, without unverified dBm claims.
+          for (int i = 0; i < af.Length; i++)
+          {
+            spectrumWindow[spectrumWrite] = af[i];
+            if (++spectrumWrite == spectrumWindow.Length) spectrumWrite = 0;
+            if (spectrumFilled < spectrumWindow.Length) spectrumFilled++;
+          }
+          spectrumInterval += af.Length;
+          if (spectrumFilled == spectrumWindow.Length &&
+              spectrumInterval >= 9600 && SpectrumAvailable != null)
+          {
+            spectrumInterval = 0;
+            float[] spectrumAudio = new float[spectrumWindow.Length];
+            int tail = spectrumWindow.Length - spectrumWrite;
+            Array.Copy(spectrumWindow, spectrumWrite, spectrumAudio, 0, tail);
+            if (spectrumWrite > 0)
+              Array.Copy(spectrumWindow, 0, spectrumAudio, tail, spectrumWrite);
+            SpectrumAvailable.Invoke(SstvToneSpectrum.Measure(spectrumAudio));
           }
           // VIS offset is now estimated relative to the manually centered
           // AF. Do not include that manual correction again downstream.
