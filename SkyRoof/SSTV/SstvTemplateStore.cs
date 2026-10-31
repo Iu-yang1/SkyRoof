@@ -11,6 +11,12 @@ namespace SkyRoof.SSTV
   public sealed record SstvUserTemplate(
     string Name, string Style, string OverlayText, DateTime SavedUtc)
   {
+    // Optional properties preserve all previously saved template JSON files.
+    public string? MyCallText { get; init; }
+    public string? TheirCallText { get; init; }
+    public SstvTextLayer? MyCallStyle { get; init; }
+    public SstvTextLayer? TheirCallStyle { get; init; }
+    public SstvTextLayer? OverlayStyle { get; init; }
     public override string ToString() => Name;
   }
 
@@ -49,11 +55,28 @@ namespace SkyRoof.SSTV
       if (list.Count > MaxTemplates)
         throw new InvalidOperationException("已达到 100 个图片模板上限。");
       string full = Path.GetFullPath(path);
+      WriteAtomically(full, list);
+    }
+
+    /// <summary>Remove only one named user template; built-in presets are not stored here.</summary>
+    public static bool Delete(string path, string name)
+    {
+      if (string.IsNullOrWhiteSpace(name)) return false;
+      var existing = Read(path);
+      var remaining = existing.Where(x =>
+        !string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase)).ToArray();
+      if (remaining.Length == existing.Count) return false;
+      WriteAtomically(Path.GetFullPath(path), remaining);
+      return true;
+    }
+
+    private static void WriteAtomically(string full, IReadOnlyList<SstvUserTemplate> entries)
+    {
       Directory.CreateDirectory(Path.GetDirectoryName(full)!);
       string temporary = full + "." + Guid.NewGuid().ToString("N") + ".tmp";
       try
       {
-        File.WriteAllText(temporary, JsonSerializer.Serialize(list,
+        File.WriteAllText(temporary, JsonSerializer.Serialize(entries,
           new JsonSerializerOptions { WriteIndented = true }),
           new UTF8Encoding(false));
         File.Move(temporary, full, true);
@@ -67,7 +90,9 @@ namespace SkyRoof.SSTV
       template.Name.Length <= 48 &&
       template.Style != null &&
       template.OverlayText != null &&
-      template.OverlayText.Length <= 256 &&
+      template.OverlayText.Length <= 512 &&
+      (template.MyCallText == null || template.MyCallText.Length <= 60) &&
+      (template.TheirCallText == null || template.TheirCallText.Length <= 60) &&
       Styles.Contains(template.Style) &&
       template.SavedUtc.Kind == DateTimeKind.Utc;
   }
