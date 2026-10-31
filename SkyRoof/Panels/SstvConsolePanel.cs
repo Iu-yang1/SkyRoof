@@ -623,8 +623,10 @@ namespace SkyRoof
       txThumbnailStrip.SuspendLayout();
       try
       {
-        foreach (Control child in txThumbnailStrip.Controls)
+        for (int i = txThumbnailStrip.Controls.Count - 1; i >= 0; i--)
         {
+          Control child = txThumbnailStrip.Controls[i];
+          txThumbnailStrip.Controls.RemoveAt(i);
           if (child is PictureBox thumb)
           {
             thumb.Image?.Dispose();
@@ -632,7 +634,6 @@ namespace SkyRoof
           }
           child.Dispose();
         }
-        txThumbnailStrip.Controls.Clear();
         // Snapshot selection is intentionally by index; the list remains
         // owned by the panel and each image is retained until evicted.
         for (int i = 0; i < txRecentImages.Count; i++)
@@ -640,8 +641,7 @@ namespace SkyRoof
           Bitmap image = txRecentImages[i];
           AddTxThumbnail(image, i == 0 ? "当前图片" : "近期编辑图片", () =>
           {
-            if (!image.Equals(null))
-              SetTxImage(new Bitmap(image));
+            SetTxImage(new Bitmap(image));
           });
         }
         string folder = Path.Combine(Utils.GetUserDataFolder(), "SstvImages");
