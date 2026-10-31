@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using SkyRoof;
 using SkyRoof.SSTV;
 using Xunit;
@@ -64,6 +65,34 @@ namespace VE3NEA.Dsp.Tests
       Assert.False(Run(false, true));
       Assert.True(Run(true, true));
       Assert.True(Run(true, false));
+    }
+
+    [Fact]
+    public void CatHardwareReadbackTimestampsAreStateSpecific()
+    {
+      // Mock CAT observation fields without any network/radio I/O.
+      var cat = (CatControlEngine)RuntimeHelpers.GetUninitializedObject(
+        typeof(CatControlEngine));
+      const BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Instance;
+      var offField = typeof(CatControlEngine).GetField(
+        "lastPttOffReadbackTicks", flags)!;
+      var onField = typeof(CatControlEngine).GetField(
+        "lastPttOnReadbackTicks", flags)!;
+      var offProperty = typeof(CatControlEngine).GetProperty(
+        "LastPttOffHardwareReadbackUtc", flags)!;
+      var onProperty = typeof(CatControlEngine).GetProperty(
+        "LastPttOnHardwareReadbackUtc", flags)!;
+      Assert.NotNull(offField);
+      Assert.NotNull(onField);
+      Assert.NotNull(offProperty);
+      Assert.NotNull(onProperty);
+      DateTime t = Started.AddSeconds(1);
+      offField.SetValue(cat, t.Ticks);
+      Assert.Equal(t, (DateTime)offProperty.GetValue(cat)!);
+      Assert.Equal(DateTime.MinValue, (DateTime)onProperty.GetValue(cat)!);
+      onField.SetValue(cat, t.AddSeconds(1).Ticks);
+      Assert.Equal(t.AddSeconds(1), (DateTime)onProperty.GetValue(cat)!);
+      Assert.Equal(t, (DateTime)offProperty.GetValue(cat)!);
     }
 
     [Fact]
