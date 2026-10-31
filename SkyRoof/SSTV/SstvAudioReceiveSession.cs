@@ -55,6 +55,7 @@ namespace SkyRoof.SSTV
     }
     public int AutoVisCorrectionHz => Volatile.Read(ref autoVisCorrectionHz);
     public event Action<SstvVisAfcLock>? VisSynchronized;
+    public event Action<string>? FskStationIdentified;
     public int ManualCorrectionHz
     {
       get => Volatile.Read(ref manualCorrectionHz);
@@ -174,6 +175,12 @@ namespace SkyRoof.SSTV
           Volatile.Write(ref autoVisCorrectionHz,
             Math.Clamp((int)Math.Round(-offset), -500, 500));
       };
+      var liveFsk = new SstvLiveFskIdDetector();
+      liveFsk.StationIdentified += call =>
+      {
+        if (Volatile.Read(ref epoch) == version && !disposed)
+          FskStationIdentified?.Invoke(call);
+      };
       var visDetector = new SstvVisAfcDetector();
       visDetector.Reset(version);
       visDetector.VisLocked += detected =>
@@ -219,6 +226,7 @@ namespace SkyRoof.SSTV
             shifter.Reset();
             raster.Reset();
             nativeSync.Reset();
+            liveFsk.Reset();
             visDetector.Reset(version);
             Volatile.Write(ref autoVisCorrectionHz, 0);
             fmPhase = 0;
@@ -243,6 +251,7 @@ namespace SkyRoof.SSTV
           // AF. Do not include that manual correction again downstream.
           visDetector.Process(af);
           nativeSync.Process(af);
+          liveFsk.Process(af);
           SstvTxModeProfile? forced =
             Interlocked.Exchange(ref manuallyRequestedMode, null);
           if (forced != null) raster.ForceMode(forced);
