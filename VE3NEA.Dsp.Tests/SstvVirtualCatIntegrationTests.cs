@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -72,7 +73,8 @@ namespace VE3NEA.Dsp.Tests
             ReconnectDelay = 100
           });
         cat.Start(rx: false, tx: true, crossband: false);
-        Assert.True(Until(() => cat.IsRunning), "Virtual CAT did not connect");
+        Assert.True(Until(() => cat.IsRunning),
+          $"Virtual CAT did not connect: accepted={rig.Connections}; commands={rig.Commands}; server={rig.LastError}");
         return cat;
       }
       finally
@@ -93,6 +95,9 @@ namespace VE3NEA.Dsp.Tests
       private readonly CancellationTokenSource stop = new();
       private readonly Task server;
       private int keyed, onCommands, offCommands, connections, dropped;
+      private readonly ConcurrentQueue<string> trace = new();
+      public string Commands => string.Join(" | ", trace);
+      public string? LastError { get; private set; }
       public bool DropAfterFirstKey { get; set; }
       public bool IsTransmitting => Volatile.Read(ref keyed) != 0;
       public int OnCommands => Volatile.Read(ref onCommands);
@@ -125,6 +130,7 @@ namespace VE3NEA.Dsp.Tests
             {
               string? line = await reader.ReadLineAsync(stop.Token);
               if (line == null) break;
+              trace.Enqueue(line);
               string response;
               bool closeConnection = false;
               switch (line)
@@ -153,10 +159,10 @@ namespace VE3NEA.Dsp.Tests
             }
           }
         }
-        catch (Exception ex) when (ex is OperationCanceledException or
-          ObjectDisposedException or IOException or SocketException)
+        catch (Exception ex)
         {
-          // Closing the fake socket is the deliberate fault under test.
+          // Diagnostics remain available even when the virtual server dies.
+          if (!stop.IsCancellationRequested) LastError = ex.ToString();
         }
       }
 
