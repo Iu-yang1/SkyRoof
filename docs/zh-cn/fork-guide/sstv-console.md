@@ -11,7 +11,7 @@
 3. 解码完成后图片与 UTC 元数据保存至 SkyRoof 用户数据目录的 `SstvImages` 文件夹，可在 **图库 / 历史** 中查看。
 4. **导入 WAV** 可以解码 48 kHz / 16-bit / 单声道、最长 7 分钟的录音。
 
-目前自动解码能力来自 SkySignals：Robot 36/72，以及 PD 50/90/120/160/180/240/290。其他 MMSSTV 模式尚未完成。
+目前自动解码能力来自 SkySignals：Robot 36/72，以及 PD 50/90/120/160/180/240/290。发送端另增加了 Scottie 1/2/DX、Martin 1/2、SC2 60/120/180 的 VIS 与 RGB 扫描编码（按 MMSSTV Main.cpp 时间参数实现）；**这些新增模式的接收端尚未完成。**
 
 回环录音采集 Windows 对应播放设备的全部混音，不是只捕捉 RS-BA1。建议将 RS-BA1 音频分配至独立设备，以免混入系统声音。
 
@@ -29,6 +29,6 @@
 
 ## 尚未完成的功能
 
-Martin、Scottie、AVT、SC2、P3/P5/P7、MP/MR/ML、窄带扩展 VIS/N-VIS 的完整收发，以及 MMSSTV 模板/宏/QSO 日志功能、真正由 VIS/同步脉冲驱动的 SSTV 自动 AFC、IC-9700 实机验证和正式版验收，均仍待实现。
+Martin、Scottie、SC2 的接收解码，AVT、P3/P5/P7、MP/MR/ML、窄带扩展 VIS/N-VIS 的完整收发，以及 MMSSTV 模板/宏/QSO 日志功能、真正由 VIS/同步脉冲驱动的 SSTV 自动 AFC、IC-9700 实机验证和正式版验收，均仍待实现。
 
 因此本页面仅为开发预览文档，不能作为稳定版发布说明。具体开发门槛见 [SSTV 集成矩阵](../../architecture/sstv-console-integration-plan.md)。
