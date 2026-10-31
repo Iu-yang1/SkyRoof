@@ -86,6 +86,11 @@ namespace SkyRoof
       Margin = new Padding(4)
     };
     private readonly TabControl tabs = new() { Dock = DockStyle.Fill };
+    private readonly SstvToneSpectrumView rxSpectrum = new()
+    {
+      Dock = DockStyle.Bottom,
+      Height = 106
+    };
     private readonly PictureBox rxPicture = new()
     {
       Dock = DockStyle.Fill, BackColor = Color.FromArgb(29, 33, 40),
@@ -170,6 +175,7 @@ namespace SkyRoof
       receiveSession.ImageAvailable += OnAudioReceived;
       receiveSession.RasterImageAvailable += OnRasterReceived;
       receiveSession.VisSynchronized += OnVisSynchronized;
+      receiveSession.SpectrumAvailable += OnSpectrumAvailable;
       receiveSession.FskStationIdentified += OnLiveFskStationIdentified;
       overlayText.TextChanged += (_, _) => RefreshTxPreview();
       qsoCall.TextChanged += (_, _) => RefreshTxPreview();
@@ -243,6 +249,7 @@ namespace SkyRoof
       }));
       actions.Controls.Add(Btn("接收记录", () => { ReloadHistory(); tabs.SelectedIndex = 2; }));
       page.Controls.Add(rxPicture);
+      page.Controls.Add(rxSpectrum);
       page.Controls.Add(rxStatus);
       page.Controls.Add(actions);
       page.Controls.Add(tuning);
@@ -709,6 +716,20 @@ namespace SkyRoof
           if (string.IsNullOrWhiteSpace(qsoCall.Text))
             qsoCall.Text = callsign;
           rxStatus.Text = $"收到 FSK 台站标识：{callsign}（需核对）";
+        }));
+      }
+      catch (InvalidOperationException) { }
+    }
+
+    private void OnSpectrumAvailable(float[] levels)
+    {
+      if (closed || IsDisposed || !IsHandleCreated) return;
+      try
+      {
+        BeginInvoke((Action)(() =>
+        {
+          if (!closed && !IsDisposed)
+            rxSpectrum.SetLevels(levels);
         }));
       }
       catch (InvalidOperationException) { }
@@ -1216,6 +1237,7 @@ namespace SkyRoof
       replayStop?.Cancel();
       receiveSession.RasterImageAvailable -= OnRasterReceived;
       receiveSession.VisSynchronized -= OnVisSynchronized;
+      receiveSession.SpectrumAvailable -= OnSpectrumAvailable;
       receiveSession.FskStationIdentified -= OnLiveFskStationIdentified;
       receiveSession.Dispose();
       if (ctx.SstvConsolePanel == this) ctx.SstvConsolePanel = null;
