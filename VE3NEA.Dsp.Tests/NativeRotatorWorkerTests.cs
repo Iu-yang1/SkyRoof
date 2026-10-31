@@ -708,7 +708,10 @@ public sealed class NativeRotatorWorkerTests
   };
   private static async Task UntilAsync(Func<bool> predicate)
   {
-    for(int i=0;i<60;i++)
+    // These tests use a real loopback TCP bridge and can be delayed when
+    // CI concurrently builds native dependencies. Wait for the actual
+    // observable command rather than treating a busy runner as a regression.
+    for(int i=0;i<120;i++)
     {
       if(predicate())return;
       await Task.Delay(50);
