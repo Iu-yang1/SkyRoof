@@ -198,6 +198,7 @@ namespace SkyRoof.SSTV
             decoder.ImageCompleted += OnImage;
             ifDemod.Reset();
             shifter.Reset();
+            raster.Reset();
             visDetector.Reset(version);
             Volatile.Write(ref autoVisCorrectionHz, 0);
             fmPhase = 0;

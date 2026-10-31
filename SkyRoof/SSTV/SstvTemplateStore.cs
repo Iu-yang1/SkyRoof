@@ -65,6 +65,8 @@ namespace SkyRoof.SSTV
       template != null &&
       !string.IsNullOrWhiteSpace(template.Name) &&
       template.Name.Length <= 48 &&
+      template.Style != null &&
+      template.OverlayText != null &&
       template.OverlayText.Length <= 256 &&
       Styles.Contains(template.Style) &&
       template.SavedUtc.Kind == DateTimeKind.Utc;
