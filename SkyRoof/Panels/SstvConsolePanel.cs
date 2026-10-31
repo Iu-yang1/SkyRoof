@@ -767,7 +767,7 @@ namespace SkyRoof
         using var snapshot = new Bitmap(txPicture.Image!);
         txStatus.Text = "正在准备 SSTV 图片...";
         SstvIdOptions? stationId = txCwId.Checked || txFskId.Checked
-          ? new SstvIdOptions(ctx.Settings.User.Call ?? "",
+          ? new SstvIdOptions(myCallInput.Text.Trim(),
             txCwId.Checked, txFskId.Checked)
           : null;
         await Task.Run(() =>
@@ -1148,7 +1148,11 @@ namespace SkyRoof
       {
         Text = "模板名称", Left = 18, Top = 18, Width = 75, Height = 28
       };
-      var input = new TextBox { Left = 98, Top = 15, Width = 255 };
+      var input = new TextBox
+      {
+        Left = 98, Top = 15, Width = 255,
+        Text = (templateBox.SelectedItem as SstvUserTemplate)?.Name ?? ""
+      };
       var ok = new Button
       {
         Text = "保存", Left = 172, Top = 65, Width = 88,
@@ -1168,7 +1172,14 @@ namespace SkyRoof
         string style = templateBox.SelectedItem is SstvUserTemplate source
           ? source.Style : templateBox.SelectedItem?.ToString() ?? "经典呼号";
         var record = new SstvUserTemplate(input.Text.Trim(), style,
-          overlayText.Text, DateTime.UtcNow);
+          overlayText.Text, DateTime.UtcNow)
+        {
+          MyCallText = myCallInput.Text,
+          TheirCallText = theirCallInput.Text,
+          MyCallStyle = textLayers[0].Normalized(),
+          TheirCallStyle = textLayers[1].Normalized(),
+          OverlayStyle = textLayers[2].Normalized()
+        };
         SstvTemplateStore.Save(TemplatePath, record);
         ReloadUserTemplates();
         for (int i = 0; i < templateBox.Items.Count; i++)
@@ -1184,6 +1195,154 @@ namespace SkyRoof
         MessageBox.Show(this, ex.Message, "无法保存图片模板",
           MessageBoxButtons.OK, MessageBoxIcon.Warning);
       }
+    }
+
+    private void ApplyUserTemplate(SstvUserTemplate selected)
+    {
+      // Older templates contain only OverlayText. Missing positions/colors
+      // are intentionally restored from defaults rather than guessed.
+      myCallInput.Text = selected.MyCallText ?? ctx.Settings.User.Call ?? "";
+      theirCallInput.Text = selected.TheirCallText ?? "";
+      overlayText.Text = selected.OverlayText;
+      textLayers[0] = (selected.MyCallStyle ?? SstvTextLayer.MyCallDefault).Normalized();
+      textLayers[1] = (selected.TheirCallStyle ?? SstvTextLayer.TheirCallDefault).Normalized();
+      textLayers[2] = (selected.OverlayStyle ?? SstvTextLayer.CustomDefault).Normalized();
+      UpdateTextEditorControls();
+    }
+
+    private void DeleteUserTemplate()
+    {
+      if (templateBox.SelectedItem is not SstvUserTemplate selected)
+      {
+        txStatus.Text = "内置模板不可删除，请先选择已保存的自定义模板";
+        return;
+      }
+      if (MessageBox.Show(this, $"删除自定义模板“{selected.Name}”？",
+        "删除 SSTV 模板", MessageBoxButtons.YesNo,
+        MessageBoxIcon.Question) != DialogResult.Yes) return;
+      try
+      {
+        if (SstvTemplateStore.Delete(TemplatePath, selected.Name))
+        {
+          ReloadUserTemplates();
+          templateBox.SelectedIndex = 0;
+          txStatus.Text = $"已删除模板：{selected.Name}";
+        }
+      }
+      catch (Exception ex)
+      {
+        MessageBox.Show(this, ex.Message, "删除模板失败",
+          MessageBoxButtons.OK, MessageBoxIcon.Warning);
+      }
+    }
+
+    private void UpdateTextEditorControls()
+    {
+      if (textLayerBox.SelectedIndex < 0) return;
+      updatingTextControls = true;
+      try
+      {
+        var style = textLayers[textLayerBox.SelectedIndex].Normalized();
+        textSizeBox.Value = Math.Clamp((decimal)style.SizePercent,
+          textSizeBox.Minimum, textSizeBox.Maximum);
+        textColorButton.BackColor = Color.FromArgb(style.ColorArgb);
+        Color c = textColorButton.BackColor;
+        textColorButton.ForeColor = (c.R * 299 + c.G * 587 + c.B * 114) / 1000 > 140
+          ? Color.Black : Color.White;
+      }
+      finally { updatingTextControls = false; }
+      txPicture.Invalidate();
+    }
+
+    private void PickTextColor()
+    {
+      int index = Math.Max(0, textLayerBox.SelectedIndex);
+      using var dialog = new ColorDialog
+      {
+        FullOpen = true,
+        Color = Color.FromArgb(textLayers[index].ColorArgb)
+      };
+      if (dialog.ShowDialog(this) != DialogResult.OK) return;
+      textLayers[index] = textLayers[index] with { ColorArgb = dialog.Color.ToArgb() };
+      UpdateTextEditorControls();
+      RefreshTxPreview();
+    }
+
+    // PictureBox Zoom preserves the SSTV bitmap aspect ratio. Use exactly
+    // the same transform for drawing the selection and interpreting drag.
+    private RectangleF TxPictureClientBounds()
+    {
+      if (txPicture.Image == null) return RectangleF.Empty;
+      float scale = Math.Min((float)txPicture.ClientSize.Width / txPicture.Image.Width,
+        (float)txPicture.ClientSize.Height / txPicture.Image.Height);
+      if (!float.IsFinite(scale) || scale <= 0) return RectangleF.Empty;
+      float width = txPicture.Image.Width * scale;
+      float height = txPicture.Image.Height * scale;
+      return new RectangleF((txPicture.ClientSize.Width - width) / 2f,
+        (txPicture.ClientSize.Height - height) / 2f, width, height);
+    }
+
+    private bool TryPicturePoint(Point location, out PointF point)
+    {
+      point = PointF.Empty;
+      RectangleF bounds = TxPictureClientBounds();
+      if (bounds.IsEmpty || !bounds.Contains(location)) return false;
+      Bitmap preview = (Bitmap)txPicture.Image!;
+      point = new PointF((location.X - bounds.Left) * preview.Width / bounds.Width,
+        (location.Y - bounds.Top) * preview.Height / bounds.Height);
+      return true;
+    }
+
+    private void OnTxPictureMouseDown(object? sender, MouseEventArgs e)
+    {
+      if (e.Button != MouseButtons.Left || !TryPicturePoint(e.Location, out PointF pixel))
+        return;
+      if (txPicture.Image is not Bitmap preview) return;
+      for (int i = textBounds.Length - 1; i >= 0; i--)
+      {
+        if (!textBounds[i].Contains(pixel)) continue;
+        textLayerBox.SelectedIndex = i;
+        SstvTextLayer layer = textLayers[i];
+        textDragOffset = new PointF(layer.X - pixel.X / preview.Width,
+          layer.Y - pixel.Y / preview.Height);
+        movingText = true;
+        txPicture.Cursor = Cursors.SizeAll;
+        return;
+      }
+    }
+
+    private void OnTxPictureMouseMove(object? sender, MouseEventArgs e)
+    {
+      if (!movingText || e.Button != MouseButtons.Left ||
+          !TryPicturePoint(e.Location, out PointF pixel) ||
+          txPicture.Image is not Bitmap preview) return;
+      int index = Math.Max(0, textLayerBox.SelectedIndex);
+      textLayers[index] = (textLayers[index] with
+      {
+        X = textDragOffset.X + pixel.X / preview.Width,
+        Y = textDragOffset.Y + pixel.Y / preview.Height
+      }).Normalized();
+      RefreshTxPreview();
+    }
+
+    private void OnTxPictureMouseWheel(object? sender, MouseEventArgs e)
+    {
+      if (e.Delta == 0) return;
+      decimal target = textSizeBox.Value + (e.Delta > 0 ? 0.5m : -0.5m);
+      textSizeBox.Value = Math.Clamp(target, textSizeBox.Minimum, textSizeBox.Maximum);
+    }
+
+    private void DrawTextSelection(Graphics g)
+    {
+      if (txPicture.Image is not Bitmap preview || textLayerBox.SelectedIndex < 0)
+        return;
+      RectangleF bounds = TxPictureClientBounds();
+      RectangleF text = textBounds[textLayerBox.SelectedIndex];
+      if (bounds.IsEmpty || text.IsEmpty) return;
+      float scale = bounds.Width / preview.Width;
+      using var pen = new Pen(Color.Gold, 1.1f) { DashStyle = DashStyle.Dash };
+      g.DrawRectangle(pen, bounds.Left + text.Left * scale,
+        bounds.Top + text.Top * scale, text.Width * scale, text.Height * scale);
     }
 
     private void UndoImage()
@@ -1278,17 +1437,31 @@ namespace SkyRoof
         radio.IsTerrestrial ? 0 : radio.CorrectedUplinkFrequency,
         radio.CorrectedDownlinkFrequency,
         DateTime.UtcNow);
-      string expanded = SstvTextMacros.Expand(overlayText.Text, macros);
-      if (template != "纯图片" && !string.IsNullOrWhiteSpace(expanded))
+      string[] captions =
       {
-        float fontSize = Math.Max(12f, canvas.Width / 19f);
-        using var font = new Font(FontFamily.GenericSansSerif, fontSize, FontStyle.Bold);
-        using var shadow = new SolidBrush(Color.FromArgb(180, 0, 0, 0));
-        using var foreground = new SolidBrush(Color.White);
-        float x = Math.Max(8, canvas.Width * .035f);
-        float y = Math.Max(6, canvas.Height - fontSize * 1.75f);
-        g.DrawString(expanded, font, shadow, x + 2, y + 2);
-        g.DrawString(expanded, font, foreground, x, y);
+        SstvTextMacros.Expand(myCallInput.Text.Trim(), macros),
+        SstvTextMacros.Expand(theirCallInput.Text.Trim(), macros),
+        SstvTextMacros.Expand(overlayText.Text, macros)
+      };
+      for (int i = 0; i < textBounds.Length; i++)
+      {
+        textBounds[i] = RectangleF.Empty;
+        if (template == "纯图片" || string.IsNullOrWhiteSpace(captions[i]))
+          continue;
+        SstvTextLayer layout = textLayers[i].Normalized();
+        float fontSize = Math.Max(7, canvas.Width * layout.SizePercent / 100f);
+        using var font = new Font(FontFamily.GenericSansSerif, fontSize, FontStyle.Bold,
+          GraphicsUnit.Pixel);
+        SizeF size = g.MeasureString(captions[i], font);
+        float x = Math.Clamp(canvas.Width * layout.X,
+          0, Math.Max(0, canvas.Width - size.Width));
+        float y = Math.Clamp(canvas.Height * layout.Y,
+          0, Math.Max(0, canvas.Height - size.Height));
+        textBounds[i] = new RectangleF(x, y, size.Width, size.Height);
+        using var shadow = new SolidBrush(Color.FromArgb(200, 0, 0, 0));
+        using var foreground = new SolidBrush(Color.FromArgb(layout.ColorArgb));
+        g.DrawString(captions[i], font, shadow, x + 1.5f, y + 1.5f);
+        g.DrawString(captions[i], font, foreground, x, y);
       }
       return canvas;
     }
@@ -1300,6 +1473,7 @@ namespace SkyRoof
       var old = txPicture.Image;
       txPicture.Image = newPicture;
       old?.Dispose();
+      txPicture.Invalidate();
       UpdateTxAvailability();
     }
 
@@ -1324,7 +1498,7 @@ namespace SkyRoof
       try
       {
         SstvIdOptions? stationId = txCwId.Checked || txFskId.Checked
-          ? new SstvIdOptions(ctx.Settings.User.Call ?? "",
+          ? new SstvIdOptions(myCallInput.Text.Trim(),
             txCwId.Checked, txFskId.Checked)
           : null;
         await Task.Run(() => SstvRgbWaveExporter.Export(
