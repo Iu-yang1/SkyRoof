@@ -93,5 +93,30 @@ namespace VE3NEA.Dsp.Tests
         true, 435000550, 300000000, 135000550, true,
         Now.AddMilliseconds(500), Now.AddSeconds(1)));
     }
+    [Fact]
+    public void FiveMinuteVirtualSatellitePassAcceptsContinuousDopplerUpdates()
+    {
+      // Simulate a QSO-length SSTV picture. SkyRoof owns the currently
+      // calculated uplink; SSTV must not freeze it at the arm-time frequency.
+      var armed = Valid();
+      for (int elapsed = 0; elapsed <= 300; elapsed++)
+      {
+        DateTime now = Now.AddSeconds(elapsed);
+        double dopplerHz = 3800 * Math.Sin(elapsed / 300.0 * Math.PI * 1.6);
+        double uplink = 435000000 + dopplerHz;
+        long catHz = (long)Math.Truncate(uplink);
+        Assert.True(SstvTxPolicy.StillSafe(armed, "sat", "tx", true,
+          true, uplink, 0, catHz, true, now.AddMilliseconds(-300), now),
+          $"Rejected valid Doppler correction at t={elapsed}s");
+      }
+      DateTime end = Now.AddSeconds(300);
+      Assert.False(SstvTxPolicy.StillSafe(armed, "sat", "tx", true,
+        true, 435001800, 0, 435004000, true,
+        end.AddMilliseconds(-300), end));
+      Assert.False(SstvTxPolicy.StillSafe(armed, "sat", "tx", true,
+        false, 435001800, 0, 435001800, true,
+        end.AddMilliseconds(-300), end));
+    }
+
   }
 }
