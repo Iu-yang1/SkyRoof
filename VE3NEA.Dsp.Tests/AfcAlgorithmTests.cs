@@ -139,14 +139,15 @@ namespace VE3NEA.Dsp.Tests
       DateTime previous = repeated;
       for (int i = 0; i < 40; i++)
       {
-        object[] args = { repeated, previous, 1600, false };
+        object[] args = { repeated, previous, repeated, 1600, false };
         previous = (DateTime)method!.Invoke(null, args)!;
-        ((bool)args[3]).Should().BeFalse();
+        ((bool)args[4]).Should().BeFalse();
         if (i > 0) previous.Should().BeAfter(repeated);
       }
-      object[] backwards = { T0.AddSeconds(-2), previous, 1600, false };
+      object[] backwards = { T0.AddSeconds(-2), previous,
+        repeated, 1600, false };
       method!.Invoke(null, backwards);
-      ((bool)backwards[3]).Should().BeTrue(
+      ((bool)backwards[4]).Should().BeTrue(
         "a genuine backwards jump is an IF discontinuity");
     }
 
