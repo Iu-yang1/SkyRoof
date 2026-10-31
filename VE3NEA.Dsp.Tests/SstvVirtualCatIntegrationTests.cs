@@ -122,6 +122,8 @@ namespace VE3NEA.Dsp.Tests
           {
             using var client = await listener.AcceptTcpClientAsync(stop.Token);
             Interlocked.Increment(ref connections);
+            try
+            {
             using var stream = client.GetStream();
             using var reader = new StreamReader(stream, Encoding.ASCII,
               detectEncodingFromByteOrderMarks: false, leaveOpen: true);
@@ -157,6 +159,13 @@ namespace VE3NEA.Dsp.Tests
               }
               if (closeConnection) break;
               await writer.WriteLineAsync(response);
+            }
+            }
+            catch (Exception ex) when (ex is IOException or SocketException or ObjectDisposedException)
+            {
+              // A radio-side CAT socket can be abruptly reset: that single
+              // connection must not kill the virtual rig listener itself.
+              if (!stop.IsCancellationRequested) LastError = ex.Message;
             }
           }
         }

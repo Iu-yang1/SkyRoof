@@ -2,8 +2,8 @@ name: Build and Release
 
 on:
   workflow_dispatch:
-  # A version bump on master is the only automatic release trigger.
-  # Tag pushes are deliberately ignored to prevent overwriting an existing version.
+  # Updating Directory.Build.props on master triggers a release build.
+  # Existing v1.62 may be explicitly republished to replace its installer.
   push:
     branches: [master]
     paths:
@@ -183,10 +183,15 @@ jobs:
           name: SkyRoof Fork v.${{ steps.get_version.outputs.version }}
           prerelease: ${{ env.SIGNPATH_AVAILABLE != 'true' }}
           tag_name: v.${{ steps.get_version.outputs.version }}
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          target_commitish: ${{ github.sha }}
           body: |
             SkyRoof Fork v.${{ steps.get_version.outputs.version }} (based on VE3NEA/SkyRoof v.1.56)
 
             ### English
+            - SSTV RX mode dropdown now lists all 43 TX profiles, including native Robot/PD; native modes continue automatic VIS decoding.
+            - Three independent callsign/caption text layers with drag-to-position, size and color controls; saved layouts can be deleted.
             - Integrated SSTV Console with 43 transmit modes, extended VIS/N-VIS reception, AF/12-kHz IF sources, image editing, CW/FSK ID, gallery and QSO log.
             - SSTV satellite-aware Doppler tracking and CAT/PTT/STOP controls; keyboard Escape cancels transmission and reports its state.
             - Virtual IC-9700 TCP CAT/STOP fault-injection tests, 5-minute Doppler sweep and SSTV Windows UI regression checks.
@@ -202,6 +207,8 @@ jobs:
             - Preserve TX frequency and persistent satellite/transponder offsets.
 
             ### 中文
+            - SSTV 接收模式列表与发射端 43 种模式保持一致，包含由原生解码器自动识别的 Robot/PD。
+            - TX 图片新增独立己方／对方呼号及自定义文字图层，支持拖动、字号和颜色调整，模板可保存并删除。
             - 集成 SSTV 控制台：43 种图片发射模式、扩展 VIS/N-VIS 接收、AF/12 kHz IF 声源、图片编辑、CW/FSK ID、图库及通联日志。
             - SSTV 卫星多普勒跟踪及 CAT/PTT/STOP 控制；Esc 可停止发射并即时显示状态。
             - 新增虚拟 IC-9700 TCP CAT/断连模拟、五分钟多普勒扫频测试及 Windows SSTV 界面自动测试。
@@ -223,3 +230,13 @@ jobs:
           files:  install/SkyRoofSetup-v.${{ steps.get_version.outputs.version }}.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # An explicitly requested in-place v1.62 replacement: only retarget
+      # the existing tag AFTER its new installer has uploaded successfully.
+      - name: Retarget v1.62 to the verified replacement source
+        if: steps.get_version.outputs.version == '1.62'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git tag -f v.1.62 "${{ github.sha }}"
+          git push origin +refs/tags/v.1.62:refs/tags/v.1.62

@@ -115,6 +115,56 @@ namespace SkyRoof
     {
       Width = 110, DropDownStyle = ComboBoxStyle.DropDownList
     };
+    private readonly TextBox myCallInput = new()
+    {
+      Width = 116, MaxLength = 60, PlaceholderText = "己方呼号"
+    };
+    private readonly TextBox theirCallInput = new()
+    {
+      Width = 116, MaxLength = 60, PlaceholderText = "对方呼号"
+    };
+    private readonly ComboBox textLayerBox = new()
+    {
+      Width = 114, DropDownStyle = ComboBoxStyle.DropDownList
+    };
+    private readonly NumericUpDown textSizeBox = new()
+    {
+      Width = 66, Minimum = 2, Maximum = 25, Increment = 0.5m,
+      DecimalPlaces = 1
+    };
+    private readonly Button textColorButton = new()
+    {
+      Text = "文字颜色", Width = 88, Height = 30,
+      Margin = new Padding(4)
+    };
+    private readonly SstvTextLayer[] textLayers =
+    {
+      SstvTextLayer.MyCallDefault,
+      SstvTextLayer.TheirCallDefault,
+      SstvTextLayer.CustomDefault
+    };
+    private readonly RectangleF[] textBounds = new RectangleF[3];
+    private bool movingText;
+    private bool updatingTextControls;
+    private PointF textDragOffset;
+    private readonly List<Bitmap> txRecentImages = new();
+    private readonly ListBox txQuickModes = new()
+    {
+      Dock = DockStyle.Fill, IntegralHeight = false, BorderStyle = BorderStyle.None
+    };
+    private readonly FlowLayoutPanel txThumbnailStrip = new()
+    {
+      Dock = DockStyle.Fill, WrapContents = false, AutoScroll = true,
+      BackColor = Color.FromArgb(30, 33, 39),
+      Padding = new Padding(4)
+    };
+    private readonly TextBox txQsoNote = new() { MaxLength = 256 };
+    private readonly TextBox txRstSent = new() { Text = "595", MaxLength = 8 };
+    private readonly TextBox txRstReceived = new() { Text = "595", MaxLength = 8 };
+    private readonly TextBox txContactName = new() { MaxLength = 64 };
+    private readonly TextBox txContactQth = new() { MaxLength = 96 };
+    private bool syncingQsoEntry;
+    private readonly ToolTip txThumbnailTips = new();
     private readonly Stack<Bitmap> undoImages = new();
     private readonly Stack<Bitmap> redoImages = new();
     private const int HistoryLimit = 10;
@@ -166,9 +216,71 @@ namespace SkyRoof
       foreach (SstvTxModeProfile mode in SstvTxModeProfile.All)
         modeBox.Items.Add(mode);
       modeBox.DisplayMember = nameof(SstvTxModeProfile.Name);
+      txQuickModes.Items.AddRange(SstvTxModeProfile.All.Cast<object>().ToArray());
       if (modeBox.Items.Count > 0) modeBox.SelectedIndex = 0;
-      modeBox.SelectedIndexChanged += (_, _) => RefreshTxPreview();
-      overlayText.Text = ctx.Settings.User.Call ?? "";
+      txQuickModes.SelectedIndex = modeBox.SelectedIndex;
+      modeBox.SelectedIndexChanged += (_, _) =>
+      {
+        if (txQuickModes.SelectedIndex != modeBox.SelectedIndex)
+          txQuickModes.SelectedIndex = modeBox.SelectedIndex;
+        RefreshTxPreview();
+      };
+      txQuickModes.SelectedIndexChanged += (_, _) =>
+      {
+        if (txQuickModes.SelectedIndex >= 0 &&
+            modeBox.SelectedIndex != txQuickModes.SelectedIndex)
+          modeBox.SelectedIndex = txQuickModes.SelectedIndex;
+      };
+      myCallInput.Text = ctx.Settings.User.Call ?? "";
+      overlayText.Text = "";
+      textLayerBox.Items.AddRange(new object[]
+      {
+        "己方呼号", "对方呼号", "自定义文字"
+      });
+      textLayerBox.SelectedIndex = 0;
+      textLayerBox.SelectedIndexChanged += (_, _) => UpdateTextEditorControls();
+      textSizeBox.ValueChanged += (_, _) =>
+      {
+        if (updatingTextControls) return;
+        int index = Math.Max(0, textLayerBox.SelectedIndex);
+        textLayers[index] = textLayers[index] with
+          { SizePercent = (float)textSizeBox.Value };
+        RefreshTxPreview();
+      };
+      textColorButton.Click += (_, _) => PickTextColor();
+      myCallInput.TextChanged += (_, _) => RefreshTxPreview();
+      theirCallInput.TextChanged += (_, _) =>
+      {
+        if (!syncingQsoEntry)
+        {
+          syncingQsoEntry = true;
+          try { qsoCall.Text = theirCallInput.Text; }
+          finally { syncingQsoEntry = false; }
+        }
+        RefreshTxPreview();
+      };
+      txQsoNote.TextChanged += (_, _) =>
+      {
+        if (syncingQsoEntry) return;
+        syncingQsoEntry = true;
+        try { qsoNotes.Text = txQsoNote.Text; }
+        finally { syncingQsoEntry = false; }
+      };
+      qsoNotes.TextChanged += (_, _) =>
+      {
+        if (syncingQsoEntry) return;
+        syncingQsoEntry = true;
+        try { txQsoNote.Text = qsoNotes.Text; }
+        finally { syncingQsoEntry = false; }
+      };
+      txPicture.MouseDown += OnTxPictureMouseDown;
+      txPicture.MouseMove += OnTxPictureMouseMove;
+      txPicture.MouseUp += (_, _) => movingText = false;
+      txPicture.MouseWheel += OnTxPictureMouseWheel;
+      txPicture.MouseEnter += (_, _) => txPicture.Focus();
+      txPicture.TabStop = true;
+      txPicture.Paint += (_, e) => DrawTextSelection(e.Graphics);
+      UpdateTextEditorControls();
       rxSourceBox.Items.AddRange(new object[]
       {
         "声卡 AF", "RS-BA1 回环 AF", "声卡 12 kHz IF", "回环 12 kHz IF"
@@ -176,8 +288,10 @@ namespace SkyRoof
       rxSourceBox.SelectedIndexChanged += (_, _) => PopulateAudioDevices();
       rxSourceBox.SelectedIndex = 0;
       rxModeBox.Items.Add("自动识别 SSTV");
+      // Display every TX mode in RX. Robot/PD are decoded by SkySignals;
+      // remaining profiles use the manual/live raster receiver.
       foreach (SstvTxModeProfile profile in SstvTxModeProfile.All)
-        if (profile.Native == null) rxModeBox.Items.Add(profile);
+        rxModeBox.Items.Add(profile);
       rxModeBox.SelectedIndex = 0;
       rxToggleButton.Click += (_, _) => ToggleReceive();
       pitchCorrection.ValueChanged += (_, _) =>
@@ -190,7 +304,16 @@ namespace SkyRoof
       receiveSession.SpectrumAvailable += OnSpectrumAvailable;
       receiveSession.FskStationIdentified += OnLiveFskStationIdentified;
       overlayText.TextChanged += (_, _) => RefreshTxPreview();
-      qsoCall.TextChanged += (_, _) => RefreshTxPreview();
+      qsoCall.TextChanged += (_, _) =>
+      {
+        if (!syncingQsoEntry)
+        {
+          syncingQsoEntry = true;
+          try { theirCallInput.Text = qsoCall.Text; }
+          finally { syncingQsoEntry = false; }
+        }
+        RefreshTxPreview();
+      };
       templateBox.Items.AddRange(new object[]
       {
         "经典呼号", "QSL 卡片", "卫星横幅", "纯图片"
@@ -199,7 +322,7 @@ namespace SkyRoof
       templateBox.SelectedIndexChanged += (_, _) =>
       {
         if (templateBox.SelectedItem is SstvUserTemplate selected)
-          overlayText.Text = selected.OverlayText;
+          ApplyUserTemplate(selected);
         RefreshTxPreview();
       };
       ReloadUserTemplates();
@@ -216,6 +339,7 @@ namespace SkyRoof
 
       PopulateTxOutputDevices();
       ReloadHistory();
+      RefreshTxThumbnails();
       ReloadQsoLog();
     }
 
@@ -276,6 +400,12 @@ namespace SkyRoof
       tabs.TabPages.Add(page);
     }
 
+    /// <summary>
+    /// MMSSTV-inspired TX workspace: large picture at left, vertical
+    /// mode picker and station/QSO/caption controls at right, image thumbnails
+    /// underneath. All controls stay in the same native WinForms tab and
+    /// preserve the existing audio/PTT model.
+    /// </summary>
     private void BuildTxTab()
     {
       var page = new TabPage("发送 TX");
@@ -287,44 +417,279 @@ namespace SkyRoof
       bar.Controls.Add(Btn("旋转", RotateImage, 60));
       bar.Controls.Add(Btn("镜像", MirrorImage, 60));
       bar.Controls.Add(Btn("裁剪", CropImage, 60));
-      var format = Toolbar();
-      format.Controls.Add(new Label
+
+      // The photo archive is always visible, as in the original MMSSTV
+      // workspace. The height drops at narrow/minimized dock sizes.
+      var galleryGroup = new GroupBox
       {
-        Text = "模式", Width = 36, Height = 30,
-        TextAlign = ContentAlignment.MiddleCenter
-      });
-      format.Controls.Add(modeBox);
-      format.Controls.Add(templateBox);
-      format.Controls.Add(Btn("保存模板", SaveUserTemplate, 95));
-      format.Controls.Add(Btn("保存音频 WAV", () => _ = ExportWaveAsync(), 116));
-      var overlay = Toolbar();
-      overlay.Controls.Add(new Label
+        Text = "图片库 / 最近图片", Dock = DockStyle.Bottom, Height = 146
+      };
+      galleryGroup.Controls.Add(txThumbnailStrip);
+      var galleryBar = new FlowLayoutPanel
       {
-        Text = "文字", Width = 36, Height = 30,
-        TextAlign = ContentAlignment.MiddleCenter
-      });
-      overlay.Controls.Add(overlayText);
-      var transmit = Toolbar();
-      transmit.Controls.Add(new Label
+        Dock = DockStyle.Right, Width = 65, WrapContents = false,
+        FlowDirection = FlowDirection.TopDown, Padding = Padding.Empty
+      };
+      galleryBar.Controls.Add(Btn("刷新", RefreshTxThumbnails, 56));
+      galleryBar.Controls.Add(Btn("图库", () => tabs.SelectedIndex = 2, 56));
+      galleryGroup.Controls.Add(galleryBar);
+      page.Resize += (_, _) =>
       {
-        Text = "发射声卡", Width = 66, Height = 30,
-        TextAlign = ContentAlignment.MiddleCenter
+        if (!page.IsDisposed)
+          galleryGroup.Height = page.ClientSize.Height < 510 ? 94 : 146;
+      };
+
+      var main = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
+        Margin = Padding.Empty, Padding = Padding.Empty
+      };
+      main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45));
+      main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55));
+      main.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+      var left = new Panel { Dock = DockStyle.Fill };
+      var actions = new FlowLayoutPanel
+      {
+        Dock = DockStyle.Bottom, Height = 78,
+        WrapContents = true, AutoScroll = true, Padding = new Padding(2)
+      };
+      actions.Controls.Add(txApproval);
+      actions.Controls.Add(txSendButton);
+      actions.Controls.Add(txStopButton);
+      actions.Controls.Add(Btn("保存 WAV", () => _ = ExportWaveAsync(), 82));
+      left.Controls.Add(txPicture);
+      left.Controls.Add(actions);
+      main.Controls.Add(left, 0, 0);
+
+      var right = new Panel { Dock = DockStyle.Fill };
+      var tone = new SstvTxToneReference { Height = 76 };
+      var rightContent = new Panel { Dock = DockStyle.Fill };
+      var modeColumn = new Panel { Dock = DockStyle.Left, Width = 130 };
+      var modeHeader = new Label
+      {
+        Dock = DockStyle.Top, Height = 27,
+        Text = "TX 模式", TextAlign = ContentAlignment.MiddleCenter,
+        Font = new Font(Font, FontStyle.Bold)
+      };
+      modeColumn.Controls.Add(txQuickModes);
+      modeColumn.Controls.Add(modeHeader);
+      var rightEditor = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+      var settingsGrid = new TableLayoutPanel
+      {
+        Dock = DockStyle.Top, AutoSize = false,
+        ColumnCount = 2, RowCount = 0, Padding = new Padding(5, 2, 5, 6)
+      };
+      settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 68));
+      settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+      rightEditor.Controls.Add(settingsGrid);
+
+      void Heading(string text)
+      {
+        int r = settingsGrid.RowCount++;
+        settingsGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 29));
+        var header = new Label
+        {
+          Text = text, Dock = DockStyle.Fill,
+          TextAlign = ContentAlignment.MiddleLeft,
+          Font = new Font(Font, FontStyle.Bold)
+        };
+        settingsGrid.Controls.Add(header, 0, r);
+        settingsGrid.SetColumnSpan(header, 2);
+      }
+      void Field(string name, Control input)
+      {
+        int r = settingsGrid.RowCount++;
+        settingsGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        settingsGrid.Controls.Add(new Label
+        {
+          Text = name, Dock = DockStyle.Fill,
+          TextAlign = ContentAlignment.MiddleLeft
+        }, 0, r);
+        input.Dock = DockStyle.Fill;
+        input.Margin = new Padding(1, 4, 2, 3);
+        settingsGrid.Controls.Add(input, 1, r);
+      }
+      void Buttons(params Control[] controls)
+      {
+        int r = settingsGrid.RowCount++;
+        settingsGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 39));
+        var row = new FlowLayoutPanel
+        {
+          Dock = DockStyle.Fill, WrapContents = false, AutoScroll = true,
+          Margin = Padding.Empty
+        };
+        row.Controls.AddRange(controls);
+        settingsGrid.Controls.Add(row, 0, r);
+        settingsGrid.SetColumnSpan(row, 2);
+      }
+
+      Heading("模式与模板");
+      Field("模式", modeBox);
+      Field("模板", templateBox);
+      Buttons(Btn("保存模板", SaveUserTemplate, 88),
+        Btn("删除模板", DeleteUserTemplate, 88));
+
+      Heading("QSO / 台站信息");
+      Field("MY", myCallInput);
+      Field("HIS", theirCallInput);
+      Field("RST TX", txRstSent);
+      Field("RST RX", txRstReceived);
+      Field("姓名", txContactName);
+      Field("QTH", txContactQth);
+      Field("备注", txQsoNote);
+      Field("文字", overlayText);
+      Buttons(Btn("通联日志", () =>
+      {
+        qsoCall.Text = theirCallInput.Text;
+        qsoNotes.Text = txQsoNote.Text;
+        tabs.SelectedIndex = 3;
+      }, 88));
+
+      Heading("图片文字样式");
+      Field("对象", textLayerBox);
+      Field("字号 %", textSizeBox);
+      Buttons(textColorButton);
+      Buttons(new Label
+      {
+        Text = "拖动预览文字定位，滚轮调整大小",
+        Height = 30, AutoSize = true,
+        TextAlign = ContentAlignment.MiddleLeft
       });
-      transmit.Controls.Add(txOutputBox);
-      transmit.Controls.Add(txCwId);
-      transmit.Controls.Add(txFskId);
-      var txActions = Toolbar();
-      txActions.Controls.Add(txApproval);
-      txActions.Controls.Add(txSendButton);
-      txActions.Controls.Add(txStopButton);
-      page.Controls.Add(txPicture);
+
+      Heading("音频与识别");
+      Field("声卡", txOutputBox);
+      Buttons(txCwId, txFskId);
+
+      // Fixed-height rows plus a fixed-width grid permit vertical scrolling
+      // while each field stretches to the available column width at 650px.
+      // AutoSize=true would enlarge the grid beyond the available right pane
+      // based on the saved preferred width of long audio device dropdowns.
+      settingsGrid.Height = (int)settingsGrid.RowStyles.Cast<RowStyle>()
+        .Sum(style => style.Height) + settingsGrid.Padding.Vertical + 8;
+
+      rightContent.Controls.Add(rightEditor);
+      rightContent.Controls.Add(modeColumn);
+      right.Controls.Add(rightContent);
+      right.Controls.Add(tone);
+      main.Controls.Add(right, 1, 0);
+
+      // Keep top editing actions discoverable at any window size.
+      page.Controls.Add(main);
+      page.Controls.Add(galleryGroup);
       page.Controls.Add(txStatus);
-      page.Controls.Add(txActions);
-      page.Controls.Add(transmit);
-      page.Controls.Add(overlay);
-      page.Controls.Add(format);
       page.Controls.Add(bar);
       tabs.TabPages.Add(page);
+    }
+
+    /// <summary>
+    /// Keep an MMSSTV-style strip of user images. Session images are capped
+    /// and downscaled to SSTV resolution; archived PNGs are read on demand,
+    /// never locked or kept at original camera resolution.
+    /// </summary>
+    private void RememberTxImage(Bitmap source)
+    {
+      const int maxDimension = 640;
+      float scale = Math.Min(1f, Math.Min((float)maxDimension / source.Width,
+        (float)maxDimension / source.Height));
+      int width = Math.Max(1, (int)Math.Round(source.Width * scale));
+      int height = Math.Max(1, (int)Math.Round(source.Height * scale));
+      var picture = new Bitmap(width, height);
+      using (var g = Graphics.FromImage(picture))
+      {
+        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+        g.DrawImage(source, new Rectangle(0, 0, width, height));
+      }
+      txRecentImages.Insert(0, picture);
+      while (txRecentImages.Count > 12)
+      {
+        int last = txRecentImages.Count - 1;
+        txRecentImages[last].Dispose();
+        txRecentImages.RemoveAt(last);
+      }
+    }
+
+    private void AddTxThumbnail(Image picture, string title, Action action)
+    {
+      var small = new Bitmap(112, 72);
+      using (var g = Graphics.FromImage(small))
+      {
+        g.Clear(Color.FromArgb(31, 35, 42));
+        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+        float zoom = Math.Min(112f / picture.Width, 72f / picture.Height);
+        int width = Math.Max(1, (int)Math.Round(picture.Width * zoom));
+        int height = Math.Max(1, (int)Math.Round(picture.Height * zoom));
+        g.DrawImage(picture, new Rectangle((112 - width) / 2,
+          (72 - height) / 2, width, height));
+      }
+      var tile = new PictureBox
+      {
+        Size = new Size(112, 72), Image = small,
+        SizeMode = PictureBoxSizeMode.StretchImage,
+        Margin = new Padding(3), Cursor = Cursors.Hand
+      };
+      tile.Click += (_, _) => action();
+      txThumbnailTips.SetToolTip(tile, title);
+      txThumbnailStrip.Controls.Add(tile);
+    }
+
+    private void RefreshTxThumbnails()
+    {
+      if (closed || txThumbnailStrip.IsDisposed) return;
+      txThumbnailStrip.SuspendLayout();
+      try
+      {
+        for (int i = txThumbnailStrip.Controls.Count - 1; i >= 0; i--)
+        {
+          Control child = txThumbnailStrip.Controls[i];
+          txThumbnailStrip.Controls.RemoveAt(i);
+          if (child is PictureBox thumb)
+          {
+            thumb.Image?.Dispose();
+            thumb.Image = null;
+          }
+          child.Dispose();
+        }
+        // Snapshot selection is intentionally by index; the list remains
+        // owned by the panel and each image is retained until evicted.
+        for (int i = 0; i < txRecentImages.Count; i++)
+        {
+          Bitmap image = txRecentImages[i];
+          AddTxThumbnail(image, i == 0 ? "当前图片" : "近期编辑图片", () =>
+          {
+            SetTxImage(new Bitmap(image));
+          });
+        }
+        string folder = Path.Combine(Utils.GetUserDataFolder(), "SstvImages");
+        if (!Directory.Exists(folder)) return;
+        foreach (string file in Directory.EnumerateFiles(folder, "*.png")
+          .OrderByDescending(File.GetLastWriteTimeUtc).Take(24))
+        {
+          try
+          {
+            using var source = Image.FromFile(file);
+            AddTxThumbnail(source, Path.GetFileNameWithoutExtension(file), () =>
+            {
+              try
+              {
+                using var loaded = Image.FromFile(file);
+                SetTxImage(new Bitmap(loaded));
+              }
+              catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                or ArgumentException)
+              {
+                txStatus.Text = $"图片无法打开：{ex.Message}";
+              }
+            });
+          }
+          catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+            or ArgumentException) { }
+        }
+      }
+      catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+      {
+        txStatus.Text = $"图库无法读取：{ex.Message}";
+      }
+      finally { txThumbnailStrip.ResumeLayout(); }
     }
 
     private void BuildHistoryTab()
@@ -520,13 +885,19 @@ namespace SkyRoof
         RadioLink link = ctx.FrequencyControl?.RadioLink ?? new RadioLink();
         var selected = modeBox.SelectedItem as SstvTxModeProfile;
         var record = new SstvQsoRecord(
-          DateTime.UtcNow, call, ctx.Settings.User.Call ?? "",
+          DateTime.UtcNow, call, myCallInput.Text.Trim().ToUpperInvariant(),
           lastReceivedMode ?? selected?.Name ?? "SSTV",
           link.IsTerrestrial ? "" : link.Sat?.name ?? "",
           link.IsTerrestrial ? 0 : link.CorrectedUplinkFrequency,
           link.CorrectedDownlinkFrequency,
           rxPicture.Tag as string ?? "",
-          qsoNotes.Text.Trim());
+          qsoNotes.Text.Trim())
+        {
+          RstSent = txRstSent.Text.Trim(),
+          RstReceived = txRstReceived.Text.Trim(),
+          ContactName = txContactName.Text.Trim(),
+          ContactQth = txContactQth.Text.Trim()
+        };
         SstvQsoLogStore.Append(QsoLogPath, record);
         qsoCall.Clear();
         qsoNotes.Clear();
@@ -664,7 +1035,7 @@ namespace SkyRoof
         using var snapshot = new Bitmap(txPicture.Image!);
         txStatus.Text = "正在准备 SSTV 图片...";
         SstvIdOptions? stationId = txCwId.Checked || txFskId.Checked
-          ? new SstvIdOptions(ctx.Settings.User.Call ?? "",
+          ? new SstvIdOptions(myCallInput.Text.Trim(),
             txCwId.Checked, txFskId.Checked)
           : null;
         await Task.Run(() =>
@@ -788,6 +1159,11 @@ namespace SkyRoof
       {
         MessageBox.Show(this, "请先启动接收声卡。", "SSTV",
           MessageBoxButtons.OK, MessageBoxIcon.Information);
+        return;
+      }
+      if (mode.Native != null)
+      {
+        rxStatus.Text = $"{mode.Name} 由 SkySignals 自动识别解码，请等待 VIS 同步";
         return;
       }
       receiveSession.ManualStart(mode);
@@ -1001,9 +1377,11 @@ namespace SkyRoof
       if (old != null) PushHistory(undoImages, old);
       txBase = image;
       old?.Dispose();
+      RememberTxImage(image);
       ClearHistory(redoImages);
       RefreshTxPreview();
       txStatus.Text = "图片已加载，可以编辑或保存 SSTV 音频";
+      RefreshTxThumbnails();
       tabs.SelectedIndex = 1;
     }
 
@@ -1040,7 +1418,11 @@ namespace SkyRoof
       {
         Text = "模板名称", Left = 18, Top = 18, Width = 75, Height = 28
       };
-      var input = new TextBox { Left = 98, Top = 15, Width = 255 };
+      var input = new TextBox
+      {
+        Left = 98, Top = 15, Width = 255,
+        Text = (templateBox.SelectedItem as SstvUserTemplate)?.Name ?? ""
+      };
       var ok = new Button
       {
         Text = "保存", Left = 172, Top = 65, Width = 88,
@@ -1060,7 +1442,14 @@ namespace SkyRoof
         string style = templateBox.SelectedItem is SstvUserTemplate source
           ? source.Style : templateBox.SelectedItem?.ToString() ?? "经典呼号";
         var record = new SstvUserTemplate(input.Text.Trim(), style,
-          overlayText.Text, DateTime.UtcNow);
+          overlayText.Text, DateTime.UtcNow)
+        {
+          MyCallText = myCallInput.Text,
+          TheirCallText = theirCallInput.Text,
+          MyCallStyle = textLayers[0].Normalized(),
+          TheirCallStyle = textLayers[1].Normalized(),
+          OverlayStyle = textLayers[2].Normalized()
+        };
         SstvTemplateStore.Save(TemplatePath, record);
         ReloadUserTemplates();
         for (int i = 0; i < templateBox.Items.Count; i++)
@@ -1076,6 +1465,154 @@ namespace SkyRoof
         MessageBox.Show(this, ex.Message, "无法保存图片模板",
           MessageBoxButtons.OK, MessageBoxIcon.Warning);
       }
+    }
+
+    private void ApplyUserTemplate(SstvUserTemplate selected)
+    {
+      // Older templates contain only OverlayText. Missing positions/colors
+      // are intentionally restored from defaults rather than guessed.
+      myCallInput.Text = selected.MyCallText ?? ctx.Settings.User.Call ?? "";
+      theirCallInput.Text = selected.TheirCallText ?? "";
+      overlayText.Text = selected.OverlayText;
+      textLayers[0] = (selected.MyCallStyle ?? SstvTextLayer.MyCallDefault).Normalized();
+      textLayers[1] = (selected.TheirCallStyle ?? SstvTextLayer.TheirCallDefault).Normalized();
+      textLayers[2] = (selected.OverlayStyle ?? SstvTextLayer.CustomDefault).Normalized();
+      UpdateTextEditorControls();
+    }
+
+    private void DeleteUserTemplate()
+    {
+      if (templateBox.SelectedItem is not SstvUserTemplate selected)
+      {
+        txStatus.Text = "内置模板不可删除，请先选择已保存的自定义模板";
+        return;
+      }
+      if (MessageBox.Show(this, $"删除自定义模板“{selected.Name}”？",
+        "删除 SSTV 模板", MessageBoxButtons.YesNo,
+        MessageBoxIcon.Question) != DialogResult.Yes) return;
+      try
+      {
+        if (SstvTemplateStore.Delete(TemplatePath, selected.Name))
+        {
+          ReloadUserTemplates();
+          templateBox.SelectedIndex = 0;
+          txStatus.Text = $"已删除模板：{selected.Name}";
+        }
+      }
+      catch (Exception ex)
+      {
+        MessageBox.Show(this, ex.Message, "删除模板失败",
+          MessageBoxButtons.OK, MessageBoxIcon.Warning);
+      }
+    }
+
+    private void UpdateTextEditorControls()
+    {
+      if (textLayerBox.SelectedIndex < 0) return;
+      updatingTextControls = true;
+      try
+      {
+        var style = textLayers[textLayerBox.SelectedIndex].Normalized();
+        textSizeBox.Value = Math.Clamp((decimal)style.SizePercent,
+          textSizeBox.Minimum, textSizeBox.Maximum);
+        textColorButton.BackColor = Color.FromArgb(style.ColorArgb);
+        Color c = textColorButton.BackColor;
+        textColorButton.ForeColor = (c.R * 299 + c.G * 587 + c.B * 114) / 1000 > 140
+          ? Color.Black : Color.White;
+      }
+      finally { updatingTextControls = false; }
+      txPicture.Invalidate();
+    }
+
+    private void PickTextColor()
+    {
+      int index = Math.Max(0, textLayerBox.SelectedIndex);
+      using var dialog = new ColorDialog
+      {
+        FullOpen = true,
+        Color = Color.FromArgb(textLayers[index].ColorArgb)
+      };
+      if (dialog.ShowDialog(this) != DialogResult.OK) return;
+      textLayers[index] = textLayers[index] with { ColorArgb = dialog.Color.ToArgb() };
+      UpdateTextEditorControls();
+      RefreshTxPreview();
+    }
+
+    // PictureBox Zoom preserves the SSTV bitmap aspect ratio. Use exactly
+    // the same transform for drawing the selection and interpreting drag.
+    private RectangleF TxPictureClientBounds()
+    {
+      if (txPicture.Image == null) return RectangleF.Empty;
+      float scale = Math.Min((float)txPicture.ClientSize.Width / txPicture.Image.Width,
+        (float)txPicture.ClientSize.Height / txPicture.Image.Height);
+      if (!float.IsFinite(scale) || scale <= 0) return RectangleF.Empty;
+      float width = txPicture.Image.Width * scale;
+      float height = txPicture.Image.Height * scale;
+      return new RectangleF((txPicture.ClientSize.Width - width) / 2f,
+        (txPicture.ClientSize.Height - height) / 2f, width, height);
+    }
+
+    private bool TryPicturePoint(Point location, out PointF point)
+    {
+      point = PointF.Empty;
+      RectangleF bounds = TxPictureClientBounds();
+      if (bounds.IsEmpty || !bounds.Contains(location)) return false;
+      Bitmap preview = (Bitmap)txPicture.Image!;
+      point = new PointF((location.X - bounds.Left) * preview.Width / bounds.Width,
+        (location.Y - bounds.Top) * preview.Height / bounds.Height);
+      return true;
+    }
+
+    private void OnTxPictureMouseDown(object? sender, MouseEventArgs e)
+    {
+      if (e.Button != MouseButtons.Left || !TryPicturePoint(e.Location, out PointF pixel))
+        return;
+      if (txPicture.Image is not Bitmap preview) return;
+      for (int i = textBounds.Length - 1; i >= 0; i--)
+      {
+        if (!textBounds[i].Contains(pixel)) continue;
+        textLayerBox.SelectedIndex = i;
+        SstvTextLayer layer = textLayers[i];
+        textDragOffset = new PointF(layer.X - pixel.X / preview.Width,
+          layer.Y - pixel.Y / preview.Height);
+        movingText = true;
+        txPicture.Cursor = Cursors.SizeAll;
+        return;
+      }
+    }
+
+    private void OnTxPictureMouseMove(object? sender, MouseEventArgs e)
+    {
+      if (!movingText || e.Button != MouseButtons.Left ||
+          !TryPicturePoint(e.Location, out PointF pixel) ||
+          txPicture.Image is not Bitmap preview) return;
+      int index = Math.Max(0, textLayerBox.SelectedIndex);
+      textLayers[index] = (textLayers[index] with
+      {
+        X = textDragOffset.X + pixel.X / preview.Width,
+        Y = textDragOffset.Y + pixel.Y / preview.Height
+      }).Normalized();
+      RefreshTxPreview();
+    }
+
+    private void OnTxPictureMouseWheel(object? sender, MouseEventArgs e)
+    {
+      if (e.Delta == 0) return;
+      decimal target = textSizeBox.Value + (e.Delta > 0 ? 0.5m : -0.5m);
+      textSizeBox.Value = Math.Clamp(target, textSizeBox.Minimum, textSizeBox.Maximum);
+    }
+
+    private void DrawTextSelection(Graphics g)
+    {
+      if (txPicture.Image is not Bitmap preview || textLayerBox.SelectedIndex < 0)
+        return;
+      RectangleF bounds = TxPictureClientBounds();
+      RectangleF text = textBounds[textLayerBox.SelectedIndex];
+      if (bounds.IsEmpty || text.IsEmpty) return;
+      float scale = bounds.Width / preview.Width;
+      using var pen = new Pen(Color.Gold, 1.1f) { DashStyle = DashStyle.Dash };
+      g.DrawRectangle(pen, bounds.Left + text.Left * scale,
+        bounds.Top + text.Top * scale, text.Width * scale, text.Height * scale);
     }
 
     private void UndoImage()
@@ -1163,24 +1700,39 @@ namespace SkyRoof
       // widget has not yet been initialized or no satellite is selected.
       RadioLink radio = ctx.FrequencyControl?.RadioLink ?? new RadioLink();
       var macros = new SstvMacroContext(
-        ctx.Settings.User.Call ?? "", ctx.Settings.User.Square ?? "",
-        qsoCall.Text.Trim().ToUpperInvariant(),
+        myCallInput.Text.Trim().ToUpperInvariant(), ctx.Settings.User.Square ?? "",
+        (string.IsNullOrWhiteSpace(theirCallInput.Text)
+          ? qsoCall.Text : theirCallInput.Text).Trim().ToUpperInvariant(),
         radio.IsTerrestrial ? "" : radio.Sat?.name ?? "",
         (modeBox.SelectedItem as SstvTxModeProfile)?.Name ?? "SSTV",
         radio.IsTerrestrial ? 0 : radio.CorrectedUplinkFrequency,
         radio.CorrectedDownlinkFrequency,
         DateTime.UtcNow);
-      string expanded = SstvTextMacros.Expand(overlayText.Text, macros);
-      if (template != "纯图片" && !string.IsNullOrWhiteSpace(expanded))
+      string[] captions =
       {
-        float fontSize = Math.Max(12f, canvas.Width / 19f);
-        using var font = new Font(FontFamily.GenericSansSerif, fontSize, FontStyle.Bold);
-        using var shadow = new SolidBrush(Color.FromArgb(180, 0, 0, 0));
-        using var foreground = new SolidBrush(Color.White);
-        float x = Math.Max(8, canvas.Width * .035f);
-        float y = Math.Max(6, canvas.Height - fontSize * 1.75f);
-        g.DrawString(expanded, font, shadow, x + 2, y + 2);
-        g.DrawString(expanded, font, foreground, x, y);
+        SstvTextMacros.Expand(myCallInput.Text.Trim(), macros),
+        SstvTextMacros.Expand(theirCallInput.Text.Trim(), macros),
+        SstvTextMacros.Expand(overlayText.Text, macros)
+      };
+      for (int i = 0; i < textBounds.Length; i++)
+      {
+        textBounds[i] = RectangleF.Empty;
+        if (template == "纯图片" || string.IsNullOrWhiteSpace(captions[i]))
+          continue;
+        SstvTextLayer layout = textLayers[i].Normalized();
+        float fontSize = Math.Max(7, canvas.Width * layout.SizePercent / 100f);
+        using var font = new Font(FontFamily.GenericSansSerif, fontSize, FontStyle.Bold,
+          GraphicsUnit.Pixel);
+        SizeF size = g.MeasureString(captions[i], font);
+        float x = Math.Clamp(canvas.Width * layout.X,
+          0, Math.Max(0, canvas.Width - size.Width));
+        float y = Math.Clamp(canvas.Height * layout.Y,
+          0, Math.Max(0, canvas.Height - size.Height));
+        textBounds[i] = new RectangleF(x, y, size.Width, size.Height);
+        using var shadow = new SolidBrush(Color.FromArgb(200, 0, 0, 0));
+        using var foreground = new SolidBrush(Color.FromArgb(layout.ColorArgb));
+        g.DrawString(captions[i], font, shadow, x + 1.5f, y + 1.5f);
+        g.DrawString(captions[i], font, foreground, x, y);
       }
       return canvas;
     }
@@ -1192,6 +1744,7 @@ namespace SkyRoof
       var old = txPicture.Image;
       txPicture.Image = newPicture;
       old?.Dispose();
+      txPicture.Invalidate();
       UpdateTxAvailability();
     }
 
@@ -1216,7 +1769,7 @@ namespace SkyRoof
       try
       {
         SstvIdOptions? stationId = txCwId.Checked || txFskId.Checked
-          ? new SstvIdOptions(ctx.Settings.User.Call ?? "",
+          ? new SstvIdOptions(myCallInput.Text.Trim(),
             txCwId.Checked, txFskId.Checked)
           : null;
         await Task.Run(() => SstvRgbWaveExporter.Export(
@@ -1345,6 +1898,11 @@ namespace SkyRoof
       txPicture.Image = null;
       oldTx?.Dispose();
       txBase?.Dispose();
+      foreach (Control child in txThumbnailStrip.Controls)
+        if (child is PictureBox thumb) { thumb.Image?.Dispose(); thumb.Image = null; }
+      foreach (Bitmap thumb in txRecentImages) thumb.Dispose();
+      txRecentImages.Clear();
+      txThumbnailTips.Dispose();
       ClearHistory(undoImages);
       ClearHistory(redoImages);
       base.OnFormClosed(e);

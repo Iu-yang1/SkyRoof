@@ -34,6 +34,16 @@ namespace VE3NEA.Dsp.Tests
       method.Invoke(target, args);
     }
 
+    private static System.Collections.Generic.IEnumerable<T> Descendants<T>(Control root)
+      where T : Control
+    {
+      foreach (Control child in root.Controls)
+      {
+        if (child is T typed) yield return typed;
+        foreach (T nested in Descendants<T>(child)) yield return nested;
+      }
+    }
+
     [Fact]
     public void FourTabsAndImageEditorWorkWithoutAnyRadioOrPtt()
     {
@@ -55,6 +65,17 @@ namespace VE3NEA.Dsp.Tests
               "图库 / 历史", "通联日志" },
             tabs.TabPages.Cast<TabPage>().Select(x => x.Text).ToArray());
           Assert.Equal(43, Field<ComboBox>(panel, "modeBox").Items.Count);
+          var rxModes = Field<ComboBox>(panel, "rxModeBox");
+          Assert.Equal(44, rxModes.Items.Count); // auto + every TX mode
+          Assert.Equal(
+            Field<ComboBox>(panel, "modeBox").Items.Cast<SstvTxModeProfile>()
+              .Select(profile => profile.Name).ToArray(),
+            rxModes.Items.Cast<object>().Skip(1).Cast<SstvTxModeProfile>()
+              .Select(profile => profile.Name).ToArray());
+          Assert.Contains(rxModes.Items.Cast<object>(),
+            item => item is SstvTxModeProfile profile && profile.Name == "Robot 36");
+          Assert.Contains(rxModes.Items.Cast<object>(),
+            item => item is SstvTxModeProfile profile && profile.Name == "MC110-N");
           Assert.False(Field<CheckBox>(panel, "txApproval").Checked);
           Assert.False(Field<Button>(panel, "txStopButton").Enabled);
           Assert.False(Field<Button>(panel, "txSendButton").Enabled);
@@ -77,8 +98,7 @@ namespace VE3NEA.Dsp.Tests
           // Exercise actual WinForms Click events, not only private
           // methods. This catches broken button wiring and disabled controls.
           Button Action(string text) =>
-            tabs.TabPages[1].Controls.OfType<FlowLayoutPanel>()
-              .SelectMany(row => row.Controls.OfType<Button>())
+            Descendants<Button>(tabs.TabPages[1])
               .Single(button => button.Text == text);
           Action("旋转").PerformClick();
           Assert.Equal(120, Field<Bitmap>(panel, "txBase").Width);
@@ -91,12 +111,59 @@ namespace VE3NEA.Dsp.Tests
           Assert.True(Field<Bitmap>(panel, "txBase").Height <= 120);
           Assert.NotNull(Field<PictureBox>(panel, "txPicture").Image);
 
+          // Three independent TX text layers with per-layer size controls.
+          var myCall = Field<TextBox>(panel, "myCallInput");
+          var theirCall = Field<TextBox>(panel, "theirCallInput");
+          var freeText = Field<TextBox>(panel, "overlayText");
+          var activeLayer = Field<ComboBox>(panel, "textLayerBox");
+          var textSize = Field<NumericUpDown>(panel, "textSizeBox");
+          Assert.Equal(3, activeLayer.Items.Count);
+          myCall.Text = "BG5JSU";
+          theirCall.Text = "HB9Q";
+          freeText.Text = "QSO {HISCALL}";
+          activeLayer.SelectedIndex = 0;
+          textSize.Value = 11;
+          Assert.Equal(11f, Field<SstvTextLayer[]>(panel, "textLayers")[0].SizePercent);
+          activeLayer.SelectedIndex = 1;
+          textSize.Value = 8;
+          Assert.Equal(8f, Field<SstvTextLayer[]>(panel, "textLayers")[1].SizePercent);
+          Assert.Contains(Action("删除模板").Text, "删除模板");
+
+          var quickModes = Field<ListBox>(panel, "txQuickModes");
+          Assert.Equal(43, quickModes.Items.Count);
+          Assert.Single(Descendants<SstvTxToneReference>(tabs.TabPages[1]));
+          Assert.True(Field<FlowLayoutPanel>(panel, "txThumbnailStrip").Controls
+            .OfType<PictureBox>().Any(), "TX recent images must be visible");
+
           var mode = Field<ComboBox>(panel, "modeBox");
+          mode.SelectedItem = SstvTxModeProfile.All.Single(x => x.Name == "P3");
+          Assert.Equal(mode.SelectedIndex, quickModes.SelectedIndex);
+          quickModes.SelectedIndex = 0;
+          Assert.Equal(0, mode.SelectedIndex);
           mode.SelectedItem = SstvTxModeProfile.All.Single(x => x.Name == "P3");
           var preview = Field<PictureBox>(panel, "txPicture").Image;
           Assert.NotNull(preview);
           Assert.Equal(640, preview!.Width);
           Assert.Equal(496, preview.Height);
+          // Test picture hit-testing: dragging text changes only the chosen layer.
+          activeLayer.SelectedIndex = 0;
+          var previewBox = Field<PictureBox>(panel, "txPicture");
+          var letterBounds = Field<RectangleF[]>(panel, "textBounds")[0];
+          Assert.False(letterBounds.IsEmpty);
+          RectangleF clientBounds = (RectangleF)typeof(SstvConsolePanel)
+            .GetMethod("TxPictureClientBounds",
+              BindingFlags.NonPublic | BindingFlags.Instance)!
+            .Invoke(panel, null)!;
+          float zoom = clientBounds.Width / preview!.Width;
+          int px = (int)(clientBounds.X + (letterBounds.X + 2) * zoom);
+          int py = (int)(clientBounds.Y + (letterBounds.Y + 2) * zoom);
+          float priorX = Field<SstvTextLayer[]>(panel, "textLayers")[0].X;
+          Invoke(panel, "OnTxPictureMouseDown", previewBox,
+            new MouseEventArgs(MouseButtons.Left, 1, px, py, 0));
+          Invoke(panel, "OnTxPictureMouseMove", previewBox,
+            new MouseEventArgs(MouseButtons.Left, 1, px + 24, py, 0));
+          Assert.NotEqual(priorX, Field<SstvTextLayer[]>(panel, "textLayers")[0].X);
+          Assert.Equal(8f, Field<SstvTextLayer[]>(panel, "textLayers")[1].SizePercent);
           // Render actual production UI surfaces into CI attachments.
           // This confirms a real WinForms paint path without requiring
           // any connected transceiver or a simulated RF key-up.
