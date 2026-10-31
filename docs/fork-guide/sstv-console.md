@@ -14,7 +14,7 @@ RX and TX now share the **same orange/black MMSSTV-style AF/IF tone ruler**, lab
 
 ## MMSSTV-style TX workspace
 
-The TX page now has a picture-edit toolbar across the top, a large image preview at left, a fast 43-mode selector with station/QSO/caption controls at right, and clickable recent/transmitted-image thumbnails below. Quick modes and the standard mode dropdown are synchronized. A small orange tone scale indicates **AF frequency reference marks** (1200/1500/1900/2300 Hz); it is not a live TX spectrum. Station details include MY/HIS calls, TX/RX RST reports, name, QTH, and notes. RST/name/QTH are preserved in JSONL and exported to ADIF. The side editor scrolls at small dock-window dimensions.
+The TX page now has a picture-edit toolbar across the top, a large image preview at left, a fast 43-mode selector with station/QSO/caption controls at right, and clickable recent/transmitted-image thumbnails below. Quick modes and the standard mode dropdown are synchronized. A small orange tone scale indicates **AF frequency reference marks** (1200/1500/1900/2300 Hz); it is not a live TX spectrum. Station details include MY/HIS calls, TX/RX RSV reports, name, QTH, and notes. RST/name/QTH are preserved in JSONL and exported to ADIF. The side editor scrolls at small dock-window dimensions.
 
 ## Multiple captions, RSV and picture performance
 
