@@ -188,9 +188,18 @@ namespace VE3NEA.Dsp.Tests
 
     private sealed class UiFixture : IDisposable
     {
-      private readonly Context context = new();
+      // No CAT/PTT or PaletteManager is needed for pure UI testing.
+      // A full Context constructor writes shared palette fixture files,
+      // racing unrelated GPU tests when xUnit runs in parallel.
+      private readonly Context context;
       public readonly SstvConsolePanel Panel;
-      public UiFixture() => Panel = new SstvConsolePanel(context);
+      public UiFixture()
+      {
+        context = (Context)System.Runtime.CompilerServices.RuntimeHelpers
+          .GetUninitializedObject(typeof(Context));
+        context.Settings = new SkyRoof.Settings();
+        Panel = new SstvConsolePanel(context);
+      }
       public void Dispose() => Panel.Close();
     }
   }
