@@ -24,6 +24,12 @@ namespace VE3NEA.Dsp.Tests
         false, false, Started.AddSeconds(-1),
         Started, Started.AddSeconds(1)));
 
+      // Even a hardware OFF sample taken before *this* OFF request must
+      // not be reused to clear the persistent fail-closed PTT alarm.
+      Assert.False(SstvTxPolicy.HasConfirmedPttOff(
+        false, false, Started.AddMilliseconds(500),
+        Started.AddMilliseconds(600), Started.AddMilliseconds(700)));
+
       // A fresh readback of ON, or unresolved owned PTT, must fail closed.
       Assert.False(SstvTxPolicy.HasConfirmedPttOff(
         true, false, Started.AddMilliseconds(400),
