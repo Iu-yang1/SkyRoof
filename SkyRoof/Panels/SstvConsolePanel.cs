@@ -1500,7 +1500,9 @@ namespace SkyRoof
           TheirCallText = theirCallInput.Text,
           MyCallStyle = textLayers[0].Normalized(),
           TheirCallStyle = textLayers[1].Normalized(),
-          OverlayStyle = textLayers[2].Normalized()
+          OverlayStyle = textLayers[2].Normalized(),
+          ExtraCaptions = extraCaptions.Select(x =>
+            x with { Style = x.Style.Normalized() }).ToArray()
         };
         SstvTemplateStore.Save(TemplatePath, record);
         ReloadUserTemplates();
@@ -1529,6 +1531,13 @@ namespace SkyRoof
       textLayers[0] = (selected.MyCallStyle ?? SstvTextLayer.MyCallDefault).Normalized();
       textLayers[1] = (selected.TheirCallStyle ?? SstvTextLayer.TheirCallDefault).Normalized();
       textLayers[2] = (selected.OverlayStyle ?? SstvTextLayer.CustomDefault).Normalized();
+      extraCaptions.Clear();
+      extraCaptions.AddRange((selected.ExtraCaptions ?? Array.Empty<SstvAdditionalCaption>())
+        .Take(5).Select(x => x with { Style = x.Style.Normalized() }));
+      while (textLayerBox.Items.Count > 3) textLayerBox.Items.RemoveAt(3);
+      for (int i = 0; i < extraCaptions.Count; i++)
+        textLayerBox.Items.Add("文字图层 " + (i + 4));
+      if (textLayerBox.SelectedIndex < 0) textLayerBox.SelectedIndex = 0;
       UpdateTextEditorControls();
     }
 
@@ -1739,11 +1748,11 @@ namespace SkyRoof
       if (e.Button != MouseButtons.Left || !TryPicturePoint(e.Location, out PointF pixel))
         return;
       if (txPicture.Image is not Bitmap preview) return;
-      for (int i = textBounds.Length - 1; i >= 0; i--)
+      for (int i = TextLayerCount - 1; i >= 0; i--)
       {
         if (!textBounds[i].Contains(pixel)) continue;
         textLayerBox.SelectedIndex = i;
-        SstvTextLayer layer = textLayers[i];
+        SstvTextLayer layer = GetTextLayer(i);
         textDragOffset = new PointF(layer.X - pixel.X / preview.Width,
           layer.Y - pixel.Y / preview.Height);
         movingText = true;
@@ -1758,11 +1767,11 @@ namespace SkyRoof
           !TryPicturePoint(e.Location, out PointF pixel) ||
           txPicture.Image is not Bitmap preview) return;
       int index = Math.Max(0, textLayerBox.SelectedIndex);
-      textLayers[index] = (textLayers[index] with
+      SetTextLayer(index, GetTextLayer(index) with
       {
         X = textDragOffset.X + pixel.X / preview.Width,
         Y = textDragOffset.Y + pixel.Y / preview.Height
-      }).Normalized();
+      });
       RefreshTxPreview();
     }
 
@@ -1878,23 +1887,25 @@ namespace SkyRoof
         (modeBox.SelectedItem as SstvTxModeProfile)?.Name ?? "SSTV",
         radio.IsTerrestrial ? 0 : radio.CorrectedUplinkFrequency,
         radio.CorrectedDownlinkFrequency,
-        DateTime.UtcNow);
-      string[] captions =
+        DateTime.UtcNow)
       {
-        SstvTextMacros.Expand(myCallInput.Text.Trim(), macros),
-        SstvTextMacros.Expand(theirCallInput.Text.Trim(), macros),
-        SstvTextMacros.Expand(overlayText.Text, macros)
+        RstSent = txRstSent.Text,
+        RstReceived = txRstReceived.Text,
+        ContactName = txContactName.Text,
+        ContactQth = txContactQth.Text,
+        Notes = txQsoNote.Text
       };
       for (int i = 0; i < textBounds.Length; i++)
       {
         textBounds[i] = RectangleF.Empty;
-        if (template == "纯图片" || string.IsNullOrWhiteSpace(captions[i]))
-          continue;
-        SstvTextLayer layout = textLayers[i].Normalized();
+        if (i >= TextLayerCount || template == "纯图片") continue;
+        string caption = SstvTextMacros.Expand(GetCaptionText(i), macros);
+        if (string.IsNullOrWhiteSpace(caption)) continue;
+        SstvTextLayer layout = GetTextLayer(i).Normalized();
         float fontSize = Math.Max(7, canvas.Width * layout.SizePercent / 100f);
         using var font = new Font(FontFamily.GenericSansSerif, fontSize, FontStyle.Bold,
           GraphicsUnit.Pixel);
-        SizeF size = g.MeasureString(captions[i], font);
+        SizeF size = g.MeasureString(caption, font);
         float x = Math.Clamp(canvas.Width * layout.X,
           0, Math.Max(0, canvas.Width - size.Width));
         float y = Math.Clamp(canvas.Height * layout.Y,
@@ -1902,8 +1913,8 @@ namespace SkyRoof
         textBounds[i] = new RectangleF(x, y, size.Width, size.Height);
         using var shadow = new SolidBrush(Color.FromArgb(200, 0, 0, 0));
         using var foreground = new SolidBrush(Color.FromArgb(layout.ColorArgb));
-        g.DrawString(captions[i], font, shadow, x + 1.5f, y + 1.5f);
-        g.DrawString(captions[i], font, foreground, x, y);
+        g.DrawString(caption, font, shadow, x + 1.5f, y + 1.5f);
+        g.DrawString(caption, font, foreground, x, y);
       }
       return canvas;
     }
