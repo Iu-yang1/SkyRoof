@@ -103,7 +103,7 @@ namespace SkyRoof.SSTV
       return first;
     }
 
-    private static void EmitVis(WaveOscillator writer, int visCode)
+    internal static void EmitVis(WaveOscillator writer, int visCode)
     {
       writer.Tone(SstvTones.Center, SstvTones.VisLeaderMs);
       writer.Tone(SstvTones.Sync, SstvTones.VisBreakMs);
@@ -121,7 +121,7 @@ namespace SkyRoof.SSTV
     }
 
     /// <summary>Continuous phase oscillator, 16-bit PCM with bounded blocks.</summary>
-    private sealed class WaveOscillator : IDisposable
+    internal sealed class WaveOscillator : IDisposable
     {
       private readonly WaveFileWriter output;
       private readonly byte[] bytes = new byte[8192];
