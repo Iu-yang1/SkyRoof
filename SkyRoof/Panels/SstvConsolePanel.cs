@@ -210,6 +210,7 @@ namespace SkyRoof
       bar.Controls.Add(autoVisCorrection);
       var actions = Toolbar();
       actions.Controls.Add(Btn("导入 WAV", () => _ = ReplayWavAsync()));
+      actions.Controls.Add(Btn("手动开始", ManualStartReceive, 98));
       actions.Controls.Add(Btn("保存图片", SaveReceivedImage));
       actions.Controls.Add(Btn("复制图片", () =>
       {
@@ -579,6 +580,24 @@ namespace SkyRoof
         MessageBox.Show(this, ex.Message, "无法启动接收",
           MessageBoxButtons.OK, MessageBoxIcon.Warning);
       }
+    }
+
+    private void ManualStartReceive()
+    {
+      if (rxModeBox.SelectedItem is not SstvTxModeProfile mode)
+      {
+        MessageBox.Show(this, "请先在接收模式中选定具体模式。", "SSTV",
+          MessageBoxButtons.OK, MessageBoxIcon.Information);
+        return;
+      }
+      if (!receiveSession.IsRunning)
+      {
+        MessageBox.Show(this, "请先启动接收声卡。", "SSTV",
+          MessageBoxButtons.OK, MessageBoxIcon.Information);
+        return;
+      }
+      receiveSession.ManualStart(mode);
+      rxStatus.Text = $"已请求手动开始 {mode.Name}，等待扫描行";
     }
 
     private void OnVisSynchronized(SstvVisAfcLock header)

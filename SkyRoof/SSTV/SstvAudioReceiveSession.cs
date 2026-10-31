@@ -39,7 +39,13 @@ namespace SkyRoof.SSTV
     private Task? worker;
     private int epoch;
     private int dropped;
+    private SstvTxModeProfile? manuallyRequestedMode;
     private int manualCorrectionHz;
+    public void ManualStart(SstvTxModeProfile mode)
+    {
+      ObjectDisposedException.ThrowIf(disposed, this);
+      Interlocked.Exchange(ref manuallyRequestedMode, mode);
+    }
     private int autoVisCorrectionHz;
     private bool autoVisEnabled = true;
     public bool AutoVisEnabled
@@ -78,6 +84,7 @@ namespace SkyRoof.SSTV
       if (string.IsNullOrWhiteSpace(deviceId))
         throw new ArgumentException("Choose a valid soundcard endpoint.", nameof(deviceId));
       Stop();
+      Interlocked.Exchange(ref manuallyRequestedMode, null);
       var queue = Channel.CreateBounded<float[]>(new BoundedChannelOptions(16)
       {
         SingleReader = true,
@@ -216,6 +223,9 @@ namespace SkyRoof.SSTV
           // Detect the full VIS sequence on UNCORRECTED AF so the NCO
           // does not introduce self-referential tone estimates.
           visDetector.Process(af);
+          SstvTxModeProfile? forced =
+            Interlocked.Exchange(ref manuallyRequestedMode, null);
+          if (forced != null) raster.ForceMode(forced);
           raster.Process(af);
           int correction = Math.Clamp(ManualCorrectionHz +
             (AutoVisEnabled ? AutoVisCorrectionHz : 0), -500, 500);

@@ -33,6 +33,24 @@ namespace SkyRoof.SSTV
     public string CurrentMode => profile?.Name ?? "";
     public double CorrectionHz => -offsetHz;
 
+    /// <summary>
+    /// Operator fallback when VIS is lost to fading. The operator should
+    /// click at the start of the next picture/row; phase/slant correction
+    /// remains an independent acquisition problem.
+    /// </summary>
+    public void ForceMode(SstvTxModeProfile mode)
+    {
+      ArgumentNullException.ThrowIfNull(mode);
+      if (mode.Native != null)
+        throw new NotSupportedException(
+          "Robot/PD is decoded by the native SkySignals stream.");
+      Reset();
+      demod = new SstvAfToneDiscriminator();
+      profile = mode;
+      picture = new Bitmap(mode.Width, mode.Height);
+      offsetHz = 0;
+    }
+
     public void Process(ReadOnlySpan<float> af)
     {
       if (disposed) throw new ObjectDisposedException(nameof(SstvLiveRasterReceiver));
