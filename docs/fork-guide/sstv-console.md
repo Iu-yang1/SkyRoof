@@ -16,6 +16,12 @@ RX and TX now share the **same orange/black MMSSTV-style AF/IF tone ruler**, lab
 
 The TX page now has a picture-edit toolbar across the top, a large image preview at left, a fast 43-mode selector with station/QSO/caption controls at right, and clickable recent/transmitted-image thumbnails below. Quick modes and the standard mode dropdown are synchronized. A small orange tone scale indicates **AF frequency reference marks** (1200/1500/1900/2300 Hz); it is not a live TX spectrum. Station details include MY/HIS calls, TX/RX RST reports, name, QTH, and notes. RST/name/QTH are preserved in JSONL and exported to ADIF. The side editor scrolls at small dock-window dimensions.
 
+## Multiple captions, RSV and picture performance
+
+The editor supports **up to eight independent text layers** (three original layers plus five new captions) with add/duplicate/remove, editable content, per-layer color/size and dragging. Select a variable and insert it into the active layer: `MYCALL`, `HISCALL`, `MYGRID`, `SAT`, `MODE`, `RSV_TX`, `RSV_RX`, `NAME`, `QTH`, `NOTE`, `UTC`, `DATE`, `HHMMSS`, `TXMHZ`, `RXMHZ` and existing aliases. Three-layer template files remain supported; extra layers are persisted automatically.
+
+SSTV signal-report UI labels now use **RSV**. Exported ADIF retains the standardized `RST_SENT`/`RST_RCVD` field names. Large photos are downscaled at load time, archival thumbnails are cached, undo/redo transfers bitmap ownership and RX PNGs can be saved by direct file copy.
+
 ## TX picture editing
 
 Open or paste an image and select a mode. The editor provides separate **My callsign**, **Their callsign**, and **custom caption** fields. Choose a layer in **Edit object**, adjust its font size (percentage of image width) and color, or **drag its text in the preview** to position it. Use the mouse wheel above the preview to resize the selected text layer.
