@@ -63,6 +63,9 @@ namespace SkyRoof
     internal static bool? PendingAfterPttAck(bool? pending, bool completedPtt) =>
       pending.HasValue && pending.Value == completedPtt ? null : pending;
 
+    internal static bool ShouldAttemptPtt(bool ctcssReady, bool? requestedPtt) =>
+      requestedPtt == false || ctcssReady;
+
     // CTCSS encode state requested by the UI. CtcssEnabled is null until the app sets it,
     // CtcssPending is true while the state still has to be written to the radio
     private double CtcssTone = CtcssTones.DEFAULT_TONE;
@@ -385,7 +388,10 @@ namespace SkyRoof
       // If a requested CTCSS update failed, do not key the transmitter with a
       // stale/unknown encoder state. Keep the write pending and retry next cycle.
       bool ctcssReady = !NeedToWriteCtcss() || TryWriteCtcss();
-      if (ctcssReady) TryWritePtt();
+      // CTCSS readiness may block KEYING, but must NEVER block emergency
+      // UNKEY. A failed tone write while SSTV is transmitting cannot keep
+      // PTT ON merely because the encoder remains in an unknown state.
+      if (ShouldAttemptPtt(ctcssReady, GetRequestedPtt())) TryWritePtt();
 
       if (NeedToReadRxFrequency()) TryReadRxFrequency();
       if (NeedToReadTxFrequency()) TryReadTxFrequency();
