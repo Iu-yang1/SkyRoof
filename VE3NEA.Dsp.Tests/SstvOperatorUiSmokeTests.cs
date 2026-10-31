@@ -54,8 +54,8 @@ namespace VE3NEA.Dsp.Tests
           Assert.False(Field<CheckBox>(panel, "txApproval").Checked);
           Assert.False(Field<Button>(panel, "txStopButton").Enabled);
           Assert.True(Field<CheckBox>(panel, "autoVisCorrection").Checked);
-          Assert.Equal(500, Field<NumericUpDown>(panel, "pitchCorrection").Maximum);
-          Assert.Equal(-500, Field<NumericUpDown>(panel, "pitchCorrection").Minimum);
+          Assert.Equal(500m, Field<NumericUpDown>(panel, "pitchCorrection").Maximum);
+          Assert.Equal(-500m, Field<NumericUpDown>(panel, "pitchCorrection").Minimum);
 
           using var image = new Bitmap(200, 120);
           using (var g = Graphics.FromImage(image)) g.Clear(Color.CornflowerBlue);
@@ -88,6 +88,15 @@ namespace VE3NEA.Dsp.Tests
           var receive = tabs.TabPages[0];
           Assert.Contains(receive.Controls.OfType<SstvToneSpectrumView>(),
             view => view.Height >= 90);
+          var rxPicture = Field<PictureBox>(panel, "rxPicture");
+          rxPicture.Tag = "old-image.png";
+          panel.ShowReceivedSstv(image, "Martin 1", false, null);
+          Assert.Null(rxPicture.Tag);
+          Assert.Contains("正在接收", Field<Label>(panel, "rxStatus").Text);
+          panel.ShowReceivedSstv(image, "Martin 1", true, null);
+          Assert.Equal("Martin 1", Field<string>(panel, "lastReceivedMode"));
+          Assert.Null(rxPicture.Tag);
+          Assert.Contains("接收完成", Field<Label>(panel, "rxStatus").Text);
           tabs.SelectedIndex = 3;
           Assert.Equal("通联日志", tabs.SelectedTab?.Text);
         }
