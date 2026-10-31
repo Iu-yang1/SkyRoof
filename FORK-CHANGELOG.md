@@ -4,6 +4,10 @@ Release date / 发布日期: 2026-10-31. SSTV Console integration release.
 
 ## English — changes since v.1.61
 
+- v1.62 gallery hotfix: selecting a thumbnail no longer duplicates its entry; right-click now opens a context menu.
+- Gallery/History adds image import, export and delete (including a confirmation prompt).
+- RX and TX use the same MMSSTV-style orange/black AF/IF reference with numeric 1200/1500/1900/2300 Hz labels only; RX retains a live trace within the lower strip.
+
 - v1.62 replacement build: RX mode dropdown now includes all 43 TX profile names (Robot/PD remain native auto-decoded).
 - TX editor has separate MY/DX callsign and custom caption layers, independent font colors/sizes and mouse dragging.
 - Existing user templates can be deleted; saved layouts persist per-layer positions, color, size and callsigns without breaking older template JSON.
@@ -16,6 +20,10 @@ Release date / 发布日期: 2026-10-31. SSTV Console integration release.
 - Corrected MC110-N scan timing and optimized cached CAT-state sampling and SSTV STOP feedback.
 
 ## 中文 — 相对 v.1.61 的变化
+
+- v1.62 图库修复：选中已有缩略图不再重复添加，右键弹出操作菜单。
+- 图库／历史增加导入、导出与删除图片功能（删除需确认）。
+- RX/TX 采用同一橙黑色 MMSSTV 音调刻度，只有 1200、1500、1900、2300 Hz 数字，RX 下方黑色区显示 AF/IF 活动。
 
 - v1.62 替换构建：RX 模式下拉框补全全部 43 种 TX 制式，Robot/PD 仍使用原生自动 VIS 解码。
 - TX 独立己方呼号、对方呼号及自由文字三图层，支持分别设置字体大小、颜色和鼠标拖动定位。
