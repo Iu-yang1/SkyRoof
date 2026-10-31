@@ -24,7 +24,7 @@ namespace VE3NEA.Dsp.Tests
     [Fact]
     public void VirtualRadio_StopReturnsToReceiveAndDoesNotRekey()
     {
-      using var rig = new VirtualRig();
+      using var rig = new VirtualRig { UseCrLf = true };
       using var cat = StartCat(rig);
       cat.SetPtt(true);
       Assert.True(Until(() => rig.IsTransmitting && cat.Ptt), "Virtual PTT ON was not received");
@@ -99,6 +99,7 @@ namespace VE3NEA.Dsp.Tests
       public string Commands => string.Join(" | ", trace);
       public string? LastError { get; private set; }
       public bool DropAfterFirstKey { get; set; }
+      public bool UseCrLf { get; set; }
       public bool IsTransmitting => Volatile.Read(ref keyed) != 0;
       public int OnCommands => Volatile.Read(ref onCommands);
       public int OffCommands => Volatile.Read(ref offCommands);
@@ -125,7 +126,7 @@ namespace VE3NEA.Dsp.Tests
             using var reader = new StreamReader(stream, Encoding.ASCII,
               detectEncodingFromByteOrderMarks: false, leaveOpen: true);
             using var writer = new StreamWriter(stream, Encoding.ASCII,
-              leaveOpen: true) { NewLine = "\n", AutoFlush = true };
+              leaveOpen: true) { NewLine = UseCrLf ? "\r\n" : "\n", AutoFlush = true };
             while (!stop.IsCancellationRequested)
             {
               string? line = await reader.ReadLineAsync(stop.Token);
