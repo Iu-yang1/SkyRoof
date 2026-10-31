@@ -29,25 +29,46 @@ namespace SkyRoof.SSTV
           wave.WaveFormat.Channels != 1 ||
           wave.WaveFormat.BitsPerSample != 16)
         throw new InvalidDataException("仅支持 48 kHz / 16-bit / 单声道 SSTV WAV 录音。");
-      // A normal receiver may have leading silence or speech. Search the
-      // first 8 seconds, including full extended (1.15-s) headers.
-      int maxSamples = (int)Math.Min(wave.Length / 2, 48000 * 8L);
-      byte[] pcm = new byte[maxSamples * 2];
-      int total = 0;
-      while (total < pcm.Length)
+      // Real recordings may begin with speech or long silence. A
+      // documented QO-100 reference capture begins its VIS near 34 sec,
+      // so an 8-second-only scan is not sufficient. Read bounded 8-sec
+      // windows with 2-sec overlap; cover every complete 1.15-sec VIS
+      // header without allocating the entire multi-minute recording.
+      const int windowSamples = 48000 * 8;
+      const int stepSamples = 48000 * 6;
+      byte[] pcm = new byte[windowSamples * 2];
+      float[] af = new float[windowSamples];
+      long totalSamples = wave.Length / wave.WaveFormat.BlockAlign;
+      for (long begin = 0; begin < totalSamples; begin += stepSamples)
       {
-        int got = wave.Read(pcm, total, pcm.Length - total);
-        if (got == 0) break;
-        total += got;
+        wave.Position = begin * wave.WaveFormat.BlockAlign;
+        int wanted = checked((int)Math.Min(
+          (long)windowSamples * wave.WaveFormat.BlockAlign,
+          (totalSamples - begin) * wave.WaveFormat.BlockAlign));
+        int received = 0;
+        while (received < wanted)
+        {
+          int got = wave.Read(pcm, received, wanted - received);
+          if (got <= 0) break;
+          received += got;
+        }
+        int sampleCount = received / wave.WaveFormat.BlockAlign;
+        if (sampleCount < 20000) break;
+        for (int i = 0; i < sampleCount; i++)
+        {
+          int at = i * 2;
+          short sample = (short)(pcm[at] | pcm[at + 1] << 8);
+          af[i] = sample / 32768f;
+        }
+        SstvVisModeIdentity? match = DetectAudio(af.AsSpan(0, sampleCount));
+        if (match.HasValue)
+          return match.Value with
+          {
+            LeadingAudio = TimeSpan.FromSeconds(
+              (double)begin / 48000) + match.Value.LeadingAudio
+          };
       }
-      var af = new float[total / 2];
-      for (int i = 0; i < af.Length; i++)
-      {
-        int at = i * 2;
-        short sample = (short)(pcm[at] | pcm[at + 1] << 8);
-        af[i] = sample / 32768f;
-      }
-      return DetectAudio(af);
+      return null;
     }
 
     /// <summary>
