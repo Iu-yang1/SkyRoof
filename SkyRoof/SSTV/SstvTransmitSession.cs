@@ -22,6 +22,7 @@ namespace SkyRoof.SSTV
     private int ownPttRequested;
     private int releaseUnconfirmed;
     private long latestOwnPttRequestUtcTicks;
+    private long latestPttReleaseRequestUtcTicks;
     private bool disposed;
 
     public bool RequiresPttVerification => Volatile.Read(ref releaseUnconfirmed) != 0;
@@ -34,11 +35,11 @@ namespace SkyRoof.SSTV
     {
       if (!RequiresPttVerification) return true;
       var cat = ctx.CatControl?.Tx;
-      long ticks = Interlocked.Read(ref latestOwnPttRequestUtcTicks);
+      long ticks = Interlocked.Read(ref latestPttReleaseRequestUtcTicks);
       if (cat == null || ticks <= 0 ||
           !SstvTxPolicy.HasConfirmedPttOff(
             cat.Ptt, cat.PttMayBeOwnedByApplication,
-            cat.LastPttHardwareReadbackUtc,
+            cat.LastPttOffHardwareReadbackUtc,
             new DateTime(ticks, DateTimeKind.Utc), DateTime.UtcNow))
         return false;
       Interlocked.Exchange(ref releaseUnconfirmed, 0);
@@ -112,7 +113,7 @@ namespace SkyRoof.SSTV
         link.HasObservation, link.IsAboveHorizon,
         link.CorrectedUplinkFrequency, lo,
         cat.LastReadTxFrequency, cat.Ptt,
-        cat.LastPttHardwareReadbackUtc, DateTime.UtcNow);
+        cat.LastPttOnHardwareReadbackUtc, DateTime.UtcNow);
     }
 
     public async Task SendWavAsync(
@@ -184,7 +185,7 @@ namespace SkyRoof.SSTV
         {
           await Task.Delay(100, local.Token);
           if (cat.Ptt &&
-              cat.LastPttHardwareReadbackUtc >= requestedUtc &&
+              cat.LastPttOnHardwareReadbackUtc >= requestedUtc &&
               CheckLiveGuard(guard))
           {
             acknowledged = true;
@@ -243,6 +244,9 @@ namespace SkyRoof.SSTV
         {
           if (pttRequested)
           {
+            DateTime releaseRequestUtc = DateTime.UtcNow;
+            Interlocked.Exchange(ref latestPttReleaseRequestUtcTicks,
+              releaseRequestUtc.Ticks);
             ctx.FrequencyControl.ReleaseApplicationPtt();
             var radio = ctx.CatControl.Tx;
             for (int attempt = 0; attempt < 40; attempt++)
@@ -250,7 +254,7 @@ namespace SkyRoof.SSTV
               if (radio != null &&
                   SstvTxPolicy.HasConfirmedPttOff(
                     radio.Ptt, radio.PttMayBeOwnedByApplication,
-                    radio.LastPttHardwareReadbackUtc, pttRequestUtc,
+                    radio.LastPttOffHardwareReadbackUtc, releaseRequestUtc,
                     DateTime.UtcNow))
               {
                 confirmedOff = true;
