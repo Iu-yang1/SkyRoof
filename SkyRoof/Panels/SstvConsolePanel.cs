@@ -156,7 +156,13 @@ namespace SkyRoof
         "经典呼号", "QSL 卡片", "卫星横幅", "纯图片"
       });
       templateBox.SelectedIndex = 0;
-      templateBox.SelectedIndexChanged += (_, _) => RefreshTxPreview();
+      templateBox.SelectedIndexChanged += (_, _) =>
+      {
+        if (templateBox.SelectedItem is SstvUserTemplate selected)
+          overlayText.Text = selected.OverlayText;
+        RefreshTxPreview();
+      };
+      ReloadUserTemplates();
       archiveList.DoubleClick += (_, _) => ShowSelectedHistory();
       txSendButton.Click += (_, _) => _ = SendImageAsync();
       txStopButton.Click += (_, _) => transmitSession.RequestStop();
@@ -224,6 +230,7 @@ namespace SkyRoof
       bar.Controls.Add(Btn("镜像", MirrorImage, 60));
       bar.Controls.Add(Btn("裁剪", CropImage, 60));
       bar.Controls.Add(templateBox);
+      bar.Controls.Add(Btn("保存模板", SaveUserTemplate, 95));
       bar.Controls.Add(new Label
       {
         Text = "模式", Width = 36, Height = 30,
@@ -751,6 +758,77 @@ namespace SkyRoof
       tabs.SelectedIndex = 1;
     }
 
+    private string TemplatePath =>
+      SstvTemplateStore.DefaultPath(Utils.GetUserDataFolder());
+
+    private void ReloadUserTemplates()
+    {
+      try
+      {
+        for (int i = templateBox.Items.Count - 1; i >= 0; i--)
+          if (templateBox.Items[i] is SstvUserTemplate)
+            templateBox.Items.RemoveAt(i);
+        foreach (SstvUserTemplate entry in SstvTemplateStore.Read(TemplatePath))
+          templateBox.Items.Add(entry);
+      }
+      catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+      {
+        txStatus.Text = "图片模板无法读取";
+      }
+    }
+
+    private void SaveUserTemplate()
+    {
+      using var dialog = new Form
+      {
+        Text = "保存图片模板", Size = new Size(380, 175),
+        MinimumSize = new Size(380, 175), MaximumSize = new Size(380, 175),
+        FormBorderStyle = FormBorderStyle.FixedDialog,
+        StartPosition = FormStartPosition.CenterParent,
+        MaximizeBox = false, MinimizeBox = false
+      };
+      var label = new Label
+      {
+        Text = "模板名称", Left = 18, Top = 18, Width = 75, Height = 28
+      };
+      var input = new TextBox { Left = 98, Top = 15, Width = 255 };
+      var ok = new Button
+      {
+        Text = "保存", Left = 172, Top = 65, Width = 88,
+        DialogResult = DialogResult.OK
+      };
+      var cancel = new Button
+      {
+        Text = "取消", Left = 265, Top = 65, Width = 88,
+        DialogResult = DialogResult.Cancel
+      };
+      dialog.Controls.AddRange(new Control[] { label, input, ok, cancel });
+      dialog.AcceptButton = ok;
+      dialog.CancelButton = cancel;
+      if (dialog.ShowDialog(this) != DialogResult.OK) return;
+      try
+      {
+        string style = templateBox.SelectedItem is SstvUserTemplate source
+          ? source.Style : templateBox.SelectedItem?.ToString() ?? "经典呼号";
+        var record = new SstvUserTemplate(input.Text.Trim(), style,
+          overlayText.Text, DateTime.UtcNow);
+        SstvTemplateStore.Save(TemplatePath, record);
+        ReloadUserTemplates();
+        for (int i = 0; i < templateBox.Items.Count; i++)
+          if (templateBox.Items[i] is SstvUserTemplate candidate &&
+              candidate.Name == record.Name)
+          {
+            templateBox.SelectedIndex = i;
+            break;
+          }
+      }
+      catch (Exception ex)
+      {
+        MessageBox.Show(this, ex.Message, "无法保存图片模板",
+          MessageBoxButtons.OK, MessageBoxIcon.Warning);
+      }
+    }
+
     private void UndoImage()
     {
       if (txBase == null || !undoImages.TryPop(out Bitmap? prior)) return;
@@ -811,7 +889,8 @@ namespace SkyRoof
       g.InterpolationMode = InterpolationMode.HighQualityBicubic;
       g.Clear(Color.Black);
       g.DrawImage(txBase, new Rectangle(0, 0, canvas.Width, canvas.Height));
-      string template = templateBox.SelectedItem?.ToString() ?? "经典呼号";
+      string template = templateBox.SelectedItem is SstvUserTemplate saved
+        ? saved.Style : templateBox.SelectedItem?.ToString() ?? "经典呼号";
       if (template == "QSL 卡片")
       {
         using var panel = new SolidBrush(Color.FromArgb(205, 16, 27, 43));
