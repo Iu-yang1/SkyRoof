@@ -13,6 +13,7 @@ namespace SkyRoof.AFC
 
     private long generation = -1;
     private DateTime phaseStartedUtc, baselineSampleUtc, probedSampleUtc;
+    private DateTime lastIndependentSampleUtc;
     private double baselineCatHz, baselineIfHz;
     private double probedCatHz, probedIfHz;
     private double previousWaitingIfHz = double.NaN;
@@ -39,7 +40,8 @@ namespace SkyRoof.AFC
     public void Reset()
     {
       generation = -1;
-      phaseStartedUtc = baselineSampleUtc = probedSampleUtc = default;
+      phaseStartedUtc = baselineSampleUtc = probedSampleUtc =
+        lastIndependentSampleUtc = default;
       baselineCatHz = baselineIfHz = probedCatHz = probedIfHz = 0;
       previousWaitingIfHz = double.NaN;
       stableSamples = phaseVotes = candidateSign = 0;
@@ -88,6 +90,16 @@ namespace SkyRoof.AFC
           : "CAT restoration readback or settled IF response timed out");
         return;
       }
+
+      // Independent IF evidence must come from genuinely distinct
+      // measurements, not repeated UI/timer delivery of the same buffer.
+      // Eligibility and watchdog checks intentionally happen before this
+      // guard so PTT/retarget changes still abort a pending probe.
+      if (observation.SampleUtc.Kind != DateTimeKind.Utc ||
+          (lastIndependentSampleUtc != default &&
+           observation.SampleUtc <= lastIndependentSampleUtc))
+        return;
+      lastIndependentSampleUtc = observation.SampleUtc;
 
       bool valid = observation.HasAbsoluteReference &&
         !observation.Ambiguous && observation.Confidence >= .7 &&
