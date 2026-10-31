@@ -31,8 +31,8 @@ PTT is requested only after WAV generation and WASAPI initialization. The code t
 ## Current compatibility boundary
 
 - RX: Robot 36/72 + PD family using the existing SkySignals decoder; 12 kHz real-IF frontend requires one clean sideband.
-- TX: Robot 36/72 + PD family, 48 kHz mono WAV and experimental guarded on-air playback.
-- Still missing: full Martin/Scottie/AVT/SC2/P3/P5/P7/MP/MR/ML/extended/N-VIS receive-and-transmit parity, full image editor/templates/macros, automated VIS/sync-driven SSTV AF AFC, independent IC-9700 bench verification, and dedicated long-run on-air fault-injection tests.
+- TX: Robot 36/72 + PD family, plus Scottie 1/2/DX, Martin 1/2 and SC2 60/120/180 RGB family, 48 kHz mono WAV and experimental guarded on-air playback. RGB modes use timing and VIS definitions audited against MMSSTV Main.cpp. **This addition does not extend RX compatibility.**
+- Still missing: Martin/Scottie/SC2 **RX**, AVT/P3/P5/P7/MP/MR/ML/extended/N-VIS receive-and-transmit parity, full image editor/templates/macros, automated VIS/sync-driven SSTV AF AFC, independent IC-9700 bench verification, and dedicated long-run on-air fault-injection tests.
 
 No stable Release should be made until the source-to-target compatibility matrix, CAT/PTT real-radio checks, and production acceptance pass.
 
