@@ -181,7 +181,7 @@ jobs:
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           name: SkyRoof Fork v.${{ steps.get_version.outputs.version }}
-          prerelease: ${{ env.SIGNPATH_AVAILABLE != 'true' }}
+          prerelease: false
           tag_name: v.${{ steps.get_version.outputs.version }}
           overwrite_files: true
           fail_on_unmatched_files: true
@@ -190,6 +190,8 @@ jobs:
             SkyRoof Fork v.${{ steps.get_version.outputs.version }} (based on VE3NEA/SkyRoof v.1.56)
 
             ### English
+            - SSTV editor now supports up to eight independently movable/colorable/sizeable text layers, duplicate and delete layers, and an insertable macro menu for callsigns, RSV, QTH, time and MHz.
+            - Image loading downscales large originals, clipboard images use the same bounded pipeline, and thumbnails reuse cached image previews.
             - SSTV gallery: thumbnail left-click reuses an existing picture without adding duplicates; right-click opens actions; history tab can import/export/delete images.
             - RX and TX share a numeric-only 1200/1500/1900/2300 Hz orange/black MMSSTV tone scale; the RX lower strip displays AF/IF activity.
             - SSTV RX mode dropdown now lists all 43 TX profiles, including native Robot/PD; native modes continue automatic VIS decoding.
@@ -209,6 +211,8 @@ jobs:
             - Preserve TX frequency and persistent satellite/transponder offsets.
 
             ### 中文
+            - SSTV 图片编辑器现支持最多八个独立文字图层，允许复制、删除、缩放、拖动与更改文字颜色；变量菜单新增呼号、RSV、QTH、UTC 与 MHz。
+            - 优化大尺寸图片加载、剪贴板图像处理和缩略图缓存，减少重复解码与生成。
             - 修复 SSTV 缩略图左右键导致重复新增的问题；图库／历史增加导入、导出及删除图片。
             - RX/TX 使用统一的 MMSSTV 橙黑色 1200/1500/1900/2300 Hz 音调参考，RX 黑色区域显示 AF/IF 频谱。
             - SSTV 接收模式列表与发射端 43 种模式保持一致，包含由原生解码器自动识别的 Robot/PD。
@@ -229,7 +233,7 @@ jobs:
             Full changelog / 完整更新记录:
             https://github.com/Iu-yang1/SkyRoof/blob/master/FORK-CHANGELOG.md
 
-            Unsigned installers are published as pre-releases. / 未签名安装包仅作为预发布版本提供。
+            Official release; Windows installer may be unsigned. / 正式发布；Windows 安装包可能未进行数字签名。
           # body: This is an experimental build, please ignore.
           files:  install/SkyRoofSetup-v.${{ steps.get_version.outputs.version }}.exe
         env:
