@@ -788,15 +788,49 @@ namespace SkyRoof.AFC
           : T("● IF 采集已启动", "● IF capture running")
         : T("○ IF 未连接", "○ IF disconnected");
       inputStatus.ForeColor = input.IsRunning ? palette.Good : palette.Muted;
+      var pipeline = input.Diagnostics;
+      bool measured = s.LastObservationUtc != default && s.Confidence >= .6 &&
+        s.State is AfcLockState.Acquiring or AfcLockState.Locked or AfcLockState.Hold;
       metrics[0].Text = $"{owner.PredictedDownlinkDopplerHz:+0;-0;0} Hz";
-      metrics[1].Text = $"{s.ErrorHz:+0.0;-0.0;0} Hz";
+      metrics[1].Text = measured ? $"{s.ErrorHz:+0.0;-0.0;0} Hz" :
+        T("未测量", "No fix");
       metrics[2].Text = $"{s.CorrectionHz:+0.0;-0.0;0} Hz";
       metrics[1].ForeColor = s.State == AfcLockState.Locked
         ? palette.Good : palette.Warning;
+      string measureZh, measureEn;
+      if (pipeline.Completed == 0)
+      {
+        measureZh = pipeline.BufferedSamples < 24000
+          ? $"等待 IF PCM {pipeline.BufferedSamples}/24000"
+          : pipeline.Scheduled == 0
+            ? "PCM 已到达，等待测量调度"
+            : pipeline.Failed > 0
+              ? $"测量任务失败 {pipeline.Failed} 次，请检查日志"
+              : $"频率测量处理中，已提交 {pipeline.Scheduled} 次";
+        measureEn = pipeline.BufferedSamples < 24000
+          ? $"IF PCM buffer {pipeline.BufferedSamples}/24000"
+          : pipeline.Scheduled == 0
+            ? "PCM ready, waiting for measurement"
+            : pipeline.Failed > 0
+              ? $"Measurement worker failed {pipeline.Failed} times (see log)"
+              : $"Frequency analysis processing; scheduled {pipeline.Scheduled}";
+      }
+      else if (pipeline.LastObservation is { } raw && !measured)
+      {
+        // A rejected estimate is not 0 Hz. Report its numerical candidate
+        // for diagnostics, but never let it drive the automatic CAT writer.
+        measureZh = $"IF 候选 {raw.IfOffsetHz:+0;-0;0} Hz · σ {raw.SigmaHz:F0} Hz · 质量 {raw.Confidence:P0}（未验证）";
+        measureEn = $"Unverified IF {raw.IfOffsetHz:+0;-0;0} Hz · σ {raw.SigmaHz:F0} Hz · quality {raw.Confidence:P0}";
+      }
+      else
+      {
+        measureZh = $"IF 已测量 {pipeline.Completed} 次";
+        measureEn = $"IF measurements {pipeline.Completed}";
+      }
       stateLabel.Text = active
         ? T(
-            $"状态: {StateText(s.State)}   ·   置信度 {s.Confidence:P0}   ·   CAT {catZh}",
-            $"State: {StateText(s.State)}  ·  Confidence {s.Confidence:P0}  ·  CAT {catEn}")
+            $"状态: {StateText(s.State)}   ·   置信度 {s.Confidence:P0}   ·   CAT {catZh}   ·   {measureZh}",
+            $"State: {StateText(s.State)}  ·  Confidence {s.Confidence:P0}  ·  CAT {catEn}  ·  {measureEn}")
         : T("状态: 关闭  ·  IF 输入尚未启动", "State: Off  ·  IF input not started");
       stateLabel.ForeColor = active &&
         s.State == AfcLockState.Locked ? palette.Good : palette.Warning;
