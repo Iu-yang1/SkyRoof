@@ -148,6 +148,7 @@ namespace SkyRoof
       autoVisCorrection.CheckedChanged += (_, _) =>
         receiveSession.AutoVisEnabled = autoVisCorrection.Checked;
       receiveSession.ImageAvailable += OnAudioReceived;
+      receiveSession.RasterImageAvailable += OnRasterReceived;
       receiveSession.VisSynchronized += OnVisSynchronized;
       overlayText.TextChanged += (_, _) => RefreshTxPreview();
       templateBox.Items.AddRange(new object[]
@@ -590,6 +591,54 @@ namespace SkyRoof
       catch (InvalidOperationException) { }
     }
 
+    private void OnRasterReceived(Bitmap picture,
+      string mode, bool final, double correctionHz)
+    {
+      if (closed || IsDisposed || !IsHandleCreated)
+      {
+        picture.Dispose();
+        return;
+      }
+      try
+      {
+        BeginInvoke((Action)(() =>
+        {
+          using (picture)
+          {
+            if (closed || IsDisposed) return;
+            string? savedFile = null;
+            if (final)
+            {
+              try
+              {
+                string folder = Path.Combine(Utils.GetUserDataFolder(), "SstvImages");
+                Directory.CreateDirectory(folder);
+                string name =
+                  $"SSTV_{DateTime.UtcNow:yyyyMMdd_HHmmss_fff}_{mode.Replace(' ', '_')}";
+                savedFile = Path.Combine(folder, name + ".png");
+                picture.Save(savedFile, ImageFormat.Png);
+                File.WriteAllText(Path.Combine(folder, name + ".json"),
+                  System.Text.Json.JsonSerializer.Serialize(new
+                  {
+                    Utc = DateTime.UtcNow,
+                    Mode = mode,
+                    Source = "实时声卡 AF/IF",
+                    OffsetHz = correctionHz,
+                    Picture = Path.GetFileName(savedFile)
+                  }));
+              }
+              catch (Exception ex)
+              {
+                Serilog.Log.Warning(ex, "Could not archive extended SSTV image");
+              }
+            }
+            ShowReceivedSstv(picture, mode, final, savedFile);
+          }
+        }));
+      }
+      catch (InvalidOperationException) { picture.Dispose(); }
+    }
+
     private void OnAudioReceived(SstvImageEvent evt)
     {
       if (closed || !IsHandleCreated ||
@@ -932,6 +981,7 @@ namespace SkyRoof
       closed = true;
       transmitSession.Dispose();
       replayStop?.Cancel();
+      receiveSession.RasterImageAvailable -= OnRasterReceived;
       receiveSession.VisSynchronized -= OnVisSynchronized;
       receiveSession.Dispose();
       if (ctx.SstvConsolePanel == this) ctx.SstvConsolePanel = null;

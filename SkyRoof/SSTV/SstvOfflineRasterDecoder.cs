@@ -137,40 +137,7 @@ namespace SkyRoof.SSTV
             hz[n] = (float)(demod.Process(pcm / 32768f) - pitchCorrectionHz);
           }
 
-          int width = profile.Width;
-          double[] red, green, blue;
-          double[]? nextY = null;
-          bool chroma = false;
-          if (profile.Rgb is { } rgbLine)
-          {
-            (red, green, blue) = DecodeRgbLine(hz, rgbLine, width);
-          }
-          else
-          {
-            var spec = profile.Extra!;
-            (red, green, blue, nextY, chroma) = DecodeExtraLine(hz, spec, width);
-          }
-          int row = line * rowsPerScan;
-          for (int x = 0; x < width; x++)
-          {
-            if (chroma)
-            {
-              var (r, g, b) = YCrCb.ToRgb(red[x], green[x], blue[x]);
-              picture.SetPixel(x, row, Color.FromArgb(Round(r), Round(g), Round(b)));
-              if (rowsPerScan == 2 && row + 1 < profile.Height)
-              {
-                (r, g, b) = YCrCb.ToRgb(nextY?[x] ?? red[x], green[x], blue[x]);
-                picture.SetPixel(x, row + 1, Color.FromArgb(Round(r), Round(g), Round(b)));
-              }
-            }
-            else
-            {
-              var pixel = Color.FromArgb(Round(red[x]), Round(green[x]), Round(blue[x]));
-              picture.SetPixel(x, row, pixel);
-              if (rowsPerScan == 2 && row + 1 < profile.Height)
-                picture.SetPixel(x, row + 1, pixel);
-            }
-          }
+          RenderLine(picture, profile, line, hz);
         }
         return picture;
       }
@@ -179,6 +146,46 @@ namespace SkyRoof.SSTV
         picture.Dispose();
         throw;
       }
+    }
+
+    internal static void RenderLine(Bitmap picture,
+      SstvTxModeProfile profile, int line, float[] hz)
+    {
+      int rowsPerScan = profile.Extra?.RowsPerScan ?? 1;
+              int width = profile.Width;
+              double[] red, green, blue;
+              double[]? nextY = null;
+              bool chroma = false;
+              if (profile.Rgb is { } rgbLine)
+              {
+                (red, green, blue) = DecodeRgbLine(hz, rgbLine, width);
+              }
+              else
+              {
+                var spec = profile.Extra!;
+                (red, green, blue, nextY, chroma) = DecodeExtraLine(hz, spec, width);
+              }
+              int row = line * rowsPerScan;
+              for (int x = 0; x < width; x++)
+              {
+                if (chroma)
+                {
+                  var (r, g, b) = YCrCb.ToRgb(red[x], green[x], blue[x]);
+                  picture.SetPixel(x, row, Color.FromArgb(Round(r), Round(g), Round(b)));
+                  if (rowsPerScan == 2 && row + 1 < profile.Height)
+                  {
+                    (r, g, b) = YCrCb.ToRgb(nextY?[x] ?? red[x], green[x], blue[x]);
+                    picture.SetPixel(x, row + 1, Color.FromArgb(Round(r), Round(g), Round(b)));
+                  }
+                }
+                else
+                {
+                  var pixel = Color.FromArgb(Round(red[x]), Round(green[x]), Round(blue[x]));
+                  picture.SetPixel(x, row, pixel);
+                  if (rowsPerScan == 2 && row + 1 < profile.Height)
+                    picture.SetPixel(x, row + 1, pixel);
+                }
+              }
     }
 
     private static (double[] r, double[] g, double[] b)

@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -60,6 +61,8 @@ namespace SkyRoof.SSTV
     private bool disposed;
 
     public event Action<SstvImageEvent>? ImageAvailable;
+    /// <summary>Ownership of the bitmap is transferred to event handlers.</summary>
+    public event Action<Bitmap, string, bool, double>? RasterImageAvailable;
     public long DroppedBlocks => Interlocked.CompareExchange(ref dropped, 0, 0);
     public bool IsRunning => capture.IsRunning || loopback.IsRunning;
 
@@ -145,6 +148,16 @@ namespace SkyRoof.SSTV
     {
       SstvDecoder decoder = new();
       var ifDemod = new SstvIfAudioDemodulator();
+      using var raster = new SstvLiveRasterReceiver();
+      raster.ImageReady += (bitmap, mode, final, offset) =>
+      {
+        if (Volatile.Read(ref epoch) == version && !disposed)
+        {
+          if (RasterImageAvailable == null) bitmap.Dispose();
+          else RasterImageAvailable.Invoke(bitmap, mode, final, offset);
+        }
+        else bitmap.Dispose();
+      };
       var shifter = new SstvAfFrequencyShifter();
       var visDetector = new SstvVisAfcDetector();
       visDetector.Reset(version);
@@ -202,6 +215,7 @@ namespace SkyRoof.SSTV
           // Detect the full VIS sequence on UNCORRECTED AF so the NCO
           // does not introduce self-referential tone estimates.
           visDetector.Process(af);
+          raster.Process(af);
           int correction = Math.Clamp(ManualCorrectionHz +
             (AutoVisEnabled ? AutoVisCorrectionHz : 0), -500, 500);
           for (int i = 0; i < af.Length; i++)

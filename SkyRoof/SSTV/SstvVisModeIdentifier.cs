@@ -40,20 +40,27 @@ namespace SkyRoof.SSTV
         if (got == 0) break;
         total += got;
       }
-      int frames = total / (2 * SamplesPerFrame);
-      var pitches = new double[frames];
-      var scratch = new float[SamplesPerFrame];
-      for (int i = 0; i < frames; i++)
+      var af = new float[total / 2];
+      for (int i = 0; i < af.Length; i++)
       {
-        int byteStart = 2 * i * SamplesPerFrame;
-        for (int n = 0; n < SamplesPerFrame; n++)
-        {
-          int at = byteStart + 2 * n;
-          short sample = (short)(pcm[at] | pcm[at + 1] << 8);
-          scratch[n] = sample / 32768f;
-        }
-        pitches[i] = SstvVisAfcDetector.EstimatePitch(scratch);
+        int at = i * 2;
+        short sample = (short)(pcm[at] | pcm[at + 1] << 8);
+        af[i] = sample / 32768f;
       }
+      return DetectAudio(af);
+    }
+
+    /// <summary>
+    /// Streaming callers supply a rolling pre-VIS buffer; no disk or CAT
+    /// dependency. Header position is relative to the supplied samples.
+    /// </summary>
+    public static SstvVisModeIdentity? DetectAudio(ReadOnlySpan<float> af)
+    {
+      int frames = af.Length / SamplesPerFrame;
+      var pitches = new double[frames];
+      for (int i = 0; i < frames; i++)
+        pitches[i] = SstvVisAfcDetector.EstimatePitch(
+          af.Slice(i * SamplesPerFrame, SamplesPerFrame));
       return FindStandard(pitches) ?? FindNarrow(pitches);
     }
 

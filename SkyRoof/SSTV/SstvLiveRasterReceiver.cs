@@ -16,7 +16,7 @@ namespace SkyRoof.SSTV
     private const int Rate = 48000;
     private const int RingLength = Rate * 8;
     private readonly float[] ring = new float[RingLength];
-    private readonly SstvAfToneDiscriminator demod = new();
+    private SstvAfToneDiscriminator demod = new();
     private int write, available, lineFill;
     private long streamSamples, lastDetectionSamples;
     private float[] lineFrequencies = Array.Empty<float>();
@@ -70,6 +70,7 @@ namespace SkyRoof.SSTV
         return;
       }
 
+      demod = new SstvAfToneDiscriminator();
       identity = found.Value;
       profile = identity.Profile;
       picture = new Bitmap(profile.Width, profile.Height);
@@ -109,7 +110,7 @@ namespace SkyRoof.SSTV
 
         UpdateLineSyncOffset(lineFrequencies, expected);
         SstvOfflineRasterDecoder.RenderLine(
-          picture!, profile, lineIndex, lineFrequencies.AsSpan(0, expected));
+          picture!, profile, lineIndex, lineFrequencies.AsSpan(0, expected).ToArray());
 
         lineIndex++;
         lineFill = 0;
