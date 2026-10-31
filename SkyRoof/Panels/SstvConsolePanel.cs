@@ -142,11 +142,23 @@ namespace SkyRoof
       SstvTextLayer.TheirCallDefault,
       SstvTextLayer.CustomDefault
     };
-    private readonly RectangleF[] textBounds = new RectangleF[3];
+    private readonly RectangleF[] textBounds = new RectangleF[8];
+    private readonly List<SstvAdditionalCaption> extraCaptions = new();
+    private readonly TextBox activeCaptionInput = new()
+    {
+      Width = 185, MaxLength = 512, PlaceholderText = "支持 {MYCALL} 等变量"
+    };
+    private readonly ComboBox macroSelector = new()
+    {
+      Width = 185, DropDownStyle = ComboBoxStyle.DropDownList
+    };
+    private const int MaxTextLayers = 8;
     private bool movingText;
     private bool updatingTextControls;
     private PointF textDragOffset;
     private readonly List<Bitmap> txRecentImages = new();
+    private readonly Dictionary<string, (DateTime Utc, long Size, Bitmap Image)>
+      archivedThumbnailCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ListBox txQuickModes = new()
     {
       Dock = DockStyle.Fill, IntegralHeight = false, BorderStyle = BorderStyle.None
@@ -238,16 +250,29 @@ namespace SkyRoof
       });
       textLayerBox.SelectedIndex = 0;
       textLayerBox.SelectedIndexChanged += (_, _) => UpdateTextEditorControls();
+      foreach (var variable in SstvTextMacros.Catalog)
+        macroSelector.Items.Add(new MacroEntry(variable.Token, variable.Label));
+      if (macroSelector.Items.Count > 0) macroSelector.SelectedIndex = 0;
+      activeCaptionInput.TextChanged += (_, _) =>
+      {
+        if (updatingTextControls || textLayerBox.SelectedIndex < 0) return;
+        SetCaptionText(textLayerBox.SelectedIndex, activeCaptionInput.Text);
+        RefreshTxPreview();
+      };
       textSizeBox.ValueChanged += (_, _) =>
       {
         if (updatingTextControls) return;
         int index = Math.Max(0, textLayerBox.SelectedIndex);
-        textLayers[index] = textLayers[index] with
-          { SizePercent = (float)textSizeBox.Value };
+        SetTextLayer(index, GetTextLayer(index) with
+          { SizePercent = (float)textSizeBox.Value });
         RefreshTxPreview();
       };
       textColorButton.Click += (_, _) => PickTextColor();
-      myCallInput.TextChanged += (_, _) => RefreshTxPreview();
+      myCallInput.TextChanged += (_, _) =>
+      {
+        SyncActiveCaptionText();
+        RefreshTxPreview();
+      };
       theirCallInput.TextChanged += (_, _) =>
       {
         if (!syncingQsoEntry)
@@ -256,6 +281,7 @@ namespace SkyRoof
           try { qsoCall.Text = theirCallInput.Text; }
           finally { syncingQsoEntry = false; }
         }
+        SyncActiveCaptionText();
         RefreshTxPreview();
       };
       txQsoNote.TextChanged += (_, _) =>
@@ -265,6 +291,7 @@ namespace SkyRoof
         try { qsoNotes.Text = txQsoNote.Text; }
         finally { syncingQsoEntry = false; }
       };
+      overlayText.TextChanged += (_, _) => SyncActiveCaptionText();
       qsoNotes.TextChanged += (_, _) =>
       {
         if (syncingQsoEntry) return;
@@ -274,7 +301,15 @@ namespace SkyRoof
       };
       txPicture.MouseDown += OnTxPictureMouseDown;
       txPicture.MouseMove += OnTxPictureMouseMove;
-      txPicture.MouseUp += (_, _) => movingText = false;
+      txPicture.MouseUp += (_, _) =>
+      {
+        if (movingText)
+        {
+          movingText = false;
+          txPicture.Cursor = Cursors.Default;
+          RefreshTxPreview(); // final bicubic render after fast drag frames
+        }
+      };
       txPicture.MouseWheel += OnTxPictureMouseWheel;
       txPicture.MouseEnter += (_, _) => txPicture.Focus();
       txPicture.TabStop = true;
@@ -531,8 +566,8 @@ namespace SkyRoof
       Heading("QSO / 台站信息");
       Field("MY", myCallInput);
       Field("HIS", theirCallInput);
-      Field("RST TX", txRstSent);
-      Field("RST RX", txRstReceived);
+      Field("RSV TX", txRstSent);
+      Field("RSV RX", txRstReceived);
       Field("姓名", txContactName);
       Field("QTH", txContactQth);
       Field("备注", txQsoNote);
@@ -546,8 +581,12 @@ namespace SkyRoof
 
       Heading("图片文字样式");
       Field("对象", textLayerBox);
+      Field("内容", activeCaptionInput);
       Field("字号 %", textSizeBox);
-      Buttons(textColorButton);
+      Buttons(textColorButton, Btn("新增", AddTextLayer, 56),
+        Btn("复制", DuplicateTextLayer, 56), Btn("删除", RemoveTextLayer, 56));
+      Field("变量", macroSelector);
+      Buttons(Btn("插入变量", InsertSelectedMacro, 88));
       Buttons(new Label
       {
         Text = "拖动预览文字定位，滚轮调整大小",
@@ -675,19 +714,39 @@ namespace SkyRoof
         }
         string folder = Path.Combine(Utils.GetUserDataFolder(), "SstvImages");
         if (!Directory.Exists(folder)) return;
+        var visibleFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (string file in Directory.EnumerateFiles(folder, "*.png")
           .OrderByDescending(File.GetLastWriteTimeUtc).Take(24))
         {
           try
           {
-            using var source = Image.FromFile(file);
-            AddTxThumbnail(source, Path.GetFileNameWithoutExtension(file), () =>
+            visibleFiles.Add(file);
+            var fileInfo = new FileInfo(file);
+            if (!archivedThumbnailCache.TryGetValue(file, out var cached) ||
+                cached.Utc != fileInfo.LastWriteTimeUtc || cached.Size != fileInfo.Length)
             {
-              try
+              if (cached.Image != null)
+                cached.Image.Dispose();
+              using var source = Image.FromFile(file);
+              const int thumbWidth = 112, thumbHeight = 72;
+              var preview = new Bitmap(thumbWidth, thumbHeight);
+              using (var gr = Graphics.FromImage(preview))
               {
-                using var loaded = Image.FromFile(file);
-                RecallTxImage(new Bitmap(loaded));
+                gr.Clear(Color.FromArgb(31, 35, 42));
+                gr.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                float scale = Math.Min((float)thumbWidth / source.Width,
+                  (float)thumbHeight / source.Height);
+                int width = Math.Max(1, (int)(source.Width * scale));
+                int height = Math.Max(1, (int)(source.Height * scale));
+                gr.DrawImage(source, new Rectangle(
+                  (thumbWidth - width) / 2, (thumbHeight - height) / 2, width, height));
               }
+              cached = (fileInfo.LastWriteTimeUtc, fileInfo.Length, preview);
+              archivedThumbnailCache[file] = cached;
+            }
+            AddTxThumbnail(cached.Image, Path.GetFileNameWithoutExtension(file), () =>
+            {
+              try { RecallTxImage(SstvImageLibrary.LoadForEditing(file)); }
               catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
                 or ArgumentException)
               {
@@ -697,6 +756,12 @@ namespace SkyRoof
           }
           catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
             or ArgumentException) { }
+        }
+        foreach (string stale in archivedThumbnailCache.Keys
+          .Where(key => !visibleFiles.Contains(key)).ToArray())
+        {
+          archivedThumbnailCache[stale].Image.Dispose();
+          archivedThumbnailCache.Remove(stale);
         }
       }
       catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -1347,8 +1412,7 @@ namespace SkyRoof
       if (dialog.ShowDialog(this) != DialogResult.OK) return;
       try
       {
-        using var loaded = Image.FromFile(dialog.FileName);
-        SetTxImage(new Bitmap(loaded));
+        SetTxImage(SstvImageLibrary.LoadForEditing(dialog.FileName));
       }
       catch (Exception ex)
       {
@@ -1362,7 +1426,13 @@ namespace SkyRoof
       try
       {
         if (Clipboard.ContainsImage() && Clipboard.GetImage() is Image image)
-          SetTxImage(new Bitmap(image));
+        {
+          using (image)
+          {
+            using var temporary = new Bitmap(image);
+            SetTxImage(SstvImageLibrary.ScaleForEditing(temporary));
+          }
+        }
       }
       catch (Exception ex)
       {
@@ -1378,7 +1448,9 @@ namespace SkyRoof
 
     private static void PushHistory(Stack<Bitmap> stack, Bitmap image)
     {
-      stack.Push(new Bitmap(image));
+      // Transfer ownership of the previous bitmap instead of cloning
+      // multi-megabyte images for every edit/undo operation.
+      stack.Push(image);
       if (stack.Count <= HistoryLimit) return;
       Bitmap[] newestFirst = stack.ToArray();
       stack.Clear();
@@ -1399,7 +1471,6 @@ namespace SkyRoof
       var old = txBase;
       if (old != null) PushHistory(undoImages, old);
       txBase = image;
-      old?.Dispose();
       if (remember) RememberTxImage(image);
       ClearHistory(redoImages);
       RefreshTxPreview();
@@ -1471,7 +1542,9 @@ namespace SkyRoof
           TheirCallText = theirCallInput.Text,
           MyCallStyle = textLayers[0].Normalized(),
           TheirCallStyle = textLayers[1].Normalized(),
-          OverlayStyle = textLayers[2].Normalized()
+          OverlayStyle = textLayers[2].Normalized(),
+          ExtraCaptions = extraCaptions.Select(x =>
+            x with { Style = x.Style.Normalized() }).ToArray()
         };
         SstvTemplateStore.Save(TemplatePath, record);
         ReloadUserTemplates();
@@ -1500,6 +1573,14 @@ namespace SkyRoof
       textLayers[0] = (selected.MyCallStyle ?? SstvTextLayer.MyCallDefault).Normalized();
       textLayers[1] = (selected.TheirCallStyle ?? SstvTextLayer.TheirCallDefault).Normalized();
       textLayers[2] = (selected.OverlayStyle ?? SstvTextLayer.CustomDefault).Normalized();
+      textLayerBox.SelectedIndex = 0;
+      extraCaptions.Clear();
+      extraCaptions.AddRange((selected.ExtraCaptions ?? Array.Empty<SstvAdditionalCaption>())
+        .Take(5).Select(x => x with { Style = x.Style.Normalized() }));
+      while (textLayerBox.Items.Count > 3) textLayerBox.Items.RemoveAt(3);
+      for (int i = 0; i < extraCaptions.Count; i++)
+        textLayerBox.Items.Add("文字图层 " + (i + 4));
+      if (textLayerBox.SelectedIndex < 0) textLayerBox.SelectedIndex = 0;
       UpdateTextEditorControls();
     }
 
@@ -1529,13 +1610,133 @@ namespace SkyRoof
       }
     }
 
+    private sealed record MacroEntry(string Token, string Label)
+    {
+      public override string ToString() => Label + "  " + Token;
+    }
+
+    private int TextLayerCount => 3 + extraCaptions.Count;
+
+    private SstvTextLayer GetTextLayer(int index) =>
+      index < 3 ? textLayers[index] : extraCaptions[index - 3].Style;
+
+    private void SetTextLayer(int index, SstvTextLayer style)
+    {
+      if (index < 3) textLayers[index] = style.Normalized();
+      else extraCaptions[index - 3] =
+        extraCaptions[index - 3] with { Style = style.Normalized() };
+    }
+
+    private string GetCaptionText(int index) => index switch
+    {
+      0 => myCallInput.Text,
+      1 => theirCallInput.Text,
+      2 => overlayText.Text,
+      _ => extraCaptions[index - 3].Text
+    };
+
+    private void SetCaptionText(int index, string text)
+    {
+      switch (index)
+      {
+        case 0: myCallInput.Text = text; break;
+        case 1: theirCallInput.Text = text; break;
+        case 2: overlayText.Text = text; break;
+        default:
+          extraCaptions[index - 3] =
+            extraCaptions[index - 3] with { Text = text };
+          break;
+      }
+    }
+
+    private void SyncActiveCaptionText()
+    {
+      if (textLayerBox.SelectedIndex < 0 || updatingTextControls) return;
+      updatingTextControls = true;
+      try { activeCaptionInput.Text = GetCaptionText(textLayerBox.SelectedIndex); }
+      finally { updatingTextControls = false; }
+    }
+
+    private void AddTextLayer()
+    {
+      if (TextLayerCount >= MaxTextLayers)
+      {
+        txStatus.Text = "最多可创建 8 个文字图层";
+        return;
+      }
+      int next = extraCaptions.Count;
+      extraCaptions.Add(new SstvAdditionalCaption("",
+        SstvTextLayer.CustomDefault with
+        {
+          Y = Math.Clamp(.12f + .11f * next, 0, .9f),
+          X = .08f
+        }));
+      textLayerBox.Items.Add("文字图层 " + (next + 4));
+      textLayerBox.SelectedIndex = TextLayerCount - 1;
+      RefreshTxPreview();
+    }
+
+    private void DuplicateTextLayer()
+    {
+      if (TextLayerCount >= MaxTextLayers)
+      {
+        txStatus.Text = "最多可创建 8 个文字图层";
+        return;
+      }
+      int selected = Math.Max(0, textLayerBox.SelectedIndex);
+      SstvTextLayer source = GetTextLayer(selected);
+      extraCaptions.Add(new SstvAdditionalCaption(GetCaptionText(selected),
+        (source with { X = source.X + .025f, Y = source.Y + .035f }).Normalized()));
+      textLayerBox.Items.Add("文字图层 " + TextLayerCount);
+      textLayerBox.SelectedIndex = TextLayerCount - 1;
+      RefreshTxPreview();
+    }
+
+    private void RemoveTextLayer()
+    {
+      int selected = textLayerBox.SelectedIndex;
+      if (selected < 3)
+      {
+        txStatus.Text = "三个基础图层不可删除，可清空文字或删除附加图层";
+        return;
+      }
+      textLayerBox.SelectedIndex = 0;
+      extraCaptions.RemoveAt(selected - 3);
+      textLayerBox.Items.RemoveAt(selected);
+      for (int i = 3; i < textLayerBox.Items.Count; i++)
+        textLayerBox.Items[i] = "文字图层 " + (i + 1);
+      textLayerBox.SelectedIndex = Math.Min(selected, TextLayerCount - 1);
+      RefreshTxPreview();
+    }
+
+    private void InsertSelectedMacro()
+    {
+      if (macroSelector.SelectedItem is not MacroEntry macro) return;
+      int index = textLayerBox.SelectedIndex;
+      if (index < 0) return;
+      string current = GetCaptionText(index);
+      if (current.Length + macro.Token.Length > 512)
+      {
+        txStatus.Text = "文字长度已达上限";
+        return;
+      }
+      int position = Math.Clamp(activeCaptionInput.SelectionStart, 0, current.Length);
+      SetCaptionText(index, current.Insert(position, macro.Token));
+      SyncActiveCaptionText();
+      activeCaptionInput.Focus();
+      activeCaptionInput.SelectionStart = position + macro.Token.Length;
+      RefreshTxPreview();
+    }
+
     private void UpdateTextEditorControls()
     {
-      if (textLayerBox.SelectedIndex < 0) return;
+      if (textLayerBox.SelectedIndex < 0 || textLayerBox.SelectedIndex >= TextLayerCount)
+        return;
       updatingTextControls = true;
       try
       {
-        var style = textLayers[textLayerBox.SelectedIndex].Normalized();
+        var style = GetTextLayer(textLayerBox.SelectedIndex).Normalized();
+        activeCaptionInput.Text = GetCaptionText(textLayerBox.SelectedIndex);
         textSizeBox.Value = Math.Clamp((decimal)style.SizePercent,
           textSizeBox.Minimum, textSizeBox.Maximum);
         textColorButton.BackColor = Color.FromArgb(style.ColorArgb);
@@ -1553,10 +1754,11 @@ namespace SkyRoof
       using var dialog = new ColorDialog
       {
         FullOpen = true,
-        Color = Color.FromArgb(textLayers[index].ColorArgb)
+        Color = Color.FromArgb(GetTextLayer(index).ColorArgb)
       };
       if (dialog.ShowDialog(this) != DialogResult.OK) return;
-      textLayers[index] = textLayers[index] with { ColorArgb = dialog.Color.ToArgb() };
+      SetTextLayer(index, GetTextLayer(index) with
+        { ColorArgb = dialog.Color.ToArgb() });
       UpdateTextEditorControls();
       RefreshTxPreview();
     }
@@ -1591,11 +1793,11 @@ namespace SkyRoof
       if (e.Button != MouseButtons.Left || !TryPicturePoint(e.Location, out PointF pixel))
         return;
       if (txPicture.Image is not Bitmap preview) return;
-      for (int i = textBounds.Length - 1; i >= 0; i--)
+      for (int i = TextLayerCount - 1; i >= 0; i--)
       {
         if (!textBounds[i].Contains(pixel)) continue;
         textLayerBox.SelectedIndex = i;
-        SstvTextLayer layer = textLayers[i];
+        SstvTextLayer layer = GetTextLayer(i);
         textDragOffset = new PointF(layer.X - pixel.X / preview.Width,
           layer.Y - pixel.Y / preview.Height);
         movingText = true;
@@ -1610,11 +1812,11 @@ namespace SkyRoof
           !TryPicturePoint(e.Location, out PointF pixel) ||
           txPicture.Image is not Bitmap preview) return;
       int index = Math.Max(0, textLayerBox.SelectedIndex);
-      textLayers[index] = (textLayers[index] with
+      SetTextLayer(index, GetTextLayer(index) with
       {
         X = textDragOffset.X + pixel.X / preview.Width,
         Y = textDragOffset.Y + pixel.Y / preview.Height
-      }).Normalized();
+      });
       RefreshTxPreview();
     }
 
@@ -1642,7 +1844,6 @@ namespace SkyRoof
     {
       if (txBase == null || !undoImages.TryPop(out Bitmap? prior)) return;
       PushHistory(redoImages, txBase);
-      txBase.Dispose();
       txBase = prior;
       RefreshTxPreview();
     }
@@ -1651,7 +1852,6 @@ namespace SkyRoof
     {
       if (txBase == null || !redoImages.TryPop(out Bitmap? next)) return;
       PushHistory(undoImages, txBase);
-      txBase.Dispose();
       txBase = next;
       RefreshTxPreview();
     }
@@ -1695,7 +1895,8 @@ namespace SkyRoof
       var canvas = new Bitmap(spec.Width, spec.Height, PixelFormat.Format32bppArgb);
       using var g = Graphics.FromImage(canvas);
       g.SmoothingMode = SmoothingMode.AntiAlias;
-      g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+      g.InterpolationMode = movingText ? InterpolationMode.Bilinear :
+        InterpolationMode.HighQualityBicubic;
       g.Clear(Color.Black);
       g.DrawImage(txBase, new Rectangle(0, 0, canvas.Width, canvas.Height));
       string template = templateBox.SelectedItem is SstvUserTemplate saved
@@ -1730,23 +1931,25 @@ namespace SkyRoof
         (modeBox.SelectedItem as SstvTxModeProfile)?.Name ?? "SSTV",
         radio.IsTerrestrial ? 0 : radio.CorrectedUplinkFrequency,
         radio.CorrectedDownlinkFrequency,
-        DateTime.UtcNow);
-      string[] captions =
+        DateTime.UtcNow)
       {
-        SstvTextMacros.Expand(myCallInput.Text.Trim(), macros),
-        SstvTextMacros.Expand(theirCallInput.Text.Trim(), macros),
-        SstvTextMacros.Expand(overlayText.Text, macros)
+        RstSent = txRstSent.Text,
+        RstReceived = txRstReceived.Text,
+        ContactName = txContactName.Text,
+        ContactQth = txContactQth.Text,
+        Notes = txQsoNote.Text
       };
       for (int i = 0; i < textBounds.Length; i++)
       {
         textBounds[i] = RectangleF.Empty;
-        if (template == "纯图片" || string.IsNullOrWhiteSpace(captions[i]))
-          continue;
-        SstvTextLayer layout = textLayers[i].Normalized();
+        if (i >= TextLayerCount || template == "纯图片") continue;
+        string caption = SstvTextMacros.Expand(GetCaptionText(i), macros);
+        if (string.IsNullOrWhiteSpace(caption)) continue;
+        SstvTextLayer layout = GetTextLayer(i).Normalized();
         float fontSize = Math.Max(7, canvas.Width * layout.SizePercent / 100f);
         using var font = new Font(FontFamily.GenericSansSerif, fontSize, FontStyle.Bold,
           GraphicsUnit.Pixel);
-        SizeF size = g.MeasureString(captions[i], font);
+        SizeF size = g.MeasureString(caption, font);
         float x = Math.Clamp(canvas.Width * layout.X,
           0, Math.Max(0, canvas.Width - size.Width));
         float y = Math.Clamp(canvas.Height * layout.Y,
@@ -1754,8 +1957,8 @@ namespace SkyRoof
         textBounds[i] = new RectangleF(x, y, size.Width, size.Height);
         using var shadow = new SolidBrush(Color.FromArgb(200, 0, 0, 0));
         using var foreground = new SolidBrush(Color.FromArgb(layout.ColorArgb));
-        g.DrawString(captions[i], font, shadow, x + 1.5f, y + 1.5f);
-        g.DrawString(captions[i], font, foreground, x, y);
+        g.DrawString(caption, font, shadow, x + 1.5f, y + 1.5f);
+        g.DrawString(caption, font, foreground, x, y);
       }
       return canvas;
     }
@@ -1830,7 +2033,7 @@ namespace SkyRoof
       }
     }
 
-    private void SaveReceivedImage()
+    private async void SaveReceivedImage()
     {
       if (rxPicture.Image == null) return;
       using var save = new SaveFileDialog
@@ -1839,7 +2042,29 @@ namespace SkyRoof
         FileName = $"SSTV_{DateTime.Now:yyyyMMdd_HHmmss}.png"
       };
       if (save.ShowDialog(this) != DialogResult.OK) return;
-      rxPicture.Image.Save(save.FileName, ImageFormat.Png);
+      try
+      {
+        string target = save.FileName;
+        string? original = rxPicture.Tag as string;
+        if (!string.IsNullOrWhiteSpace(original) && File.Exists(original))
+        {
+          // Decoded images are already persisted as PNG, so copying the
+          // original avoids another GDI+ encode on the WinForms thread.
+          await Task.Run(() => SstvImageLibrary.Export(original, target));
+        }
+        else
+        {
+          using var snapshot = new Bitmap(rxPicture.Image);
+          await Task.Run(() => snapshot.Save(target, ImageFormat.Png));
+        }
+        if (!closed) rxStatus.Text = "图片已保存";
+      }
+      catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+        or System.Runtime.InteropServices.ExternalException or ArgumentException)
+      {
+        if (!closed) MessageBox.Show(this, ex.Message, "保存图片失败",
+          MessageBoxButtons.OK, MessageBoxIcon.Warning);
+      }
     }
 
     private string HistoryFolder =>
@@ -1980,8 +2205,7 @@ namespace SkyRoof
       if (archiveList.SelectedItem is not HistoryImage item) return;
       try
       {
-        using var loaded = Image.FromFile(item.Path);
-        RecallTxImage(new Bitmap(loaded));
+        RecallTxImage(SstvImageLibrary.LoadForEditing(item.Path));
       }
       catch (Exception ex)
       {
@@ -2021,6 +2245,8 @@ namespace SkyRoof
       txBase?.Dispose();
       foreach (Control child in txThumbnailStrip.Controls)
         if (child is PictureBox thumb) { thumb.Image?.Dispose(); thumb.Image = null; }
+      foreach (var cached in archivedThumbnailCache.Values) cached.Image.Dispose();
+      archivedThumbnailCache.Clear();
       foreach (Bitmap thumb in txRecentImages) thumb.Dispose();
       txRecentImages.Clear();
       txThumbnailTips.Dispose();
