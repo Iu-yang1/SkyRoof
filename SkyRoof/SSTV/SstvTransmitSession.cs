@@ -26,6 +26,10 @@ namespace SkyRoof.SSTV
 
     public bool RequiresPttVerification => Volatile.Read(ref releaseUnconfirmed) != 0;
 
+    // The operator UI may retry this read-only hardware verification after a
+    // failed PTT release. It never clears the fault solely on user approval.
+    public bool VerifyPreviousPttRelease() => TryConfirmPreviousRelease();
+
     private bool TryConfirmPreviousRelease()
     {
       if (!RequiresPttVerification) return true;
