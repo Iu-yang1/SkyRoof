@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
@@ -76,6 +77,13 @@ namespace VE3NEA.Dsp.Tests
           Assert.NotNull(preview);
           Assert.Equal(640, preview!.Width);
           Assert.Equal(496, preview.Height);
+          // Render actual production UI surfaces into CI attachments.
+          // This confirms a real WinForms paint path without requiring
+          // any connected transceiver or a simulated RF key-up.
+          SaveLayoutSnapshot(panel, tabs, 1, "tx-980x720", 980, 720);
+          SaveLayoutSnapshot(panel, tabs, 1, "tx-650x420", 650, 420);
+          SaveLayoutSnapshot(panel, tabs, 0, "rx-980x720", 980, 720);
+          SaveLayoutSnapshot(panel, tabs, 0, "rx-650x420", 650, 420);
 
           var receive = tabs.TabPages[0];
           Assert.Contains(receive.Controls.OfType<SstvToneSpectrumView>(),
@@ -117,6 +125,22 @@ namespace VE3NEA.Dsp.Tests
       thread.Start();
       Assert.True(thread.Join(TimeSpan.FromSeconds(10)), "Spectrum paint timed out");
       if (failure != null) throw new Xunit.Sdk.XunitException(failure.ToString());
+    }
+
+    private static void SaveLayoutSnapshot(SstvConsolePanel panel,
+      TabControl tabs, int tab, string name, int width, int height)
+    {
+      string? dir = Environment.GetEnvironmentVariable(
+        "SKYROOF_SSTV_UI_ARTIFACT_DIR");
+      if (string.IsNullOrWhiteSpace(dir)) return;
+      Directory.CreateDirectory(dir);
+      panel.Size = new Size(width, height);
+      panel.PerformLayout();
+      tabs.SelectedIndex = tab;
+      tabs.PerformLayout();
+      using var screen = new Bitmap(width, height);
+      panel.DrawToBitmap(screen, new Rectangle(0, 0, width, height));
+      screen.Save(Path.Combine(dir, name + ".png"));
     }
 
     private sealed class UiFixture : IDisposable
