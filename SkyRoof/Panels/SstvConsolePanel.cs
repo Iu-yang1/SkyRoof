@@ -22,6 +22,25 @@ namespace SkyRoof
   {
     private readonly Context ctx;
     private readonly SstvAudioReceiveSession receiveSession = new();
+    private readonly SstvTransmitSession transmitSession;
+    private readonly ComboBox txOutputBox = new()
+    {
+      DropDownStyle = ComboBoxStyle.DropDownList, Width = 245
+    };
+    private readonly CheckBox txApproval = new()
+    {
+      Text = "已确认频率 / 功率", AutoSize = true,
+      Padding = new Padding(3, 7, 3, 0)
+    };
+    private readonly Button txSendButton = new()
+    {
+      Text = "发射图片", Width = 90, Height = 30, Margin = new Padding(4)
+    };
+    private readonly Button txStopButton = new()
+    {
+      Text = "停止发射", Width = 90, Height = 30, Margin = new Padding(4),
+      Enabled = false
+    };
     private readonly ComboBox rxSourceBox = new()
     {
       DropDownStyle = ComboBoxStyle.DropDownList, Width = 152
@@ -74,6 +93,7 @@ namespace SkyRoof
     {
       this.ctx = ctx ?? throw new ArgumentNullException(nameof(ctx));
       ctx.SstvConsolePanel = this;
+      transmitSession = new SstvTransmitSession(ctx);
       Text = "SSTV";
       TabText = "SSTV";
       Width = 980;
@@ -101,6 +121,9 @@ namespace SkyRoof
       receiveSession.ImageAvailable += OnAudioReceived;
       overlayText.TextChanged += (_, _) => RefreshTxPreview();
       archiveList.DoubleClick += (_, _) => ShowSelectedHistory();
+      txSendButton.Click += (_, _) => _ = SendImageAsync();
+      txStopButton.Click += (_, _) => transmitSession.RequestStop();
+      PopulateTxOutputDevices();
       ReloadHistory();
     }
 
@@ -165,6 +188,10 @@ namespace SkyRoof
       });
       bar.Controls.Add(overlayText);
       bar.Controls.Add(Btn("保存音频 WAV", () => _ = ExportWaveAsync(), 116));
+      bar.Controls.Add(txOutputBox);
+      bar.Controls.Add(txApproval);
+      bar.Controls.Add(txSendButton);
+      bar.Controls.Add(txStopButton);
       page.Controls.Add(txPicture);
       page.Controls.Add(txStatus);
       page.Controls.Add(bar);
@@ -181,6 +208,84 @@ namespace SkyRoof
       page.Controls.Add(archiveList);
       page.Controls.Add(bar);
       tabs.TabPages.Add(page);
+    }
+
+    private void PopulateTxOutputDevices()
+    {
+      txOutputBox.Items.Clear();
+      try
+      {
+        foreach (AudioDeviceEntry d in Soundcard.ListDevices(DataFlow.Render))
+          txOutputBox.Items.Add(new DeviceEntry(d.Id, d.Name));
+        if (txOutputBox.Items.Count > 0) txOutputBox.SelectedIndex = 0;
+      }
+      catch (Exception ex) { txStatus.Text = ex.Message; }
+    }
+
+    private async Task SendImageAsync()
+    {
+      if (transmitSession.IsSending ||
+          txOutputBox.SelectedItem is not DeviceEntry output ||
+          txPicture.Image is not Bitmap image ||
+          modeBox.SelectedItem is not SstvModeSpec spec)
+      {
+        if (!transmitSession.IsSending)
+          MessageBox.Show(this, "请先选择图片、发送模式及发射声卡。", "SSTV",
+            MessageBoxButtons.OK, MessageBoxIcon.Information);
+        return;
+      }
+      if (!txApproval.Checked)
+      {
+        MessageBox.Show(this, "请先核对电台上行频率、发射许可及发射功率。", "SSTV",
+          MessageBoxButtons.OK, MessageBoxIcon.Information);
+        return;
+      }
+      if (MessageBox.Show(this,
+        $"确认通过所选声卡输出并启动电台 PTT 发送 {spec.Name}？" +
+        "\\n\\n开始后可随时点击“停止发射”。",
+        "确认 SSTV 发射", MessageBoxButtons.YesNo,
+        MessageBoxIcon.Warning) != DialogResult.Yes) return;
+
+      string temporaryWave = Path.Combine(Path.GetTempPath(),
+        $"SkyRoof_SstvTx_{Guid.NewGuid():N}.wav");
+      txSendButton.Enabled = false;
+      txStopButton.Enabled = true;
+      txApproval.Enabled = false;
+      try
+      {
+        using var snapshot = new Bitmap(image);
+        txStatus.Text = "正在准备 SSTV 图片...";
+        await Task.Run(() =>
+          SstvWaveExporter.Export(snapshot, spec.Mode, temporaryWave));
+        if (closed) return;
+        await transmitSession.SendWavAsync(
+          temporaryWave, output.Id, txApproval.Checked,
+          message => { if (!closed) txStatus.Text = message; });
+      }
+      catch (OperationCanceledException)
+      {
+        if (!closed) txStatus.Text = "发射已停止";
+      }
+      catch (Exception ex)
+      {
+        if (!closed)
+        {
+          txStatus.Text = "发射未完成";
+          MessageBox.Show(this, ex.Message, "SSTV 发射已终止",
+            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+      }
+      finally
+      {
+        try { File.Delete(temporaryWave); } catch (IOException) { }
+        if (!closed)
+        {
+          txStopButton.Enabled = false;
+          txSendButton.Enabled = true;
+          txApproval.Enabled = true;
+          txApproval.Checked = false;
+        }
+      }
     }
 
     private void PopulateAudioDevices()
@@ -476,6 +581,7 @@ namespace SkyRoof
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
       closed = true;
+      transmitSession.Dispose();
       receiveSession.Dispose();
       if (ctx.SstvConsolePanel == this) ctx.SstvConsolePanel = null;
       var oldRx = rxPicture.Image;
