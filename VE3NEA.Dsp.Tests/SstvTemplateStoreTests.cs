@@ -32,6 +32,70 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void TextLayerStylesAndCallsignsPersistAndUserTemplatesCanBeDeleted()
+    {
+      string path = Path.Combine(Path.GetTempPath(),
+        "SkyRoof-template-editor-" + Guid.NewGuid().ToString("N"), "templates.json");
+      try
+      {
+        var entry = new SstvUserTemplate("EME QSO", "QSL 卡片",
+          "QSO {HISCALL}", DateTime.UtcNow)
+        {
+          MyCallText = "BG5JSU",
+          TheirCallText = "HB9Q",
+          MyCallStyle = new SstvTextLayer(.22f, .38f, 12, unchecked((int)0xFFFF0000)),
+          TheirCallStyle = new SstvTextLayer(.48f, .6f, 9, unchecked((int)0xFF00FF00)),
+          OverlayStyle = new SstvTextLayer(.07f, .82f, 6, unchecked((int)0xFF0080FF))
+        };
+        SstvTemplateStore.Save(path, entry);
+        var loaded = Assert.Single(SstvTemplateStore.Read(path));
+        Assert.Equal(entry, loaded);
+        Assert.Equal("BG5JSU", loaded.MyCallText);
+        Assert.Equal("HB9Q", loaded.TheirCallText);
+        Assert.Equal(.22f, loaded.MyCallStyle!.X);
+        Assert.Equal(12f, loaded.MyCallStyle.SizePercent);
+        Assert.Equal(unchecked((int)0xFF00FF00), loaded.TheirCallStyle!.ColorArgb);
+        Assert.True(SstvTemplateStore.Delete(path, "eme qso"));
+        Assert.Empty(SstvTemplateStore.Read(path));
+        Assert.False(SstvTemplateStore.Delete(path, "no template"));
+      }
+      finally
+      {
+        try { Directory.Delete(Path.GetDirectoryName(path)!, true); }
+        catch (IOException) { }
+      }
+    }
+
+    [Fact]
+    public void OlderTemplateJsonAndLayerCoordinateNormalizationRemainCompatible()
+    {
+      string path = Path.Combine(Path.GetTempPath(),
+        "SkyRoof-template-old-" + Guid.NewGuid().ToString("N"), "templates.json");
+      try
+      {
+        SstvTemplateStore.Save(path,
+          new SstvUserTemplate("Legacy", "经典呼号", "CQ SSTV", DateTime.UtcNow));
+        var old = Assert.Single(SstvTemplateStore.Read(path));
+        Assert.Null(old.MyCallStyle);
+        Assert.Null(old.MyCallText);
+        var normalized = new SstvTextLayer(-3, 2, 300, -1).Normalized();
+        Assert.Equal(0, normalized.X);
+        Assert.Equal(.99f, normalized.Y);
+        Assert.Equal(25, normalized.SizePercent);
+        normalized = new SstvTextLayer(float.NaN, float.PositiveInfinity, -4, -1)
+          .Normalized();
+        Assert.Equal(0, normalized.X);
+        Assert.Equal(0, normalized.Y);
+        Assert.Equal(2, normalized.SizePercent);
+      }
+      finally
+      {
+        try { Directory.Delete(Path.GetDirectoryName(path)!, true); }
+        catch (IOException) { }
+      }
+    }
+
+    [Fact]
     public void InvalidLayoutCannotBeSaved()
     {
       Assert.Throws<ArgumentException>(() =>
