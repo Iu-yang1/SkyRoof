@@ -157,6 +157,8 @@ namespace SkyRoof
     private bool updatingTextControls;
     private PointF textDragOffset;
     private readonly List<Bitmap> txRecentImages = new();
+    private readonly Dictionary<string, (DateTime Utc, long Size, Bitmap Image)>
+      archivedThumbnailCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ListBox txQuickModes = new()
     {
       Dock = DockStyle.Fill, IntegralHeight = false, BorderStyle = BorderStyle.None
@@ -299,7 +301,15 @@ namespace SkyRoof
       };
       txPicture.MouseDown += OnTxPictureMouseDown;
       txPicture.MouseMove += OnTxPictureMouseMove;
-      txPicture.MouseUp += (_, _) => movingText = false;
+      txPicture.MouseUp += (_, _) =>
+      {
+        if (movingText)
+        {
+          movingText = false;
+          txPicture.Cursor = Cursors.Default;
+          RefreshTxPreview(); // final bicubic render after fast drag frames
+        }
+      };
       txPicture.MouseWheel += OnTxPictureMouseWheel;
       txPicture.MouseEnter += (_, _) => txPicture.Focus();
       txPicture.TabStop = true;
@@ -714,8 +724,7 @@ namespace SkyRoof
             {
               try
               {
-                using var loaded = Image.FromFile(file);
-                RecallTxImage(new Bitmap(loaded));
+                RecallTxImage(SstvImageLibrary.LoadForEditing(file));
               }
               catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
                 or ArgumentException)
@@ -1376,8 +1385,7 @@ namespace SkyRoof
       if (dialog.ShowDialog(this) != DialogResult.OK) return;
       try
       {
-        using var loaded = Image.FromFile(dialog.FileName);
-        SetTxImage(new Bitmap(loaded));
+        SetTxImage(SstvImageLibrary.LoadForEditing(dialog.FileName));
       }
       catch (Exception ex)
       {
@@ -1391,7 +1399,13 @@ namespace SkyRoof
       try
       {
         if (Clipboard.ContainsImage() && Clipboard.GetImage() is Image image)
-          SetTxImage(new Bitmap(image));
+        {
+          using (image)
+          {
+            using var temporary = new Bitmap(image);
+            SetTxImage(SstvImageLibrary.ScaleForEditing(temporary));
+          }
+        }
       }
       catch (Exception ex)
       {
@@ -1852,7 +1866,8 @@ namespace SkyRoof
       var canvas = new Bitmap(spec.Width, spec.Height, PixelFormat.Format32bppArgb);
       using var g = Graphics.FromImage(canvas);
       g.SmoothingMode = SmoothingMode.AntiAlias;
-      g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+      g.InterpolationMode = movingText ? InterpolationMode.Bilinear :
+        InterpolationMode.HighQualityBicubic;
       g.Clear(Color.Black);
       g.DrawImage(txBase, new Rectangle(0, 0, canvas.Width, canvas.Height));
       string template = templateBox.SelectedItem is SstvUserTemplate saved
@@ -2139,8 +2154,7 @@ namespace SkyRoof
       if (archiveList.SelectedItem is not HistoryImage item) return;
       try
       {
-        using var loaded = Image.FromFile(item.Path);
-        RecallTxImage(new Bitmap(loaded));
+        RecallTxImage(SstvImageLibrary.LoadForEditing(item.Path));
       }
       catch (Exception ex)
       {
