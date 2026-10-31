@@ -65,7 +65,8 @@ namespace SkyRoof.SSTV
   public static class SstvOfflineRasterDecoder
   {
     public static Bitmap Decode(string wavPath, SstvTxModeProfile profile,
-      TimeSpan leadingAudio = default, double pitchCorrectionHz = 0)
+      TimeSpan leadingAudio = default, double pitchCorrectionHz = 0,
+      double sampleClockPpm = 0)
     {
       ArgumentNullException.ThrowIfNull(profile);
       using var wave = new WaveFileReader(wavPath);
@@ -98,13 +99,18 @@ namespace SkyRoof.SSTV
       if (leadingAudio < TimeSpan.Zero || leadingAudio.TotalSeconds > 120 ||
           !double.IsFinite(pitchCorrectionHz) || Math.Abs(pitchCorrectionHz) > 2000)
         throw new ArgumentOutOfRangeException(nameof(pitchCorrectionHz));
+      if (!double.IsFinite(sampleClockPpm) ||
+          Math.Abs(sampleClockPpm) > 1000)
+        throw new ArgumentOutOfRangeException(nameof(sampleClockPpm),
+          "SSTV sample-clock adjustment must be within ±1000 ppm.");
+      double scale = 1 + sampleClockPpm / 1_000_000.0;
       double leadingMs = leadingAudio.TotalMilliseconds;
-      double expected = (leadingMs + header + lines * lineMs) / 1000;
+      double expected = (leadingMs + (header + lines * lineMs) * scale) / 1000;
       if (wave.TotalTime.TotalSeconds + .02 < expected)
         throw new InvalidDataException(
           "录音时长不足以解码所选 SSTV 模式的完整图像。");
 
-      int discarded = checked((int)Math.Round((leadingMs + header) * 48) * 2);
+      int discarded = checked((int)Math.Round((leadingMs + header * scale) * 48) * 2);
       byte[] skip = new byte[8192];
       while (discarded > 0)
       {
@@ -116,10 +122,11 @@ namespace SkyRoof.SSTV
       var picture = new Bitmap(profile.Width, profile.Height);
       try
       {
-        long previous = (long)Math.Round((leadingMs + header) * 48);
+        long previous = (long)Math.Round((leadingMs + header * scale) * 48);
         for (int line = 0; line < lines; line++)
         {
-          long next = (long)Math.Round((leadingMs + header + (line + 1) * lineMs) * 48);
+          long next = (long)Math.Round(
+            (leadingMs + (header + (line + 1) * lineMs) * scale) * 48);
           int samples = checked((int)(next - previous));
           previous = next;
           byte[] bytes = new byte[samples * 2];
@@ -137,6 +144,12 @@ namespace SkyRoof.SSTV
             hz[n] = (float)(demod.Process(pcm / 32768f) - pitchCorrectionHz);
           }
 
+          if (Math.Abs(sampleClockPpm) > .001)
+          {
+            int nominal = (int)(Math.Round((line + 1) * lineMs * 48) -
+              Math.Round(line * lineMs * 48));
+            hz = ResampleFrequencyLine(hz, nominal);
+          }
           RenderLine(picture, profile, line, hz);
         }
         return picture;
@@ -146,6 +159,31 @@ namespace SkyRoof.SSTV
         picture.Dispose();
         throw;
       }
+    }
+
+    /// <summary>
+    /// Reproject one measured raster line onto the nominal mode clock.
+    /// Resampling instantaneous frequency (not raw audio) preserves the
+    /// SSTV pixel tone scale and avoids extrapolation at the line edge.
+    /// </summary>
+    internal static float[] ResampleFrequencyLine(ReadOnlySpan<float> source,
+      int targetSamples)
+    {
+      if (source.Length < 2 || targetSamples < 2 || targetSamples > 150000)
+        throw new ArgumentOutOfRangeException(nameof(targetSamples));
+      var output = new float[targetSamples];
+      double ratio = (double)source.Length / targetSamples;
+      for (int n = 0; n < targetSamples; n++)
+      {
+        double sourceIndex = Math.Clamp((n + .5) * ratio - .5,
+          0, source.Length - 1);
+        int left = (int)sourceIndex;
+        int right = Math.Min(left + 1, source.Length - 1);
+        double fractional = sourceIndex - left;
+        output[n] = (float)((1 - fractional) * source[left] +
+          fractional * source[right]);
+      }
+      return output;
     }
 
     internal static void RenderLine(Bitmap picture,
