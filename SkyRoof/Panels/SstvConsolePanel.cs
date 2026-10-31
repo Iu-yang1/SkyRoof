@@ -476,7 +476,7 @@ namespace SkyRoof
       var rightEditor = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
       var settingsGrid = new TableLayoutPanel
       {
-        Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        Dock = DockStyle.Top, AutoSize = false,
         ColumnCount = 2, RowCount = 0, Padding = new Padding(5, 2, 5, 6)
       };
       settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 68));
@@ -559,6 +559,13 @@ namespace SkyRoof
       Heading("音频与识别");
       Field("声卡", txOutputBox);
       Buttons(txCwId, txFskId);
+
+      // Fixed-height rows plus a fixed-width grid permit vertical scrolling
+      // while each field stretches to the available column width at 650px.
+      // AutoSize=true would enlarge the grid beyond the available right pane
+      // based on the saved preferred width of long audio device dropdowns.
+      settingsGrid.Height = (int)settingsGrid.RowStyles.Cast<RowStyle>()
+        .Sum(style => style.Height) + settingsGrid.Padding.Vertical + 8;
 
       rightContent.Controls.Add(rightEditor);
       rightContent.Controls.Add(modeColumn);
