@@ -566,8 +566,8 @@ namespace SkyRoof
       Heading("QSO / 台站信息");
       Field("MY", myCallInput);
       Field("HIS", theirCallInput);
-      Field("RST TX", txRstSent);
-      Field("RST RX", txRstReceived);
+      Field("RSV TX", txRstSent);
+      Field("RSV RX", txRstReceived);
       Field("姓名", txContactName);
       Field("QTH", txContactQth);
       Field("备注", txQsoNote);
