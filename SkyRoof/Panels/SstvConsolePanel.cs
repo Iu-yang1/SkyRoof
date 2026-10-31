@@ -939,6 +939,7 @@ namespace SkyRoof
       old?.Dispose();
       ClearHistory(redoImages);
       RefreshTxPreview();
+      txStatus.Text = "图片已加载，可以编辑或保存 SSTV 音频";
       tabs.SelectedIndex = 1;
     }
 
