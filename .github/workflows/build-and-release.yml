@@ -190,6 +190,8 @@ jobs:
             SkyRoof Fork v.${{ steps.get_version.outputs.version }} (based on VE3NEA/SkyRoof v.1.56)
 
             ### English
+            - SSTV gallery: thumbnail left-click reuses an existing picture without adding duplicates; right-click opens actions; history tab can import/export/delete images.
+            - RX and TX share a numeric-only 1200/1500/1900/2300 Hz orange/black MMSSTV tone scale; the RX lower strip displays AF/IF activity.
             - SSTV RX mode dropdown now lists all 43 TX profiles, including native Robot/PD; native modes continue automatic VIS decoding.
             - Three independent callsign/caption text layers with drag-to-position, size and color controls; saved layouts can be deleted.
             - Integrated SSTV Console with 43 transmit modes, extended VIS/N-VIS reception, AF/12-kHz IF sources, image editing, CW/FSK ID, gallery and QSO log.
@@ -207,6 +209,8 @@ jobs:
             - Preserve TX frequency and persistent satellite/transponder offsets.
 
             ### 中文
+            - 修复 SSTV 缩略图左右键导致重复新增的问题；图库／历史增加导入、导出及删除图片。
+            - RX/TX 使用统一的 MMSSTV 橙黑色 1200/1500/1900/2300 Hz 音调参考，RX 黑色区域显示 AF/IF 频谱。
             - SSTV 接收模式列表与发射端 43 种模式保持一致，包含由原生解码器自动识别的 Robot/PD。
             - TX 图片新增独立己方／对方呼号及自定义文字图层，支持拖动、字号和颜色调整，模板可保存并删除。
             - 集成 SSTV 控制台：43 种图片发射模式、扩展 VIS/N-VIS 接收、AF/12 kHz IF 声源、图片编辑、CW/FSK ID、图库及通联日志。

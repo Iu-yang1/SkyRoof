@@ -87,10 +87,9 @@ namespace SkyRoof
       Margin = new Padding(4)
     };
     private readonly TabControl tabs = new() { Dock = DockStyle.Fill };
-    private readonly SstvToneSpectrumView rxSpectrum = new()
+    private readonly SstvTxToneReference rxToneReference = new()
     {
-      Dock = DockStyle.Bottom,
-      Height = 106
+      Dock = DockStyle.Bottom, Height = 90
     };
     private readonly PictureBox rxPicture = new()
     {
@@ -392,7 +391,7 @@ namespace SkyRoof
       }));
       actions.Controls.Add(Btn("接收记录", () => { ReloadHistory(); tabs.SelectedIndex = 2; }));
       page.Controls.Add(rxPicture);
-      page.Controls.Add(rxSpectrum);
+      page.Controls.Add(rxToneReference);
       page.Controls.Add(rxStatus);
       page.Controls.Add(actions);
       page.Controls.Add(tuning);
@@ -462,7 +461,7 @@ namespace SkyRoof
       main.Controls.Add(left, 0, 0);
 
       var right = new Panel { Dock = DockStyle.Fill };
-      var tone = new SstvTxToneReference { Height = 76 };
+      var tone = new SstvTxToneReference { Height = 90 };
       var rightContent = new Panel { Dock = DockStyle.Fill };
       var modeColumn = new Panel { Dock = DockStyle.Left, Width = 130 };
       var modeHeader = new Label
@@ -627,7 +626,22 @@ namespace SkyRoof
         SizeMode = PictureBoxSizeMode.StretchImage,
         Margin = new Padding(3), Cursor = Cursors.Hand
       };
-      tile.Click += (_, _) => action();
+      // Mouse Click fires for both left and right buttons. Never treat a
+      // right-click as selecting/re-importing a picture.
+      tile.MouseUp += (_, e) =>
+      {
+        if (e.Button == MouseButtons.Left) action();
+        // WinForms displays ContextMenuStrip itself on a right click.
+        // Do not explicitly Show() here, or the menu opens twice.
+      };
+      var context = new ContextMenuStrip();
+      context.Items.Add("设为当前发送图片", null, (_, _) => action());
+      context.Items.Add("打开图库 / 历史", null, (_, _) =>
+      {
+        ReloadHistory();
+        tabs.SelectedIndex = 2;
+      });
+      tile.ContextMenuStrip = context;
       txThumbnailTips.SetToolTip(tile, title);
       txThumbnailStrip.Controls.Add(tile);
     }
@@ -656,7 +670,7 @@ namespace SkyRoof
           Bitmap image = txRecentImages[i];
           AddTxThumbnail(image, i == 0 ? "当前图片" : "近期编辑图片", () =>
           {
-            SetTxImage(new Bitmap(image));
+            RecallTxImage(new Bitmap(image));
           });
         }
         string folder = Path.Combine(Utils.GetUserDataFolder(), "SstvImages");
@@ -672,7 +686,7 @@ namespace SkyRoof
               try
               {
                 using var loaded = Image.FromFile(file);
-                SetTxImage(new Bitmap(loaded));
+                RecallTxImage(new Bitmap(loaded));
               }
               catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
                 or ArgumentException)
@@ -696,9 +710,12 @@ namespace SkyRoof
     {
       var page = new TabPage("图库 / 历史");
       var bar = Toolbar();
-      bar.Controls.Add(Btn("刷新", ReloadHistory));
-      bar.Controls.Add(Btn("查看", ShowSelectedHistory));
-      bar.Controls.Add(Btn("用作发送图片", UseSelectedHistoryForTx, 135));
+      bar.Controls.Add(Btn("刷新", ReloadHistory, 70));
+      bar.Controls.Add(Btn("导入图片", ImportHistoryImage, 90));
+      bar.Controls.Add(Btn("导出图片", ExportHistoryImage, 90));
+      bar.Controls.Add(Btn("删除图片", DeleteHistoryImage, 90));
+      bar.Controls.Add(Btn("查看", ShowSelectedHistory, 70));
+      bar.Controls.Add(Btn("用作发送图片", UseSelectedHistoryForTx, 125));
       page.Controls.Add(archiveList);
       page.Controls.Add(bar);
       tabs.TabPages.Add(page);
@@ -1194,7 +1211,7 @@ namespace SkyRoof
         BeginInvoke((Action)(() =>
         {
           if (!closed && !IsDisposed)
-            rxSpectrum.SetLevels(levels);
+            rxToneReference.SetLevels(levels);
         }));
       }
       catch (InvalidOperationException) { }
@@ -1371,17 +1388,23 @@ namespace SkyRoof
         stack.Push(newestFirst[i]);
     }
 
-    private void SetTxImage(Bitmap image)
+    private void SetTxImage(Bitmap image) => ReplaceTxImage(image, remember: true);
+
+    // Selecting an already-present thumbnail changes the editor selection;
+    // it is not another import and must not append a history entry.
+    private void RecallTxImage(Bitmap image) => ReplaceTxImage(image, remember: false);
+
+    private void ReplaceTxImage(Bitmap image, bool remember)
     {
       var old = txBase;
       if (old != null) PushHistory(undoImages, old);
       txBase = image;
       old?.Dispose();
-      RememberTxImage(image);
+      if (remember) RememberTxImage(image);
       ClearHistory(redoImages);
       RefreshTxPreview();
       txStatus.Text = "图片已加载，可以编辑或保存 SSTV 音频";
-      RefreshTxThumbnails();
+      if (remember) RefreshTxThumbnails();
       tabs.SelectedIndex = 1;
     }
 
@@ -1819,6 +1842,104 @@ namespace SkyRoof
       rxPicture.Image.Save(save.FileName, ImageFormat.Png);
     }
 
+    private string HistoryFolder =>
+      Path.Combine(Utils.GetUserDataFolder(), "SstvImages");
+
+    private void ImportHistoryImage()
+    {
+      using var dialog = new OpenFileDialog
+      {
+        Title = "导入 SSTV 图库图片",
+        Filter = "图片文件|*.png;*.jpg;*.jpeg;*.bmp;*.gif|所有文件|*.*",
+        Multiselect = false, CheckFileExists = true
+      };
+      if (dialog.ShowDialog(this) != DialogResult.OK) return;
+      try
+      {
+        string imported = SstvImageLibrary.Import(HistoryFolder, dialog.FileName);
+        ReloadHistory();
+        for (int i = 0; i < archiveList.Items.Count; i++)
+        {
+          if (archiveList.Items[i] is HistoryImage item &&
+              string.Equals(item.Path, imported, StringComparison.OrdinalIgnoreCase))
+          {
+            archiveList.SelectedIndex = i;
+            break;
+          }
+        }
+        RefreshTxThumbnails();
+        txStatus.Text = "图片已导入图库";
+      }
+      catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+        or ArgumentException or System.Runtime.InteropServices.ExternalException)
+      {
+        MessageBox.Show(this, ex.Message, "导入图片失败",
+          MessageBoxButtons.OK, MessageBoxIcon.Warning);
+      }
+    }
+
+    private void ExportHistoryImage()
+    {
+      if (archiveList.SelectedItem is not HistoryImage item)
+      {
+        MessageBox.Show(this, "请在图库中选中要导出的图片。", "SSTV",
+          MessageBoxButtons.OK, MessageBoxIcon.Information);
+        return;
+      }
+      using var dialog = new SaveFileDialog
+      {
+        Title = "导出图库图片",
+        Filter = "PNG 图片|*.png",
+        FileName = Path.GetFileName(item.Path),
+        AddExtension = true, DefaultExt = "png"
+      };
+      if (dialog.ShowDialog(this) != DialogResult.OK) return;
+      try
+      {
+        SstvImageLibrary.Export(item.Path, dialog.FileName);
+        txStatus.Text = "图片已导出";
+      }
+      catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+        or ArgumentException)
+      {
+        MessageBox.Show(this, ex.Message, "导出图片失败",
+          MessageBoxButtons.OK, MessageBoxIcon.Warning);
+      }
+    }
+
+    private void DeleteHistoryImage()
+    {
+      if (archiveList.SelectedItem is not HistoryImage item)
+      {
+        MessageBox.Show(this, "请在图库中选中要删除的图片。", "SSTV",
+          MessageBoxButtons.OK, MessageBoxIcon.Information);
+        return;
+      }
+      if (MessageBox.Show(this, $"确定删除图库图片“{Path.GetFileName(item.Path)}”？",
+        "删除 SSTV 图片", MessageBoxButtons.YesNo,
+        MessageBoxIcon.Question, MessageBoxDefaultButton.Button2)
+          != DialogResult.Yes) return;
+      try
+      {
+        if (!SstvImageLibrary.Delete(HistoryFolder, item.Path))
+        {
+          txStatus.Text = "图片已经不存在";
+        }
+        else
+        {
+          txStatus.Text = "图片已从图库删除";
+        }
+        ReloadHistory();
+        RefreshTxThumbnails();
+      }
+      catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+        or InvalidOperationException or ArgumentException)
+      {
+        MessageBox.Show(this, ex.Message, "删除图片失败",
+          MessageBoxButtons.OK, MessageBoxIcon.Warning);
+      }
+    }
+
     private void ReloadHistory()
     {
       if (closed) return;
@@ -1860,7 +1981,7 @@ namespace SkyRoof
       try
       {
         using var loaded = Image.FromFile(item.Path);
-        SetTxImage(new Bitmap(loaded));
+        RecallTxImage(new Bitmap(loaded));
       }
       catch (Exception ex)
       {

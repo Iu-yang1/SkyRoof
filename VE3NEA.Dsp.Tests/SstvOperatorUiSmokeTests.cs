@@ -172,9 +172,42 @@ namespace VE3NEA.Dsp.Tests
           SaveLayoutSnapshot(panel, tabs, 0, "rx-980x720", 980, 720);
           SaveLayoutSnapshot(panel, tabs, 0, "rx-650x420", 650, 420);
 
+          // Clicking an existing thumbnail must select its image, NOT
+          // append another recent picture, regardless of mouse button.
+          tabs.SelectedIndex = 1;
+          var thumbs = Field<FlowLayoutPanel>(panel, "txThumbnailStrip");
+          var recent = Field<System.Collections.Generic.List<Bitmap>>(panel,
+            "txRecentImages");
+          int recentCount = recent.Count, thumbnailCount = thumbs.Controls.Count;
+          var tile = thumbs.Controls.OfType<PictureBox>().First();
+          MethodInfo mouseUp = typeof(Control).GetMethod("OnMouseUp",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+          for (int i = 0; i < 3; i++)
+            mouseUp.Invoke(tile, new object[]
+            {
+              new MouseEventArgs(MouseButtons.Left, 1, 14, 14, 0)
+            });
+          Assert.Equal(recentCount, recent.Count);
+          Assert.Equal(thumbnailCount, thumbs.Controls.Count);
+          mouseUp.Invoke(tile, new object[]
+          {
+            new MouseEventArgs(MouseButtons.Right, 1, 14, 14, 0)
+          });
+          tile.ContextMenuStrip?.Close();
+          Assert.Equal(recentCount, recent.Count);
+          Assert.Equal(thumbnailCount, thumbs.Controls.Count);
+
           var receive = tabs.TabPages[0];
-          Assert.Contains(receive.Controls.OfType<SstvToneSpectrumView>(),
-            view => view.Height >= 90);
+          Assert.Single(Descendants<SstvTxToneReference>(receive));
+          Assert.Equal(new[] { 1200, 1500, 1900, 2300 },
+            SstvTxToneReference.ReferenceFrequencies);
+          var historyButtons = Descendants<Button>(tabs.TabPages[2])
+            .Select(button => button.Text).ToArray();
+          Assert.Contains("导入图片", historyButtons);
+          Assert.Contains("导出图片", historyButtons);
+          Assert.Contains("删除图片", historyButtons);
+          Assert.Contains(receive.Controls.OfType<SstvTxToneReference>(),
+            view => view.Height >= 80);
           var rxPicture = Field<PictureBox>(panel, "rxPicture");
           rxPicture.Tag = "old-image.png";
           panel.ShowReceivedSstv(image, "Martin 1", false, null);
@@ -226,6 +259,39 @@ namespace VE3NEA.Dsp.Tests
       thread.SetApartmentState(ApartmentState.STA);
       thread.Start();
       Assert.True(thread.Join(TimeSpan.FromSeconds(20)), "STA UI smoke timed out");
+      if (failure != null) throw new Xunit.Sdk.XunitException(failure.ToString());
+    }
+
+    [Fact]
+    public void TxAndRxUseTheSameNumericOnlyOrangeBlackToneScale()
+    {
+      Exception? failure = null;
+      var thread = new Thread(() =>
+      {
+        try
+        {
+          using var tx = new SstvTxToneReference { Size = new Size(400, 90) };
+          using var rx = new SstvTxToneReference { Size = new Size(400, 90) };
+          using var txBitmap = new Bitmap(400, 90);
+          using var rxBitmap = new Bitmap(400, 90);
+          tx.DrawToBitmap(txBitmap, new Rectangle(0, 0, 400, 90));
+          rx.DrawToBitmap(rxBitmap, new Rectangle(0, 0, 400, 90));
+          for (int y = 0; y < 90; y += 3)
+            for (int x = 0; x < 400; x += 3)
+              Assert.Equal(txBitmap.GetPixel(x, y), rxBitmap.GetPixel(x, y));
+          Color orange = txBitmap.GetPixel(200, 30);
+          Color black = txBitmap.GetPixel(200, 75);
+          Assert.True(orange.R > orange.G && orange.G > orange.B,
+            "The upper AF reference pane must be orange");
+          Assert.True(black.R < 20 && black.G < 20 && black.B < 20,
+            "The lower AF reference pane must be black");
+        }
+        catch (Exception ex) { failure = ex; }
+      });
+      thread.SetApartmentState(ApartmentState.STA);
+      thread.IsBackground = true;
+      thread.Start();
+      Assert.True(thread.Join(TimeSpan.FromSeconds(10)), "Tone reference paint timed out");
       if (failure != null) throw new Xunit.Sdk.XunitException(failure.ToString());
     }
 
