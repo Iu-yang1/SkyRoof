@@ -17,6 +17,7 @@ namespace SkyRoof.SSTV
     public SstvTextLayer? MyCallStyle { get; init; }
     public SstvTextLayer? TheirCallStyle { get; init; }
     public SstvTextLayer? OverlayStyle { get; init; }
+    public SstvAdditionalCaption[]? ExtraCaptions { get; init; }
     public override string ToString() => Name;
   }
 
@@ -93,6 +94,10 @@ namespace SkyRoof.SSTV
       template.OverlayText.Length <= 512 &&
       (template.MyCallText == null || template.MyCallText.Length <= 60) &&
       (template.TheirCallText == null || template.TheirCallText.Length <= 60) &&
+      (template.ExtraCaptions == null ||
+        (template.ExtraCaptions.Length <= 5 &&
+         template.ExtraCaptions.All(x => x != null && x.Text != null &&
+           x.Text.Length <= 512 && x.Style != null))) &&
       Styles.Contains(template.Style) &&
       template.SavedUtc.Kind == DateTimeKind.Utc;
   }
