@@ -85,7 +85,11 @@ namespace SkyRoof
     {
       DropDownStyle = ComboBoxStyle.DropDownList, Width = 145
     };
-    private readonly TextBox overlayText = new() { Width = 165 };
+    private readonly TextBox overlayText = new()
+    {
+      Width = 185, MaxLength = 512,
+      PlaceholderText = "呼号 / {MYGRID} / {SAT} / {UTC}"
+    };
     private readonly ComboBox templateBox = new()
     {
       Width = 110, DropDownStyle = ComboBoxStyle.DropDownList
@@ -151,6 +155,7 @@ namespace SkyRoof
       receiveSession.RasterImageAvailable += OnRasterReceived;
       receiveSession.VisSynchronized += OnVisSynchronized;
       overlayText.TextChanged += (_, _) => RefreshTxPreview();
+      qsoCall.TextChanged += (_, _) => RefreshTxPreview();
       templateBox.Items.AddRange(new object[]
       {
         "经典呼号", "QSL 卡片", "卫星横幅", "纯图片"
@@ -910,7 +915,17 @@ namespace SkyRoof
         g.DrawString("SATELLITE SSTV", captionFont, Brushes.White,
           canvas.Width * .035f, canvas.Height * .035f);
       }
-      if (template != "纯图片" && !string.IsNullOrWhiteSpace(overlayText.Text))
+      var radio = ctx.FrequencyControl.RadioLink;
+      var macros = new SstvMacroContext(
+        ctx.Settings.User.Call ?? "", ctx.Settings.User.Square ?? "",
+        qsoCall.Text.Trim().ToUpperInvariant(),
+        radio.IsTerrestrial ? "" : radio.Sat?.name ?? "",
+        (modeBox.SelectedItem as SstvTxModeProfile)?.Name ?? "SSTV",
+        radio.IsTerrestrial ? 0 : radio.CorrectedUplinkFrequency,
+        radio.CorrectedDownlinkFrequency,
+        DateTime.UtcNow);
+      string expanded = SstvTextMacros.Expand(overlayText.Text, macros);
+      if (template != "纯图片" && !string.IsNullOrWhiteSpace(expanded))
       {
         float fontSize = Math.Max(12f, canvas.Width / 19f);
         using var font = new Font(FontFamily.GenericSansSerif, fontSize, FontStyle.Bold);
@@ -918,8 +933,8 @@ namespace SkyRoof
         using var foreground = new SolidBrush(Color.White);
         float x = Math.Max(8, canvas.Width * .035f);
         float y = Math.Max(6, canvas.Height - fontSize * 1.75f);
-        g.DrawString(overlayText.Text, font, shadow, x + 2, y + 2);
-        g.DrawString(overlayText.Text, font, foreground, x, y);
+        g.DrawString(expanded, font, shadow, x + 2, y + 2);
+        g.DrawString(expanded, font, foreground, x, y);
       }
       return canvas;
     }
