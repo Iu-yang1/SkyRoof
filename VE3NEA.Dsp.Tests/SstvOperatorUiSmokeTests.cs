@@ -46,7 +46,11 @@ namespace VE3NEA.Dsp.Tests
           var panel = ctx.Panel;
           panel.Size = new Size(980, 720);
           panel.CreateControl();
+          panel.Show();
+          Application.DoEvents();
           var tabs = panel.Controls.OfType<TabControl>().Single();
+          Assert.True(panel.Visible);
+          Assert.True(tabs.Visible);
           Assert.Equal(new[] { "接收 RX", "发送 TX",
               "图库 / 历史", "通联日志" },
             tabs.TabPages.Cast<TabPage>().Select(x => x.Text).ToArray());
@@ -152,8 +156,21 @@ namespace VE3NEA.Dsp.Tests
       panel.PerformLayout();
       tabs.SelectedIndex = tab;
       tabs.PerformLayout();
+      Application.DoEvents();
       using var screen = new Bitmap(width, height);
       panel.DrawToBitmap(screen, new Rectangle(0, 0, width, height));
+      // A prior CI run reported a nominally successful capture that was
+      // actually an empty DockContent frame. Reject such false acceptance.
+      int darkPixels = 0;
+      for (int y = 35; y < height; y += 3)
+        for (int x = 10; x < width - 10; x += 3)
+        {
+          Color pixel = screen.GetPixel(x, y);
+          if (pixel.R < 100 && pixel.G < 115 && pixel.B < 135)
+            darkPixels++;
+        }
+      Assert.True(darkPixels > 300,
+        $"SSTV {name} screenshot has no rendered RX/TX content");
       screen.Save(Path.Combine(dir, name + ".png"));
     }
 
