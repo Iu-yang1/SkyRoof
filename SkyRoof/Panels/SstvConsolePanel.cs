@@ -330,19 +330,34 @@ namespace SkyRoof
       rxToggleButton.Text = "开始接收";
       var stop = new CancellationTokenSource();
       replayStop = stop;
+      string? normalizedTemporaryFile = null;
       try
       {
+        rxStatus.Text = "正在准备 SSTV 录音...";
+        string workingWave = dialog.FileName;
+        bool convert = await Task.Run(
+          () => SstvWavNormalizer.NeedsConversion(dialog.FileName), stop.Token);
+        if (convert)
+        {
+          normalizedTemporaryFile = Path.Combine(Path.GetTempPath(),
+            $"SkyRoof_SstvRx_{Guid.NewGuid():N}.wav");
+          string output = normalizedTemporaryFile;
+          await Task.Run(() => SstvWavNormalizer.Normalize(
+            dialog.FileName, output, stop.Token), stop.Token);
+          workingWave = output;
+        }
+        stop.Token.ThrowIfCancellationRequested();
         rxStatus.Text = "正在解析 SSTV 录音...";
         double clockPpm = (double)imageSlantCorrection.Value;
         SstvVisModeIdentity? identified = await Task.Run(
-          () => SstvVisModeIdentifier.DetectWave(dialog.FileName), stop.Token);
+          () => SstvVisModeIdentifier.DetectWave(workingWave), stop.Token);
         SstvTxModeProfile? manual = rxModeBox.SelectedItem as SstvTxModeProfile;
         SstvTxModeProfile? resolved = manual ?? identified?.Profile;
         if (resolved != null && resolved.Native == null)
         {
           using Bitmap image = await Task.Run(
             () => SstvOfflineRasterDecoder.Decode(
-              dialog.FileName, resolved,
+              workingWave, resolved,
               identified?.Profile.Name == resolved.Name
                 ? identified.Value.LeadingAudio : default,
               identified?.Profile.Name == resolved.Name
@@ -364,11 +379,11 @@ namespace SkyRoof
                 Picture = Path.GetFileName(pictureFile)
               }));
             ShowReceivedSstv(image, resolved.Name, true, pictureFile);
-            await IdentifyRecordedFskIdAsync(dialog.FileName, stop.Token);
+            await IdentifyRecordedFskIdAsync(workingWave, stop.Token);
           }
           return;
         }
-        await SstvWaveReceiver.DecodeAsync(dialog.FileName, OnAudioReceived,
+        await SstvWaveReceiver.DecodeAsync(workingWave, OnAudioReceived,
           progress =>
           {
             if (closed || !IsHandleCreated) return;
@@ -385,7 +400,7 @@ namespace SkyRoof
         if (!closed)
         {
           rxStatus.Text = "录音解析已完成";
-          await IdentifyRecordedFskIdAsync(dialog.FileName, stop.Token);
+          await IdentifyRecordedFskIdAsync(workingWave, stop.Token);
         }
       }
       catch (OperationCanceledException)
@@ -402,6 +417,12 @@ namespace SkyRoof
       {
         if (ReferenceEquals(replayStop, stop)) replayStop = null;
         stop.Dispose();
+        if (!string.IsNullOrEmpty(normalizedTemporaryFile))
+        {
+          try { File.Delete(normalizedTemporaryFile); }
+          catch (IOException) { }
+          catch (UnauthorizedAccessException) { }
+        }
       }
     }
 
