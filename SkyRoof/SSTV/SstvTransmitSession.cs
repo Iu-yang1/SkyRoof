@@ -64,7 +64,10 @@ namespace SkyRoof.SSTV
     {
       var link = ctx.FrequencyControl.RadioLink;
       var cat = ctx.CatControl.Tx;
-      if (cat == null || !cat.Ptt) return false;
+      if (cat == null || !cat.Ptt ||
+          link.UplinkMode != guard.Mode ||
+          ctx.CwTransmit?.TxCatWritesFrozen == true)
+        return false;
       double lo = 0;
       if (ctx.Settings.Transverter.TxCatOffsetEnabled)
       {
