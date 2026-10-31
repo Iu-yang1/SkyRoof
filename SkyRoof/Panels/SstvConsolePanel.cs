@@ -75,6 +75,11 @@ namespace SkyRoof
       Minimum = -500, Maximum = 500, Increment = 5,
       DecimalPlaces = 0, Width = 72, Height = 30
     };
+    private readonly NumericUpDown imageSlantCorrection = new()
+    {
+      Minimum = -1000, Maximum = 1000, Increment = 25,
+      DecimalPlaces = 0, Width = 76, Height = 30
+    };
     private readonly Button rxToggleButton = new()
     {
       Text = "开始接收", Width = 96, Height = 30,
@@ -221,6 +226,12 @@ namespace SkyRoof
       });
       tuning.Controls.Add(pitchCorrection);
       tuning.Controls.Add(autoVisCorrection);
+      tuning.Controls.Add(new Label
+      {
+        Text = "图像倾斜", Width = 66, Height = 30,
+        TextAlign = ContentAlignment.MiddleCenter
+      });
+      tuning.Controls.Add(imageSlantCorrection);
       var actions = Toolbar();
       actions.Controls.Add(Btn("导入 WAV", () => _ = ReplayWavAsync()));
       actions.Controls.Add(Btn("手动开始", ManualStartReceive, 98));
@@ -321,6 +332,7 @@ namespace SkyRoof
       try
       {
         rxStatus.Text = "正在解析 SSTV 录音...";
+        double clockPpm = (double)imageSlantCorrection.Value;
         SstvVisModeIdentity? identified = await Task.Run(
           () => SstvVisModeIdentifier.DetectWave(dialog.FileName), stop.Token);
         SstvTxModeProfile? manual = rxModeBox.SelectedItem as SstvTxModeProfile;
@@ -333,7 +345,8 @@ namespace SkyRoof
               identified?.Profile.Name == resolved.Name
                 ? identified.Value.LeadingAudio : default,
               identified?.Profile.Name == resolved.Name
-                ? identified.Value.FrequencyOffsetHz : 0), stop.Token);
+                ? identified.Value.FrequencyOffsetHz : 0,
+              clockPpm), stop.Token);
           if (!closed)
           {
             string gallery = Path.Combine(Utils.GetUserDataFolder(), "SstvImages");
