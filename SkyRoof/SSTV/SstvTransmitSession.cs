@@ -96,6 +96,9 @@ namespace SkyRoof.SSTV
         cancellationToken);
       stop = local;
       bool pttRequested = false;
+      bool unsuccessful = false;
+      bool audioFinished = false;
+      DateTime pttRequestUtc = default;
       try
       {
         if (string.IsNullOrWhiteSpace(wavPath) ||
@@ -136,6 +139,7 @@ namespace SkyRoof.SSTV
 
         var cat = ctx.CatControl.Tx!;
         DateTime requestedUtc = DateTime.UtcNow;
+        pttRequestUtc = requestedUtc;
         // Publish ownership intent before issuing the asynchronous CAT write
         // so STOP can cancel a still-pending PTT-ON request.
         Interlocked.Exchange(ref ownPttRequested, 1);
@@ -187,18 +191,57 @@ namespace SkyRoof.SSTV
           }
         }
         player.Stop();
-        status?.Invoke("SSTV 音频发送结束");
+        audioFinished = true;
+      }
+      catch
+      {
+        unsuccessful = true;
+        throw;
       }
       finally
       {
-        // Stop/close/cancellation/CAT errors all converge on the same
-        // ownership-aware release. Never leave the rig keyed on exception.
-        if (pttRequested)
-          ctx.FrequencyControl.ReleaseApplicationPtt();
-        Interlocked.Exchange(ref ownPttRequested, 0);
-        stop = null;
-        local.Dispose();
-        Interlocked.Exchange(ref sending, 0);
+        // A successful OFF command ACK is NOT independent PTT readback.
+        // Do not report completion while the transceiver may still be
+        // transmitting. Cancellation of the picture must not cancel this
+        // short safety wait.
+        bool confirmedOff = !pttRequested;
+        try
+        {
+          if (pttRequested)
+          {
+            ctx.FrequencyControl.ReleaseApplicationPtt();
+            var radio = ctx.CatControl.Tx;
+            for (int attempt = 0; attempt < 40; attempt++)
+            {
+              if (radio != null &&
+                  SstvTxPolicy.HasConfirmedPttOff(
+                    radio.Ptt, radio.PttMayBeOwnedByApplication,
+                    radio.LastPttHardwareReadbackUtc, pttRequestUtc,
+                    DateTime.UtcNow))
+              {
+                confirmedOff = true;
+                break;
+              }
+              await Task.Delay(100); // release watchdog is not user-cancelable
+            }
+          }
+        }
+        finally
+        {
+          Interlocked.Exchange(ref ownPttRequested, 0);
+          stop = null;
+          local.Dispose();
+          Interlocked.Exchange(ref sending, 0);
+        }
+        if (!confirmedOff)
+        {
+          status?.Invoke("无法确认 PTT 已解除，请立即检查电台！");
+          // Preserve the primary transmission exception when one exists.
+          if (!unsuccessful)
+            throw new IOException("未收到新的 CAT PTT OFF 硬件读回，需人工确认电台停止发射。");
+        }
+        else if (!unsuccessful && audioFinished)
+          status?.Invoke("SSTV 发送完成，PTT 已确认解除");
       }
     }
 
