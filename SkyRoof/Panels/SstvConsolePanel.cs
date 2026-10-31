@@ -196,7 +196,12 @@ namespace SkyRoof
       archiveList.DoubleClick += (_, _) => ShowSelectedHistory();
       txSendButton.Click += (_, _) => _ = SendImageAsync();
       txApproval.CheckedChanged += (_, _) => UpdateTxAvailability();
-      txOutputBox.SelectedIndexChanged += (_, _) => UpdateTxAvailability();
+      // A changed audio route invalidates the operator's previous approval.
+      txOutputBox.SelectedIndexChanged += (_, _) =>
+      {
+        txApproval.Checked = false;
+        UpdateTxAvailability();
+      };
       txStopButton.Click += (_, _) => StopTransmit();
 
       PopulateTxOutputDevices();
@@ -558,10 +563,12 @@ namespace SkyRoof
       {
         foreach (AudioDeviceEntry d in Soundcard.ListDevices(DataFlow.Render))
           txOutputBox.Items.Add(new DeviceEntry(d.Id, d.Name));
-        if (txOutputBox.Items.Count > 0)
-          txOutputBox.SelectedIndex = 0;
-        else
-          txStatus.Text = "未检测到发射声卡；仍可保存 SSTV WAV 音频";
+        // Never choose Windows' default speaker as the TX audio route.
+        // The operator must deliberately select the radio's own AF endpoint.
+        txOutputBox.SelectedIndex = -1;
+        txStatus.Text = txOutputBox.Items.Count > 0
+          ? "请选择实际连接电台的发射声卡；不会自动使用系统默认扬声器。"
+          : "未检测到发射声卡；仍可保存 SSTV WAV 音频";
       }
       catch (Exception ex)
       {
@@ -634,6 +641,7 @@ namespace SkyRoof
       txSendButton.Enabled = false;
       txStopButton.Enabled = true;
       txApproval.Enabled = false;
+      txOutputBox.Enabled = false;
       bool criticalPttAlertShown = false;
       try
       {
@@ -687,6 +695,7 @@ namespace SkyRoof
         if (!closed)
         {
           txStopButton.Enabled = false;
+          txOutputBox.Enabled = true;
           txApproval.Enabled = true;
           txApproval.Checked = false;
           UpdateTxAvailability();
