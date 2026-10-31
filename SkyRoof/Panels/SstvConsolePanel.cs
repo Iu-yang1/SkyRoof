@@ -1431,7 +1431,8 @@ namespace SkyRoof
       RadioLink radio = ctx.FrequencyControl?.RadioLink ?? new RadioLink();
       var macros = new SstvMacroContext(
         ctx.Settings.User.Call ?? "", ctx.Settings.User.Square ?? "",
-        qsoCall.Text.Trim().ToUpperInvariant(),
+        (string.IsNullOrWhiteSpace(theirCallInput.Text)
+          ? qsoCall.Text : theirCallInput.Text).Trim().ToUpperInvariant(),
         radio.IsTerrestrial ? "" : radio.Sat?.name ?? "",
         (modeBox.SelectedItem as SstvTxModeProfile)?.Name ?? "SSTV",
         radio.IsTerrestrial ? 0 : radio.CorrectedUplinkFrequency,
