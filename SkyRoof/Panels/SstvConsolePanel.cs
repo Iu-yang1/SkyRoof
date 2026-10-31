@@ -145,6 +145,16 @@ namespace SkyRoof
       transmitSession = new SstvTransmitSession(ctx);
       Text = "SSTV";
       TabText = "SSTV";
+      KeyPreview = true;
+      KeyDown += (_, e) =>
+      {
+        if (e.KeyCode == Keys.Escape && txStopButton.Enabled)
+        {
+          StopTransmit();
+          e.Handled = true;
+          e.SuppressKeyPress = true;
+        }
+      };
       Width = 980;
       Height = 720;
       MinimumSize = new Size(650, 420);
@@ -606,6 +616,9 @@ namespace SkyRoof
 
     private void StopTransmit()
     {
+      if (txOperationStop == null && !transmitSession.IsSending) return;
+      txStopButton.Enabled = false; // prevent duplicate STOP clicks
+      txStatus.Text = "正在停止音频并请求 PTT OFF...";
       txOperationStop?.Cancel();
       transmitSession.RequestStop();
     }
