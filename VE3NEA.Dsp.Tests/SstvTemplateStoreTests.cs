@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using SkyRoof.SSTV;
 using Xunit;
 namespace VE3NEA.Dsp.Tests
@@ -58,6 +59,42 @@ namespace VE3NEA.Dsp.Tests
         Assert.True(SstvTemplateStore.Delete(path, "eme qso"));
         Assert.Empty(SstvTemplateStore.Read(path));
         Assert.False(SstvTemplateStore.Delete(path, "no template"));
+      }
+      finally
+      {
+        try { Directory.Delete(Path.GetDirectoryName(path)!, true); }
+        catch (IOException) { }
+      }
+    }
+
+    [Fact]
+    public void AdditionalCaptionLayersPersistAcrossTemplateReload()
+    {
+      string path = Path.Combine(Path.GetTempPath(),
+        "SkyRoof-multilayer-" + Guid.NewGuid().ToString("N"), "templates.json");
+      try
+      {
+        var extra = new SstvAdditionalCaption[]
+        {
+          new("{MYCALL} / {HISCALL}",
+            new SstvTextLayer(.17f, .4f, 9f, unchecked((int)0xFFFF00FF))),
+          new("{RSV_TX} {RSV_RX}",
+            new SstvTextLayer(.67f, .77f, 5f, unchecked((int)0xFF11FF22)))
+        };
+        var entry = new SstvUserTemplate("Multiple", "经典呼号",
+          "{SAT}", DateTime.UtcNow) { ExtraCaptions = extra };
+        SstvTemplateStore.Save(path, entry);
+        var loaded = Assert.Single(SstvTemplateStore.Read(path));
+        Assert.NotNull(loaded.ExtraCaptions);
+        Assert.Equal(2, loaded.ExtraCaptions!.Length);
+        Assert.Equal(extra[0], loaded.ExtraCaptions[0]);
+        Assert.Equal(extra[1], loaded.ExtraCaptions[1]);
+        var bad = entry with
+        {
+          ExtraCaptions = Enumerable.Range(0, 6)
+            .Select(x => extra[0]).ToArray()
+        };
+        Assert.Throws<ArgumentException>(() => SstvTemplateStore.Save(path, bad));
       }
       finally
       {
