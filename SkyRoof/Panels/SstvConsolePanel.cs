@@ -142,7 +142,17 @@ namespace SkyRoof
       SstvTextLayer.TheirCallDefault,
       SstvTextLayer.CustomDefault
     };
-    private readonly RectangleF[] textBounds = new RectangleF[3];
+    private readonly RectangleF[] textBounds = new RectangleF[8];
+    private readonly List<SstvAdditionalCaption> extraCaptions = new();
+    private readonly TextBox activeCaptionInput = new()
+    {
+      Width = 185, MaxLength = 512, PlaceholderText = "支持 {MYCALL} 等变量"
+    };
+    private readonly ComboBox macroSelector = new()
+    {
+      Width = 185, DropDownStyle = ComboBoxStyle.DropDownList
+    };
+    private const int MaxTextLayers = 8;
     private bool movingText;
     private bool updatingTextControls;
     private PointF textDragOffset;
@@ -238,16 +248,29 @@ namespace SkyRoof
       });
       textLayerBox.SelectedIndex = 0;
       textLayerBox.SelectedIndexChanged += (_, _) => UpdateTextEditorControls();
+      foreach (var variable in SstvTextMacros.Catalog)
+        macroSelector.Items.Add(new MacroEntry(variable.Token, variable.Label));
+      if (macroSelector.Items.Count > 0) macroSelector.SelectedIndex = 0;
+      activeCaptionInput.TextChanged += (_, _) =>
+      {
+        if (updatingTextControls || textLayerBox.SelectedIndex < 0) return;
+        SetCaptionText(textLayerBox.SelectedIndex, activeCaptionInput.Text);
+        RefreshTxPreview();
+      };
       textSizeBox.ValueChanged += (_, _) =>
       {
         if (updatingTextControls) return;
         int index = Math.Max(0, textLayerBox.SelectedIndex);
-        textLayers[index] = textLayers[index] with
-          { SizePercent = (float)textSizeBox.Value };
+        SetTextLayer(index, GetTextLayer(index) with
+          { SizePercent = (float)textSizeBox.Value });
         RefreshTxPreview();
       };
       textColorButton.Click += (_, _) => PickTextColor();
-      myCallInput.TextChanged += (_, _) => RefreshTxPreview();
+      myCallInput.TextChanged += (_, _) =>
+      {
+        SyncActiveCaptionText();
+        RefreshTxPreview();
+      };
       theirCallInput.TextChanged += (_, _) =>
       {
         if (!syncingQsoEntry)
@@ -256,6 +279,7 @@ namespace SkyRoof
           try { qsoCall.Text = theirCallInput.Text; }
           finally { syncingQsoEntry = false; }
         }
+        SyncActiveCaptionText();
         RefreshTxPreview();
       };
       txQsoNote.TextChanged += (_, _) =>
@@ -265,6 +289,7 @@ namespace SkyRoof
         try { qsoNotes.Text = txQsoNote.Text; }
         finally { syncingQsoEntry = false; }
       };
+      overlayText.TextChanged += (_, _) => SyncActiveCaptionText();
       qsoNotes.TextChanged += (_, _) =>
       {
         if (syncingQsoEntry) return;
@@ -546,8 +571,12 @@ namespace SkyRoof
 
       Heading("图片文字样式");
       Field("对象", textLayerBox);
+      Field("内容", activeCaptionInput);
       Field("字号 %", textSizeBox);
-      Buttons(textColorButton);
+      Buttons(textColorButton, Btn("新增", AddTextLayer, 56),
+        Btn("复制", DuplicateTextLayer, 56), Btn("删除", RemoveTextLayer, 56));
+      Field("变量", macroSelector);
+      Buttons(Btn("插入变量", InsertSelectedMacro, 88));
       Buttons(new Label
       {
         Text = "拖动预览文字定位，滚轮调整大小",
