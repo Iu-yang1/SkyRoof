@@ -28,10 +28,12 @@ namespace VE3NEA.Dsp.Tests
       try
       {
         using (var original = new Bitmap(64, 48))
-        using (var g = Graphics.FromImage(original))
         {
-          g.Clear(Color.White);
-          g.FillRectangle(Brushes.Black, 0, 0, 32, 48);
+          using (var g = Graphics.FromImage(original))
+          {
+            g.Clear(Color.White);
+            g.FillRectangle(Brushes.Black, 0, 0, 32, 48);
+          }
           SstvRgbWaveExporter.Export(original, mode, wav);
         }
 
