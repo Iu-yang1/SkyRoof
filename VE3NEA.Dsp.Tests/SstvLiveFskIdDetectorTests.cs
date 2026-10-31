@@ -26,7 +26,7 @@ namespace VE3NEA.Dsp.Tests
           wave.Flush();
         }
         using var stream = new WaveFileReader(path);
-        using var rx = new SstvLiveFskIdDetector();
+        var rx = new SstvLiveFskIdDetector();
         int events = 0;
         string last = "";
         rx.StationIdentified += value => { events++; last = value; };
