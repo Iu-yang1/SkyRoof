@@ -20,6 +20,8 @@ namespace SkyRoof
 
     public bool Ptt { get; private set; } = false;
     private long lastPttReadbackTicks;
+    private long lastPttOnReadbackTicks;
+    private long lastPttOffReadbackTicks;
     // A CAT write ACK alone is not a hardware PTT readback. SSTV
     // transmission checks this timestamp before starting audio.
     internal DateTime LastPttHardwareReadbackUtc
@@ -31,6 +33,20 @@ namespace SkyRoof
           new DateTime(ticks, DateTimeKind.Utc);
       }
     }
+    // Keep state-specific hardware evidence. A command-ACK update to Ptt
+    // cannot turn the last *opposite-state* CAT poll into a PTT readback.
+    internal DateTime LastPttOnHardwareReadbackUtc =>
+      ReadPttTimestamp(ref lastPttOnReadbackTicks);
+    internal DateTime LastPttOffHardwareReadbackUtc =>
+      ReadPttTimestamp(ref lastPttOffReadbackTicks);
+
+    private static DateTime ReadPttTimestamp(ref long ticks)
+    {
+      long value = Interlocked.Read(ref ticks);
+      return value == 0 ? DateTime.MinValue :
+        new DateTime(value, DateTimeKind.Utc);
+    }
+
     private bool PttChanged = false;
 
     // Ownership is deliberately separate from the observed PTT state. A second
@@ -711,8 +727,13 @@ namespace SkyRoof
         return;
       }
 
-      Interlocked.Exchange(ref lastPttReadbackTicks, DateTime.UtcNow.Ticks);
+      long readbackTicks = DateTime.UtcNow.Ticks;
+      Interlocked.Exchange(ref lastPttReadbackTicks, readbackTicks);
       bool newPtt = reply == "1";
+      if (newPtt)
+        Interlocked.Exchange(ref lastPttOnReadbackTicks, readbackTicks);
+      else
+        Interlocked.Exchange(ref lastPttOffReadbackTicks, readbackTicks);
 
       PttChanged = newPtt != Ptt;
       Ptt = newPtt;
