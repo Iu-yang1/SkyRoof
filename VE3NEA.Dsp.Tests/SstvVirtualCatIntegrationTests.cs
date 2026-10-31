@@ -126,6 +126,7 @@ namespace VE3NEA.Dsp.Tests
               string? line = await reader.ReadLineAsync(stop.Token);
               if (line == null) break;
               string response;
+              bool closeConnection = false;
               switch (line)
               {
                 case "a": response = Caps; break;
@@ -136,7 +137,8 @@ namespace VE3NEA.Dsp.Tests
                   Interlocked.Increment(ref onCommands);
                   if (DropAfterFirstKey && Interlocked.Exchange(ref dropped, 1) == 0)
                   {
-                    client.Close(); // emulate a lost ACK after real PTT ON
+                    closeConnection = true; // emulate a lost ACK after real PTT ON
+                    response = string.Empty;
                     break;
                   }
                   response = "RPRT 0"; break;
@@ -146,6 +148,7 @@ namespace VE3NEA.Dsp.Tests
                   response = "RPRT 0"; break;
                 default: response = "RPRT 0"; break;
               }
+              if (closeConnection) break;
               await writer.WriteLineAsync(response);
             }
           }
