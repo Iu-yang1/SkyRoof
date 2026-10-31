@@ -14,7 +14,7 @@ namespace SkyRoof.SSTV
   public static class SstvTxPolicy
   {
     public const long FrequencyToleranceHz = 250;
-    public const double MaximumAudioDurationSeconds = 360;
+    public const double MaximumAudioDurationSeconds = 540;
     public const int MaximumPttReadbackAgeMs = 1500;
 
     public static SstvTxGuard Validate(
