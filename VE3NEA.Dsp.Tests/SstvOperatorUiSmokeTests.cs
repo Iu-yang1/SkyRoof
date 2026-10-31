@@ -34,6 +34,16 @@ namespace VE3NEA.Dsp.Tests
       method.Invoke(target, args);
     }
 
+    private static System.Collections.Generic.IEnumerable<T> Descendants<T>(Control root)
+      where T : Control
+    {
+      foreach (Control child in root.Controls)
+      {
+        if (child is T typed) yield return typed;
+        foreach (T nested in Descendants<T>(child)) yield return nested;
+      }
+    }
+
     [Fact]
     public void FourTabsAndImageEditorWorkWithoutAnyRadioOrPtt()
     {
@@ -88,8 +98,7 @@ namespace VE3NEA.Dsp.Tests
           // Exercise actual WinForms Click events, not only private
           // methods. This catches broken button wiring and disabled controls.
           Button Action(string text) =>
-            tabs.TabPages[1].Controls.OfType<FlowLayoutPanel>()
-              .SelectMany(row => row.Controls.OfType<Button>())
+            Descendants<Button>(tabs.TabPages[1])
               .Single(button => button.Text == text);
           Action("旋转").PerformClick();
           Assert.Equal(120, Field<Bitmap>(panel, "txBase").Width);
@@ -120,7 +129,17 @@ namespace VE3NEA.Dsp.Tests
           Assert.Equal(8f, Field<SstvTextLayer[]>(panel, "textLayers")[1].SizePercent);
           Assert.Contains(Action("删除模板").Text, "删除模板");
 
+          var quickModes = Field<ListBox>(panel, "txQuickModes");
+          Assert.Equal(43, quickModes.Items.Count);
+          Assert.Single(Descendants<SstvTxToneReference>(tabs.TabPages[1]));
+          Assert.True(Field<FlowLayoutPanel>(panel, "txThumbnailStrip").Controls
+            .OfType<PictureBox>().Any(), "TX recent images must be visible");
+
           var mode = Field<ComboBox>(panel, "modeBox");
+          mode.SelectedItem = SstvTxModeProfile.All.Single(x => x.Name == "P3");
+          Assert.Equal(mode.SelectedIndex, quickModes.SelectedIndex);
+          quickModes.SelectedIndex = 0;
+          Assert.Equal(0, mode.SelectedIndex);
           mode.SelectedItem = SstvTxModeProfile.All.Single(x => x.Name == "P3");
           var preview = Field<PictureBox>(panel, "txPicture").Image;
           Assert.NotNull(preview);
