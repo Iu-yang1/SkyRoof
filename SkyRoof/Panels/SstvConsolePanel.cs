@@ -1069,7 +1069,9 @@ namespace SkyRoof
         g.DrawString("SATELLITE SSTV", captionFont, Brushes.White,
           canvas.Width * .035f, canvas.Height * .035f);
       }
-      var radio = ctx.FrequencyControl.RadioLink;
+      // Picture editing and offline WAV export work even when the radio
+      // widget has not yet been initialized or no satellite is selected.
+      RadioLink radio = ctx.FrequencyControl?.RadioLink ?? new RadioLink();
       var macros = new SstvMacroContext(
         ctx.Settings.User.Call ?? "", ctx.Settings.User.Square ?? "",
         qsoCall.Text.Trim().ToUpperInvariant(),
