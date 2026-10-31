@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Threading;
 using NAudio.Wave;
 using VE3NEA.SkySSTV;
 
@@ -14,7 +15,8 @@ namespace SkyRoof.SSTV
   /// </summary>
   public static class SstvRgbWaveExporter
   {
-    public static void Export(Bitmap source, SstvRgbTxSpec spec, string outputPath)
+    public static void Export(Bitmap source, SstvRgbTxSpec spec, string outputPath,
+      CancellationToken cancellationToken = default)
     {
       ArgumentNullException.ThrowIfNull(source);
       ArgumentNullException.ThrowIfNull(spec);
@@ -35,7 +37,7 @@ namespace SkyRoof.SSTV
       using var stream = new FileStream(file, FileMode.Create, FileAccess.Write);
       using var writer = new WaveFileWriter(stream,
         new WaveFormat(SstvWaveExporter.SampleRate, 16, 1));
-      using var osc = new SstvWaveExporter.WaveOscillator(writer);
+      using var osc = new SstvWaveExporter.WaveOscillator(writer, cancellationToken);
       SstvWaveExporter.EmitVis(osc, spec.VisCode7);
 
       // MMSSTV inserts this one-time Scottie 9-ms sync immediately after VIS.
@@ -95,14 +97,15 @@ namespace SkyRoof.SSTV
       return result;
     }
 
-    public static void Export(Bitmap source, SstvTxModeProfile mode, string outputPath)
+    public static void Export(Bitmap source, SstvTxModeProfile mode, string outputPath,
+      CancellationToken cancellationToken = default)
     {
       if (mode.Native is SstvMode standard)
-        SstvWaveExporter.Export(source, standard, outputPath);
+        SstvWaveExporter.Export(source, standard, outputPath, cancellationToken);
       else if (mode.Rgb is { } rgb)
-        Export(source, rgb, outputPath);
+        Export(source, rgb, outputPath, cancellationToken);
       else if (mode.Extra is { } extra)
-        SstvExtraWaveExporter.Export(source, extra, outputPath);
+        SstvExtraWaveExporter.Export(source, extra, outputPath, cancellationToken);
       else
         throw new NotSupportedException("SSTV transmit mode not supported.");
     }

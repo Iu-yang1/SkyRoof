@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Threading;
 using NAudio.Wave;
 using VE3NEA.SkySSTV;
 
@@ -20,7 +21,8 @@ namespace SkyRoof.SSTV
     public const double PeakLevel = 0.75;
     private const double TwoPi = 2 * Math.PI;
 
-    public static void Export(Bitmap source, SstvMode mode, string outputPath)
+    public static void Export(Bitmap source, SstvMode mode, string outputPath,
+      CancellationToken cancellationToken = default)
     {
       ArgumentNullException.ThrowIfNull(source);
       if (string.IsNullOrWhiteSpace(outputPath)) throw new ArgumentException("Output path required", nameof(outputPath));
@@ -41,7 +43,7 @@ namespace SkyRoof.SSTV
       Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
       using var stream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None);
       using var wave = new WaveFileWriter(stream, new WaveFormat(SampleRate, 16, 1));
-      using var oscillator = new WaveOscillator(wave);
+      using var oscillator = new WaveOscillator(wave, cancellationToken);
       EmitVis(oscillator, spec.VisCode);
 
       for (int line = 0; line < spec.LineCount; line++)
@@ -124,12 +126,17 @@ namespace SkyRoof.SSTV
     internal sealed class WaveOscillator : IDisposable
     {
       private readonly WaveFileWriter output;
+      private readonly CancellationToken cancellationToken;
       private readonly byte[] bytes = new byte[8192];
       private int pending;
       private long sampleCount;
       private double idealSamples, phase;
 
-      internal WaveOscillator(WaveFileWriter output) => this.output = output;
+      internal WaveOscillator(WaveFileWriter output, CancellationToken cancellationToken = default)
+      {
+        this.output = output;
+        this.cancellationToken = cancellationToken;
+      }
 
       internal void Tone(double frequency, double milliseconds)
       {
@@ -170,7 +177,11 @@ namespace SkyRoof.SSTV
         bytes[pending++] = (byte)pcm;
         bytes[pending++] = (byte)(pcm >> 8);
         sampleCount++;
-        if (pending == bytes.Length) Flush();
+        if (pending == bytes.Length)
+        {
+          cancellationToken.ThrowIfCancellationRequested();
+          Flush();
+        }
       }
 
       internal void Flush()

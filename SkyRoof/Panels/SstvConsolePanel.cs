@@ -517,7 +517,7 @@ namespace SkyRoof
         using var snapshot = new Bitmap(txPicture.Image!);
         txStatus.Text = "正在准备 SSTV 图片...";
         await Task.Run(() =>
-          SstvRgbWaveExporter.Export(snapshot, spec, temporaryWave),
+          SstvRgbWaveExporter.Export(snapshot, spec, temporaryWave, operation.Token),
           operation.Token);
         operation.Token.ThrowIfCancellationRequested();
         if (closed) return;

@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Threading;
 using NAudio.Wave;
 using VE3NEA.SkySSTV;
 
@@ -18,7 +19,8 @@ namespace SkyRoof.SSTV
     private const double NarrowBlack = 2044;
     private const double NarrowWhite = 2300;
 
-    public static void Export(Bitmap source, SstvExtraTxSpec mode, string destination)
+    public static void Export(Bitmap source, SstvExtraTxSpec mode, string destination,
+      CancellationToken cancellationToken = default)
     {
       ArgumentNullException.ThrowIfNull(source);
       ArgumentNullException.ThrowIfNull(mode);
@@ -39,7 +41,7 @@ namespace SkyRoof.SSTV
       using var stream = new FileStream(path, FileMode.Create, FileAccess.Write);
       using var wav = new WaveFileWriter(stream,
         new WaveFormat(SstvWaveExporter.SampleRate, 16, 1));
-      using var osc = new SstvWaveExporter.WaveOscillator(wav);
+      using var osc = new SstvWaveExporter.WaveOscillator(wav, cancellationToken);
       EmitHeader(osc, mode);
 
       for (int scan = 0; scan < mode.LineCount; scan++)
