@@ -112,6 +112,7 @@ namespace SkyRoof
       Text = "选择图片和模式，即可保存 SSTV 音频"
     };
     private CancellationTokenSource? replayStop;
+    private CancellationTokenSource? txOperationStop;
     private Bitmap? txBase;
     private bool closed;
 
@@ -170,7 +171,8 @@ namespace SkyRoof
       ReloadUserTemplates();
       archiveList.DoubleClick += (_, _) => ShowSelectedHistory();
       txSendButton.Click += (_, _) => _ = SendImageAsync();
-      txStopButton.Click += (_, _) => transmitSession.RequestStop();
+      txStopButton.Click += (_, _) => StopTransmit();
+
       PopulateTxOutputDevices();
       ReloadHistory();
       ReloadQsoLog();
@@ -470,9 +472,15 @@ namespace SkyRoof
       catch (Exception ex) { txStatus.Text = ex.Message; }
     }
 
+    private void StopTransmit()
+    {
+      txOperationStop?.Cancel();
+      transmitSession.RequestStop();
+    }
+
     private async Task SendImageAsync()
     {
-      if (transmitSession.IsSending ||
+      if (txOperationStop != null || transmitSession.IsSending ||
           txOutputBox.SelectedItem is not DeviceEntry output ||
           txPicture.Image is not Bitmap image ||
           modeBox.SelectedItem is not SstvTxModeProfile spec)
@@ -496,19 +504,27 @@ namespace SkyRoof
 
       string temporaryWave = Path.Combine(Path.GetTempPath(),
         $"SkyRoof_SstvTx_{Guid.NewGuid():N}.wav");
+      using var operation = new CancellationTokenSource();
+      txOperationStop = operation;
       txSendButton.Enabled = false;
       txStopButton.Enabled = true;
       txApproval.Enabled = false;
       try
       {
-        using var snapshot = new Bitmap(image);
+        // Refresh macros at the actual send instant, before taking a
+        // picture snapshot. STOP can also abort the entire WAV preparation.
+        RefreshTxPreview();
+        using var snapshot = new Bitmap(txPicture.Image!);
         txStatus.Text = "正在准备 SSTV 图片...";
         await Task.Run(() =>
-          SstvRgbWaveExporter.Export(snapshot, spec, temporaryWave));
+          SstvRgbWaveExporter.Export(snapshot, spec, temporaryWave),
+          operation.Token);
+        operation.Token.ThrowIfCancellationRequested();
         if (closed) return;
         await transmitSession.SendWavAsync(
           temporaryWave, output.Id, txApproval.Checked,
-          message => { if (!closed) txStatus.Text = message; });
+          message => { if (!closed) txStatus.Text = message; },
+          operation.Token);
       }
       catch (OperationCanceledException)
       {
@@ -525,6 +541,7 @@ namespace SkyRoof
       }
       finally
       {
+        if (ReferenceEquals(txOperationStop, operation)) txOperationStop = null;
         try { File.Delete(temporaryWave); } catch (IOException) { }
         if (!closed)
         {
@@ -1092,6 +1109,7 @@ namespace SkyRoof
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
       closed = true;
+      StopTransmit();
       transmitSession.Dispose();
       replayStop?.Cancel();
       receiveSession.RasterImageAvailable -= OnRasterReceived;
