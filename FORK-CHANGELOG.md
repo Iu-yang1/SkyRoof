@@ -4,6 +4,10 @@ Release date / 发布日期: 2026-10-31. SSTV Console integration release.
 
 ## English — changes since v.1.61
 
+- AFC FM fix: repeated WASAPI IF audio timestamps no longer clear the longer frequency-measurement buffer while the independent spectrum remains active.
+- AFC distinguishes no measurement from a true zero residual, and displays tentative FM IF offset estimates plus quality without unsafe CAT correction.
+- Added +820 Hz FM offset and repeated-timestamp regression tests and measurement pipeline diagnostics.
+
 - Official v1.62 update: up to eight draggable SSTV caption layers with add/duplicate/remove, editable text, size, color and template persistence.
 - Added picture variable insertion for MY/DX calls, RSV sent/received, QTH/name/notes, UTC time and TX/RX MHz, preserving older RST variable aliases.
 - Optimized large photo loading, bitmap undo/redo, gallery thumbnail caching, fast picture drag, and background saving of received images.
@@ -25,6 +29,10 @@ Release date / 发布日期: 2026-10-31. SSTV Console integration release.
 - Corrected MC110-N scan timing and optimized cached CAT-state sampling and SSTV STOP feedback.
 
 ## 中文 — 相对 v.1.61 的变化
+
+- 修复 AFC FM 频偏测量：连续 IF 音频块使用重复时间戳时不再清空测量缓冲，避免出现频谱正常但无频率数据。
+- 未测量不再显示为真实零频偏，低置信度 FM IF 估计以“候选”形式显示，同时保持 CAT 自动修正限制。
+- 添加 +820 Hz FM 偏移、重复时间戳回归测试和测量链路状态诊断。
 
 - 正式版 v1.62 更新：最多八个独立 SSTV 图层，支持添加、复制、删除、拖动、文字颜色/大小及模板持久化。
 - 增加呼号、RSV、QTH、姓名、备注、UTC 时间和上下行 MHz 变量的选择与插入，兼容旧 RST 宏。
