@@ -137,7 +137,7 @@ namespace VE3NEA.Dsp.Tests
                   if (DropAfterFirstKey && Interlocked.Exchange(ref dropped, 1) == 0)
                   {
                     client.Close(); // emulate a lost ACK after real PTT ON
-                    continue;
+                    break;
                   }
                   response = "RPRT 0"; break;
                 case "T 0":
