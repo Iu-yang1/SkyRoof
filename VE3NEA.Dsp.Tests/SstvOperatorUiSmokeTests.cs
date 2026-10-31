@@ -102,6 +102,7 @@ namespace VE3NEA.Dsp.Tests
         }
         catch (Exception ex) { failure = ex; }
       });
+      thread.IsBackground = true;
       thread.SetApartmentState(ApartmentState.STA);
       thread.Start();
       Assert.True(thread.Join(TimeSpan.FromSeconds(20)), "STA UI smoke timed out");
@@ -130,6 +131,7 @@ namespace VE3NEA.Dsp.Tests
         }
         catch (Exception ex) { failure = ex; }
       });
+      thread.IsBackground = true;
       thread.SetApartmentState(ApartmentState.STA);
       thread.Start();
       Assert.True(thread.Join(TimeSpan.FromSeconds(10)), "Spectrum paint timed out");
