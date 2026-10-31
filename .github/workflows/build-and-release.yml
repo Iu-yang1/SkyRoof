@@ -187,6 +187,9 @@ jobs:
             SkyRoof Fork v.${{ steps.get_version.outputs.version }} (based on VE3NEA/SkyRoof v.1.56)
 
             ### English
+            - Integrated SSTV Console with 43 transmit modes, extended VIS/N-VIS reception, AF/12-kHz IF sources, image editing, CW/FSK ID, gallery and QSO log.
+            - SSTV satellite-aware Doppler tracking and CAT/PTT/STOP controls; keyboard Escape cancels transmission and reports its state.
+            - Virtual IC-9700 TCP CAT/STOP fault-injection tests, 5-minute Doppler sweep and SSTV Windows UI regression checks.
             - New Simplified Chinese / English selector in Settings; saved UI language and presentation-only PropertyGrid translations.
             - AFC Live Tracking, Advanced Settings and operator diagnostic text support both languages.
             - IC-9700 LAN Spectrum toolbar: START / STOP, CLEAR, SYNC, SETS; readable REF, VBW, AVG, SMOOTH, ZOOM labels.
@@ -199,6 +202,9 @@ jobs:
             - Preserve TX frequency and persistent satellite/transponder offsets.
 
             ### 中文
+            - 集成 SSTV 控制台：43 种图片发射模式、扩展 VIS/N-VIS 接收、AF/12 kHz IF 声源、图片编辑、CW/FSK ID、图库及通联日志。
+            - SSTV 卫星多普勒跟踪及 CAT/PTT/STOP 控制；Esc 可停止发射并即时显示状态。
+            - 新增虚拟 IC-9700 TCP CAT/断连模拟、五分钟多普勒扫频测试及 Windows SSTV 界面自动测试。
             - 设置页新增简体中文 / English 切换，保留原始配置键名及参数功能，界面语言可持久化。
             - AFC 实时跟踪、控制状态、诊断信息与高级设置提供中英双语。
             - IC-9700 LAN 频谱工具栏使用 START / STOP、CLEAR、SYNC、SETS 英文按钮。
@@ -208,7 +214,6 @@ jobs:
             - 扣除卫星模型预期多普勒频率变化，减少动态轨道跟踪中的校准误判。
             - 校准仅作用于 RX；新增 CAT 读回时效、PTT 冻结、失号/超时回退和状态诊断。
             - 保留原有中英界面和频谱 UI 调整，不改变 TX、永久转发器偏移或卫星轨道模型。
-            - IC-9700 实机闭环表现仍需联合 IF/CAT 验收。
 
             Full changelog / 完整更新记录:
             https://github.com/Iu-yang1/SkyRoof/blob/master/FORK-CHANGELOG.md
