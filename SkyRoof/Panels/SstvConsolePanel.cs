@@ -50,6 +50,11 @@ namespace SkyRoof
     {
       DropDownStyle = ComboBoxStyle.DropDownList, Width = 280
     };
+    private readonly CheckBox autoVisCorrection = new()
+    {
+      Text = "自动校频", AutoSize = true, Checked = true,
+      Padding = new Padding(3, 7, 3, 0)
+    };
     private readonly NumericUpDown pitchCorrection = new()
     {
       Minimum = -500, Maximum = 500, Increment = 5,
@@ -120,7 +125,10 @@ namespace SkyRoof
       rxToggleButton.Click += (_, _) => ToggleReceive();
       pitchCorrection.ValueChanged += (_, _) =>
         receiveSession.ManualCorrectionHz = (int)pitchCorrection.Value;
+      autoVisCorrection.CheckedChanged += (_, _) =>
+        receiveSession.AutoVisEnabled = autoVisCorrection.Checked;
       receiveSession.ImageAvailable += OnAudioReceived;
+      receiveSession.VisSynchronized += OnVisSynchronized;
       overlayText.TextChanged += (_, _) => RefreshTxPreview();
       archiveList.DoubleClick += (_, _) => ShowSelectedHistory();
       txSendButton.Click += (_, _) => _ = SendImageAsync();
@@ -159,6 +167,7 @@ namespace SkyRoof
         TextAlign = ContentAlignment.MiddleCenter
       });
       bar.Controls.Add(pitchCorrection);
+      bar.Controls.Add(autoVisCorrection);
       var actions = Toolbar();
       actions.Controls.Add(Btn("导入 WAV", () => _ = ReplayWavAsync()));
       actions.Controls.Add(Btn("保存图片", SaveReceivedImage));
@@ -397,6 +406,28 @@ namespace SkyRoof
         MessageBox.Show(this, ex.Message, "无法启动接收",
           MessageBoxButtons.OK, MessageBoxIcon.Warning);
       }
+    }
+
+    private void OnVisSynchronized(SstvVisAfcLock header)
+    {
+      if (closed || !IsHandleCreated) return;
+      try
+      {
+        BeginInvoke((Action)(() =>
+        {
+          if (closed || IsDisposed) return;
+          var native = SstvModes.FromVisByte(header.VisByte);
+          string mode = native?.Name ??
+            SstvRgbTxSpec.All.FirstOrDefault(x =>
+              SstvModes.EvenParityByte(x.VisCode7) == header.VisByte)?.Name ??
+            "SSTV";
+          string status = autoVisCorrection.Checked ?
+            $"识别 {mode} · 已自动校正 {receiveSession.AutoVisCorrectionHz:+0;-0;0} Hz" :
+            $"识别 {mode} · 自动校频已关闭";
+          rxStatus.Text = status;
+        }));
+      }
+      catch (InvalidOperationException) { }
     }
 
     private void OnAudioReceived(SstvImageEvent evt)
@@ -648,6 +679,7 @@ namespace SkyRoof
       closed = true;
       transmitSession.Dispose();
       replayStop?.Cancel();
+      receiveSession.VisSynchronized -= OnVisSynchronized;
       receiveSession.Dispose();
       if (ctx.SstvConsolePanel == this) ctx.SstvConsolePanel = null;
       var oldRx = rxPicture.Image;
