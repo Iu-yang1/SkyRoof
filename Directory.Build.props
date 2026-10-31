@@ -3,7 +3,7 @@
   <!-- The single source of truth for the release version. Bump it here and nowhere else:
        MSBuild applies it to every project in the solution automatically, and the CI workflow
        runs build/Set-Version.ps1 to propagate it to the installer script and the docs. -->
-  <!-- Rebuild the v1.62 installer with SSTV caption editor and RX mode fixes. -->
+  <!-- Rebuild the existing v1.62 installer with corrected SSTV gallery selection, image management and shared RX/TX audio tone rulers. -->
   <PropertyGroup>
     <Product>SkyRoof</Product>
     <Version>1.62</Version>
