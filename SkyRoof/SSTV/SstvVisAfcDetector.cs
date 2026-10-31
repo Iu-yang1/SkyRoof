@@ -83,11 +83,59 @@ namespace SkyRoof.SSTV
         last = crossing;
         count++;
       }
-      if (energy / block.Length < .0025 || count < 5 ||
-          checkedPeriods < 3 || periodError / checkedPeriods > .025)
+      if (energy / block.Length < .0025) return double.NaN;
+
+      // Crossing interpolation is inexpensive and accurately measures a
+      // clean VIS leader to within a few hertz. Wideband receiver noise
+      // produces extra crossings, however, so fall back to a bounded
+      // normalized-autocorrelation search on that condition.
+      if (count >= 5 && checkedPeriods >= 3 &&
+          periodError / checkedPeriods <= .025)
+      {
+        double hz = (count - 1) * Rate / (last - first);
+        if (hz is >= 900 and <= 2350) return hz;
+      }
+
+      // Fundamental periods 20–53 samples cover SSTV 900–2350 Hz.
+      // Normalization prevents slowly varying amplitude and QSB from
+      // appearing as a strong tone. No FFT allocation or CAT dependency.
+      const int firstLag = 19, lastLag = 54;
+      Span<double> correlations = stackalloc double[lastLag - firstLag + 1];
+      int bestLag = 0;
+      double bestScore = double.NegativeInfinity;
+      for (int lag = firstLag; lag <= lastLag; lag++)
+      {
+        double cross = 0, leftEnergy = 0, rightEnergy = 0;
+        for (int n = 0; n < block.Length - lag; n++)
+        {
+          double left = block[n];
+          double right = block[n + lag];
+          cross += left * right;
+          leftEnergy += left * left;
+          rightEnergy += right * right;
+        }
+        double denominator = Math.Sqrt(leftEnergy * rightEnergy);
+        double score = denominator > 1e-9 ? cross / denominator : 0;
+        correlations[lag - firstLag] = score;
+        if (score > bestScore)
+        {
+          bestScore = score;
+          bestLag = lag;
+        }
+      }
+      // Random or broadband hiss can have a local maximum, but it
+      // generally cannot achieve a highly periodic autocorrelation peak.
+      if (bestScore < .68 || bestLag <= firstLag || bestLag >= lastLag)
         return double.NaN;
-      double hz = (count - 1) * Rate / (last - first);
-      return hz is >= 900 and <= 2350 ? hz : double.NaN;
+
+      double before = correlations[bestLag - firstLag - 1];
+      double center = correlations[bestLag - firstLag];
+      double after = correlations[bestLag - firstLag + 1];
+      double curvature = before - 2 * center + after;
+      double subSample = Math.Abs(curvature) > 1e-9
+        ? Math.Clamp(.5 * (before - after) / curvature, -.75, .75) : 0;
+      double measuredHz = Rate / (bestLag + subSample);
+      return measuredHz is >= 900 and <= 2350 ? measuredHz : double.NaN;
     }
 
     private static bool Near(double measured, double target, double tolerance = 130)
