@@ -50,6 +50,25 @@ namespace SkyRoof.SSTV
         rfHz, mode, nowUtc);
     }
 
+    /// <summary>
+    /// A PTT-OFF command ACK is not sufficient for a safe completion
+    /// message. Require an independent hardware-state read after our own
+    /// PTT-ON request and a fresh RX observation.
+    /// </summary>
+    public static bool HasConfirmedPttOff(
+      bool pttState, bool applicationMayOwnPtt,
+      DateTime lastHardwareReadUtc, DateTime pttOnRequestedUtc,
+      DateTime nowUtc)
+    {
+      return !pttState && !applicationMayOwnPtt &&
+        lastHardwareReadUtc.Kind == DateTimeKind.Utc &&
+        pttOnRequestedUtc.Kind == DateTimeKind.Utc &&
+        nowUtc.Kind == DateTimeKind.Utc &&
+        lastHardwareReadUtc >= pttOnRequestedUtc &&
+        lastHardwareReadUtc <= nowUtc &&
+        (nowUtc - lastHardwareReadUtc).TotalMilliseconds <= MaximumPttReadbackAgeMs;
+    }
+
     public static bool StillSafe(SstvTxGuard armed,
       string? satelliteId, string? transmitterId, bool hasObservation,
       bool aboveHorizon, double expectedRfHz, double loHz,
