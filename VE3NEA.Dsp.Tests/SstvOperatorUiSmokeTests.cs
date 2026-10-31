@@ -128,6 +128,34 @@ namespace VE3NEA.Dsp.Tests
           textSize.Value = 8;
           Assert.Equal(8f, Field<SstvTextLayer[]>(panel, "textLayers")[1].SizePercent);
           Assert.Contains(Action("删除模板").Text, "删除模板");
+          var activeText = Field<TextBox>(panel, "activeCaptionInput");
+          var macroSelector = Field<ComboBox>(panel, "macroSelector");
+          Assert.Contains(macroSelector.Items.Cast<object>(),
+            item => item.ToString()!.Contains("{RSV_TX}"));
+          Action("新增").PerformClick();
+          Assert.Equal(4, activeLayer.Items.Count);
+          Assert.Equal(3, activeLayer.SelectedIndex);
+          activeText.Text = "Via {SAT}";
+          Assert.Equal("Via {SAT}",
+            Field<System.Collections.Generic.List<SstvAdditionalCaption>>(
+              panel, "extraCaptions")[0].Text);
+          macroSelector.SelectedIndex = macroSelector.Items.Cast<object>()
+            .Select((item, idx) => (item, idx))
+            .Single(x => x.item.ToString()!.Contains("{RSV_TX}")).idx;
+          activeText.SelectionStart = activeText.Text.Length;
+          Action("插入变量").PerformClick();
+          Assert.Contains("{RSV_TX}", activeText.Text);
+          Action("复制").PerformClick();
+          Assert.Equal(5, activeLayer.Items.Count);
+          Assert.Equal(activeText.Text,
+            Field<System.Collections.Generic.List<SstvAdditionalCaption>>(
+              panel, "extraCaptions")[1].Text);
+          for (int index = 0; index < 3; index++) Action("新增").PerformClick();
+          Assert.Equal(8, activeLayer.Items.Count);
+          Action("新增").PerformClick(); // cap is eight
+          Assert.Equal(8, activeLayer.Items.Count);
+          for (int index = 0; index < 5; index++) Action("删除").PerformClick();
+          Assert.Equal(3, activeLayer.Items.Count);
 
           var quickModes = Field<ListBox>(panel, "txQuickModes");
           Assert.Equal(43, quickModes.Items.Count);
