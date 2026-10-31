@@ -165,7 +165,7 @@ namespace SkyRoof
       });
       rxSourceBox.SelectedIndexChanged += (_, _) => PopulateAudioDevices();
       rxSourceBox.SelectedIndex = 0;
-      rxModeBox.Items.Add("自动识别 Robot/PD");
+      rxModeBox.Items.Add("自动识别 SSTV");
       foreach (SstvTxModeProfile profile in SstvTxModeProfile.All)
         if (profile.Native == null) rxModeBox.Items.Add(profile);
       rxModeBox.SelectedIndex = 0;
@@ -558,7 +558,10 @@ namespace SkyRoof
       {
         foreach (AudioDeviceEntry d in Soundcard.ListDevices(DataFlow.Render))
           txOutputBox.Items.Add(new DeviceEntry(d.Id, d.Name));
-        if (txOutputBox.Items.Count > 0) txOutputBox.SelectedIndex = 0;
+        if (txOutputBox.Items.Count > 0)
+          txOutputBox.SelectedIndex = 0;
+        else
+          txStatus.Text = "未检测到发射声卡；仍可保存 SSTV WAV 音频";
       }
       catch (Exception ex)
       {
@@ -674,7 +677,10 @@ namespace SkyRoof
         foreach (AudioDeviceEntry d in Soundcard.ListDevices(
           loopback ? DataFlow.Render : DataFlow.Capture))
           rxDeviceBox.Items.Add(new DeviceEntry(d.Id, d.Name));
-        if (rxDeviceBox.Items.Count > 0) rxDeviceBox.SelectedIndex = 0;
+        if (rxDeviceBox.Items.Count > 0)
+          rxDeviceBox.SelectedIndex = 0;
+        else
+          rxStatus.Text = "未检测到接收声卡；可使用“导入 WAV”解码录音";
       }
       catch (Exception ex)
       {
