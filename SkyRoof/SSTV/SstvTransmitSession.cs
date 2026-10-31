@@ -21,7 +21,6 @@ namespace SkyRoof.SSTV
     private int sending;
     private int ownPttRequested;
     private int releaseUnconfirmed;
-    private long latestOwnPttRequestUtcTicks;
     private long latestPttReleaseRequestUtcTicks;
     private bool disposed;
 
@@ -132,7 +131,6 @@ namespace SkyRoof.SSTV
       bool pttRequested = false;
       bool unsuccessful = false;
       bool audioFinished = false;
-      DateTime pttRequestUtc = default;
       try
       {
         if (string.IsNullOrWhiteSpace(wavPath) ||
@@ -173,8 +171,6 @@ namespace SkyRoof.SSTV
 
         var cat = ctx.CatControl.Tx!;
         DateTime requestedUtc = DateTime.UtcNow;
-        pttRequestUtc = requestedUtc;
-        Interlocked.Exchange(ref latestOwnPttRequestUtcTicks, requestedUtc.Ticks);
         // Publish ownership intent before issuing the asynchronous CAT write
         // so STOP can cancel a still-pending PTT-ON request.
         Interlocked.Exchange(ref ownPttRequested, 1);
