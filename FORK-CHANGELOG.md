@@ -4,6 +4,11 @@ Release date / 发布日期: 2026-10-31. SSTV Console integration release.
 
 ## English — changes since v.1.61
 
+- Official v1.62 update: up to eight draggable SSTV caption layers with add/duplicate/remove, editable text, size, color and template persistence.
+- Added picture variable insertion for MY/DX calls, RSV sent/received, QTH/name/notes, UTC time and TX/RX MHz, preserving older RST variable aliases.
+- Optimized large photo loading, bitmap undo/redo, gallery thumbnail caching, fast picture drag, and background saving of received images.
+- SSTV QSO reports display RSV; ADIF exports standard RST_SENT and RST_RCVD field names.
+
 - v1.62 gallery hotfix: selecting a thumbnail no longer duplicates its entry; right-click now opens a context menu.
 - Gallery/History adds image import, export and delete (including a confirmation prompt).
 - RX and TX use the same MMSSTV-style orange/black AF/IF reference with numeric 1200/1500/1900/2300 Hz labels only; RX retains a live trace within the lower strip.
@@ -20,6 +25,11 @@ Release date / 发布日期: 2026-10-31. SSTV Console integration release.
 - Corrected MC110-N scan timing and optimized cached CAT-state sampling and SSTV STOP feedback.
 
 ## 中文 — 相对 v.1.61 的变化
+
+- 正式版 v1.62 更新：最多八个独立 SSTV 图层，支持添加、复制、删除、拖动、文字颜色/大小及模板持久化。
+- 增加呼号、RSV、QTH、姓名、备注、UTC 时间和上下行 MHz 变量的选择与插入，兼容旧 RST 宏。
+- 优化大图加载、撤销重做内存、图库缩略图缓存、拖动渲染与接收图片异步保存。
+- SSTV 通联报告界面改为 RSV，ADIF 继续使用标准 RST_SENT/RST_RCVD 字段。
 
 - v1.62 图库修复：选中已有缩略图不再重复添加，右键弹出操作菜单。
 - 图库／历史增加导入、导出与删除图片功能（删除需确认）。
