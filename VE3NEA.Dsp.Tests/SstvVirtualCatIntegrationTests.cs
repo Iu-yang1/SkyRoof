@@ -125,7 +125,7 @@ namespace VE3NEA.Dsp.Tests
             using var reader = new StreamReader(stream, Encoding.ASCII,
               detectEncodingFromByteOrderMarks: false, leaveOpen: true);
             using var writer = new StreamWriter(stream, Encoding.ASCII,
-              leaveOpen: true) { AutoFlush = true };
+              leaveOpen: true) { NewLine = "\\n", AutoFlush = true };
             while (!stop.IsCancellationRequested)
             {
               string? line = await reader.ReadLineAsync(stop.Token);
