@@ -34,7 +34,7 @@ namespace SkyRoof.SSTV
     {
       if (!File.Exists(path)) return Array.Empty<SstvUserTemplate>();
       var data = new FileInfo(path);
-      if (data.Length > 256 * 1024)
+      if (data.Length > 2 * 1024 * 1024)
         throw new InvalidDataException("SSTV template library is too large");
       try
       {
