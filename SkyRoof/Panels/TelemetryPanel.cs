@@ -1881,6 +1881,9 @@ namespace SkyRoof
       info.Filter = filter;
       info.Bitmap = rendering.ToBitmap();
       if (savedPath != null) info.SavedPath = savedPath;
+      if (evt.Final || evt.ValidRows > 0 && evt.ValidRows % 12 == 0)
+        ctx.SstvConsolePanel?.ShowReceivedSstv(info.Bitmap, evt.Mode.ToString(),
+          evt.Final, info.SavedPath);
       node.Text = $"{ClockWidget.Stamp(info.FirstSeen, "HH:mm:ss")}  {evt.Mode}  {evt.ValidRows}/{evt.Image.Height} rows";
       if (ImageBox.Image == oldBitmap) ImageBox.Image = info.Bitmap;
       oldBitmap?.Dispose();

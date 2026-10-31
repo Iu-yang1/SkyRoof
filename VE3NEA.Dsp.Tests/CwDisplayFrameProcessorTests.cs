@@ -43,7 +43,10 @@ namespace VE3NEA.Dsp.Tests
         .Should().BeTrue();
       try
       {
-        started.Wait(TimeSpan.FromSeconds(3)).Should().BeTrue();
+        // The Windows CI runner can schedule this worker behind concurrent
+        // FFT/SSTV test work. This bound tests eventual scheduling; the
+        // nonblocking UI TryQueue behavior is asserted separately below.
+        started.Wait(TimeSpan.FromSeconds(10)).Should().BeTrue();
         processor.Busy.Should().BeTrue();
         processor.RecordBusyTick();
         processor.BusyTicks.Should().Be(1);
@@ -134,7 +137,10 @@ namespace VE3NEA.Dsp.Tests
         processor.TryQueue(
           Snapshot(10000), 1, CwDenoiseMode.Bypass)
           .Should().BeTrue();
-        started.Wait(TimeSpan.FromSeconds(3)).Should().BeTrue();
+        // The Windows CI runner can schedule this worker behind concurrent
+        // FFT/SSTV test work. This bound tests eventual scheduling; the
+        // nonblocking UI TryQueue behavior is asserted separately below.
+        started.Wait(TimeSpan.FromSeconds(10)).Should().BeTrue();
         processor.Dispose();
         processor.TryQueue(
           Snapshot(12000), 1, CwDenoiseMode.Bypass)

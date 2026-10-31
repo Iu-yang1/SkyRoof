@@ -19,6 +19,34 @@ namespace SkyRoof
     private readonly bool IgnoreDialKnob;
 
     public bool Ptt { get; private set; } = false;
+    private long lastPttReadbackTicks;
+    private long lastPttOnReadbackTicks;
+    private long lastPttOffReadbackTicks;
+    // A CAT write ACK alone is not a hardware PTT readback. SSTV
+    // transmission checks this timestamp before starting audio.
+    internal DateTime LastPttHardwareReadbackUtc
+    {
+      get
+      {
+        long ticks = Interlocked.Read(ref lastPttReadbackTicks);
+        return ticks == 0 ? DateTime.MinValue :
+          new DateTime(ticks, DateTimeKind.Utc);
+      }
+    }
+    // Keep state-specific hardware evidence. A command-ACK update to Ptt
+    // cannot turn the last *opposite-state* CAT poll into a PTT readback.
+    internal DateTime LastPttOnHardwareReadbackUtc =>
+      ReadPttTimestamp(ref lastPttOnReadbackTicks);
+    internal DateTime LastPttOffHardwareReadbackUtc =>
+      ReadPttTimestamp(ref lastPttOffReadbackTicks);
+
+    private static DateTime ReadPttTimestamp(ref long ticks)
+    {
+      long value = Interlocked.Read(ref ticks);
+      return value == 0 ? DateTime.MinValue :
+        new DateTime(value, DateTimeKind.Utc);
+    }
+
     private bool PttChanged = false;
 
     // Ownership is deliberately separate from the observed PTT state. A second
@@ -39,6 +67,20 @@ namespace SkyRoof
     private Slicer.Mode? RequestedRxMode, LastWrittenRxMode;      
     private Slicer.Mode? RequestedTxMode, LastWrittenTxMode;
     private bool? RequestedPtt;
+    private readonly object pttRequestSync = new();
+
+    private bool? GetRequestedPtt()
+    {
+      lock (pttRequestSync) return RequestedPtt;
+    }
+
+    // The request may be changed to OFF while a prior ON command is in
+    // flight. Never erase that newer STOP request when ON is acknowledged.
+    internal static bool? PendingAfterPttAck(bool? pending, bool completedPtt) =>
+      pending.HasValue && pending.Value == completedPtt ? null : pending;
+
+    internal static bool ShouldAttemptPtt(bool ctcssReady, bool? requestedPtt) =>
+      requestedPtt == false || ctcssReady;
 
     // CTCSS encode state requested by the UI. CtcssEnabled is null until the app sets it,
     // CtcssPending is true while the state still has to be written to the radio
@@ -187,24 +229,26 @@ namespace SkyRoof
     public void SetPtt(bool ptt)
     {
       LogInfo($"SetPtt {ptt}");
-      RequestedPtt = ptt;
+      lock (pttRequestSync) RequestedPtt = ptt;
     }
 
     internal void ReleaseApplicationPtt()
     {
-      // A momentary control must never unkey a transmission that it did not
-      // create. If its ON request is still only queued, cancel it. Once an ON
-      // write was attempted (including a timeout) or confirmed, request OFF
-      // and let the normal readback/retry path verify release.
-      if (PttMayBeOwnedByApplication)
+      // Atomic with the CAT worker's transition from queued ON to in-flight
+      // ON. Once an ON attempt has started, STOP must remain queued as OFF
+      // even if the original ON reply arrives after cancellation.
+      lock (pttRequestSync)
       {
-        LogInfo("ReleaseApplicationPtt: requesting PTT OFF");
-        RequestedPtt = false;
-      }
-      else if (RequestedPtt == true)
-      {
-        LogInfo("ReleaseApplicationPtt: canceling unsent PTT ON");
-        RequestedPtt = null;
+        if (PttMayBeOwnedByApplication)
+        {
+          LogInfo("ReleaseApplicationPtt: requesting PTT OFF");
+          RequestedPtt = false;
+        }
+        else if (RequestedPtt == true)
+        {
+          LogInfo("ReleaseApplicationPtt: canceling unsent PTT ON");
+          RequestedPtt = null;
+        }
       }
     }
 
@@ -360,7 +404,10 @@ namespace SkyRoof
       // If a requested CTCSS update failed, do not key the transmitter with a
       // stale/unknown encoder state. Keep the write pending and retry next cycle.
       bool ctcssReady = !NeedToWriteCtcss() || TryWriteCtcss();
-      if (ctcssReady) TryWritePtt();
+      // CTCSS readiness may block KEYING, but must NEVER block emergency
+      // UNKEY. A failed tone write while SSTV is transmitting cannot keep
+      // PTT ON merely because the encoder remains in an unknown state.
+      if (ShouldAttemptPtt(ctcssReady, GetRequestedPtt())) TryWritePtt();
 
       if (NeedToReadRxFrequency()) TryReadRxFrequency();
       if (NeedToReadTxFrequency()) TryReadTxFrequency();
@@ -680,7 +727,13 @@ namespace SkyRoof
         return;
       }
 
+      long readbackTicks = DateTime.UtcNow.Ticks;
+      Interlocked.Exchange(ref lastPttReadbackTicks, readbackTicks);
       bool newPtt = reply == "1";
+      if (newPtt)
+        Interlocked.Exchange(ref lastPttOnReadbackTicks, readbackTicks);
+      else
+        Interlocked.Exchange(ref lastPttOffReadbackTicks, readbackTicks);
 
       PttChanged = newPtt != Ptt;
       Ptt = newPtt;
@@ -713,19 +766,20 @@ namespace SkyRoof
         PttReleased.Reset();
       }
 
-      if (RequestedPtt.HasValue && RequestedPtt.Value == Ptt)
+      lock (pttRequestSync)
       {
-        // Merely requesting ON while another client already has the rig keyed
-        // does not establish ownership. Ownership is granted only by a
-        // successful write or by readback after an actual ON attempt.
-        if (!Ptt)
+        if (RequestedPtt.HasValue && RequestedPtt.Value == Ptt)
         {
-          PttOwnedByApplication = false;
-          PttOnAttempted = false;
-          PttReleased.Set();
+          // A hardware match satisfies the queued request; do not clear a
+          // concurrently queued opposite state (notably STOP after PTT ON).
+          if (!Ptt)
+          {
+            PttOwnedByApplication = false;
+            PttOnAttempted = false;
+            PttReleased.Set();
+          }
+          RequestedPtt = null;
         }
-
-        RequestedPtt = null;
       }
 
       LogInfo($"ReadPtt: {Ptt} (changed={PttChanged})");
@@ -734,67 +788,68 @@ namespace SkyRoof
     private void TryWritePtt()
     {
       if (CatMode == OperatingMode.RxOnly) return;
-      if (!RequestedPtt.HasValue) return;
-      if (RequestedPtt == Ptt)
+      bool commandPtt;
+      string? command;
+      lock (pttRequestSync)
       {
-        // The state is already satisfied. Do not claim ownership of an
-        // externally asserted PTT merely because SkyRoof requested the same
-        // state; only a successful write/read-back can establish ownership.
-        if (!Ptt)
+        if (!RequestedPtt.HasValue) return;
+        commandPtt = RequestedPtt.Value;
+        if (commandPtt == Ptt)
         {
-          PttOwnedByApplication = false;
-          PttReleased.Set();
+          // Do not claim ownership of an externally asserted PTT just
+          // because a matching state was requested.
+          if (!Ptt)
+          {
+            PttOwnedByApplication = false;
+            PttReleased.Set();
+          }
+          RequestedPtt = null;
+          return;
         }
 
-        RequestedPtt = null;
-        return;
+        command = commandPtt ? commands.set_ptt_on : commands.set_ptt_off;
+        if (command == null) return;
+        if (commandPtt)
+        {
+          // From this point a concurrent STOP must queue an OFF command;
+          // it cannot simply cancel the queued ON as never attempted.
+          PttOnAttempted = true;
+          PttReleased.Reset();
+        }
       }
 
-      string? command = RequestedPtt == true
-        ? commands.set_ptt_on
-        : commands.set_ptt_off;
+      // CAT writes may block. Never hold the request lock across I/O: STOP
+      // must be able to queue OFF immediately while ON is in flight.
+      if (!SendWriteCommand(command)) return;
 
-      if (command == null)
-        return;
-
-      if (RequestedPtt == true)
+      lock (pttRequestSync)
       {
-        PttOnAttempted = true;
-        PttReleased.Reset();
+        // This is the state of the command we actually sent, NOT the latest
+        // requested state. Reading RequestedPtt.Value here used to erase an
+        // intervening STOP and could falsely report RX after sending PTT ON.
+        Ptt = commandPtt;
+        PttChanged = true;
+        if (commandPtt)
+        {
+          PttOwnedByApplication = true;
+          PttOnAttempted = false;
+          PttReleased.Reset();
+          LastWrittenTxFrequency = NOT_ASSIGNED;
+        }
+        else
+        {
+          PttOwnedByApplication = false;
+          PttOnAttempted = false;
+          PttReleased.Set();
+          LastWrittenRxFrequency = NOT_ASSIGNED;
+        }
+        RequestedPtt = PendingAfterPttAck(RequestedPtt, commandPtt);
       }
-
-      // Never claim a PTT transition that the radio rejected. A failed ON
-      // remains "possibly owned" because the reply may have been lost after
-      // the radio keyed; a failed OFF remains pending for retry.
-      if (!SendWriteCommand(command))
-        return;
-
-      Ptt = RequestedPtt.Value;
-      PttChanged = true;
       Log.Information(
         "CAT PTT command accepted: PTT={Ptt}, mode={Mode}, requestedRxHz={Rx}, requestedTxHz={Tx}, ctcssRequested={CtcssEnabled}, toneHz={Tone:F1}; command ACK is not independent RF-output verification",
-        Ptt, CatMode, RequestedRxFrequency, RequestedTxFrequency,
+        commandPtt, CatMode, RequestedRxFrequency, RequestedTxFrequency,
         CtcssEnabled, CtcssTone);
-
-      if (Ptt)
-      {
-        PttOwnedByApplication = true;
-        PttOnAttempted = false;
-        PttReleased.Reset();
-        LastWrittenTxFrequency = NOT_ASSIGNED;
-      }
-      else
-      {
-        PttOwnedByApplication = false;
-        PttOnAttempted = false;
-        PttReleased.Set();
-        LastWrittenRxFrequency = NOT_ASSIGNED;
-      }
-
-      RequestedPtt = null;
     }
-
-
 
 
     //----------------------------------------------------------------------------------------------
@@ -916,7 +971,7 @@ namespace SkyRoof
       {
         // Keep our state at TX and schedule an explicit OFF retry. ReadPtt on
         // the next cycle can refine the observed hardware state.
-        RequestedPtt = false;
+        lock (pttRequestSync) RequestedPtt = false;
         Log.Error("Arming carrier PTT OFF was rejected; queued another PTT OFF attempt.");
       }
 
@@ -1309,7 +1364,7 @@ namespace SkyRoof
       if (CatMode != OperatingMode.Simplex) return false;
 
       // not swsitching to tx
-      if (RequestedPtt != true) return false;
+      if (GetRequestedPtt() != true) return false;
 
       // nothing to write
       if (RequestedTxFrequency == NOT_ASSIGNED && !RequestedTxMode.HasValue) return false;
@@ -1355,7 +1410,7 @@ namespace SkyRoof
 
       // Icom Auto Repeater and similar features may drop the tone when the frequency changes,
       // re-assert it immediately before every transmission
-      return RequestedPtt == true && Ptt == false;
+      return GetRequestedPtt() == true && Ptt == false;
     }
 
     private bool NeedToWriteRxMode()
@@ -1391,17 +1446,17 @@ namespace SkyRoof
       // Cancel a not-yet-sent SkyRoof PTT-ON request. If SkyRoof actually keyed
       // the rig, ask the worker to send PTT OFF and give it a bounded opportunity
       // to receive the radio acknowledgement before the TCP connection is torn down.
-      if (!PttMayBeOwnedByApplication && RequestedPtt == true)
-        RequestedPtt = null;
-
-      if (PttMayBeOwnedByApplication)
+      bool releasePtt;
+      lock (pttRequestSync)
       {
-        RequestedPtt = false;
-
-        if (!PttReleased.Wait(4000))
-          Log.Warning(
-            "CAT engine stopped while SkyRoof-owned or possibly-owned PTT could not be confirmed OFF.");
+        releasePtt = PttMayBeOwnedByApplication;
+        if (releasePtt) RequestedPtt = false;
+        else if (RequestedPtt == true) RequestedPtt = null;
       }
+
+      if (releasePtt && !PttReleased.Wait(4000))
+        Log.Warning(
+          "CAT engine stopped while SkyRoof-owned or possibly-owned PTT could not be confirmed OFF.");
 
       base.Dispose();
       PttReleased.Dispose();

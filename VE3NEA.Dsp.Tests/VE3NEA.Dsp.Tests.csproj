@@ -42,6 +42,10 @@
       <HintPath>..\Vendor\VE3NEA.SkySignals\VE3NEA.SkyFM.dll</HintPath>
       <Private>true</Private>
     </Reference>
+    <Reference Include="VE3NEA.SkySSTV">
+      <HintPath>..\Vendor\VE3NEA.SkySignals\VE3NEA.SkySSTV.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
     <Reference Include="VE3NEA.Dsp">
       <HintPath>..\Vendor\VE3NEA.Dsp\VE3NEA.Dsp.dll</HintPath>
       <Private>true</Private>

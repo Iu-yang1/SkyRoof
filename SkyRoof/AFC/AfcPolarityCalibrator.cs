@@ -13,6 +13,7 @@ namespace SkyRoof.AFC
 
     private long generation = -1;
     private DateTime phaseStartedUtc, baselineSampleUtc, probedSampleUtc;
+    private DateTime lastIndependentSampleUtc;
     private double baselineCatHz, baselineIfHz;
     private double probedCatHz, probedIfHz;
     private double previousWaitingIfHz = double.NaN;
@@ -39,7 +40,8 @@ namespace SkyRoof.AFC
     public void Reset()
     {
       generation = -1;
-      phaseStartedUtc = baselineSampleUtc = probedSampleUtc = default;
+      phaseStartedUtc = baselineSampleUtc = probedSampleUtc =
+        lastIndependentSampleUtc = default;
       baselineCatHz = baselineIfHz = probedCatHz = probedIfHz = 0;
       previousWaitingIfHz = double.NaN;
       stableSamples = phaseVotes = candidateSign = 0;
@@ -89,6 +91,16 @@ namespace SkyRoof.AFC
         return;
       }
 
+      // Independent IF evidence must come from genuinely distinct
+      // measurements, not repeated UI/timer delivery of the same buffer.
+      // Eligibility and watchdog checks intentionally happen before this
+      // guard so PTT/retarget changes still abort a pending probe.
+      if (observation.SampleUtc.Kind != DateTimeKind.Utc ||
+          (lastIndependentSampleUtc != default &&
+           observation.SampleUtc <= lastIndependentSampleUtc))
+        return;
+      lastIndependentSampleUtc = observation.SampleUtc;
+
       bool valid = observation.HasAbsoluteReference &&
         !observation.Ambiguous && observation.Confidence >= .7 &&
         double.IsFinite(observation.IfOffsetHz) &&
@@ -113,16 +125,22 @@ namespace SkyRoof.AFC
 
         // A stronger FM test step makes the response identifiable even when
         // the finite FM discriminator window has a modest modulation bias.
-        int amplitude = observation.Mode == AfcSignalMode.FM ? 150 : 40;
-        if (tuningStepHz <= 0 || tuningStepHz > amplitude)
+        // Probe amplitude must be observable above the IF estimator's own
+        // uncertainty and quantized by the *actual* CAT tuning step. A 100 Hz
+        // configured rig step is not a reason to reject a safe 200 Hz test.
+        // Avoid tiny CW probes buried under a noisy/discrete IF estimator.
+        double nominal = observation.Mode == AfcSignalMode.FM ? 150 : 40;
+        double maximum = observation.Mode == AfcSignalMode.FM ? 250 : 150;
+        double needed = Math.Max(nominal, 4.0 * observation.SigmaHz);
+        if (tuningStepHz <= 0 || tuningStepHz > maximum)
         {
-          Fail("CAT tuning step is too coarse for a safe IF probe");
+          Fail("CAT step exceeds safe receive-only calibration span");
           return;
         }
-        probeHz = Math.Ceiling(amplitude / (double)tuningStepHz) * tuningStepHz;
-        if (probeHz > (observation.Mode == AfcSignalMode.FM ? 250 : 50))
+        probeHz = Math.Ceiling(needed / tuningStepHz) * tuningStepHz;
+        if (probeHz > maximum)
         {
-          Fail("CAT tuning step cannot fit the safe IF calibration span");
+          Fail("CAT tuning step cannot resolve IF measurement noise within safe span");
           return;
         }
         baselineCatHz = catReadbackHz;
