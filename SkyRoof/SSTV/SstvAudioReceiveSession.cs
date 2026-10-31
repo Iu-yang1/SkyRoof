@@ -167,6 +167,13 @@ namespace SkyRoof.SSTV
       };
       var manualShifter = new SstvAfFrequencyShifter();
       var shifter = new SstvAfFrequencyShifter();
+      var nativeSync = new SstvNativeLineSyncAfc();
+      nativeSync.OffsetUpdated += offset =>
+      {
+        if (Volatile.Read(ref epoch) == version && AutoVisEnabled)
+          Volatile.Write(ref autoVisCorrectionHz,
+            Math.Clamp((int)Math.Round(-offset), -500, 500));
+      };
       var visDetector = new SstvVisAfcDetector();
       visDetector.Reset(version);
       visDetector.VisLocked += detected =>
@@ -175,6 +182,9 @@ namespace SkyRoof.SSTV
         if (AutoVisEnabled)
           Volatile.Write(ref autoVisCorrectionHz,
             Math.Clamp((int)Math.Round(-detected.OffsetHz), -500, 500));
+        SstvModeSpec? native = SstvModes.FromVisByte(detected.VisByte);
+        if (native != null) nativeSync.Begin(detected, native);
+        else nativeSync.Disable();
         VisSynchronized?.Invoke(detected);
       };
       double fmPhase = 0;
@@ -208,6 +218,7 @@ namespace SkyRoof.SSTV
             manualShifter.Reset();
             shifter.Reset();
             raster.Reset();
+            nativeSync.Reset();
             visDetector.Reset(version);
             Volatile.Write(ref autoVisCorrectionHz, 0);
             fmPhase = 0;
@@ -231,6 +242,7 @@ namespace SkyRoof.SSTV
           // VIS offset is now estimated relative to the manually centered
           // AF. Do not include that manual correction again downstream.
           visDetector.Process(af);
+          nativeSync.Process(af);
           SstvTxModeProfile? forced =
             Interlocked.Exchange(ref manuallyRequestedMode, null);
           if (forced != null) raster.ForceMode(forced);
