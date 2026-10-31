@@ -72,7 +72,7 @@ namespace SkyRoof.SSTV
         File.Copy(sourcePath, destination);
       else
       {
-        using var image = LoadForEditing(sourcePath);
+        using var image = ScaleForEditing(original);
         image.Save(destination, ImageFormat.Png);
       }
       return destination;
