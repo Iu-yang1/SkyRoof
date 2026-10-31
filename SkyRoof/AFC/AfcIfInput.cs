@@ -34,7 +34,7 @@ namespace SkyRoof.AFC
     private readonly float[] buffer = new float[96000];
     private int write, used, busy;
     private long generation, lastAnalysisMs;
-    private DateTime lastUtc;
+    private DateTime lastUtc, lastSourceUtc;
     private long totalSamples, scheduledAnalyses, completedAnalyses, failedAnalyses;
     private DateTime lastResultUtc;
     private AfcObservation? latestObservation;
@@ -63,19 +63,31 @@ namespace SkyRoof.AFC
     /// are not new PCM generations and must not discard the IF accumulator.
     /// A genuine backwards jump is still recognized as a discontinuity.
     /// </summary>
-    internal static DateTime NormalizePacketUtc(DateTime incoming, DateTime previous,
-      int samples, out bool discontinuity)
+    internal static DateTime NormalizePacketUtc(DateTime incoming,
+      DateTime previousNormalized, DateTime previousSource, int samples,
+      out bool discontinuity)
     {
       discontinuity = false;
       if (incoming.Kind != DateTimeKind.Utc)
         incoming = incoming.Kind == DateTimeKind.Unspecified
           ? DateTime.SpecifyKind(incoming, DateTimeKind.Utc)
           : incoming.ToUniversalTime();
-      if (previous == default || incoming > previous) return incoming;
-      if ((previous - incoming).TotalMilliseconds <= 250)
-        return previous.AddSeconds(Math.Max(1, samples) / 48000.0);
-      discontinuity = true;
-      return incoming;
+      if (previousNormalized == default) return incoming;
+      // Compare original hardware timestamps to each other, not to the
+      // synthesized PCM clock. If WASAPI repeats a timestamp for twenty
+      // consecutive 33-ms buffers, normalized time is now ~660 ms ahead
+      // of that source stamp; that is NOT a backwards device jump.
+      if (previousSource != default &&
+          (previousSource - incoming).TotalMilliseconds > 250)
+      {
+        discontinuity = true;
+        return incoming;
+      }
+      DateTime next = previousNormalized.AddSeconds(
+        Math.Max(1, samples) / 48000.0);
+      // Never let coarse-grained timestamps rewind time; if hardware time
+      // leaps forward, take its newer absolute UTC instead.
+      return incoming > next ? incoming : next;
     }
     private AfcSignalProcessing processor = new();
     private AfcSignalMode mode;
@@ -114,7 +126,7 @@ namespace SkyRoof.AFC
       {
         generation++;
         write = used = 0;
-        lastUtc = default;
+        lastUtc = lastSourceUtc = default;
         lastResultUtc = default;
         latestObservation = null;
         totalSamples = scheduledAnalyses = completedAnalyses = failedAnalyses = 0;
@@ -155,7 +167,7 @@ namespace SkyRoof.AFC
       {
         generation++;
         write = used = 0;
-        lastUtc = lastResultUtc = default;
+        lastUtc = lastSourceUtc = lastResultUtc = default;
         latestObservation = null;
         scheduledAnalyses = completedAnalyses = failedAnalyses = 0;
         lastAnalysisMs = 0;
@@ -193,8 +205,8 @@ namespace SkyRoof.AFC
         {
           if (disposed) return;
           int accepted = Math.Min(e.Count, e.Data.Length);
-          packetUtc = NormalizePacketUtc(e.Utc, lastUtc, accepted,
-            out bool discontinuity);
+          packetUtc = NormalizePacketUtc(e.Utc, lastUtc, lastSourceUtc,
+            accepted, out bool discontinuity);
           if (discontinuity)
           {
             generation++;
@@ -205,6 +217,9 @@ namespace SkyRoof.AFC
             lastAnalysisMs = 0;
           }
           lastUtc = packetUtc;
+          lastSourceUtc = e.Utc.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(e.Utc, DateTimeKind.Utc) :
+            e.Utc.ToUniversalTime();
           totalSamples += accepted;
           for (int i = 0; i < accepted; i++)
           {
