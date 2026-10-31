@@ -403,7 +403,7 @@ namespace SkyRoof
       textTools.Controls.Add(textColorButton);
       textTools.Controls.Add(new Label
       {
-        Text = "拖动图片上的文字；滚轮调整字号", Width = 225,
+        Text = "拖动文字；滚轮调整字号", Width = 170,
         Height = 30, TextAlign = ContentAlignment.MiddleLeft
       });
       var transmit = Toolbar();
