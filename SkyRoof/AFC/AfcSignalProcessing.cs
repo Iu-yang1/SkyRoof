@@ -165,9 +165,14 @@ namespace SkyRoof.AFC
         sigma = Math.Max(sigma, disagreement * 0.25);
       }
       bool valid = double.IsFinite(median) && Math.Abs(median) < 8000 &&
-        power > 1e-8 && confidence >= 0.4;
+        power > 1e-8 && confidence >= 0.4 && sigma <= 150;
+      // Keep the measured candidate and its numerical quality even when
+      // confidence / IF ambiguity rejects it as an AFC reference. Previously
+      // a rejected nonzero FM offset was reported as 0% without any reason,
+      // making a real carrier shift indistinguishable from missing PCM.
+      // HasAbsoluteReference remains false, so the CAT servo cannot use it.
       return new(AfcSignalMode.FM, utc, generation, median, sigma,
-        valid ? confidence : 0, valid);
+        confidence, valid);
     }
 
     private AfcObservation EstimateTone(Complex[] bb, AfcSignalMode mode,
