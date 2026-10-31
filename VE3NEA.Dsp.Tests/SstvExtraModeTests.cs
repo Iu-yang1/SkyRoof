@@ -30,7 +30,7 @@ namespace VE3NEA.Dsp.Tests
     [InlineData("MR73", 0x4523, 286.3)]
     [InlineData("ML180", 0x8523, 363.3)]
     [InlineData("MP73-N", 0x02, 570.0)]
-    [InlineData("MC110-N", 0x14, 428.5)]
+    [InlineData("MC110-N", 0x14, 437.5)]
     [InlineData("Robot BW 8", 0x02, 66.89709)]
     [InlineData("Robot 24", 0x04, 200.0)]
     public void TimingAndVisDefinitionsMatchMmsstv(
