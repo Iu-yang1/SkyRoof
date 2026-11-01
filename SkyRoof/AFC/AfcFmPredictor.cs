@@ -8,10 +8,18 @@ namespace SkyRoof.AFC
   /// carrier bursts. No new measurement is invented during squelch/noise.
   /// Neither this predictor nor its extrapolation directly authorizes CAT.
   /// </summary>
-  public sealed class AfcFmPredictor
+  public sealed class AfcBurstPredictor
   {
     public const double MaximumRateHzPerSecond = 90;
-    public const double MaximumCoastSeconds = 1.5;
+    public const double MaximumCoastSeconds = 2.5;
+    private readonly double maxCoastSeconds, maxRateHzPerSecond;
+    public AfcBurstPredictor(double coastSeconds = 1.5, double maxRateHzPerSecond = 90)
+    {
+      if (coastSeconds is < .3 or > 5 || maxRateHzPerSecond is < 1 or > 300)
+        throw new ArgumentOutOfRangeException(nameof(coastSeconds));
+      this.maxCoastSeconds = coastSeconds;
+      this.maxRateHzPerSecond = maxRateHzPerSecond;
+    }
     public DateTime LastValidUtc { get; private set; }
     public double OffsetHz { get; private set; }
     public double RateHzPerSecond { get; private set; }
@@ -24,9 +32,10 @@ namespace SkyRoof.AFC
     }
 
     public bool TryPredict(DateTime utc, out double offsetHz,
-      double maximumAgeSeconds = MaximumCoastSeconds)
+      double maximumAgeSeconds = -1)
     {
       offsetHz = 0;
+      if (maximumAgeSeconds < 0) maximumAgeSeconds = maxCoastSeconds;
       if (!HasEstimate || utc < LastValidUtc ||
           maximumAgeSeconds < 0 || (utc - LastValidUtc).TotalSeconds > maximumAgeSeconds)
         return false;
@@ -45,7 +54,7 @@ namespace SkyRoof.AFC
           (HasEstimate && sampleUtc <= LastValidUtc))
         return false;
 
-      if (!HasEstimate || (sampleUtc - LastValidUtc).TotalSeconds > MaximumCoastSeconds)
+      if (!HasEstimate || (sampleUtc - LastValidUtc).TotalSeconds > maxCoastSeconds)
       {
         OffsetHz = measuredHz;
         RateHzPerSecond = 0;
@@ -68,7 +77,7 @@ namespace SkyRoof.AFC
       OffsetHz = projected + alpha * innovation;
       RateHzPerSecond = Math.Clamp(
         RateHzPerSecond + beta * innovation / Math.Max(.08, dt),
-        -MaximumRateHzPerSecond, MaximumRateHzPerSecond);
+        -maxRateHzPerSecond, maxRateHzPerSecond);
       LastValidUtc = sampleUtc;
       return true;
     }
