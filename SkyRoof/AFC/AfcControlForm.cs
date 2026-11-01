@@ -578,7 +578,7 @@ namespace SkyRoof.AFC
           // divergence; the user can override an inverted hardware path.
           int sign = AfcDirectionResolver.Resolve(cfg.RfIfSign,
             owner.RadioLink.TxCust != null
-              ? owner.RadioLink.DownlinkMode : Slicer.Mode.USB);
+              ? owner.RadioLink.DownlinkMode : VE3NEA.Slicer.Mode.USB);
           owner.AfcController.Observe(observation, readback,
             sign, Math.Clamp(cfg.MaxCorrectionHz, 1, 10000),
             Math.Clamp(cfg.FmDeadbandHz, 1, 500),
