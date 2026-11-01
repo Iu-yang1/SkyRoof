@@ -18,6 +18,7 @@ namespace SkyRoof.AFC
     private readonly object displayGate = new();
     private readonly AfcIfDisplayAnalyzer displayAnalyzer = new();
     private int displayBusy;
+    private int acquisitionPreset = (int)AfcAcquisitionPreset.Adaptive;
     private long lastDisplayMs;
     private volatile bool displayEnabled;
     public bool DisplayEnabled
@@ -26,6 +27,29 @@ namespace SkyRoof.AFC
       set => displayEnabled = value;
     }
     public event Action<AfcIfDisplayFrame>? DisplayFrameAvailable;
+
+    /// <summary>Changes the strategy without reopening USB IF. Discards
+    /// previously buffered windows so that the next estimate is fresh.</summary>
+    public void SetAcquisitionPreset(AfcAcquisitionPreset preset)
+    {
+      if (!Enum.IsDefined(typeof(AfcAcquisitionPreset), preset))
+        throw new ArgumentOutOfRangeException(nameof(preset));
+      lock (sync)
+      {
+        if (acquisitionPreset == (int)preset) return;
+        acquisitionPreset = (int)preset;
+        generation++;
+        write = used = 0;
+        lastResultUtc = default;
+        latestObservation = null;
+        lastAnalysisMs = 0;
+      }
+    }
+
+    public AfcAcquisitionPreset AcquisitionPreset
+    {
+      get { lock (sync) return (AfcAcquisitionPreset)acquisitionPreset; }
+    }
 
     public void ConfigureDisplay(bool blackmanHarris, bool haloReduction,
       double smoothingMs)
@@ -230,6 +254,7 @@ namespace SkyRoof.AFC
         long gen = 0;
         DateTime packetUtc;
         AfcSignalMode selected = default;
+        AfcAcquisitionPreset preset = AfcAcquisitionPreset.Adaptive;
         bool refPresent = false;
         double expected = 0;
         AfcSignalProcessing analyzer;
@@ -275,7 +300,8 @@ namespace SkyRoof.AFC
           // Mode-specific short bursts. Never analyze 2 seconds of stale
           // FM when a 400-ms SO-50 voice transmission is all we have.
           // CW and piloted SSB have dedicated (slightly longer) windows.
-          var profile = AfcTrackingProfile.For(mode, pilot);
+          var profile = AfcTrackingProfile.For(mode, pilot,
+            (AfcAcquisitionPreset)acquisitionPreset);
           if (used >= profile.MinimumSamples &&
               tick - lastAnalysisMs >= profile.CadenceMilliseconds &&
               Interlocked.CompareExchange(ref busy, 1, 0) == 0)
@@ -288,6 +314,7 @@ namespace SkyRoof.AFC
             for (int i = 0; i < n; i++)
               pcm[i] = buffer[(start + i) % buffer.Length];
             selected = mode;
+            preset = (AfcAcquisitionPreset)acquisitionPreset;
             refPresent = pilot;
             expected = targetOffset;
           }
@@ -326,7 +353,7 @@ namespace SkyRoof.AFC
             double centerLagSeconds = data.Length / 48000.0 / 2.0;
             DateTime analysisUtc = packetUtc.AddSeconds(-centerLagSeconds);
             AfcObservation obs = analyzer.Analyze(data, selected, analysisUtc,
-              version, expected, refPresent);
+              version, expected, refPresent, preset);
             lock (sync)
             {
               if (disposed || version != generation) return;

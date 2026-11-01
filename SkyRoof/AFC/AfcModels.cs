@@ -24,6 +24,12 @@ namespace SkyRoof
     public string? InputDeviceId { get; set; } =
       Soundcard.GetPreferredSoundcardId(DataFlow.Capture, "USB Audio CODEC", "ICOM");
 
+    [DisplayName("捕获策略（速度 / 灵敏度）")]
+    [Description("Adaptive=约250ms开始短窗测频，随新增采样用多分辨率FFT和重叠窗改进精度；Fast=最短处理路径；Balanced=原有平衡策略；Sensitive=较长积分提高弱信号可靠性。不会降低CAT置信度/安全限制。")]
+    [DefaultValue(AFC.AfcAcquisitionPreset.Adaptive)]
+    public AFC.AfcAcquisitionPreset AcquisitionPreset { get; set; } =
+      AFC.AfcAcquisitionPreset.Adaptive;
+
     [DisplayName("AFC 控制等级")]
     [DefaultValue(AFC.AfcControlMode.Assist)]
     public AFC.AfcControlMode Control { get; set; } = AFC.AfcControlMode.Assist;

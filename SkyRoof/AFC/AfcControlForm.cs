@@ -517,6 +517,18 @@ namespace SkyRoof.AFC
       object? sender, PropertyValueChangedEventArgs e)
     {
       string name = e.ChangedItem.PropertyDescriptor?.Name ?? "";
+      if (name == nameof(AfcSettings.AcquisitionPreset))
+      {
+        input.SetAcquisitionPreset(ctx.Settings.Afc.AcquisitionPreset);
+        if (active)
+        {
+          owner.AfcController.Reset("Acquisition strategy changed");
+          owner.AfcController.Configure(currentMode, EffectiveControl());
+          if (currentMode == AfcSignalMode.SSB &&
+              ctx.Settings.Afc.SsbPilotEnabled)
+            owner.AfcController.CenterOn(ctx.Settings.Afc.DesiredOffsetHz);
+        }
+      }
       if (name == nameof(AfcSettings.RfIfSign))
       {
         AbortPolarityCalibration();
@@ -637,6 +649,7 @@ namespace SkyRoof.AFC
         currentMode = owner.CurrentAfcMode;
         AbortPolarityCalibration();
         var cfg = ctx.Settings.Afc;
+        input.SetAcquisitionPreset(cfg.AcquisitionPreset);
         if (cfg.InputSource == AfcIfSource.WasapiCapture &&
             ctx.IfAf?.IsRunning == true &&
             string.Equals(ctx.IfAf.InputDeviceId, cfg.InputDeviceId,
@@ -838,7 +851,8 @@ namespace SkyRoof.AFC
       string measureZh, measureEn;
       if (pipeline.Completed == 0)
       {
-        int needed = AfcTrackingProfile.For(currentMode, cfg.SsbPilotEnabled).MinimumSamples;
+        int needed = AfcTrackingProfile.For(currentMode, cfg.SsbPilotEnabled,
+          cfg.AcquisitionPreset).MinimumSamples;
         measureZh = pipeline.BufferedSamples < needed
           ? $"等待 IF PCM {pipeline.BufferedSamples}/{needed}"
           : pipeline.Scheduled == 0

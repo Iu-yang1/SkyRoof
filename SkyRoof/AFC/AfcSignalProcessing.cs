@@ -54,9 +54,11 @@ namespace SkyRoof.AFC
     }
 
     public AfcObservation Analyze(ReadOnlySpan<float> pcm, AfcSignalMode mode,
-      DateTime utc, long generation, double expectedOffsetHz = 0, bool ssbPilot = false)
+      DateTime utc, long generation, double expectedOffsetHz = 0,
+      bool ssbPilot = false,
+      AfcAcquisitionPreset acquisitionPreset = AfcAcquisitionPreset.Balanced)
     {
-      var profile = AfcTrackingProfile.For(mode, ssbPilot);
+      var profile = AfcTrackingProfile.For(mode, ssbPilot, acquisitionPreset);
       if (pcm.Length < profile.MinimumSamples)
         return new(mode, utc, generation, 0, double.PositiveInfinity, 0, false);
       // Only the newest mode-specific window contributes to this estimate.
@@ -74,9 +76,10 @@ namespace SkyRoof.AFC
       AfcObservation result = mode switch
       {
         AfcSignalMode.FM => EstimateFm(bb, utc, generation),
-        AfcSignalMode.CW => EstimateTone(bb, mode, utc, generation, search),
+        AfcSignalMode.CW => EstimateTone(bb, mode, utc, generation,
+          search, acquisitionPreset),
         AfcSignalMode.SSB when ssbPilot =>
-          EstimateTone(bb, mode, utc, generation, search),
+          EstimateTone(bb, mode, utc, generation, search, acquisitionPreset),
         AfcSignalMode.SSB => EstimateSsbRelative(bb, utc, generation),
         _ => new(mode, utc, generation, 0, double.PositiveInfinity, 0, false)
       };
@@ -177,7 +180,8 @@ namespace SkyRoof.AFC
     }
 
     private AfcObservation EstimateTone(Complex[] bb, AfcSignalMode mode,
-      DateTime utc, long generation, double expectedHz)
+      DateTime utc, long generation, double expectedHz,
+      AfcAcquisitionPreset preset)
     {
       // Prefer an ~171-ms 4096-point FFT for short Morse key-downs.
       // A second ~341-ms window has finer bins for weaker longer carriers.
@@ -190,10 +194,25 @@ namespace SkyRoof.AFC
         return fast;
       var sensitive = EstimateToneWindow(bb, mode, utc, generation,
         expectedHz, 8192);
-      return sensitive.HasAbsoluteReference &&
+      var best = sensitive.HasAbsoluteReference &&
         (!fast.HasAbsoluteReference ||
          sensitive.Confidence >= fast.Confidence - .05)
           ? sensitive : fast;
+      // Optional third, longer resolution for an already available weak
+      // carrier: no extra time-to-first-fix penalty in Adaptive mode.
+      if (preset is AfcAcquisitionPreset.Adaptive or
+          AfcAcquisitionPreset.Sensitive && bb.Length >= 16384)
+      {
+        var deep = EstimateToneWindow(bb, mode, utc, generation,
+          expectedHz, 16384);
+        if (deep.HasAbsoluteReference &&
+            (!best.HasAbsoluteReference ||
+              deep.Confidence >= best.Confidence - .08) &&
+            (best.HasAbsoluteReference
+              ? Math.Abs(deep.IfOffsetHz - best.IfOffsetHz) <= 12 : true))
+          best = deep;
+      }
+      return best;
     }
 
     private AfcObservation EstimateToneWindow(Complex[] bb,
