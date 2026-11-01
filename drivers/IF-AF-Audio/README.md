@@ -20,3 +20,7 @@ Settings → 12-kHz IF → AF: `AudioRoute` selects the default backward-compati
 SkyRoof status strip: **IF › DDC › AF › V-MIC/VAC**, with `Q` = estimated host processing queue age, `P` = requested WASAPI output period, plus clickable runtime diagnostics. Neither is actual hardware-to-WSJT-X end-to-end latency, which must be measured separately.
 
 References: [SysVAD](https://github.com/microsoft/Windows-driver-samples/tree/main/audio/sysvad), [Windows low latency audio](https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/low-latency-audio), [driver signing requirements](https://learn.microsoft.com/en-us/windows-hardware/drivers/dashboard/driver-signing-offerings).
+
+### Event-driven WASAPI and underrun telemetry
+
+The 20/40/80-ms IF-AF routes use shared-mode WASAPI event callbacks; the legacy-compatible 200-ms option retains polling. Only IF-AF sinks zero-fill underruns to prevent replay of stale audio; `OutputUnderrunSamples` is shown in the diagnostic link popup and VAC tooltip. Actual OS engine period and end-to-end latency are **not** established by the requested period. Validate with actual loopback measurements and FT4/FT8 decode capture.
