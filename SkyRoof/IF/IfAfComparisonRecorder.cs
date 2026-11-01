@@ -154,6 +154,10 @@ namespace SkyRoof.IF
           !ifEntry.Name.Contains("ICOM", StringComparison.OrdinalIgnoreCase))
         Log.Warning("Dual capture: IF device {Device} is not identified as an IC-9700 USB endpoint", ifEntry.Name);
       if (hub?.IsRunning == true &&
+          string.Equals(hub.VacRenderDeviceId, afPlaybackDevice, StringComparison.Ordinal))
+        throw new InvalidOperationException(
+          "LAN original AF endpoint conflicts with SkyRoof IF-to-AF virtual audio output. Select a separate RS-BA1 playback device.");
+      if (hub?.IsRunning == true &&
           string.Equals(hub.InputDeviceId, ifDevice, StringComparison.Ordinal) &&
           ifChannel != hub.CaptureChannel)
         throw new InvalidOperationException(
