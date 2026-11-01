@@ -62,3 +62,9 @@ SkyRoof 底部状态栏新增紧凑的 **IF › DDC › AF › V-MIC/VAC** 分�
 ## 硬件验收建议
 
 先用 `ExistingVirtualCable` + `Balanced40Ms`（最稳妥），然后在声卡环境允许时尝试 `Fast20Ms`。通过新增 USB IF/LAN AF 双轨 WAV 和 WSJT-X 解码记录，比较端到端延迟、频偏、缓冲欠载、掉块、接收 SNR、FT4/FT8/Q65 解码率。虚拟驱动正式可用后再进行 IF-AF-Audio 原生端点验收。
+
+### 低延迟实现补充：事件驱动与欠载诊断
+
+`Fast20Ms`、`Balanced40Ms`、`Stable80Ms` 使用 WASAPI Shared event-driven 输出；`Compatible200Ms` 保留原先轮询策略。仅 IF-AF 输出路径启用**缺样本补零**：缓冲空时返回零样本，避免将旧信号延迟输出，`OutputUnderrunSamples` 记录被补零的采样数。UI 会分别显示 IF 输入丢块、AF 削波和输出欠载。开始运行及切换设备时少量补零属于正常现象；持续增长才提示输入/处理/设备驱动不稳定。
+
+Windows 内部音频引擎可能将请求的 20/40ms 更改为实际支持的周期；请用音频环回实测延迟而不是使用 UI P 数字断言端到端性能。
