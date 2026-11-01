@@ -77,6 +77,17 @@ Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\fa-solid-900.ttf; DestDir:
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\runtimes\win-x64\native\onnxruntime*.dll; DestDir: {app}\runtimes\win-x64\native; Flags: overwritereadonly ignoreversion
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\ft4_coder.pdb; DestDir: {app}; Flags: overwritereadonly ignoreversion
 
+; Only the separate IF-AF-Test packaging workflow defines IF_AF_AUDIO_DEV_BUNDLE.
+; SYS/INF/CAT are copied AS DOCUMENTED DEVELOPER FILES, NEVER installed,
+; registered or loaded by Setup. The CAT is not Microsoft release-signed.
+#ifdef IF_AF_AUDIO_DEV_BUNDLE
+Source: ..\drivers\IF-AF-Audio\vendor\audio\sysvad\TabletAudioSample\x64\Release\Package\IfAfAudio.sys; DestDir: {app}\Drivers\IF-AF-Audio; Flags: overwritereadonly ignoreversion
+Source: ..\drivers\IF-AF-Audio\vendor\audio\sysvad\TabletAudioSample\x64\Release\Package\IfAfAudio.inf; DestDir: {app}\Drivers\IF-AF-Audio; Flags: overwritereadonly ignoreversion
+Source: ..\drivers\IF-AF-Audio\vendor\audio\sysvad\TabletAudioSample\x64\Release\Package\ifafaudio.cat; DestDir: {app}\Drivers\IF-AF-Audio; Flags: overwritereadonly ignoreversion
+Source: ..\drivers\IF-AF-Audio\README.md; DestDir: {app}\Drivers\IF-AF-Audio; DestName: README-DEVELOPMENT-ONLY.md; Flags: overwritereadonly ignoreversion
+Source: ..\drivers\IF-AF-Audio\LICENSE-LoopIt7-MIT.txt; DestDir: {app}\Drivers\IF-AF-Audio; Flags: overwritereadonly ignoreversion
+#endif
+
 [Icons]
 Name: {commonprograms}\{#MyAppName}; Filename: {app}\{#MyAppExeName}
 Name: {commondesktop}\{#MyAppName}; Filename: {app}\{#MyAppExeName}; Tasks: desktopicon

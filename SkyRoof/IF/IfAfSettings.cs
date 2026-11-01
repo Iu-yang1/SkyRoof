@@ -55,9 +55,25 @@ namespace SkyRoof.IF
     [Description("A real Windows microphone requires a signed virtual audio driver. This field reports whether both dedicated audio endpoints are installed; naming an in-process buffer does not create an endpoint.")]
     [ReadOnly(true)]
     [JsonIgnore]
-    public string DriverStatus => IfAfAudioEndpointDiscovery.Detect().Ready
-      ? "Ready: IF-AF-Audio capture and playback installed"
-      : "Not installed: signed virtual audio driver required";
+    public string DriverStatus
+    {
+      get
+      {
+        var endpoints = IfAfAudioEndpointDiscovery.Detect();
+        if (endpoints.Ready)
+          return "Ready: Windows IF-AF-Audio capture and playback endpoints detected";
+        return IfAfAudioEndpointDiscovery.BundledDevelopmentPackagePath == null
+          ? "Not installed: IF-AF-Audio Windows driver is required"
+          : "Developer-only driver files bundled; not installed or Microsoft release-signed";
+      }
+    }
+
+    [DisplayName("IF-AF-Audio driver package (developer only)")]
+    [Description("Shows the path only if the complete experimental SYS/INF/CAT package is bundled. Package presence does not install or sign a driver.")]
+    [ReadOnly(true)]
+    [JsonIgnore]
+    public string DriverPackage => IfAfAudioEndpointDiscovery.BundledDevelopmentPackagePath ??
+      "(No bundled driver package)";
 
     [DisplayName("Virtual audio render device")]
     [Description("Only for ExistingVirtualCable. Choose CABLE Input/VAC playback; never IC-9700 USB Audio CODEC (TX).")]

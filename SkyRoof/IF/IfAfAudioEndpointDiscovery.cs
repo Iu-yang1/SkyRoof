@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using NAudio.CoreAudioApi;
 using VE3NEA;
 
@@ -18,6 +19,27 @@ namespace SkyRoof.IF
 
   public static class IfAfAudioEndpointDiscovery
   {
+    /// <summary>
+    /// A development driver may be bundled as files without being installed.
+    /// Finding INF/SYS/CAT here never means the driver is installed or trusted.
+    /// </summary>
+    public static string? BundledDevelopmentPackagePath
+    {
+      get
+      {
+        string path = Path.Combine(AppContext.BaseDirectory, "Drivers", "IF-AF-Audio");
+        return IsCompleteDevelopmentPackage(path) ? path : null;
+      }
+    }
+
+    public static bool IsCompleteDevelopmentPackage(string? folder)
+    {
+      if (string.IsNullOrWhiteSpace(folder)) return false;
+      return File.Exists(Path.Combine(folder, "IfAfAudio.sys")) &&
+        File.Exists(Path.Combine(folder, "IfAfAudio.inf")) &&
+        File.Exists(Path.Combine(folder, "ifafaudio.cat"));
+    }
+
     public const string VirtualCaptureName = "IF-AF-Audio";
     public const string VirtualPlaybackName = "IF-AF-Audio Playback";
 
@@ -52,15 +74,17 @@ namespace SkyRoof.IF
     }
 
     public static bool IsExpectedRenderName(string? name) =>
-      string.Equals(name?.Trim(), VirtualPlaybackName,
-        StringComparison.OrdinalIgnoreCase) ||
-      string.Equals(name?.Trim(), "Speakers (IF-AF-Audio Playback)",
-        StringComparison.OrdinalIgnoreCase);
+      MatchesEndpointName(name, VirtualPlaybackName);
 
     public static bool IsExpectedCaptureName(string? name) =>
-      string.Equals(name?.Trim(), VirtualCaptureName,
-        StringComparison.OrdinalIgnoreCase) ||
-      string.Equals(name?.Trim(), "Microphone (IF-AF-Audio)",
-        StringComparison.OrdinalIgnoreCase);
+      MatchesEndpointName(name, VirtualCaptureName);
+
+    private static bool MatchesEndpointName(string? name, string exactName)
+    {
+      string value = name?.Trim() ?? "";
+      return string.Equals(value, exactName, StringComparison.OrdinalIgnoreCase) ||
+        value.EndsWith("(" + exactName + ")", StringComparison.OrdinalIgnoreCase) ||
+        value.EndsWith("（" + exactName + "）", StringComparison.OrdinalIgnoreCase);
+    }
   }
 }

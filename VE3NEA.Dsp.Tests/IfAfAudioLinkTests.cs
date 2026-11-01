@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.IO;
 using SkyRoof.IF;
 using VE3NEA;
 using Xunit;
@@ -11,6 +12,9 @@ namespace VE3NEA.Dsp.Tests
     [Theory]
     [InlineData("IF-AF-Audio Playback", true)]
     [InlineData("Speakers (IF-AF-Audio Playback)", true)]
+    [InlineData("扬声器 (IF-AF-Audio Playback)", true)]
+    [InlineData("扬声器（IF-AF-Audio Playback）", true)]
+    [InlineData("扬声器 (Fake IF-AF-Audio Playback)", false)]
     [InlineData("Speakers (USB Audio CODEC)", false)]
     [InlineData("ICOM_VAUDIO-1 (Icom Virtual Audio Device)", false)]
     [InlineData("IF-AF-Audio", false)]
@@ -21,6 +25,9 @@ namespace VE3NEA.Dsp.Tests
     [Theory]
     [InlineData("IF-AF-Audio", true)]
     [InlineData("Microphone (IF-AF-Audio)", true)]
+    [InlineData("麦克风 (IF-AF-Audio)", true)]
+    [InlineData("麦克风（IF-AF-Audio）", true)]
+    [InlineData("麦克风 (Fake IF-AF-Audio)", false)]
     [InlineData("IF-AF-Audio Playback", false)]
     [InlineData("Microphone (USB Audio CODEC)", false)]
     public void InputRouteOnlyRecognizesDedicatedVirtualCapture(
@@ -33,6 +40,24 @@ namespace VE3NEA.Dsp.Tests
       Assert.False(new IfAfEndpointPair("one", null, "missing").Ready);
       Assert.False(new IfAfEndpointPair(null, "two", "missing").Ready);
       Assert.True(new IfAfEndpointPair("one", "two", "both").Ready);
+    }
+
+    [Fact]
+    public void OnlyCompleteDeveloperPackageIsRecognized()
+    {
+      var folder = Path.Combine(Path.GetTempPath(),
+        "if-af-audio-package-" + Guid.NewGuid().ToString("N"));
+      Directory.CreateDirectory(folder);
+      try
+      {
+        Assert.False(IfAfAudioEndpointDiscovery.IsCompleteDevelopmentPackage(folder));
+        File.WriteAllBytes(Path.Combine(folder, "IfAfAudio.sys"), new byte[] { 1 });
+        File.WriteAllText(Path.Combine(folder, "IfAfAudio.inf"), "test");
+        Assert.False(IfAfAudioEndpointDiscovery.IsCompleteDevelopmentPackage(folder));
+        File.WriteAllBytes(Path.Combine(folder, "ifafaudio.cat"), new byte[] { 1 });
+        Assert.True(IfAfAudioEndpointDiscovery.IsCompleteDevelopmentPackage(folder));
+      }
+      finally { Directory.Delete(folder, true); }
     }
 
     [Fact]

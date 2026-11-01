@@ -86,3 +86,30 @@ There is no signed driver installed on a real Windows host and no audio
 loopback or HLK result yet. Review the first successful WDK pipeline results,
 then test on an isolated VM with a test-authorized signature. Further fixes
 may be required after Driver Verifier, WaveRT position and sleep/resume tests.
+
+## IF-AF-Test integrated SkyRoof installer (development only)
+
+The workflow `SkyRoof IF-AF-Audio Integrated Developer Installer` builds the
+managed SkyRoof application AND native x64 SysVAD WaveRT driver on Windows,
+runs xUnit, creates an Inno Setup installer with
+`/DIF_AF_AUDIO_DEV_BUNDLE`, and installs the application into a temporary
+directory to verify the embedded SYS, INF, and CAT match the exact WDK
+package SHA-256 hashes. The normal/master installer is unaffected.
+
+The developer-only driver files are placed at
+`<SkyRoof installation>\\Drivers\\IF-AF-Audio\\`. These are *not* loaded,
+installed or automatically registered by the Inno Setup installer. The
+experimentally signed SYS does not imply an appropriately signed INF/CAT or a
+Microsoft-trusted Windows driver. **Do not use the normal operating computer
+to install this experimental kernel driver.**
+
+SkyRoof's `IF-AF-Audio driver status` displays Windows endpoint detection;
+`IF-AF-Audio driver package (developer only)` displays the package location
+only when SYS, INF and CAT are present. Once a properly signed driver is
+installed separately, select `PreferIfAfAudio`, then WSJT-X recording input
+`IF-AF-Audio`. When no real endpoints exist, the route refuses startup
+instead of redirecting to IC-9700 transmit audio. Windows display names may
+have localized `Speakers`/`Microphone` prefixes.
+
+See the technical results in `IC9700-IF-AF-20261101-analysis.md` (the supplied
+USB IF/LAN AF recording is **not** a virtual-driver loopback test).
