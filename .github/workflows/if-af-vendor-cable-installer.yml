@@ -27,6 +27,10 @@ jobs:
         with:
           submodules: true
 
+      - name: Stage original VB-Audio basic VB-CABLE and verify vendor signatures
+        shell: pwsh
+        run: ./scripts/prepare-vbcable.ps1
+
       - name: Validate CW release invariants
         shell: pwsh
         run: ./scripts/validate-cw-release.ps1
@@ -109,10 +113,6 @@ jobs:
           if-no-files-found: warn
 
 
-
-      - name: Stage original VB-Audio basic VB-CABLE and verify vendor signatures
-        shell: pwsh
-        run: ./scripts/prepare-vbcable.ps1
 
       - name: Install Inno Setup
         shell: powershell
