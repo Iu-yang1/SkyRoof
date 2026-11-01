@@ -54,9 +54,13 @@ namespace SkyRoof
     public int RfIfSign { get; set; } = 0;
 
     [DisplayName("目标搜索 IF 偏移 (Hz)")]
-    [Description("CW/导频参考信号的搜索中心；也可直接点击实时 IF 频谱选择目标。")]
+    [Description("CW/导频参考的搜索中心；FM 有独立候选参考。频谱左键选择，右键清除。")]
     [DefaultValue(0.0)]
     public double TargetOffsetHz { get; set; } = 0;
+
+    [Browsable(false)]
+    [Description("Optional FM spectrum-click acquisition hint; null allows unrestricted FM search.")]
+    public double? FmReferenceCandidateHz { get; set; }
 
     [DisplayName("希望居中的 IF 偏移 (Hz)")]
     [Description("“居中并锁定”要将所选信号移动到的位置，与目标搜索频率相互独立。")]

@@ -199,7 +199,12 @@ namespace SkyRoof.AFC
     {
       lock (sync)
       {
-        if (mode != signalMode || pilot != ssbPilot || Math.Abs(offset - targetOffset) > .5)
+        // NaN is the unrestricted-FM sentinel. Its transitions must
+        // invalidate the old measurement generation.
+        bool targetChanged = double.IsNaN(offset)
+          ? !double.IsNaN(targetOffset)
+          : double.IsNaN(targetOffset) || Math.Abs(offset - targetOffset) > .5;
+        if (mode != signalMode || pilot != ssbPilot || targetChanged)
         {
           generation++;
           write = used = 0;

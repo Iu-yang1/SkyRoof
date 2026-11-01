@@ -21,6 +21,7 @@ namespace SkyRoof.AFC
     private AfcSignalMode carrierMode;
     private double carrierSearchHz;
     private bool carrierTracked;
+    private bool fmCandidateAcquired;
     public int SampleRate => sampleRate;
 
     public AfcSignalProcessing(int sampleRate = 48000, double ifReferenceHz = 12000)
@@ -54,7 +55,7 @@ namespace SkyRoof.AFC
     }
 
     public AfcObservation Analyze(ReadOnlySpan<float> pcm, AfcSignalMode mode,
-      DateTime utc, long generation, double expectedOffsetHz = 0,
+      DateTime utc, long generation, double expectedOffsetHz = double.NaN,
       bool ssbPilot = false,
       AfcAcquisitionPreset acquisitionPreset = AfcAcquisitionPreset.Balanced)
     {
@@ -71,8 +72,11 @@ namespace SkyRoof.AFC
         carrierMode = mode;
         carrierSearchHz = expectedOffsetHz;
         carrierTracked = false;
+        fmCandidateAcquired = false;
       }
-      double search = toneMode && carrierTracked ? carrierSearchHz : expectedOffsetHz;
+      // Tone defaults to 0 Hz, but unselected FM must remain unrestricted.
+      double search = toneMode && carrierTracked ? carrierSearchHz :
+        double.IsFinite(expectedOffsetHz) ? expectedOffsetHz : 0;
       AfcObservation result = mode switch
       {
         AfcSignalMode.FM => EstimateFm(bb, utc, generation, acquisitionPreset),
@@ -83,6 +87,18 @@ namespace SkyRoof.AFC
         AfcSignalMode.SSB => EstimateSsbRelative(bb, utc, generation),
         _ => new(mode, utc, generation, 0, double.PositiveInfinity, 0, false)
       };
+      if (mode == AfcSignalMode.FM &&
+          double.IsFinite(expectedOffsetHz) && !fmCandidateAcquired)
+      {
+        // An operator click is only an initial acquisition hint; it never
+        // directly authorizes CAT. After the first qualified match the
+        // servo may move the FM carrier away from the original click.
+        if (Math.Abs(result.IfOffsetHz - expectedOffsetHz) > 1500)
+          result = result with { HasAbsoluteReference = false,
+            Ambiguous = true };
+        else if (result.HasAbsoluteReference && !result.Ambiguous)
+          fmCandidateAcquired = true;
+      }
       if (toneMode && result.HasAbsoluteReference && !result.Ambiguous)
       {
         carrierSearchHz = result.IfOffsetHz;

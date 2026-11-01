@@ -182,6 +182,7 @@ namespace SkyRoof.AFC
       spectrum.ApplyPalette(palette);
       spectrum.SetReferenceLevel(ctx.Settings.Afc.SpectrumRefLevelDb);
       spectrum.TargetSelected += OnSpectrumTargetSelected;
+      spectrum.ReferenceResetRequested += OnSpectrumReferenceResetRequested;
       spectrum.SpanChanged += OnSpanChanged;
       spectrumBlock.Controls.Add(spectrumToolbar, 0, 0);
       spectrumBlock.Controls.Add(spectrum, 0, 1);
@@ -414,7 +415,7 @@ namespace SkyRoof.AFC
             snapshot.LastObservationUtc != default &&
               snapshot.Confidence > 0 && snapshot.State == AfcLockState.Locked
               ? snapshot.ObservedIfOffsetHz : null,
-            ctx.Settings.Afc.TargetOffsetHz);
+            AfcSpectrumReference.DisplayMarker(ctx.Settings.Afc, currentMode));
         }));
       }
       catch (InvalidOperationException) { }
@@ -503,11 +504,30 @@ namespace SkyRoof.AFC
 
     private void OnSpectrumTargetSelected(double offset)
     {
-      if (!active || currentMode == AfcSignalMode.FM) return;
-      ctx.Settings.Afc.TargetOffsetHz = offset;
-      input.UpdateTarget(currentMode, ctx.Settings.Afc.SsbPilotEnabled, offset);
-      owner.AfcController.Reset("Selected new IF carrier");
-      owner.AfcController.Configure(currentMode, EffectiveControl());
+      if (!active || !AfcSpectrumReference.Select(
+          ctx.Settings.Afc, currentMode, offset)) return;
+      ReacquireSpectrumReference("Operator selected IF candidate");
+    }
+
+    private void OnSpectrumReferenceResetRequested()
+    {
+      AfcSpectrumReference.Reset(ctx.Settings.Afc, currentMode);
+      ReacquireSpectrumReference("Operator reset IF reference");
+    }
+
+    private void ReacquireSpectrumReference(string reason)
+    {
+      var cfg = ctx.Settings.Afc;
+      if (active)
+      {
+        input.UpdateTarget(currentMode, cfg.SsbPilotEnabled,
+          AfcSpectrumReference.AnalysisOffset(cfg, currentMode));
+        // Mouse clicks cannot bypass the normal CAT/IF confidence gate.
+        owner.AfcController.Reset(reason);
+        owner.AfcController.Configure(currentMode, EffectiveControl());
+      }
+      spectrum.SetMeasurement(null,
+        AfcSpectrumReference.DisplayMarker(cfg, currentMode));
       settingsGrid.Refresh();
       ctx.Settings.SaveToFile();
       RefreshDisplay();
@@ -551,7 +571,7 @@ namespace SkyRoof.AFC
                  nameof(AfcSettings.SsbPilotEnabled))
         {
           input.UpdateTarget(currentMode, ctx.Settings.Afc.SsbPilotEnabled,
-            ctx.Settings.Afc.TargetOffsetHz);
+            AfcSpectrumReference.AnalysisOffset(ctx.Settings.Afc, currentMode));
           owner.AfcController.Reset("Target parameters changed");
           owner.AfcController.Configure(currentMode, EffectiveControl());
         }
@@ -636,7 +656,7 @@ namespace SkyRoof.AFC
           spectrum.SetMeasurement(
             observation.HasAbsoluteReference && observation.Confidence > 0
               ? observation.IfOffsetHz : null,
-            cfg.TargetOffsetHz);
+            AfcSpectrumReference.DisplayMarker(cfg, currentMode));
           owner.ApplyAfcRxCorrection();
           RefreshDisplay();
         }));
@@ -657,10 +677,10 @@ namespace SkyRoof.AFC
             string.Equals(ctx.IfAf.InputDeviceId, cfg.InputDeviceId,
               StringComparison.Ordinal))
           input.StartShared(ctx.IfAf, cfg.IfReferenceHz, currentMode,
-            cfg.SsbPilotEnabled, cfg.TargetOffsetHz);
+            cfg.SsbPilotEnabled, AfcSpectrumReference.AnalysisOffset(cfg, currentMode));
         else
           input.Start(cfg.InputDeviceId, cfg.IfReferenceHz, currentMode,
-            cfg.SsbPilotEnabled, cfg.TargetOffsetHz,
+            cfg.SsbPilotEnabled, AfcSpectrumReference.AnalysisOffset(cfg, currentMode),
             cfg.InputSource, cfg.LoopbackDeviceId);
         if (!input.IsRunning)
           throw new InvalidOperationException("12 kHz IF input did not start. Check routing.");
@@ -793,7 +813,8 @@ namespace SkyRoof.AFC
       if (active && mode != currentMode)
       {
         currentMode = mode;
-        input.UpdateTarget(mode, cfg.SsbPilotEnabled, cfg.TargetOffsetHz);
+        input.UpdateTarget(mode, cfg.SsbPilotEnabled,
+          AfcSpectrumReference.AnalysisOffset(cfg, mode));
         spectrum.ClearHistory();
         owner.AfcController.Reset("Radio mode changed");
         if (!AutoAllowed && cfg.Control == AfcControlMode.Auto)
@@ -907,18 +928,26 @@ namespace SkyRoof.AFC
         ? "手动 RF/IF 映射" : "RF/IF 自动验证与有界回退";
       string calibrationEn = cfg.RfIfSign is 1 or -1
         ? "Manual RF/IF mapping" : "Automatic IF polarity / bounded recovery";
+      string searchZh = currentMode == AfcSignalMode.FM
+        ? cfg.FmReferenceCandidateHz is double fm && double.IsFinite(fm)
+          ? $"FM 候选 {fm:+0;-0;0} Hz" : "FM 自动搜索"
+        : $"搜索 {cfg.TargetOffsetHz:+0;-0;0} Hz";
+      string searchEn = currentMode == AfcSignalMode.FM
+        ? cfg.FmReferenceCandidateHz is double fmEn && double.IsFinite(fmEn)
+          ? $"FM candidate {fmEn:+0;-0;0} Hz" : "FM free search"
+        : $"Search {cfg.TargetOffsetHz:+0;-0;0} Hz";
       stateDetail.Text = active
         ? T(
-            $"{DetailText(s.Detail)}  ·  搜索 {cfg.TargetOffsetHz:+0;-0;0} Hz  ·  居中 {cfg.DesiredOffsetHz:+0;-0;0} Hz  ·  RF/IF 方向 {(s.MappingSign == 0 ? "待确认" : s.MappingSign.ToString("+0;-0"))}" +
+            $"{DetailText(s.Detail)}  ·  {searchZh}  ·  居中 {cfg.DesiredOffsetHz:+0;-0;0} Hz  ·  RF/IF 方向 {(s.MappingSign == 0 ? "待确认" : s.MappingSign.ToString("+0;-0"))}" +
               $"  ·  {calibrationZh}  ·  底噪 {noiseFloorDb:F0} dBFS  ·  削波 {clipFraction:P1}",
-            $"{DetailText(s.Detail)}  ·  Search {cfg.TargetOffsetHz:+0;-0;0} Hz  ·  Center {cfg.DesiredOffsetHz:+0;-0;0} Hz  ·  RF/IF sign {(s.MappingSign == 0 ? "unknown" : s.MappingSign.ToString("+0;-0"))}" +
+            $"{DetailText(s.Detail)}  ·  {searchEn}  ·  Center {cfg.DesiredOffsetHz:+0;-0;0} Hz  ·  RF/IF sign {(s.MappingSign == 0 ? "unknown" : s.MappingSign.ToString("+0;-0"))}" +
               $"  ·  {calibrationEn}  ·  Noise {noiseFloorDb:F0} dBFS  ·  Clipping {clipFraction:P1}")
         : T("请在「高级设置」配置真正的 12 kHz IF 输入，再启动 IF 采集。",
             "Select a real 12 kHz IF input under Advanced settings, then start capture.");
       startButton.Text = active ? T("停止 IF", "STOP IF") : T("启动 IF", "START IF");
       bool canLock = active && currentMode != AfcSignalMode.FM;
       lockButton.Enabled = centerButton.Enabled = canLock;
-      spectrum.SetTargetInteraction(canLock);
+      spectrum.SetTargetInteraction(active); // FM also accepts hints.
       offButton.Enabled = assistButton.Enabled = active;
       autoButton.Enabled = active && AutoAllowed;
       AfcControlMode level = active ? EffectiveControl() : AfcControlMode.Off;
@@ -952,6 +981,7 @@ namespace SkyRoof.AFC
       if (active) Stop();
       owner.AfcTargetInvalidated -= OnTargetInvalidated;
       spectrum.TargetSelected -= OnSpectrumTargetSelected;
+      spectrum.ReferenceResetRequested -= OnSpectrumReferenceResetRequested;
       input.ObservationAvailable -= OnObservation;
       input.DisplayFrameAvailable -= OnDisplayFrame;
       spectrum.SpanChanged -= OnSpanChanged;

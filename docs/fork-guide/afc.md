@@ -31,7 +31,7 @@ The AFC console now has **Tracking** and **Advanced settings** tabs.
 Tracking displays a measured 12-kHz IF spectrum, observed offset, error
 from desired center, RX-only correction, confidence, frequency-direction
 state, and CAT availability. Click the spectrum to select a CW/pilot
-carrier; ordinary FM center tracking does not use a selected tone.
+carrier; ordinary FM center tracking does not use a selected tone. FM now accepts a left-click acquisition candidate (initial ±1.5-kHz proximity gate; it does not tune CAT or prove a carrier). Once the signal matches, the initial hint is released so AFC can converge toward zero without being rejected by the old click. Right-click clears the active mode's reference and returns to the 12-kHz span; FM and CW/SSB search hints do not overwrite each other.
 
 **Lock Here** preserves the current carrier's IF pitch.
 **Center & Lock** attempts to move that selected carrier toward
