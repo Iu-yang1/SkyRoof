@@ -284,16 +284,21 @@ namespace SkyRoof.SSTV
           SstvTxModeProfile? forced =
             Interlocked.Exchange(ref manuallyRequestedMode, null);
           if (forced != null) raster.ForceMode(forced);
-          raster.Process(af);
           int correction = AutoVisEnabled ? AutoVisCorrectionHz : 0;
+          var correctedAf = new float[af.Length];
+          // VIS and line-sync estimators always inspect pre-AFC audio.
+          // Feed the SAME software-corrected AF to both extended raster
+          // (Scottie/Martin/SC2) and native Robot/PD decoder branches.
           for (int i = 0; i < af.Length; i++)
           {
             double audio = shifter.Process(af[i], correction);
+            correctedAf[i] = (float)audio;
             fmPhase += 2.0 * Math.PI * (FmDeviationHz / SampleRate) * audio;
             if (fmPhase > Math.PI) fmPhase -= 2 * Math.PI;
             if (fmPhase < -Math.PI) fmPhase += 2 * Math.PI;
             iq[i] = new Complex32((float)Math.Cos(fmPhase), (float)Math.Sin(fmPhase));
           }
+          raster.Process(correctedAf);
           decoder.Process(iq);
         }
       }
