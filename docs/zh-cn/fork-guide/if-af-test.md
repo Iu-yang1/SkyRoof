@@ -41,3 +41,24 @@
 - 硬件发送期间的 CAT/PTT 保护和 FT4/FT8/Q65 端到端解码灵敏度。
 
 **不要将软件测试通过解读为 IC-9700 接收机灵敏度或动态范围已等同于原机 AF。**
+
+## 新增：IC-9700 USB IF 与原机 LAN AF 双路对照录音
+
+在 SkyRoof **Recorder 面板的 Record 下拉菜单**选择 **Record IC-9700 USB IF + LAN AF…**；也可从主窗口 **Tools → Record IC-9700 IF + LAN AF (Test)…** 打开独立录音窗。
+
+1. 电台设置：`USB AF/IF Output = IF`，`LAN AF/IF Output = AF`；在 RS-BA1 Remote Utility 让 LAN AF 进入独立 Windows 播放端点（可选择 CABLE Input，但请勿与实验版 IF-AF 解调输出混用）。关闭静噪，避免音频中断。
+2. 窗口内分别选择 **USB 12 kHz IF 录音设备（Windows Capture）** 与 **LAN / RS-BA1 AF 播放设备（Windows Render）**，选择 USB 左/右声道（默认 Left），指定保存目录。
+3. 在备注框填写接收频率、模式、滤波器带宽、AGC、PREAMP、ATT、射频增益等；点击 **开始双路录音**，持续录制相同的 RF 信号 60–120 秒，点击 **停止并保存**。两路会尽可能同时启动，**不保证硬件样本同步**。
+4. 保存目录格式为 `IfAfComparisons/IF-AF_YYYYMMDDTHHMMSSfffZ_xxxxxx/`。上传整个文件夹中的五个文件，不能仅发送其中一个 WAV。
+
+| 文件 | 内容 |
+| --- | --- |
+| `ic9700_usb_12khz_if.wav` | USB 12 kHz IF，48 kHz / mono / IEEE float32，未经过 SkyRoof IF→AF 解调 |
+| `ic9700_lan_original_af.wav` | RS-BA1/LAN 原机 AF，从所选播放端点 WASAPI Loopback 录制，同为 48 kHz / mono / float32 |
+| `ic9700_usb_12khz_if.csv` | IF 每一块音频的采样偏移量、数量与 Windows 回调 UTC 时间 |
+| `ic9700_lan_original_af.csv` | AF 每块音频的采样偏移量、数量与 Windows 回调 UTC 时间 |
+| `capture.json` | 设备 ID/名称、录制起止 UTC、下行频率与模式、IF 输入声道、两个轨道的有效样本数、丢块、报错和人工备注 |
+
+可不启用独立 `IF-AF` 的 `Enable USB IF -> AF`，此时录音器会单独采集 IF。如果实验解调服务正在使用**同一 USB 设备和声道**，则录音器直接订阅共享 IF PCM，避免重复打开声卡。
+
+**计量边界：** WAV 保存的是应用实际接收到的、经 Windows 可选重采样/声道选择后的单声道 PCM，而不是 USB 端点原始比特流。UTC 时间戳来自 Windows 软件回调，不是设备硬件时间戳；两条时钟存在固定偏移或漂移属于正常现象，需要后期相关分析、对齐与重采样。RS-BA1 播放端点的其他 Windows 声音也会被混录；在纯静音时 WASAPI Loopback 可能不产生块。请保持设备独占用途并检查丢块统计。
