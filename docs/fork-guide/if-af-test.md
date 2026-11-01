@@ -21,3 +21,13 @@ The session directory under `IfAfComparisons` includes two independent 48-kHz mo
 Recording is independent of SkyRoof's separate `Recorder` WAV utility. If experimental IF-AF is already running on the same USB capture device **and input channel**, the recorder subscribes to the shared *unmodified IF PCM* instead of opening another WASAPI stream. Otherwise it captures the IF independently. LAN AF always comes from its own loopback of the chosen RS-BA1 render endpoint, *not* from the SkyRoof software-demodulated VAC output.
 
 **Caveats:** callback timestamps originate in Windows rather than sample-clock hardware; the two captures are not necessarily sample-synchronous. Both WAVs are application-level mono PCM after possible WASAPI mixing/resampling, not raw USB packets. Windows loopback captures all mixed playback on its selected endpoint, and may omit silent intervals. Review CSV gap patterns and JSON drop counters; do not claim calibrated IC-9700 sensitivity or an exact hardware timebase.
+
+## Added: fast, recoverable AFC for transient satellite FM/CW/SSB
+
+The experimental RX-only residual AFC now uses mode-specific IF windows and independent source-confidence gates: FM minimum 400 ms, 500-ms analysis window and 125-ms cadence; CW minimum 375 ms, 550-ms window, 125-ms cadence and adaptive 4096/8192-bin local tone detection; SSB with explicit stable pilot minimum 375 ms, 600-ms window and 150-ms cadence; SSB without pilot remains **relative drift only (Assist)** with a 750-ms minimum.
+
+A bounded alpha-beta residual predictor coasts through 1.5 s FM / 2.5 s CW / 2.0 s piloted-SSB gaps. Predicted residual never alone authorizes new CAT AFC steps; real, unambiguous carrier measurements do. Once the coast horizon expires, prior AFC-only RX correction decays at 160 Hz/s back toward the orbital Doppler model; it is frozen during PTT. No changes are made to TX, persisted transponder corrections or the orbital model.
+
+Verified, time-aligned **AFC-authored** CAT readbacks indicating repeated divergence cause bounded rollback and reacquisition, rather than latching Fault while leaving a stale offset. Sign reversal is eligible only for auto polarity with repeated independent CAT/IF evidence. An explicit manual sign is never silently flipped. Rate limits and AFC servo bounds remain in place.
+
+`AFC trace` and `AFC watchdog` logs expose IF candidate, quality and sigma, estimated/observed residual, CAT readback attribution, correction, state transitions and PTT status. Synthetic tests include transient 400-ms FM, keyed CW, piloted SSB, drop-outs, outliers and divergence. These are **software checks**, not measured IC-9700 AFC lock-time or RF sensitivity guarantees.
