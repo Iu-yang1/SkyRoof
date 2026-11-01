@@ -272,16 +272,20 @@ namespace SkyRoof.AFC
             for (int i = 0; i < n; i++)
               displayPcm[i] = buffer[(start + i) % buffer.Length];
           }
-          // Measure at 250 ms cadence once 500 ms of IF PCM is buffered.
-          // UI FFT is deliberately independent of the ~250ms AFC loop.
-          if (used >= 24000 && tick - lastAnalysisMs >= 250 &&
+          // Mode-specific short bursts. Never analyze 2 seconds of stale
+          // FM when a 400-ms SO-50 voice transmission is all we have.
+          // CW and piloted SSB have dedicated (slightly longer) windows.
+          var profile = AfcTrackingProfile.For(mode, pilot);
+          if (used >= profile.MinimumSamples &&
+              tick - lastAnalysisMs >= profile.CadenceMilliseconds &&
               Interlocked.CompareExchange(ref busy, 1, 0) == 0)
           {
             lastAnalysisMs = tick;
             scheduledAnalyses++;
-            pcm = new float[used];
-            int start = (write - used + buffer.Length) % buffer.Length;
-            for (int i = 0; i < used; i++)
+            int n = Math.Min(used, profile.WindowSamples);
+            pcm = new float[n];
+            int start = (write - n + buffer.Length) % buffer.Length;
+            for (int i = 0; i < n; i++)
               pcm[i] = buffer[(start + i) % buffer.Length];
             selected = mode;
             refPresent = pilot;
@@ -317,9 +321,9 @@ namespace SkyRoof.AFC
         {
           try
           {
-            double centerLagSeconds = selected == AfcSignalMode.FM
-              ? Math.Min(data.Length / 48000.0, 2.0) / 2.0
-              : 8192.0 / 24000 / 2.0;
+            // Timestamp the physical center of this actual short window.
+            // Different modes do NOT share a fictitious 2-second lag.
+            double centerLagSeconds = data.Length / 48000.0 / 2.0;
             DateTime analysisUtc = packetUtc.AddSeconds(-centerLagSeconds);
             AfcObservation obs = analyzer.Analyze(data, selected, analysisUtc,
               version, expected, refPresent);

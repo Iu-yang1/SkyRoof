@@ -576,18 +576,19 @@ namespace SkyRoof.AFC
           // receive mode without injecting a CAT probe or restore sequence.
           // The controller still checks fresh IF, PTT, and closed-loop
           // divergence; the user can override an inverted hardware path.
-          int sign = AfcDirectionResolver.Resolve(cfg.RfIfSign,
+          int nominal = AfcDirectionResolver.Resolve(0,
             owner.RadioLink.TxCust != null
               ? owner.RadioLink.DownlinkMode : Slicer.Mode.USB);
           owner.AfcController.Observe(observation, readback,
-            sign, Math.Clamp(cfg.MaxCorrectionHz, 1, 10000),
+            cfg.RfIfSign, Math.Clamp(cfg.MaxCorrectionHz, 1, 10000),
             Math.Clamp(cfg.FmDeadbandHz, 1, 500),
             Math.Clamp(cfg.ToneDeadbandHz, .5, 100),
             owner.IsAfcTransmitting,
             catReadbackIsTimeAligned: double.IsFinite(readback),
             confirmedOwnAfcReadback:
               owner.IsAfcReadbackConfirmedAt(observation.SampleUtc),
-            calibrationInProgress: false);
+            calibrationInProgress: false,
+            nominalSign: nominal);
           spectrum.SetMeasurement(
             observation.HasAbsoluteReference && observation.Confidence > 0
               ? observation.IfOffsetHz : null,
@@ -698,6 +699,14 @@ namespace SkyRoof.AFC
       "Signal ambiguous, weak, or reference absent; holding" => T("信号不明确、过弱或缺少参考，暂时保持", "Signal ambiguous, weak, or reference absent; holding"),
       "Acquiring selected carrier" => T("正在捕获所选载波", "Acquiring selected carrier"),
       "AFC divergence detected; automatic CAT writes stopped" => T("检测到 AFC 发散，已停止自动 CAT 写频", "AFC divergence detected; automatic CAT writes stopped"),
+      "Short signal gap: bounded residual prediction" => T("短暂信号间隙，正在限时预测频偏", "Short signal gap: bounded residual prediction"),
+      "AFC divergent: bounded rollback and reacquiring" => T("AFC 发散：撤回部分修正并重新捕获", "AFC divergence: bounded rollback and reacquisition"),
+      "AFC divergent: verified sign reversed, backtracking" => T("AFC 发散：确认频率方向反转并回退", "AFC divergence: verified polarity reversal and rollback"),
+      "Manual RF/IF sign conflicts with AFC readback; backtracking" => T("手动 RF/IF 方向与读回矛盾，正在回退", "Manual RF/IF polarity conflicts with readback: rolling back"),
+      "Manual RF/IF sign requires review" => T("手动 RF/IF 方向需要检查", "Review manually configured RF/IF direction"),
+      "Divergence recovery: verifying new IF" => T("发散恢复：验证后续 IF 观测", "Divergence recovery: checking fresh IF"),
+      "No carrier: reverted to orbital Doppler prediction" => T("载波消失，已恢复轨道多普勒预测", "Carrier lost: orbital Doppler only"),
+      "No carrier: releasing stale AFC correction toward Doppler" => T("载波消失，正在平滑释放 AFC 旧修正", "Carrier lost: releasing stale AFC offset"),
       "PTT active: AFC frozen" => T("正在发射，AFC 已冻结", "PTT active: AFC frozen"),
       "Learning IF/CAT polarity from observed tuning" => T("正在根据 CAT 调谐学习 IF 频率方向", "Learning IF/CAT polarity from observed tuning"),
       "Tracking reference" => T("正在跟踪参考信号", "Tracking reference"),
@@ -710,7 +719,10 @@ namespace SkyRoof.AFC
     private void RefreshDisplay()
     {
       RefreshLanguage();
-      owner.AfcController.Tick(DateTime.UtcNow);
+      owner.AfcController.Tick(DateTime.UtcNow, owner.IsAfcTransmitting);
+      // Apply a controlled release of stale AFC residual even if no more
+      // IF callbacks arrive after squelch. RX CAT remains single-owner.
+      owner.ApplyAfcRxCorrection();
       // Probe-free AFC: no temporary CAT calibration offsets or waiting.
       owner.SetAfcCalibrationOffsetHz(0, false);
       var cfg = ctx.Settings.Afc;
@@ -764,7 +776,7 @@ namespace SkyRoof.AFC
         latest.Confidence >= .6;
       bool measured = validLatestReference &&
         s.LastObservationUtc != default &&
-        (s.State is AfcLockState.Acquiring or AfcLockState.Locked or AfcLockState.Hold);
+        (s.State is AfcLockState.Acquiring or AfcLockState.Locked or AfcLockState.Coasting or AfcLockState.Hold);
       metrics[0].Text = $"{owner.PredictedDownlinkDopplerHz:+0;-0;0} Hz";
       AfcObservation candidate = pipeline.LastObservation.GetValueOrDefault();
       bool freshCandidate = pipeline.LastObservation.HasValue &&
@@ -785,15 +797,16 @@ namespace SkyRoof.AFC
       string measureZh, measureEn;
       if (pipeline.Completed == 0)
       {
-        measureZh = pipeline.BufferedSamples < 24000
-          ? $"等待 IF PCM {pipeline.BufferedSamples}/24000"
+        int needed = AfcTrackingProfile.For(currentMode, cfg.SsbPilotEnabled).MinimumSamples;
+        measureZh = pipeline.BufferedSamples < needed
+          ? $"等待 IF PCM {pipeline.BufferedSamples}/{needed}"
           : pipeline.Scheduled == 0
             ? "PCM 已到达，等待测量调度"
             : pipeline.Failed > 0
               ? $"测量任务失败 {pipeline.Failed} 次，请检查日志"
               : $"频率测量处理中，已提交 {pipeline.Scheduled} 次";
-        measureEn = pipeline.BufferedSamples < 24000
-          ? $"IF PCM buffer {pipeline.BufferedSamples}/24000"
+        measureEn = pipeline.BufferedSamples < needed
+          ? $"IF PCM buffer {pipeline.BufferedSamples}/{needed}"
           : pipeline.Scheduled == 0
             ? "PCM ready, waiting for measurement"
             : pipeline.Failed > 0
@@ -820,9 +833,9 @@ namespace SkyRoof.AFC
       stateLabel.ForeColor = active &&
         s.State == AfcLockState.Locked ? palette.Good : palette.Warning;
       string calibrationZh = cfg.RfIfSign is 1 or -1
-        ? "手动 RF/IF 映射" : "RF/IF 模式推定（闭环发散保护）";
+        ? "手动 RF/IF 映射" : "RF/IF 自动验证与有界回退";
       string calibrationEn = cfg.RfIfSign is 1 or -1
-        ? "Manual RF/IF mapping" : "Nominal IF mapping (divergence guarded)";
+        ? "Manual RF/IF mapping" : "Automatic IF polarity / bounded recovery";
       stateDetail.Text = active
         ? T(
             $"{DetailText(s.Detail)}  ·  搜索 {cfg.TargetOffsetHz:+0;-0;0} Hz  ·  居中 {cfg.DesiredOffsetHz:+0;-0;0} Hz  ·  RF/IF 方向 {(s.MappingSign == 0 ? "待确认" : s.MappingSign.ToString("+0;-0"))}" +

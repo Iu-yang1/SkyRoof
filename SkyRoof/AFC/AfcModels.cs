@@ -42,7 +42,7 @@ namespace SkyRoof
     public double IfReferenceHz { get; set; } = 12000;
 
     [DisplayName("RF/IF 频率方向 (0=自动，±1=手动)")]
-    [Description("0=根据当前接收模式立即推定 IF/RF 方向，不执行 CAT 测试调谐；闭环发散保护会停止错误方向的写频。±1=人工覆盖，具体电台与 IF 路由应实测确认。")]
+    [Description("0=根据模式推定并使用独立 AFC CAT/IF 读回修正方向；遇到发散时有界回退、重新捕获，不再锁死 Fault。±1=人工覆盖，若与读回矛盾则暂停自动积分并提示检查。")]
     [DefaultValue(0)]
     public int RfIfSign { get; set; } = 0;
 
