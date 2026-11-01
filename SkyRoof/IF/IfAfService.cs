@@ -65,13 +65,30 @@ namespace SkyRoof.IF
           !Enum.IsDefined(typeof(IfAfAudioRoute), config.AudioRoute))
         throw new ArgumentOutOfRangeException(nameof(config),
           "Invalid IF-AF audio route or buffer preset.");
-      var driver = IfAfAudioEndpointDiscovery.Detect();
-      virtualDeviceStatus = driver.Status;
-      string? outputId = config.AudioRoute == IfAfAudioRoute.PreferIfAfAudio
-        ? driver.RenderId : config.VacRenderDeviceId;
-      if (config.AudioRoute == IfAfAudioRoute.PreferIfAfAudio && !driver.Ready)
-        throw new InvalidOperationException(driver.Status +
-          " Select ExistingVirtualCable to use an already installed VAC.");
+      var pair = config.AudioRoute == IfAfAudioRoute.PreferIfAfAudio
+        ? IfAfAudioEndpointDiscovery.Detect()
+        : default;
+      var signed = config.AudioRoute == IfAfAudioRoute.AutoSignedCable
+        ? IfAfSignedCableDiscovery.Detect()
+        : default;
+      virtualDeviceStatus = config.AudioRoute switch
+      {
+        IfAfAudioRoute.PreferIfAfAudio => pair.Status,
+        IfAfAudioRoute.AutoSignedCable => signed.Status,
+        _ => "Operator-selected virtual render endpoint (capture pair not verified)"
+      };
+      string? outputId = config.AudioRoute switch
+      {
+        IfAfAudioRoute.PreferIfAfAudio => pair.RenderId,
+        IfAfAudioRoute.AutoSignedCable => signed.RenderId,
+        _ => config.VacRenderDeviceId
+      };
+      if (config.AudioRoute == IfAfAudioRoute.PreferIfAfAudio && !pair.Ready)
+        throw new InvalidOperationException(pair.Status +
+          " Prefer an installed vendor cable (AutoSignedCable).");
+      if (config.AudioRoute == IfAfAudioRoute.AutoSignedCable && !signed.Ready)
+        throw new InvalidOperationException(signed.Status +
+          " Get VB-CABLE from https://vb-audio.com/Cable/ or use ExistingVirtualCable.");
       if (string.IsNullOrWhiteSpace(outputId))
         throw new InvalidOperationException("Choose a virtual audio render device.");
       if (config.FmDeviationHz is < 1000 or > 6000 ||

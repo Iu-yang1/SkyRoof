@@ -380,3 +380,6 @@ FodyWeavers.xsd
 
 # Experimental SysVAD source checkout and WDK build products (never commit)
 /drivers/IF-AF-Audio/vendor/
+
+# Unmodified VB-Audio donationware bundle fetched from the official vendor only during installer CI
+/Vendor/VB-CABLE/

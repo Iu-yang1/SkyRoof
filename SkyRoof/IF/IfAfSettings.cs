@@ -8,7 +8,7 @@ namespace SkyRoof.IF
 {
   public enum IfAfSelection { FollowRadio, Usb, Lsb, CwUsb, CwLsb, Fm }
 
-  public enum IfAfAudioRoute { PreferIfAfAudio, ExistingVirtualCable }
+  public enum IfAfAudioRoute { PreferIfAfAudio, ExistingVirtualCable, AutoSignedCable }
 
   public enum IfAfLatencyPreset
   {
@@ -41,9 +41,9 @@ namespace SkyRoof.IF
     public IfAfSelection Mode { get; set; } = IfAfSelection.FollowRadio;
 
     [DisplayName("AF audio route")]
-    [Description("PreferIfAfAudio requires a genuine installed IF-AF-Audio Windows virtual capture + playback device. ExistingVirtualCable uses the selected device below. No sound driver is silently installed.")]
-    [DefaultValue(IfAfAudioRoute.ExistingVirtualCable)]
-    public IfAfAudioRoute AudioRoute { get; set; } = IfAfAudioRoute.ExistingVirtualCable;
+    [Description("AutoSignedCable detects an installed VB-CABLE or VAC Lite playback/capture pair. ExistingVirtualCable uses your selected output. PreferIfAfAudio is a legacy experimental route and is not installed by SkyRoof.")]
+    [DefaultValue(IfAfAudioRoute.AutoSignedCable)]
+    public IfAfAudioRoute AudioRoute { get; set; } = IfAfAudioRoute.AutoSignedCable;
 
     [DisplayName("AF output latency preset")]
     [Description("Requested shared-mode WASAPI render buffer; 20ms can glitch on some devices. Actual hardware/OS end-to-end latency is measured separately.")]
@@ -51,32 +51,28 @@ namespace SkyRoof.IF
     public IfAfLatencyPreset LatencyPreset { get; set; } =
       IfAfLatencyPreset.Balanced40Ms;
 
-    [DisplayName("IF-AF-Audio driver status")]
-    [Description("A real Windows microphone requires a signed virtual audio driver. This field reports whether both dedicated audio endpoints are installed; naming an in-process buffer does not create an endpoint.")]
+    [DisplayName("Installed virtual audio cable status")]
+    [Description("Shows paired Windows playback and recording endpoints. This is not a cryptographic signature check. Obtain drivers only from the vendor.")]
     [ReadOnly(true)]
     [JsonIgnore]
     public string DriverStatus
     {
       get
       {
-        var endpoints = IfAfAudioEndpointDiscovery.Detect();
-        if (endpoints.Ready)
-          return "Ready: Windows IF-AF-Audio capture and playback endpoints detected";
-        return IfAfAudioEndpointDiscovery.BundledDevelopmentPackagePath == null
-          ? "Not installed: IF-AF-Audio Windows driver is required"
-          : "Developer-only driver files bundled; not installed or Microsoft release-signed";
+        var detected = IfAfSignedCableDiscovery.Detect();
+        return detected.Status;
       }
     }
 
-    [DisplayName("IF-AF-Audio driver package (developer only)")]
-    [Description("Shows the path only if the complete experimental SYS/INF/CAT package is bundled. Package presence does not install or sign a driver.")]
+    [DisplayName("Virtual microphone input for WSJT-X")]
     [ReadOnly(true)]
     [JsonIgnore]
-    public string DriverPackage => IfAfAudioEndpointDiscovery.BundledDevelopmentPackagePath ??
-      "(No bundled driver package)";
+    public string VirtualCaptureDevice => IfAfSignedCableDiscovery.Detect() is var selected &&
+      selected.Ready ? selected.Provider + " (Windows recording endpoint)" :
+      "(No automatically paired recording endpoint)";
 
     [DisplayName("Virtual audio render device")]
-    [Description("Only for ExistingVirtualCable. Choose CABLE Input/VAC playback; never IC-9700 USB Audio CODEC (TX).")]
+    [Description("Only for ExistingVirtualCable; choose the third-party cable playback end (e.g. CABLE Input). Never select IC-9700 USB Audio CODEC TX.")]
     [TypeConverter(typeof(OutputSoundcardNameConverter))]
     public string? VacRenderDeviceId { get; set; }
 

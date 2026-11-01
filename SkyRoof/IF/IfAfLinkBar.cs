@@ -65,13 +65,13 @@ namespace SkyRoof.IF
         st.Value.OutputSamples <= st.Value.InputSamples;
       bool render = st.HasValue && st.Value.RenderRunning;
       bool driver = route == IfAfAudioRoute.ExistingVirtualCable ||
-        (st.HasValue && st.Value.VirtualDeviceStatus.StartsWith(
-          "IF-AF-Audio playback", StringComparison.OrdinalIgnoreCase));
+        (st.HasValue && st.Value.VirtualDeviceStatus.Contains(
+          "endpoints detected", StringComparison.OrdinalIgnoreCase));
       Color ok = Color.FromArgb(45, 150, 95);
       Color warn = Color.FromArgb(200, 145, 32);
       Color bad = Color.FromArgb(195, 76, 72);
       int w = Math.Max(34, (Width - 98) / 4);
-      string[] stages = { "IF", "DDC", "AF", route == IfAfAudioRoute.PreferIfAfAudio ? "V-MIC" : "VAC" };
+      string[] stages = { "IF", "DDC", "AF", (route == IfAfAudioRoute.PreferIfAfAudio || route == IfAfAudioRoute.AutoSignedCable) ? "V-MIC" : "VAC" };
       Color[] colors =
       {
         input ? ok : warn,

@@ -1,4 +1,4 @@
-name: SkyRoof IF-AF-Audio Integrated Developer Installer
+name: SkyRoof IF-AF Bundled VB-CABLE Installer
 
 on:
   push:
@@ -6,10 +6,12 @@ on:
     paths:
       - 'SkyRoof/IF/**'
       - 'VE3NEA.Dsp.Tests/IfAfAudioLinkTests.cs'
-      - 'drivers/IF-AF-Audio/**'
+      - 'SkyRoof/Settings/SettingsDialog.cs'
       - 'install/SkyRoof.iss'
-      - '.github/workflows/if-af-integrated-installer.yml'
-      - 'scripts/test-if-af-development-package.ps1'
+      - '.github/workflows/if-af-vendor-cable-installer.yml'
+      - 'scripts/Manage-VbCable.ps1'
+      - 'scripts/prepare-vbcable.ps1'
+      - 'docs/VB-CABLE-NOTICE.txt'
   workflow_dispatch:
 
 permissions:
@@ -107,39 +109,31 @@ jobs:
           if-no-files-found: warn
 
 
-      - name: Verify WDK presence
-        shell: pwsh
-        run: |
-          $wdk = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\build" -Recurse -Filter WindowsDriver.Common.targets -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $wdk) { throw 'Windows WDK is required for the integrated package.' }
-          python --version
 
-      - name: Build native WaveRT driver package
+      - name: Stage original VB-Audio basic VB-CABLE and verify vendor signatures
         shell: pwsh
-        run: |
-          ./drivers/IF-AF-Audio/scripts/fetch-sample.ps1 -Force
-          ./drivers/IF-AF-Audio/scripts/build.ps1 -Configuration Release -Platform x64
+        run: ./scripts/prepare-vbcable.ps1
 
       - name: Install Inno Setup
         shell: powershell
         run: choco upgrade innosetup --yes --no-progress
 
-      - name: Package SkyRoof with segregated WaveRT development files
+      - name: Package SkyRoof with licensed, unmodified basic VB-CABLE
         shell: cmd
-        run: '"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DIF_AF_AUDIO_DEV_BUNDLE "install\SkyRoof.iss"'
+        run: '"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "install\SkyRoof.iss"'
 
-      - name: Verify installed SkyRoof runtime payload
+      - name: Smoke-test installed SkyRoof application
         shell: pwsh
         run: ./scripts/test-installer-payload.ps1
 
-      - name: Verify developer driver payload without loading it
+      - name: Verify actual installed official VB-CABLE package
         shell: pwsh
-        run: ./scripts/test-if-af-development-package.ps1
+        run: ./scripts/test-vbcable-installer-payload.ps1
 
-      - name: Upload experimental SkyRoof IF-AF-Audio integrated installer
+      - name: Upload SkyRoof IF-AF vendor-cable experimental installer
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: SkyRoof-IF-AF-Test-INTEGRATED-DEV-DRIVER-NOT-RELEASE-SIGNED
+          name: SkyRoof-IF-AF-Test-VB-CABLE-BUNDLED-AUTO-INSTALL
           path: install/Output/SkyRoofSetup.exe
           if-no-files-found: error
           retention-days: 7

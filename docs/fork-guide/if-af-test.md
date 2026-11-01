@@ -61,3 +61,42 @@ Original code required >=40% quality at the FM estimator and >=60% at the AFC co
 - Manual retune, transponder/mode change, explicit AFC disable/reinitialization and independently verified wrong CAT polarity still have their own appropriate reset/rollback logic.
 
 The UI distinguishes `Weak FM temporally verified` from raw single-window 26% quality rather than falsely displaying it as 60%. These are software acceptance gates, not an IC-9700 lock-time guarantee.
+
+## Vendor virtual cable selection (current IF-AF-Test)
+
+We have **stopped distributing or automatically building the experimental
+SysVAD kernel driver** in the SkyRoof installer. Instead, IF-AF uses
+officially installed vendor drivers via Windows WASAPI, no custom driver
+or special test-signing boot policy required.
+
+- **Recommended: [VB-CABLE](https://vb-audio.com/Cable/)** from VB-Audio.
+  SkyRoof sends 48-kHz mono float AF to the Windows **CABLE Input**
+  *playback* device; WSJT-X must open **CABLE Output** as a *recording*
+  device. The Windows shared-mode audio engine may convert the format to
+  match the installed cable.
+- **Alternative: [Virtual Audio Cable Lite](https://vac.muzychenko.net/en/)**
+  by Eugene Muzychenko, which normally exposes Line 1 on both playback
+  and recording sides. Observe the Lite version's non-commercial distribution
+  restrictions and obtain the original package from the vendor.
+- **AudioRoute = AutoSignedCable** (default for new settings) detects a
+  single unambiguous pair of active vendor Windows audio endpoints.
+  **ExistingVirtualCable** remains the manual fallback for renamed cables,
+  third-party drivers or explicitly chosen dedicated output endpoints.
+  Existing serialized routes retain their original numeric values.
+- If a complete pair is absent or ambiguous, automatic routing fails closed;
+  it NEVER silently selects the system default render device or Icom USB
+  TX audio. The installed driver is governed by Windows code integrity;
+  name recognition alone is **not** cryptographic verification of a signer.
+- Settings includes an official VB-CABLE download link and an endpoint
+  rescan button; SkyRoof does not embed, re-sign, patch, silently download
+  or remove the third-party driver. Use vendor maintenance/uninstall tools.
+- Do not use the *same* cable as an independent Slicer → VAC output
+  while IF-AF is running. The user-supplied USB IF and LAN original AF
+  recordings are not a third-party cable round-trip validation.
+
+The original `drivers/IF-AF-Audio/` experiment is preserved for research,
+but its WDK Actions and separate unsigned-driver packaging workflow are
+disabled. The experimental installer now bundles SkyRoof plus the **unmodified official basic VB-CABLE ZIP**, with an opt-in automated installation of the vendor driver. CI smoke tests skip driver installation.
+
+
+**2026-11-01 packaging update:** Under the [official VB-Audio donationware bundling grant](https://vb-audio.com/Services/licensing.htm), SkyRoof embeds the unmodified official base `VBCABLE_Driver_Pack45.zip`, verifies the package SHA-256 and executable/catalog signatures, and invokes VB-Audio's own driver setup with administrator consent. The default interactive installer offers optional automated installation, requires a Windows restart, and never changes Secure Boot or test-signing policy. A shared vendor driver installed by somebody else is not removed by SkyRoof. This does not apply to paid A+B/C+D drivers.

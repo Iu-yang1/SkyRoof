@@ -42,6 +42,63 @@ namespace VE3NEA.Dsp.Tests
       Assert.True(new IfAfEndpointPair("one", "two", "both").Ready);
     }
 
+    private static AudioDeviceEntry Device(string id, string name) => new(id, name);
+
+    [Fact]
+    public void AutoDiscoverPairsOnlyMatchingVbCableRenderAndCapture()
+    {
+      var result = IfAfSignedCableDiscovery.Select(
+        new[] { Device("radioTx", "Speakers (USB Audio CODEC)"),
+                Device("vbOut", "CABLE Input (VB-Audio Virtual Cable)") },
+        new[] { Device("vbIn", "CABLE Output (VB-Audio Virtual Cable)"),
+                Device("radioRx", "Microphone (USB Audio CODEC)") });
+      Assert.True(result.Ready);
+      Assert.Equal("vbOut", result.RenderId);
+      Assert.Equal("vbIn", result.CaptureId);
+      Assert.Equal("VB-CABLE", result.Provider);
+    }
+
+    [Fact]
+    public void AutoDiscoverFallsBackToVacLiteWithoutDefaultSpeakers()
+    {
+      var result = IfAfSignedCableDiscovery.Select(
+        new[] { Device("lineOut", "Line 1 (Virtual Audio Cable)"),
+                Device("realSpeakers", "Speakers (Realtek Audio)") },
+        new[] { Device("lineIn", "Line 1 (Virtual Audio Cable)") });
+      Assert.True(result.Ready);
+      Assert.Equal("lineOut", result.RenderId);
+      Assert.Equal("lineIn", result.CaptureId);
+      Assert.Equal("VAC Lite", result.Provider);
+    }
+
+    [Fact]
+    public void AutoDiscoverRejectsMissingOrAmbiguousPairs()
+    {
+      var output = Device("vbOut", "CABLE Input (VB-Audio Virtual Cable)");
+      var input = Device("vbIn", "CABLE Output (VB-Audio Virtual Cable)");
+      Assert.False(IfAfSignedCableDiscovery.Select(new[] { output },
+        Array.Empty<AudioDeviceEntry>()).Ready);
+      Assert.False(IfAfSignedCableDiscovery.Select(new[] { output, output },
+        new[] { input }).Ready);
+      Assert.False(IfAfSignedCableDiscovery.Select(
+        new[] { Device("test", "Speakers (USB Audio CODEC)") },
+        new[] { input }).Ready);
+      Assert.False(IfAfSignedCableDiscovery.Select(
+        new[] { Device("both", "CABLE Input (VB-Audio Virtual Cable)") },
+        new[] { Device("both", "CABLE Output (VB-Audio Virtual Cable)") }).Ready);
+    }
+
+    [Theory]
+    [InlineData("CABLE Input (VB-Audio Virtual Cable)", true)]
+    [InlineData("CABLE Input", true)]
+    [InlineData("CABLE Output (VB-Audio Virtual Cable)", false)]
+    [InlineData("USB Audio CODEC", false)]
+    [InlineData("CABLE Input (Some Other Vendor)", false)]
+    public void DetectVbCableEndpointNames(string name, bool expected)
+    {
+      Assert.Equal(expected, IfAfSignedCableDiscovery.IsVbCableEnd(name, "CABLE Input"));
+    }
+
     [Fact]
     public void OnlyCompleteDeveloperPackageIsRecognized()
     {
@@ -61,11 +118,12 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
-    public void BackwardCompatibleVacRouteAndLowLatencyDefaults()
+    public void DefaultRoutePrefersVendorCableAndKeepsManualFallback()
     {
       var cfg = new IfAfSettings();
       Assert.False(cfg.Enabled);
-      Assert.Equal(IfAfAudioRoute.ExistingVirtualCable, cfg.AudioRoute);
+      Assert.Equal(IfAfAudioRoute.AutoSignedCable, cfg.AudioRoute);
+      Assert.Equal(1, (int)IfAfAudioRoute.ExistingVirtualCable);
       Assert.Equal(IfAfLatencyPreset.Balanced40Ms, cfg.LatencyPreset);
       var info = TypeDescriptor.GetProperties(typeof(IfAfSettings))["DriverStatus"];
       Assert.NotNull(info);

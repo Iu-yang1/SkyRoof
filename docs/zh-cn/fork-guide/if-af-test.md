@@ -119,3 +119,33 @@ For the signed virtual microphone implementation and SkyRoof link-bar details, s
 例如，AFC 曾修正 −800 Hz，信号消失 10 秒：默认 HoldLast 下仍保持 −800 Hz，轨道多普勒继续计算。截图中的 26% 候选只有在连续多次可信一致后才会被标记为“**弱 FM 已时序确认**”；显示的原始单窗质量不会被伪造为 60%。
 
 实际误锁率、动态多普勒、环路 CAT 方向仍需要 IC-9700 双路 WAV 和真实通联验证。
+
+## 已签名第三方虚拟声卡方案（当前 IF-AF-Test）
+
+已取消在 SkyRoof 安装包中编译、携带或自动安装自研 SysVAD 内核驱动。
+现统一使用 Windows 中已安装的第三方虚拟音频驱动，经 WASAPI 连接：
+
+- **优先：[VB-CABLE 官方下载](https://vb-audio.com/Cable/)**。
+  SkyRoof 将 48 kHz 单声道 float32 AF 送往 *播放端* `CABLE Input`，
+  WSJT-X 在 Audio → Input 选择 *录音端* `CABLE Output`。
+  Windows 共享音频引擎可能按设备原生格式进行转换。
+- **备选：[Virtual Audio Cable Lite](https://vac.muzychenko.net/en/)**。
+  默认是播放和录音端的 `Line 1 (Virtual Audio Cable)`，须使用原厂包并遵守
+  Lite 版非商业用途分发限制。
+- 新用户默认 `AudioRoute=AutoSignedCable`：仅自动选取**完整且唯一**
+  的厂商播放+录音端点对；`ExistingVirtualCable` 保留手动选择，
+  适合改过名称或使用其他虚拟声卡的情况。旧配置枚举值保持兼容。
+- **禁止静默回退到 IC-9700 USB Audio CODEC 发射端、默认系统扬声器**。
+  找不到完整端点时直接报错。设备名可用于识别，但不能当作密码学
+  签名验证；内核驱动能否装载由 Windows 系统驱动策略决定。
+- 设置窗口新增“获取官方 VB-CABLE”和“重新检测音频端点”。
+  不把第三方厂商的 INF/SYS/CAT 嵌入安装包，不擅自重签名，也不会替用户
+  静默卸载其声卡。SkyRoof 通过 UAC 调用原厂工具进行安装和用户授权的卸载，绝不直接修改第三方驱动文件。
+- 避免 IF-AF 与原有 SkyRoof Slicer → VAC 同时写入同一虚拟声卡；
+  用户上传的 USB IF/LAN AF 录音不等同于已验证第三方 cable 环回性能。
+
+历史自研驱动资料仍保留在 `drivers/IF-AF-Audio/` 供研究，但默认构建及
+实验驱动打包工作流已停止。当前实验安装包包含 SkyRoof 及**未经修改的基础版 VB-CABLE 官方 ZIP**；交互式安装时默认勾选官方驱动自动安装，可取消，静默 CI 冒烟测试不会安装音频驱动。完成后须重启 Windows。
+
+
+**2026-11-01 一体化打包方案：**VB-Audio 官网允许在 Donationware 条件成立时将基础版 VB-CABLE 原始包嵌入应用安装器并静默安装，须明确告知来源和支持／捐赠渠道（详见 https://vb-audio.com/Services/licensing.htm）。SkyRoof 使用原包 `VBCABLE_Driver_Pack45.zip`，发行时不提取重签名内核驱动；校验原始 SHA256 与原厂签名后由原厂 `VBCABLE_Setup_x64.exe` 安装。卸载仅允许操作者确认且 SkyRoof 实际安装过的实例，避免误删其他软件依赖。
