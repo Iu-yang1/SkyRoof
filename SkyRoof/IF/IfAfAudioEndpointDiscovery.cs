@@ -23,8 +23,19 @@ namespace SkyRoof.IF
 
     public static IfAfEndpointPair Detect()
     {
-      var render = Soundcard.ListDevices(DataFlow.Render);
-      var capture = Soundcard.ListDevices(DataFlow.Capture);
+      AudioDeviceEntry[] render, capture;
+      try
+      {
+        render = Soundcard.ListDevices(DataFlow.Render);
+        capture = Soundcard.ListDevices(DataFlow.Capture);
+      }
+      catch (Exception ex)
+      {
+        // The Settings property grid may inspect DriverStatus even when
+        // Windows Audio Service is unavailable. Discovery must not crash UI.
+        return new(null, null, "Windows audio device enumeration unavailable: " +
+          ex.GetType().Name);
+      }
       var renderDevice = Array.Find(render,
         e => IsExpectedRenderName(e.Name));
       var captureDevice = Array.Find(capture,
