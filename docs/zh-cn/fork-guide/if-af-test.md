@@ -96,3 +96,7 @@
 | Sensitive | 500 ms | 375 ms | 375 ms | 弱信号，允许更多统计时间以提高可靠性 |
 
 说明：这些值是**启用首次 DSP 测量的最小缓存长度**，不是实测锁定耗时，也不能代替载波确认、CAT 读回和控制环限幅。普通无导频 SSB 始终只提供辅助信息，不会变成绝对 Auto。采集线程限制为最多一个测频任务运行；Adaptive 保留短窗 4096 点质量判断、较长窗 8192/16384 点高精度载波估计，以及 FM 的重叠短时对照；多个重叠窗口不是统计独立的多个 CAT 确认。性能要求高时可切换 Fast，避免 i5 等设备 CPU 负载过高。
+
+## IF-AF-Audio device architecture
+
+For the signed virtual microphone implementation and SkyRoof link-bar details, see [IF-AF-Audio 虚拟声卡与低延迟链路](../../../drivers/IF-AF-Audio/DESIGN.md). The in-app user-mode route is implemented in this test branch; the signed WDK driver is not yet built or distributed.
