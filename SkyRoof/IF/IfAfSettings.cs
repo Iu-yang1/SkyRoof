@@ -93,6 +93,17 @@ namespace SkyRoof.IF
     [DefaultValue(2500)]
     public int FmDeviationHz { get; set; } = 2500;
 
+    /// <summary>Resolve effective renderer for playback and legacy stream collision guard.</summary>
+    public static string? ResolveRenderEndpoint(IfAfAudioRoute route,
+      string? manualRenderId, string? developerRenderId, string? signedRenderId) =>
+      route switch
+      {
+        IfAfAudioRoute.PreferIfAfAudio => developerRenderId,
+        IfAfAudioRoute.AutoSignedCable => signedRenderId,
+        IfAfAudioRoute.ExistingVirtualCable => manualRenderId,
+        _ => null
+      };
+
     public static IfAfMode Resolve(IfAfSelection selection, Slicer.Mode radio)
     {
       if (selection != IfAfSelection.FollowRadio)

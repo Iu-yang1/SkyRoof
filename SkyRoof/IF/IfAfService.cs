@@ -38,7 +38,12 @@ namespace SkyRoof.IF
     private string detail = "Stopped";
     private bool disposed;
     public event EventHandler<DataEventArgs<float>>? RawIfAvailable;
-    private readonly record struct Frame(float[] Data, DateTime Utc, int Version);
+    private readonly record struct Frame(float[] Data, DateTime Utc,
+      int Version, long FirstSampleIndex);
+
+    // A missing 10-ms chunk does not exceed the 250-ms timestamp tolerance.
+    internal static bool FramesContinuous(long expectedStart, long actualStart) =>
+      expectedStart < 0 || expectedStart == actualStart;
 
     public bool IsRunning => capture?.IsRunning == true && vac.IsRunning;
     public string? InputDeviceId => settings?.InputDeviceId;
@@ -77,12 +82,14 @@ namespace SkyRoof.IF
         IfAfAudioRoute.AutoSignedCable => signed.Status,
         _ => "Operator-selected virtual render endpoint (capture pair not verified)"
       };
-      string? outputId = config.AudioRoute switch
-      {
-        IfAfAudioRoute.PreferIfAfAudio => pair.RenderId,
-        IfAfAudioRoute.AutoSignedCable => signed.RenderId,
-        _ => config.VacRenderDeviceId
-      };
+      string? outputId = IfAfSettings.ResolveRenderEndpoint(config.AudioRoute,
+        config.VacRenderDeviceId, pair.RenderId, signed.RenderId);
+      // This recording end belongs to WSJT-X; using it as IF creates feedback.
+      if (config.AudioRoute == IfAfAudioRoute.AutoSignedCable &&
+          string.Equals(config.InputDeviceId, signed.CaptureId,
+            StringComparison.OrdinalIgnoreCase))
+        throw new InvalidOperationException(
+          "IF capture must not be the selected virtual cable recording endpoint. Select IC-9700 USB IF.");
       if (config.AudioRoute == IfAfAudioRoute.PreferIfAfAudio && !pair.Ready)
         throw new InvalidOperationException(pair.Status +
           " Prefer an installed vendor cable (AutoSignedCable).");
@@ -183,9 +190,9 @@ namespace SkyRoof.IF
       catch (Exception ex) { Log.Warning(ex, "IF shared consumer failed"); }
       var data = new float[count];
       Array.Copy(e.Data, data, count);
-      Interlocked.Add(ref inputSamples, count);
+      long startIndex = Interlocked.Add(ref inputSamples, count) - count;
       Interlocked.Exchange(ref lastUtcTicks, e.Utc.Ticks);
-      if (!target.Writer.TryWrite(new Frame(data, e.Utc, generation)))
+      if (!target.Writer.TryWrite(new Frame(data, e.Utc, generation, startIndex)))
       {
         Interlocked.Increment(ref dropped);
         detail = "PCM overrun; decoder will reset on discontinuity";
@@ -201,6 +208,7 @@ namespace SkyRoof.IF
       double scale = Math.Pow(10, gainDb / 20.0);
       DateTime previous = default;
       int previousSamples = 0;
+      long expectedStart = -1;
       try
       {
         await foreach (var frame in reader.ReadAllAsync(stop))
@@ -210,13 +218,16 @@ namespace SkyRoof.IF
           if (mode != dsp.Mode) dsp.Configure(mode);
           // Timestamp of captured block is its end. Discontinuities should
           // not splice unrelated IF phases into one decodable WSJT symbol.
+          bool discontinuity = !FramesContinuous(expectedStart, frame.FirstSampleIndex);
           if (previous != default)
           {
             double elapsed = (frame.Utc - previous).TotalSeconds;
             double expected = previousSamples / 48000.0;
             if (elapsed < -0.05 || elapsed > expected + .25)
-              dsp.Reset();
+              discontinuity = true;
           }
+          if (discontinuity) dsp.Reset();
+          expectedStart = frame.FirstSampleIndex + frame.Data.Length;
           previous = frame.Utc;
           previousSamples = frame.Data.Length;
           double queueLagMs = (DateTime.UtcNow - frame.Utc).TotalMilliseconds;

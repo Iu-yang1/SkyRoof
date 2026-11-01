@@ -600,10 +600,13 @@ namespace SkyRoof
       if (ctx.IfAf == null) return;
       try
       {
-        string? ifAfOutputId =
-          ctx.Settings.IfAf.AudioRoute == IfAfAudioRoute.PreferIfAfAudio
-            ? IfAfAudioEndpointDiscovery.Detect().RenderId
-            : ctx.Settings.IfAf.VacRenderDeviceId;
+        var route = ctx.Settings.IfAf.AudioRoute;
+        string? ifAfOutputId = IfAfSettings.ResolveRenderEndpoint(route,
+          ctx.Settings.IfAf.VacRenderDeviceId,
+          route == IfAfAudioRoute.PreferIfAfAudio
+            ? IfAfAudioEndpointDiscovery.Detect().RenderId : null,
+          route == IfAfAudioRoute.AutoSignedCable
+            ? IfAfSignedCableDiscovery.Detect().RenderId : null);
         if (ctx.Settings.IfAf.Enabled && ctx.Settings.OutputStream.Enabled &&
             ctx.Settings.OutputStream.Type == DataStreamType.AudioToVac &&
             ctx.Settings.OutputStream.Vac == ifAfOutputId)
@@ -622,8 +625,7 @@ namespace SkyRoof
 
     private IfAfMode CurrentIfAfMode() =>
       IfAfSettings.Resolve(ctx.Settings.IfAf.Mode,
-        ctx.FrequencyControl.RadioLink.TxCust == null
-          ? Slicer.Mode.USB : ctx.FrequencyControl.RadioLink.DownlinkMode);
+        ctx.FrequencyControl.CurrentIfAfRadioMode);
 
     internal void ApplyKissServerSettings()
     {
