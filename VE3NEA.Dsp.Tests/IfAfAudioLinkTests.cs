@@ -226,8 +226,10 @@ namespace VE3NEA.Dsp.Tests
       Assert.Equal(IfAfLinkState.Warning, held.Af);
       var recovered = IfAfLinkBar.Evaluate(true,
         IfAfAudioRoute.AutoSignedCable,
-        during with { InputSamples = 96000, OutputSamples = 96000 },
-        during with { InputSamples = 72000, OutputSamples = 72000 },
+        during with { InputSamples = 96000, OutputSamples = 96000,
+          LastInputUtc = now.AddSeconds(4) },
+        during with { InputSamples = 72000, OutputSamples = 72000,
+          LastInputUtc = now.AddSeconds(1) },
         now.AddSeconds(4));
       Assert.Equal(IfAfLinkState.Ok, recovered.Af);
       Assert.Equal(IfAfLinkState.Ok, recovered.VirtualMic);
