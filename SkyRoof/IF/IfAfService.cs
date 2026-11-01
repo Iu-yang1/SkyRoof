@@ -10,7 +10,9 @@ namespace SkyRoof.IF
   public readonly record struct IfAfStatus(bool Running, IfAfMode Mode,
     long InputSamples, long OutputSamples, long DroppedBlocks,
     long ClippedSamples, DateTime LastInputUtc, double InputRmsDbfs,
-    double ProcessingQueueLagMs, string Detail);
+    double ProcessingQueueLagMs, string Detail,
+    int RequestedRenderPeriodMs, bool RenderRunning,
+    string VirtualDeviceStatus);
 
   /// <summary>Single-owner 48-kHz IF WASAPI stream; fans out unmodified IF
   /// to AFC and SSTV synchronously and produces filtered AF on a separate
@@ -19,7 +21,10 @@ namespace SkyRoof.IF
   public sealed class IfAfService : IDisposable
   {
     private InputSoundcard<float>? capture;
-    private readonly OutputSoundcard<float> vac = new(samplingRate: 48000);
+    private OutputSoundcard<float> vac = new(samplingRate: 48000,
+      latencyMilliseconds: 40);
+    private string? resolvedRenderId;
+    private string virtualDeviceStatus = "Not probed";
     private Channel<Frame>? queue;
     private CancellationTokenSource? cancel;
     private Task? worker;
@@ -35,16 +40,17 @@ namespace SkyRoof.IF
     public event EventHandler<DataEventArgs<float>>? RawIfAvailable;
     private readonly record struct Frame(float[] Data, DateTime Utc, int Version);
 
-    public bool IsRunning => capture?.IsRunning == true;
+    public bool IsRunning => capture?.IsRunning == true && vac.IsRunning;
     public string? InputDeviceId => settings?.InputDeviceId;
-    public string? VacRenderDeviceId => settings?.VacRenderDeviceId;
+    public string? VacRenderDeviceId => resolvedRenderId;
     public AudioChannelChoice CaptureChannel => settings?.CaptureChannel ?? AudioChannelChoice.Left;
     public IfAfStatus Status => new(IsRunning, (IfAfMode)Volatile.Read(ref requestedMode),
       Interlocked.Read(ref inputSamples), Interlocked.Read(ref outputSamples),
       Interlocked.Read(ref dropped), Interlocked.Read(ref clipped),
       new DateTime(Math.Max(0, Interlocked.Read(ref lastUtcTicks)), DateTimeKind.Utc),
       Volatile.Read(ref lastRmsDbfs),
-      Interlocked.Read(ref lastProcessingLagUs) / 1000.0, detail);
+      Interlocked.Read(ref lastProcessingLagUs) / 1000.0, detail,
+      vac.RequestedLatencyMs, vac.IsRunning, virtualDeviceStatus);
 
     public void Apply(IfAfSettings config, IfAfMode mode)
     {
@@ -52,9 +58,21 @@ namespace SkyRoof.IF
       ArgumentNullException.ThrowIfNull(config);
       Stop();
       if (!config.Enabled) return;
-      if (string.IsNullOrWhiteSpace(config.InputDeviceId) ||
-          string.IsNullOrWhiteSpace(config.VacRenderDeviceId))
-        throw new InvalidOperationException("Select both the IF capture and VAC render endpoints.");
+      if (string.IsNullOrWhiteSpace(config.InputDeviceId))
+        throw new InvalidOperationException("Select the IF capture endpoint.");
+      if (!Enum.IsDefined(typeof(IfAfLatencyPreset), config.LatencyPreset) ||
+          !Enum.IsDefined(typeof(IfAfAudioRoute), config.AudioRoute))
+        throw new ArgumentOutOfRangeException(nameof(config),
+          "Invalid IF-AF audio route or buffer preset.");
+      var driver = IfAfAudioEndpointDiscovery.Detect();
+      virtualDeviceStatus = driver.Status;
+      string? outputId = config.AudioRoute == IfAfAudioRoute.PreferIfAfAudio
+        ? driver.RenderId : config.VacRenderDeviceId;
+      if (config.AudioRoute == IfAfAudioRoute.PreferIfAfAudio && !driver.Ready)
+        throw new InvalidOperationException(driver.Status +
+          " Select ExistingVirtualCable to use an already installed VAC.");
+      if (string.IsNullOrWhiteSpace(outputId))
+        throw new InvalidOperationException("Choose a virtual audio render device.");
       if (config.FmDeviationHz is < 1000 or > 6000 ||
           config.GainDb is < -40 or > 12 ||
           config.SsbLowHz is < 100 or > 750 ||
@@ -65,7 +83,7 @@ namespace SkyRoof.IF
       // Never play the demodulated receive audio into a radio's TX CODEC.
       var vacEntry = Soundcard.ListDevices(NAudio.CoreAudioApi.DataFlow.Render);
       AudioDeviceEntry? target = Array.Find(vacEntry,
-        x => string.Equals(x.Id, config.VacRenderDeviceId, StringComparison.Ordinal));
+        x => string.Equals(x.Id, outputId, StringComparison.Ordinal));
       if (target == null ||
           target.Name.Contains("USB Audio CODEC", StringComparison.OrdinalIgnoreCase) ||
           target.Name.Contains("ICOM", StringComparison.OrdinalIgnoreCase))
@@ -78,6 +96,8 @@ namespace SkyRoof.IF
         CaptureChannel = config.CaptureChannel,
         Mode = config.Mode,
         VacRenderDeviceId = config.VacRenderDeviceId,
+        AudioRoute = config.AudioRoute,
+        LatencyPreset = config.LatencyPreset,
         GainDb = config.GainDb,
         FmDeviationHz = config.FmDeviationHz,
         SsbLowHz = config.SsbLowHz,
@@ -91,7 +111,10 @@ namespace SkyRoof.IF
       Interlocked.Exchange(ref clipped, 0);
       Interlocked.Exchange(ref lastProcessingLagUs, 0);
       detail = "Starting";
-      var next = Channel.CreateBounded<Frame>(new BoundedChannelOptions(20)
+      // 8 x ~10-ms IF chunks caps queueing to ~80 ms. A stalled
+      // consumer drops excess frames instead of accumulating seconds of
+      // stale audio, which would ruin fast satellite receive tracking.
+      var next = Channel.CreateBounded<Frame>(new BoundedChannelOptions(8)
       {
         SingleReader = true,
         SingleWriter = true,
@@ -100,13 +123,17 @@ namespace SkyRoof.IF
       var source = new CancellationTokenSource();
       queue = next;
       cancel = source;
+      vac.Dispose();
+      vac = new OutputSoundcard<float>(samplingRate: 48000,
+        latencyMilliseconds: (int)config.LatencyPreset);
+      resolvedRenderId = outputId;
       capture = new InputSoundcard<float>(config.InputDeviceId, 48000,
-        captureBufferMilliseconds: 40, readerBlockSizeSamples: 1600,
-        channelChoice: config.CaptureChannel);
+        captureBufferMilliseconds: 20, readerBlockSizeSamples: 480,
+        channelChoice: config.CaptureChannel, idleSleepMilliseconds: 2);
       capture.SamplesAvailable += CaptureSamples;
       try
       {
-        vac.SetDeviceId(config.VacRenderDeviceId);
+        vac.SetDeviceId(outputId);
         vac.Volume = 1;
         vac.Enabled = true;
         if (!vac.IsRunning) throw new InvalidOperationException("Virtual audio playback unavailable.");
@@ -115,7 +142,7 @@ namespace SkyRoof.IF
           config.SsbLowHz, config.SsbHighHz));
         capture.Enabled = true;
         if (!capture.IsRunning) throw new InvalidOperationException("IF capture unavailable.");
-        detail = "48-kHz IF -> independent VAC AF";
+        detail = $"48-kHz IF -> {target.Name}, requested render period {(int)config.LatencyPreset} ms";
       }
       catch
       {
@@ -223,6 +250,7 @@ namespace SkyRoof.IF
       }
       vac.Enabled = false;
       settings = null;
+      resolvedRenderId = null;
       detail = "Stopped";
     }
 
