@@ -348,14 +348,20 @@ namespace VE3NEA
     private readonly RingBufferWaveProvider<T> waveProvider;
     private WasapiOut? wasapiOut;
     private float volume;
+    private readonly int requestedLatencyMs;
+    public int RequestedLatencyMs => requestedLatencyMs;
 
     public RingBuffer<T> Buffer => waveProvider.Buffer;
     public float Volume { get => volume; set => SetVolume(value); }
 
 
-    public OutputSoundcard(string? audioDeviceId = null, int? samplingRate = null) 
+    public OutputSoundcard(string? audioDeviceId = null, int? samplingRate = null,
+      int latencyMilliseconds = 200)
       : base(audioDeviceId, samplingRate)
     {
+      if (latencyMilliseconds is < 10 or > 1000)
+        throw new ArgumentOutOfRangeException(nameof(latencyMilliseconds));
+      requestedLatencyMs = latencyMilliseconds;
       waveProvider = new RingBufferWaveProvider<T>(SamplingRate);
       waveProvider.Volume = volume;
     }
@@ -370,7 +376,7 @@ namespace VE3NEA
       waveProvider.Buffer.Clear();
       waveProvider.Volume = volume;
 
-      wasapiOut = new WasapiOut(mmDevice!, AudioClientShareMode.Shared, false, 200);
+      wasapiOut = new WasapiOut(mmDevice!, AudioClientShareMode.Shared, false, requestedLatencyMs);
       wasapiOut.Init(waveProvider);
       wasapiOut.PlaybackStopped += Soundcard_Stopped;
       wasapiOut.Play();
@@ -429,6 +435,7 @@ namespace VE3NEA
     private readonly int captureBufferMilliseconds;
     private readonly int readerBlockSizeSamples;
     private readonly AudioChannelChoice channelChoice;
+    private readonly int idleSleepMilliseconds;
 
     public int CaptureBufferMilliseconds => captureBufferMilliseconds;
     public int ReaderBlockSizeSamples => readerBlockSizeSamples;
@@ -438,7 +445,8 @@ namespace VE3NEA
       int? samplingRate = null,
       int captureBufferMilliseconds = 200,
       int readerBlockSizeSamples = 4800,
-      AudioChannelChoice channelChoice = AudioChannelChoice.Mix)
+      AudioChannelChoice channelChoice = AudioChannelChoice.Mix,
+      int idleSleepMilliseconds = 20)
       : base(audioDeviceId, samplingRate)
     {
       if (captureBufferMilliseconds is < 20 or > 1000)
@@ -448,6 +456,9 @@ namespace VE3NEA
       this.captureBufferMilliseconds = captureBufferMilliseconds;
       this.readerBlockSizeSamples = readerBlockSizeSamples;
       this.channelChoice = channelChoice;
+      if (idleSleepMilliseconds is < 1 or > 20)
+        throw new ArgumentOutOfRangeException(nameof(idleSleepMilliseconds));
+      this.idleSleepMilliseconds = idleSleepMilliseconds;
     }
 
     protected override bool IsCurrentSoundcard(object? sender)
@@ -556,7 +567,7 @@ namespace VE3NEA
             SamplesAvailable?.Invoke(this, Args);
           }
           else
-            Thread.Sleep(20); // avoid busy spin if device starves
+            Thread.Sleep(idleSleepMilliseconds); // low-latency IF only, legacy default remains 20 ms
         }
         catch (ObjectDisposedException) {}
         catch (InvalidOperationException) {}

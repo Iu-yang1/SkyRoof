@@ -7,6 +7,16 @@ namespace SkyRoof.IF
 {
   public enum IfAfSelection { FollowRadio, Usb, Lsb, CwUsb, CwLsb, Fm }
 
+  public enum IfAfAudioRoute { PreferIfAfAudio, ExistingVirtualCable }
+
+  public enum IfAfLatencyPreset
+  {
+    Fast20Ms = 20,
+    Balanced40Ms = 40,
+    Stable80Ms = 80,
+    Compatible200Ms = 200
+  }
+
   /// <summary>Opt-in IF-AF test path. Uses only receiver PCM; no CAT or PTT
   /// writes. VAC device must be an explicit Windows RENDER endpoint and never
   /// the IC-9700 USB Audio CODEC playback/TX input.</summary>
@@ -29,8 +39,19 @@ namespace SkyRoof.IF
     [DefaultValue(IfAfSelection.FollowRadio)]
     public IfAfSelection Mode { get; set; } = IfAfSelection.FollowRadio;
 
+    [DisplayName("AF audio route")]
+    [Description("PreferIfAfAudio requires a genuine installed IF-AF-Audio Windows virtual capture + playback device. ExistingVirtualCable uses the selected device below. No sound driver is silently installed.")]
+    [DefaultValue(IfAfAudioRoute.PreferIfAfAudio)]
+    public IfAfAudioRoute AudioRoute { get; set; } = IfAfAudioRoute.PreferIfAfAudio;
+
+    [DisplayName("AF output latency preset")]
+    [Description("Requested shared-mode WASAPI render buffer; 20ms can glitch on some devices. Actual hardware/OS end-to-end latency is measured separately.")]
+    [DefaultValue(IfAfLatencyPreset.Balanced40Ms)]
+    public IfAfLatencyPreset LatencyPreset { get; set; } =
+      IfAfLatencyPreset.Balanced40Ms;
+
     [DisplayName("Virtual audio render device")]
-    [Description("CABLE Input / VAC playback endpoint. NEVER choose USB Audio CODEC (radio TX audio).")]
+    [Description("Only for ExistingVirtualCable. Choose CABLE Input/VAC playback; never IC-9700 USB Audio CODEC (TX).")]
     [TypeConverter(typeof(OutputSoundcardNameConverter))]
     public string? VacRenderDeviceId { get; set; }
 
