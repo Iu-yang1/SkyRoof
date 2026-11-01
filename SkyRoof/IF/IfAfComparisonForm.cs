@@ -174,6 +174,12 @@ namespace SkyRoof
             afDevice.SelectedItem is not AudioEndpointOption lan)
           throw new InvalidOperationException("请先分别选择 USB IF 录音端点和 LAN AF 播放端点。");
 
+        if (ctx.Settings.OutputStream.Enabled &&
+            ctx.Settings.OutputStream.Type == DataStreamType.AudioToVac &&
+            string.Equals(ctx.Settings.OutputStream.Vac, lan.Id,
+              StringComparison.Ordinal))
+          throw new InvalidOperationException(
+            "所选 LAN AF 播放端点同时接收 SkyRoof SDR→VAC 输出。请为 RS-BA1 选择独立端点，以避免参考 AF 混入软件解调声音。");
         var choice = ifChannel.SelectedIndex switch
         {
           1 => AudioChannelChoice.Right,
