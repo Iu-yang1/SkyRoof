@@ -22,6 +22,8 @@ namespace SkyRoof
     private ToolStripProfessionalRenderer? ThemeRenderer;
     private readonly EmbeddedSkyCatHost EmbeddedSkyCat = new();
     private IfAfComparisonForm? ifAfComparisonForm;
+    private IfAfLinkBar? ifAfLinkBar;
+    private ToolStripControlHost? ifAfLinkHost;
     internal void ApplyEmbeddedSkyCatSettings() =>
       EmbeddedSkyCat.Apply(ctx.Settings.Cat.Embedded);
     internal bool EmbeddedSkyCatRunning => EmbeddedSkyCat.IsRunning;
@@ -42,6 +44,7 @@ namespace SkyRoof
       ConfigureSstvConsoleMenuItem();
       ConfigureOnvifCameraMenu();
       ConfigureIfAfComparisonMenu();
+      ConfigureIfAfLinkBar();
       ConfigureGitHubThemeMenuItems();
       AddOrbitSourceMenuItems();
       AddLogArchiveMenuItem();
@@ -597,12 +600,17 @@ namespace SkyRoof
       if (ctx.IfAf == null) return;
       try
       {
+        string? ifAfOutputId =
+          ctx.Settings.IfAf.AudioRoute == IfAfAudioRoute.PreferIfAfAudio
+            ? IfAfAudioEndpointDiscovery.Detect().RenderId
+            : ctx.Settings.IfAf.VacRenderDeviceId;
         if (ctx.Settings.IfAf.Enabled && ctx.Settings.OutputStream.Enabled &&
             ctx.Settings.OutputStream.Type == DataStreamType.AudioToVac &&
-            ctx.Settings.OutputStream.Vac == ctx.Settings.IfAf.VacRenderDeviceId)
+            ctx.Settings.OutputStream.Vac == ifAfOutputId)
           throw new InvalidOperationException(
             "IF-AF and SDR Output Stream cannot share one VAC render endpoint.");
         ctx.IfAf.Apply(ctx.Settings.IfAf, CurrentIfAfMode());
+        UpdateIfAfLinkBar();
       }
       catch (Exception ex)
       {
@@ -1074,6 +1082,63 @@ namespace SkyRoof
           "Custom TLE Sources",
           MessageBoxButtons.OK,
           MessageBoxIcon.Error);
+      }
+    }
+
+    private void ConfigureIfAfLinkBar()
+    {
+      ifAfLinkBar = new IfAfLinkBar
+      {
+        BackColor = StatusStrip.BackColor,
+        ForeColor = StatusStrip.ForeColor
+      };
+      ifAfLinkHost = new ToolStripControlHost(ifAfLinkBar)
+      {
+        AutoSize = false,
+        Size = new Size(333, 27),
+        Visible = false,
+        ToolTipText = "IF-AF experimental receive pipeline: Q = software queue age, " +
+          "P = requested WASAPI playback period (NOT measured end-to-end latency)"
+      };
+      ifAfLinkBar.Click += (_, _) =>
+      {
+        if (ctx.IfAf == null) return;
+        var x = ctx.IfAf.Status;
+        MessageBox.Show(this,
+          $"IF-AF-Audio link\n\nMode: {x.Mode}\n" +
+          $"Capture samples: {x.InputSamples}\nAF samples: {x.OutputSamples}\n" +
+          $"Capture input RMS: {x.InputRmsDbfs:F1} dBFS\n" +
+          $"Queue age: {x.ProcessingQueueLagMs:F1} ms (host estimate)\n" +
+          $"WASAPI render period requested: {x.RequestedRenderPeriodMs} ms\n" +
+          $"Dropped blocks: {x.DroppedBlocks}\nClipped: {x.ClippedSamples}\n" +
+          $"Playback active: {x.RenderRunning}\n\n{x.VirtualDeviceStatus}\n\n{x.Detail}\n\n" +
+          "The WSJT-X decode state and device hardware latency are not directly observable here.",
+          "IF-AF-Audio link diagnostics",
+          MessageBoxButtons.OK, MessageBoxIcon.Information);
+      };
+      int index = StatusStrip.Items.IndexOf(VacStatusLabel);
+      StatusStrip.Items.Insert(index >= 0 ? index + 1 : StatusStrip.Items.Count,
+        ifAfLinkHost);
+    }
+
+    private void UpdateIfAfLinkBar()
+    {
+      if (ifAfLinkBar == null || ifAfLinkHost == null) return;
+      bool enabled = ctx.Settings.IfAf.Enabled;
+      ifAfLinkHost.Visible = enabled;
+      ifAfLinkBar.BackColor = StatusStrip.BackColor;
+      ifAfLinkBar.ForeColor = StatusStrip.ForeColor;
+      ifAfLinkBar.UpdateLink(enabled, ctx.Settings.IfAf.AudioRoute,
+        ctx.IfAf?.Status);
+      if (enabled && ctx.IfAf != null)
+      {
+        var x = ctx.IfAf.Status;
+        ifAfLinkHost.ToolTipText =
+          $"IF → DDC → AF → {(ctx.Settings.IfAf.AudioRoute == IfAfAudioRoute.PreferIfAfAudio ? "IF-AF-Audio" : "VAC")}" +
+          $"\nQueue age: {x.ProcessingQueueLagMs:F1} ms (host estimate)" +
+          $"\nWASAPI period: {x.RequestedRenderPeriodMs} ms (requested)" +
+          $"\nDrops: {x.DroppedBlocks}, clipping: {x.ClippedSamples}" +
+          $"\n{x.VirtualDeviceStatus}";
       }
     }
 
@@ -1998,6 +2063,7 @@ namespace SkyRoof
     private void timer_Tick(object sender, EventArgs e)
     {
       ctx.IfAf?.UpdateMode(CurrentIfAfMode());
+      if ((TickCount & 3) == 0) UpdateIfAfLinkBar();
       // 8 Hz (125 ms) ticks
       TickCount += 1;
 
