@@ -120,7 +120,7 @@ jobs:
 
       - name: Package SkyRoof with licensed, unmodified basic VB-CABLE
         shell: cmd
-        run: '"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "install\SkyRoof.iss"'
+        run: '"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DIF_AF_BUNDLE_VBCABLE "install\SkyRoof.iss"'
 
       - name: Smoke-test installed SkyRoof application
         shell: pwsh

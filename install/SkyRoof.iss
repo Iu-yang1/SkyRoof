@@ -34,10 +34,12 @@ PrivilegesRequired=admin
 Name: english; MessagesFile: compiler:Default.isl
 
 [Tasks]
+#ifdef IF_AF_BUNDLE_VBCABLE
 ; Only the original, unmodified base VB-CABLE Donationware is bundled.
 ; Attribution is explicitly required by https://vb-audio.com/Services/licensing.htm.
 ; User can opt out; the default is to install with SkyRoof for IF->AF reception.
 Name: installvbcable; Description: "Automatically install VB-Audio VB-CABLE (donationware, optional; restart Windows after installing)"; GroupDescription: "Virtual audio driver:"; Flags: checkedonce
+#endif
 Name: desktopicon; Description: {cm:CreateDesktopIcon}; GroupDescription: {cm:AdditionalIcons}; Flags: unchecked
 
 [Files]
@@ -81,12 +83,14 @@ Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\fa-solid-900.ttf; DestDir:
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\runtimes\win-x64\native\onnxruntime*.dll; DestDir: {app}\runtimes\win-x64\native; Flags: overwritereadonly ignoreversion
 Source: ..\SkyRoof\bin\x64\Release\net10.0-windows7.0\ft4_coder.pdb; DestDir: {app}; Flags: overwritereadonly ignoreversion
 
+#ifdef IF_AF_BUNDLE_VBCABLE
 ; Original basic VB-CABLE ZIP is shipped unchanged (no extracted/resigned driver files).
 ; Attribution and official donation/support references are included.
 Source: ..\Vendor\VB-CABLE\VBCABLE_Driver_Pack45.zip; DestDir: {app}\ThirdParty\VB-CABLE; Flags: overwritereadonly ignoreversion
 Source: ..\Vendor\VB-CABLE\VBCABLE_Driver_Pack45.sha256; DestDir: {app}\ThirdParty\VB-CABLE; Flags: overwritereadonly ignoreversion
 Source: ..\scripts\Manage-VbCable.ps1; DestDir: {app}\ThirdParty\VB-CABLE; Flags: overwritereadonly ignoreversion
 Source: ..\docs\VB-CABLE-NOTICE.txt; DestDir: {app}\ThirdParty\VB-CABLE; Flags: overwritereadonly ignoreversion
+#endif
 
 [Icons]
 Name: {commonprograms}\{#MyAppName}; Filename: {app}\{#MyAppExeName}
@@ -96,6 +100,7 @@ Name: {commondesktop}\{#MyAppName}; Filename: {app}\{#MyAppExeName}; Tasks: desk
 Filename: {app}\{#MyAppExeName}; Description: {cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}; Flags: nowait postinstall skipifsilent
 
 [Code]
+#ifdef IF_AF_BUNDLE_VBCABLE
 var
   VbCableRebootNeeded: Boolean;
 
@@ -131,6 +136,7 @@ begin
       IntToStr(ResultCode) + '. SkyRoof remains installed. Check Windows ' +
       'driver security logs and use Settings to retry.', mbError, MB_OK);
 end;
+#endif
 
 function InitializeSetup: Boolean;
 begin
