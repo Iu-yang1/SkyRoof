@@ -55,7 +55,7 @@ namespace SkyRoof
       this.ctx = ctx;
       Text = "IC-9700 IF / 原机 AF 同步对照录音 — IF-AF-Test";
       StartPosition = FormStartPosition.CenterParent;
-      MinimumSize = new Size(640, 385);
+      MinimumSize = new Size(650, 420);
       ClientSize = new Size(760, 420);
 
       var table = new TableLayoutPanel
@@ -65,12 +65,13 @@ namespace SkyRoof
       };
       table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
       table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+      table.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+      table.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+      table.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
       table.RowStyles.Add(new RowStyle(SizeType.Absolute, 43));
-      table.RowStyles.Add(new RowStyle(SizeType.Absolute, 43));
-      table.RowStyles.Add(new RowStyle(SizeType.Absolute, 39));
-      table.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-      table.RowStyles.Add(new RowStyle(SizeType.Absolute, 85));
-      table.RowStyles.Add(new RowStyle(SizeType.Absolute, 55));
+      table.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
+      table.RowStyles.Add(new RowStyle(SizeType.Absolute, 45));
+      table.RowStyles.Add(new RowStyle(SizeType.Absolute, 63));
       table.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
       void AddRow(string text, Control ctrl, int row)
