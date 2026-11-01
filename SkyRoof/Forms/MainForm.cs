@@ -658,7 +658,10 @@ namespace SkyRoof
       else
         SoundcardLedLabel.ForeColor = Color.Lime;
 
-      if (!ctx.Settings.OutputStream.Enabled)
+      if (ctx.Settings.IfAf.Enabled)
+        VacLedLabel.ForeColor = ctx.IfAf?.IsRunning == true
+          ? Color.Lime : Color.Red;
+      else if (!ctx.Settings.OutputStream.Enabled)
         VacLedLabel.ForeColor = SystemColors.GrayText;
       else if (ctx.Settings.OutputStream.Type == DataStreamType.AudioToVac && !ctx.AudioVacSoundcard.IsRunning)
         VacLedLabel.ForeColor = Color.Red;
@@ -669,6 +672,17 @@ namespace SkyRoof
 
       SoundcardStatusLabel.ToolTipText = ctx.SpeakerSoundcard.GetDisplayName();
       VacStatusLabel.ToolTipText = OutputStreamTooltip();
+      if (ctx.Settings.IfAf.Enabled && ctx.IfAf != null)
+      {
+        var state = ctx.IfAf.Status;
+        VacStatusLabel.ToolTipText +=
+          $"\nIF-AF TEST {state.Mode} {(state.Running ? "RUNNING" : "STOPPED")}" +
+          $"\nIF 48 kS/s RMS={state.InputRmsDbfs:F1} dBFS" +
+          $"\nFrames={state.InputSamples} Out={state.OutputSamples}" +
+          $"\nQueue drops={state.DroppedBlocks} AF clipping={state.ClippedSamples}" +
+          $"\nQueue age={state.ProcessingQueueLagMs:F1} ms (not total audio latency)" +
+          $"\n{state.Detail}";
+      }
     }
 
     private string OutputStreamTooltip()
@@ -1641,6 +1655,13 @@ namespace SkyRoof
 
     private void VacLabel_Click(object sender, EventArgs e)
     {
+      if (ctx.Settings.IfAf.Enabled)
+      {
+        MessageBox.Show(this,
+          "IF-AF TEST 使用独立 VAC 输出；请在设置中关闭 IF-AF 后再操作此 SDR 输出开关。",
+          "IF-AF Test", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        return;
+      }
       ctx.Settings.OutputStream.Enabled = !ctx.Settings.OutputStream.Enabled;
       EnableDisableVac();
       ShowSoundcardLabels();
@@ -1989,6 +2010,7 @@ namespace SkyRoof
       ctx.TelemetryPanel?.UpdateTxStatus();
 
       ShowCpuUsage();
+      if (ctx.Settings.IfAf.Enabled) ShowSoundcardLabels();
     }
     private async Task OneMinuteTick()
     {

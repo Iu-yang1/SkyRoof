@@ -10,7 +10,7 @@ namespace SkyRoof.IF
   public readonly record struct IfAfStatus(bool Running, IfAfMode Mode,
     long InputSamples, long OutputSamples, long DroppedBlocks,
     long ClippedSamples, DateTime LastInputUtc, double InputRmsDbfs,
-    string Detail);
+    double ProcessingQueueLagMs, string Detail);
 
   /// <summary>Single-owner 48-kHz IF WASAPI stream; fans out unmodified IF
   /// to AFC and SSTV synchronously and produces filtered AF on a separate
@@ -18,12 +18,12 @@ namespace SkyRoof.IF
   /// when it can subscribe to this service.</summary>
   public sealed class IfAfService : IDisposable
   {
-    private readonly object gate = new();
     private InputSoundcard<float>? capture;
     private readonly OutputSoundcard<float> vac = new(samplingRate: 48000);
     private Channel<Frame>? queue;
     private CancellationTokenSource? cancel;
     private Task? worker;
+    private long lastProcessingLagUs;
     private IfAfSettings? settings;
     private int requestedMode;
     private int generation;
@@ -41,7 +41,8 @@ namespace SkyRoof.IF
       Interlocked.Read(ref inputSamples), Interlocked.Read(ref outputSamples),
       Interlocked.Read(ref dropped), Interlocked.Read(ref clipped),
       new DateTime(Math.Max(0, Interlocked.Read(ref lastUtcTicks)), DateTimeKind.Utc),
-      Volatile.Read(ref lastRmsDbfs), detail);
+      Volatile.Read(ref lastRmsDbfs),
+      Interlocked.Read(ref lastProcessingLagUs) / 1000.0, detail);
 
     public void Apply(IfAfSettings config, IfAfMode mode)
     {
@@ -81,6 +82,7 @@ namespace SkyRoof.IF
       Interlocked.Exchange(ref outputSamples, 0);
       Interlocked.Exchange(ref dropped, 0);
       Interlocked.Exchange(ref clipped, 0);
+      Interlocked.Exchange(ref lastProcessingLagUs, 0);
       detail = "Starting";
       var next = Channel.CreateBounded<Frame>(new BoundedChannelOptions(20)
       {
@@ -161,6 +163,10 @@ namespace SkyRoof.IF
           }
           previous = frame.Utc;
           previousSamples = frame.Data.Length;
+          double queueLagMs = (DateTime.UtcNow - frame.Utc).TotalMilliseconds;
+          if (queueLagMs >= 0 && queueLagMs < 60000)
+            Interlocked.Exchange(ref lastProcessingLagUs,
+              (long)Math.Round(queueLagMs * 1000));
           float[] af = new float[frame.Data.Length];
           dsp.Process(frame.Data, af);
           double power = 0;
