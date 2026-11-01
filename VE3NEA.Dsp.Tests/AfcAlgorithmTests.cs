@@ -61,7 +61,8 @@ namespace VE3NEA.Dsp.Tests
       controller.Observe(new(AfcSignalMode.CW,
         T0.AddSeconds(3), 1, 800, 999, 0, false),
         145000000, 1, 500, 20, 5, false);
-      controller.Snapshot.State.Should().Be(AfcLockState.Hold);
+      controller.Snapshot.State.Should().Be(AfcLockState.Coasting,
+        "short Morse key-up gaps should maintain predicted carrier track");
       controller.Snapshot.CorrectionHz.Should().Be(before);
       controller.Observe(new(AfcSignalMode.CW,
         T0.AddSeconds(4), 1, 900, 1, 1, true),
