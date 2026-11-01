@@ -4,11 +4,21 @@
 [CmdletBinding()]
 param(
   [ValidateSet('Verify','Install','Uninstall')][string]$Action = 'Verify',
-  [string]$ArchivePath = (Join-Path $PSScriptRoot 'VBCABLE_Driver_Pack45.zip'),
+  [string]$ArchivePath,
   [switch]$Consent,
-  [string]$LogPath = (Join-Path $PSScriptRoot 'VB-CABLE-manager.log')
+  [string]$LogPath
 )
 $ErrorActionPreference = 'Stop'
+# Windows PowerShell 5.1 evaluates param() default expressions before
+# $PSScriptRoot is reliably populated. Both defaults must be resolved in
+# the script BODY, otherwise a GUI launch can fail immediately with code 1.
+if ([string]::IsNullOrWhiteSpace($ArchivePath)) {
+  $ArchivePath = Join-Path $PSScriptRoot 'VBCABLE_Driver_Pack45.zip'
+}
+if ([string]::IsNullOrWhiteSpace($LogPath)) {
+  $LogPath = Join-Path $PSScriptRoot 'VB-CABLE-manager.log'
+}
+
 $vendorUrl = 'https://vb-audio.com/Cable/'
 $stateKey = 'HKLM:\Software\SkyRoof\VbCableBundled'
 $work = Join-Path ([IO.Path]::GetTempPath()) ('SkyRoof-VBCable-' + [guid]::NewGuid().ToString('N'))

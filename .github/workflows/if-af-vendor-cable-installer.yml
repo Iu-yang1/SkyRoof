@@ -38,12 +38,19 @@ jobs:
       - name: Verify VB-CABLE manager reports actionable archive failures
         shell: pwsh
         run: |
-          $missing = Join-Path $env:RUNNER_TEMP 'SkyRoof-VBCABLE-missing-test.zip'
-          $diagnostic = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/Manage-VbCable.ps1 -Action Verify -ArchivePath $missing 2>&1 | Out-String
+          # This intentionally OMITs -ArchivePath and -LogPath. On Windows
+          # PowerShell 5.1 the old param() default expression used an empty
+          # $PSScriptRoot and aborted before any driver verification.
+          $diagnostic = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/Manage-VbCable.ps1 -Action Verify 2>&1 | Out-String
           if ($LASTEXITCODE -ne 1 -or $diagnostic -notmatch 'VB-CABLE FAILED at stage \[Bundled archive and SHA256\]') {
-            throw "Vendor manager failure diagnostic regression: code=$LASTEXITCODE; log=$diagnostic"
+            throw "Vendor manager default-path regression: code=$LASTEXITCODE; log=$diagnostic"
           }
-          Write-Host 'PASS: manager supplies failing stage rather than only exit code 1.'
+          $vendorZip = Join-Path $env:GITHUB_WORKSPACE 'Vendor\VB-CABLE\VBCABLE_Driver_Pack45.zip'
+          $verified = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/Manage-VbCable.ps1 -Action Verify -ArchivePath $vendorZip 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0 -or $verified -notmatch 'Original VB-CABLE package verified') {
+            throw "Vendor manager signed-package verification regression: code=$LASTEXITCODE; log=$verified"
+          }
+          Write-Host 'PASS: Windows PowerShell 5.1 default paths and verified vendor package.'
 
       - name: Validate CW release invariants
         shell: pwsh
