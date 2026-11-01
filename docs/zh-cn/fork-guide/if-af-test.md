@@ -1,6 +1,6 @@
 # IF-AF-Test：12 kHz IF → SSB / CW / FM → WSJT-X
 
-> 仅适用于 `IF-AF-Test` 实验分支。默认关闭；不改动电台 PTT/CAT，不合并至正式 Release。所有指标以软件仿真为主，尚未在真实 IC-9700 的 USB IF 端点测量。
+> 仅适用于 `IF-AF-Test` 实验分支。默认关闭；不改动电台 PTT/CAT，不合并至正式 Release。已使用 IC-9700 实际 USB 12 kHz IF 与原机 LAN AF 双路录音对 USB 解调作离线对照；LSB/CW/FM 及 VB-CABLE 真实环回、WSJT-X 译码仍需分别做实机验收。
 
 ## 实现与信号处理
 
@@ -17,8 +17,8 @@
 
 1. IC-9700 `USB AF/IF Output = IF`，Windows 将 USB 录音端点设为 48 kHz。推荐不启用 Windows 音效增强、自动增益。
 2. SkyRoof → Settings → **12 kHz IF -> AF / WSJT-X (Test)**，先选择输入为 `Microphone (USB Audio CODEC)`，输入声道默认 **Left**；不再强制将立体声平均。
-3. 安装 VB-CABLE/虚拟声卡，在 `Virtual audio render device` 选 **CABLE Input**。不得选 `Speakers (USB Audio CODEC)`，该设备可能是 IC-9700 的 USB 发射调制输入，软件主动拒绝。
-4. `Enable USB IF -> AF = true`；`Demodulation = FollowRadio`，对于线性转发器不一致的模式可选 USB/LSB，必要时手动选择 CW 或 FM。
+3. 使用实验分支的 **VB-CABLE 集成安装包**，交互式安装默认勾选安装原厂基础版驱动；经 UAC 授权后按要求重启。旧版或未勾选时，可通过 Settings → **安装 VB-CABLE** 操作。`AudioRoute=AutoSignedCable` 自动选择播放端 **CABLE Input**；**不需要手动选择 `Virtual audio render device`**。仅使用手动 `ExistingVirtualCable` 时才选择该设备。严禁选 `Speakers (USB Audio CODEC)`，以防误接入 IC-9700 发射音频输入。
+4. 重启后确认 Windows 具有 **CABLE Input（播放）** 与 **CABLE Output（录音）** 两个端点，再设置 `Enable USB IF -> AF = true`、`Demodulation = FollowRadio`；该选项跟随 SkyRoof 当前接收/下行模式，不等于直接读取电台手动改变的 CI-V 模式。对于线性转发器可显式选择 USB/LSB；CW-LSB 需手动选择。
 5. WSJT-X → Settings → Audio → Input 选 **CABLE Output**；发射 Output 可按电台 USB 调制输入单独设置。WSJT-X CAT 建议通过 SkyCAT 4534 代理，SkyRoof 独立管理卫星多普勒。
 
 **输入与共享：** IF-AF 服务启动后，AFC/SSTV 如果选择同一 USB IF 录音端点，将订阅共享的原始 PCM；不同设备或 RS-BA1 回环仍走原来的独立来源。CW 解码器当前并未直接订阅共享 raw IF，可按需要从经 VAC 解调的 AF 输入接收，不能视为所有 CW 路径已统一。
@@ -76,7 +76,7 @@
 
 > 窗口并非额外等待时间：采集到首个最小 IF 样本后即可开始频率测量；软件需要运行 FFT/DSP/CAT 后才可能提交修正。以上为算法配置，不是实测的锁定时间。
 
-控制环采用质量门限和预测器的分离设计：新的真实载波才能产生 CAT AFC 增量；短时间失声时，显示带限频偏预测，**不依赖噪声继续调整频率**。超过预测上限后，以有限速率（160 Hz/s）释放残留 AFC 修正，使轨道多普勒恢复为唯一基准。发射 PTT 时冻结修正释放。
+控制环采用质量门限和预测器的分离设计：新的真实载波才能产生 CAT AFC 增量；短时间失声时，显示带限频偏预测，**不依赖噪声继续调整频率**。默认 `HoldLast` 保留最后确认的 AFC RX 附加修正，轨道多普勒继续运行；仅显式选择 `GentleRelease` 时才在失去参考 30 秒后以 10 Hz/s 缓慢释放。发射 PTT 时冻结修正及释放。
 
 发散处理不再永久进入 `Fault`。仅当独立、带时间戳的 AFC 自身 CAT 写频读回证明误差持续增大时，控制器才将累计修正折半回退并进入重新捕获。自动 RF/IF 方向必须通过多次一致的真实 CAT/IF 频移证据才能反转；`RfIfSign=±1` 属人工覆盖，出现矛盾时不会擅自反转人工设置，而提示需要检查并先回退旧修正。
 
@@ -99,7 +99,7 @@
 
 ## IF-AF-Audio device architecture
 
-For the signed virtual microphone implementation and SkyRoof link-bar details, see [IF-AF-Audio 虚拟声卡与低延迟链路](../../../drivers/IF-AF-Audio/DESIGN.md). The in-app user-mode route is implemented in this test branch; the signed WDK driver is not yet built or distributed.
+历史自研 IF-AF-Audio WaveRT 研究档案见 [设计文档](../../../drivers/IF-AF-Audio/DESIGN.md)。**当前发行方案不是自研签名 WDK 驱动**，而是嵌入并校验 VB-Audio 原厂基础版驱动 ZIP，通过官方安装器完成部署。
 
 
 ## SO-50 AFC 修复：弱 FM 验证与丢失信号保持
@@ -138,9 +138,8 @@ For the signed virtual microphone implementation and SkyRoof link-bar details, s
 - **禁止静默回退到 IC-9700 USB Audio CODEC 发射端、默认系统扬声器**。
   找不到完整端点时直接报错。设备名可用于识别，但不能当作密码学
   签名验证；内核驱动能否装载由 Windows 系统驱动策略决定。
-- 设置窗口新增“获取官方 VB-CABLE”和“重新检测音频端点”。
-  不把第三方厂商的 INF/SYS/CAT 嵌入安装包，不擅自重签名，也不会替用户
-  静默卸载其声卡。SkyRoof 通过 UAC 调用原厂工具进行安装和用户授权的卸载，绝不直接修改第三方驱动文件。
+- 设置窗口提供“安装 VB-CABLE”“卸载 VB-CABLE”“重新检测音频端点”。
+  实验安装包携带完整、未经修改的原厂 ZIP（其中自然包含厂商原有的 INF/SYS/CAT）；不拆改、不重新签署驱动文件。安装须经 UAC 授权，卸载须用户确认且 SkyRoof 记录为自己安装的实例，绝不自动移除其他软件已安装的声卡。
 - 避免 IF-AF 与原有 SkyRoof Slicer → VAC 同时写入同一虚拟声卡；
   用户上传的 USB IF/LAN AF 录音不等同于已验证第三方 cable 环回性能。
 
@@ -149,3 +148,14 @@ For the signed virtual microphone implementation and SkyRoof link-bar details, s
 
 
 **2026-11-01 一体化打包方案：**VB-Audio 官网允许在 Donationware 条件成立时将基础版 VB-CABLE 原始包嵌入应用安装器并静默安装，须明确告知来源和支持／捐赠渠道（详见 https://vb-audio.com/Services/licensing.htm）。SkyRoof 使用原包 `VBCABLE_Driver_Pack45.zip`，发行时不提取重签名内核驱动；校验原始 SHA256 与原厂签名后由原厂 `VBCABLE_Setup_x64.exe` 安装。卸载仅允许操作者确认且 SkyRoof 实际安装过的实例，避免误删其他软件依赖。
+
+## 2026-11-01 源码复审及实机验收顺序
+
+1. **初始安全检查：**确认电台 `USB AF/IF Output=IF`，Windows USB IF 为 48 kHz；SkyRoof 的 IF→AF 输入选 IC-9700 USB Audio CODEC 的真实 IF 声道，默认 Left；AFC 独立采集默认也为 Left，若选 Right 请在 AFC 中显式指定。严禁将 CABLE Output 选作 IF 输入，严禁将 IC-9700 USB 扬声器选作解调 AF 输出。
+2. **USB 与 LSB：**用强度稳定的接收信号轮流切换 USB/LSB；WSJT-X Input 使用 CABLE Output。检查 IF Input/Output Samples 是否单调增长、DroppedBlocks/ClippedSamples 是否保持 0，确认错边带不应产生与正确边带同样的声音。
+3. **CW 与 FM：**CW 测试 250–1150 Hz（建议 700 Hz）音调，另测反向 CW 需手动选 `CwLsb`；FM 分别试 2.5 kHz/5 kHz 偏移参数，避免发射端真实频偏与参数不一致。记录监听和音频水位，勿以响度判断解调灵敏度。
+4. **AFC：**从 Assist 开始观察 IF 峰和 CAT 读回，确认模式映射正确；FM 短发射应先捕获载波、随后才有限速校正。无稳定导频的 SSB 不允许绝对 Auto。启用 Auto 前核对 CAT 方向，发射 PTT 时 RX 校正冻结；信号消失 10 s 的 `HoldLast` 不应归零。
+5. **音频冲突/丢块：**故意选择相同 CABLE Input 给旧 SDR Audio-to-VAC 与 IF→AF，启动应被拒绝；错误选择 CABLE Output 作 IF 捕获也应被拒绝。故意制造高 CPU 负载观察欠载/丢块计数，恢复后无陈旧音频重放。更改 AFC 捕获声道后须重新开启该捕获链。
+6. **端到端：**记录 VB-CABLE 捕获 WAV 与原始 LAN AF（使用独立设备录制，避免混音回环）并对齐包络，检查 WSJT-X FT4/FT8/Q65 信号水位、音频频偏与解码结果。需按多个独立周期统计，不能只凭一次成功判定等效接收性能。
+
+在 2026-11-01 原始 IC-9700 **USB 模式** IF/LAN AF 对照录音的 50–80 s 片段中，离线 USB 复数滤波 AF 与 LAN AF 短时包络相关约 **0.953**（相对时移约 **+320 ms**）；换用 LSB 解调得到约 **0.018**。这证明了该录音的 USB 频谱方向与软件 USB 选边带的一致性，但既不是第三方虚拟声卡驱动环回测试，也不是对 LSB/CW/FM 独立实机验收。

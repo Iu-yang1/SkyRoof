@@ -26,7 +26,7 @@ Recording is independent of SkyRoof's separate `Recorder` WAV utility. If experi
 
 The experimental RX-only residual AFC now uses mode-specific IF windows and independent source-confidence gates: FM minimum 400 ms, 500-ms analysis window and 125-ms cadence; CW minimum 375 ms, 550-ms window, 125-ms cadence and adaptive 4096/8192-bin local tone detection; SSB with explicit stable pilot minimum 375 ms, 600-ms window and 150-ms cadence; SSB without pilot remains **relative drift only (Assist)** with a 750-ms minimum.
 
-A bounded alpha-beta residual predictor coasts through 1.5 s FM / 2.5 s CW / 2.0 s piloted-SSB gaps. Predicted residual never alone authorizes new CAT AFC steps; real, unambiguous carrier measurements do. Once the coast horizon expires, prior AFC-only RX correction decays at 160 Hz/s back toward the orbital Doppler model; it is frozen during PTT. No changes are made to TX, persisted transponder corrections or the orbital model.
+A bounded alpha-beta residual predictor coasts through 1.5 s FM / 2.5 s CW / 2.0 s piloted-SSB gaps. Predicted residual never alone authorizes new CAT AFC steps; real, unambiguous carrier measurements do. Once the coast horizon expires, the default `HoldLast` policy retains the last verified AFC RX correction while orbital Doppler continues. Only an explicitly selected `GentleRelease` releases at 10 Hz/s after 30 seconds without signal; release is frozen during PTT. No changes are made to TX, persisted transponder corrections or the orbital model.
 
 Verified, time-aligned **AFC-authored** CAT readbacks indicating repeated divergence cause bounded rollback and reacquisition, rather than latching Fault while leaving a stale offset. Sign reversal is eligible only for auto polarity with repeated independent CAT/IF evidence. An explicit manual sign is never silently flipped. Rate limits and AFC servo bounds remain in place.
 
@@ -87,9 +87,7 @@ or special test-signing boot policy required.
   it NEVER silently selects the system default render device or Icom USB
   TX audio. The installed driver is governed by Windows code integrity;
   name recognition alone is **not** cryptographic verification of a signer.
-- Settings includes an official VB-CABLE download link and an endpoint
-  rescan button; SkyRoof does not embed, re-sign, patch, silently download
-  or remove the third-party driver. Use vendor maintenance/uninstall tools.
+- Settings provides **Install VB-CABLE**, **Uninstall VB-CABLE**, and endpoint rescan. The experimental installer embeds the **unaltered original base VB-CABLE ZIP** (including the vendor's own INF/SYS/CAT), verifies its SHA-256 and signed artifacts, and invokes vendor setup with UAC permission. Removal requires user confirmation and SkyRoof-owned installation; never remove another application's existing driver.
 - Do not use the *same* cable as an independent Slicer → VAC output
   while IF-AF is running. The user-supplied USB IF and LAN original AF
   recordings are not a third-party cable round-trip validation.
@@ -100,3 +98,10 @@ disabled. The experimental installer now bundles SkyRoof plus the **unmodified o
 
 
 **2026-11-01 packaging update:** Under the [official VB-Audio donationware bundling grant](https://vb-audio.com/Services/licensing.htm), SkyRoof embeds the unmodified official base `VBCABLE_Driver_Pack45.zip`, verifies the package SHA-256 and executable/catalog signatures, and invokes VB-Audio's own driver setup with administrator consent. The default interactive installer offers optional automated installation, requires a Windows restart, and never changes Secure Boot or test-signing policy. A shared vendor driver installed by somebody else is not removed by SkyRoof. This does not apply to paid A+B/C+D drivers.
+
+## 2026-11-01 acceptance notes
+
+- FollowRadio uses SkyRoof's current terrestrial RX selection or satellite downlink mode; do not assume a manual external CI-V mode change will be followed automatically. CW-LSB is manually selectable. AFC independent WASAPI IF capture defaults to Left, configurable separately; IF-AF/AFC share unmodified IF only when both device ID and selected channel match.
+- Legacy SDR Audio-to-VAC and automatically selected VB-CABLE CABLE Input may not be used simultaneously. The IF-AF path also rejects using the same VB-CABLE recording endpoint (CABLE Output) as its IF source. Detect missing 10-ms PCM blocks using the capture sample sequence; do not splice NCO phase across a lost block.
+- In a 30-second segment of actual 2026-11-01 IC-9700 **USB** IF and LAN AF captures, a matching 257-tap complex USB sideband filter produced an approximately **0.953** short-time envelope correlation after +320-ms relative alignment; the wrong LSB sideband produced approximately **0.018**. Other modes and real VB-CABLE/WSJT-X receive performance still require independent hardware tests.
+- For real hardware acceptance, verify the full VB-CABLE render/capture pair and reboot, start with AFC Assist, test USB/LSB/CW/FM separately, inspect IF PCM counters and output underruns, confirm CW pitch and FM deviation, then carefully enable AFC Auto with verified CAT frequency direction. Ensure PTT freezes AFC writes and HoldLast retains the RX correction through signal gaps. Compare WSJT-X FT4/FT8/Q65 decodes over multiple periods, not one isolated decode.

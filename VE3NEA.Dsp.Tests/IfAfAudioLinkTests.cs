@@ -121,7 +121,7 @@ namespace VE3NEA.Dsp.Tests
 
     [Fact]
     public void AfcAndIfAfIndependentCaptureDefaultsToSameLeftChannel() =>
-      Assert.Equal(AudioChannelChoice.Left, new AfcSettings().CaptureChannel);
+      Assert.Equal(AudioChannelChoice.Left, new SkyRoof.AfcSettings().CaptureChannel);
 
     [Fact]
     public void OnlyCompleteDeveloperPackageIsRecognized()
