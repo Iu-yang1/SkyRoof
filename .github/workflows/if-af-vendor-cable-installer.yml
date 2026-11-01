@@ -5,7 +5,11 @@ on:
     branches: [IF-AF-Test]
     paths:
       - 'SkyRoof/IF/**'
+      - 'SkyRoof/AFC/**'
+      - 'SkyRoof/Forms/MainForm.cs'
+      - 'SkyRoof/Widgets/FrequencyWidget.cs'
       - 'VE3NEA.Dsp.Tests/IfAfAudioLinkTests.cs'
+      - 'VE3NEA.Dsp.Tests/IfAfSimulatedHardwareTests.cs'
       - 'SkyRoof/Settings/SettingsDialog.cs'
       - 'install/SkyRoof.iss'
       - '.github/workflows/if-af-vendor-cable-installer.yml'
