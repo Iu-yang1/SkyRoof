@@ -12,7 +12,7 @@ namespace SkyRoof.IF
     long ClippedSamples, DateTime LastInputUtc, double InputRmsDbfs,
     double ProcessingQueueLagMs, string Detail,
     int RequestedRenderPeriodMs, bool RenderRunning,
-    string VirtualDeviceStatus);
+    string VirtualDeviceStatus, long OutputUnderrunSamples);
 
   /// <summary>Single-owner 48-kHz IF WASAPI stream; fans out unmodified IF
   /// to AFC and SSTV synchronously and produces filtered AF on a separate
@@ -22,7 +22,7 @@ namespace SkyRoof.IF
   {
     private InputSoundcard<float>? capture;
     private OutputSoundcard<float> vac = new(samplingRate: 48000,
-      latencyMilliseconds: 40);
+      latencyMilliseconds: 40, padSilenceOnUnderrun: true);
     private string? resolvedRenderId;
     private string virtualDeviceStatus = "Not probed";
     private Channel<Frame>? queue;
@@ -50,7 +50,8 @@ namespace SkyRoof.IF
       new DateTime(Math.Max(0, Interlocked.Read(ref lastUtcTicks)), DateTimeKind.Utc),
       Volatile.Read(ref lastRmsDbfs),
       Interlocked.Read(ref lastProcessingLagUs) / 1000.0, detail,
-      vac.RequestedLatencyMs, vac.IsRunning, virtualDeviceStatus);
+      vac.RequestedLatencyMs, vac.IsRunning, virtualDeviceStatus,
+      vac.UnderrunSamples);
 
     public void Apply(IfAfSettings config, IfAfMode mode)
     {
@@ -125,7 +126,8 @@ namespace SkyRoof.IF
       cancel = source;
       vac.Dispose();
       vac = new OutputSoundcard<float>(samplingRate: 48000,
-        latencyMilliseconds: (int)config.LatencyPreset);
+        latencyMilliseconds: (int)config.LatencyPreset,
+        padSilenceOnUnderrun: true);
       resolvedRenderId = outputId;
       capture = new InputSoundcard<float>(config.InputDeviceId, 48000,
         captureBufferMilliseconds: 20, readerBlockSizeSamples: 480,
