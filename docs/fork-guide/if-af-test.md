@@ -48,3 +48,16 @@ These are **minimum PCM observation durations**, not measured lock latency, guar
 ## IF-AF-Audio device architecture
 
 For the signed virtual microphone implementation and SkyRoof link-bar details, see [IF-AF-Audio virtual microphone and low-latency pipeline](../../drivers/IF-AF-Audio/README.md). The in-app user-mode route is implemented in this test branch; the signed WDK driver is not yet built or distributed.
+
+
+## SO-50-style FM acquisition and signal-loss policy
+
+Original code required >=40% quality at the FM estimator and >=60% at the AFC controller/predictor. Short low-quality but narrow-sigma FM candidates were ignored. The test branch now permits FM candidates >=22% quality and sufficient relative spectral evidence, but CAT remains gated behind **three consistent new-time epochs separated by >=80 ms**, candidate sigma <=45 Hz, and successive offset disagreement <=max(55 Hz, 2.5*sigma). These overlapped analysis windows are NOT statistically independent. CW and SSB quality thresholds are unaffected.
+
+**Settings → AFC → SignalLossPolicy**:
+
+- `HoldLast` (default): maintain the last *verified* RX AFC residual through FM voice gaps, QSB and CW key-up while orbital Doppler continues as usual. Coasting can expire into Hold/Lost *without changing the retained frequency correction*.
+- `GentleRelease`: an explicitly selected alternative; wait 30 seconds after the last valid signal, then release at 10 Hz/s, frozen during PTT.
+- Manual retune, transponder/mode change, explicit AFC disable/reinitialization and independently verified wrong CAT polarity still have their own appropriate reset/rollback logic.
+
+The UI distinguishes `Weak FM temporally verified` from raw single-window 26% quality rather than falsely displaying it as 60%. These are software acceptance gates, not an IC-9700 lock-time guarantee.
