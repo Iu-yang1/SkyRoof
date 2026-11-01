@@ -692,6 +692,8 @@ namespace SkyRoof
           $"\nFrames={state.InputSamples} Out={state.OutputSamples}" +
           $"\nQueue drops={state.DroppedBlocks} AF clipping={state.ClippedSamples}" +
           $"\nQueue age={state.ProcessingQueueLagMs:F1} ms (not total audio latency)" +
+          $"\nWASAPI requested period={state.RequestedRenderPeriodMs} ms, " +
+          $"underrun={state.OutputUnderrunSamples} samples" +
           $"\n{state.Detail}";
       }
     }
@@ -1111,6 +1113,7 @@ namespace SkyRoof
           $"Queue age: {x.ProcessingQueueLagMs:F1} ms (host estimate)\n" +
           $"WASAPI render period requested: {x.RequestedRenderPeriodMs} ms\n" +
           $"Dropped blocks: {x.DroppedBlocks}\nClipped: {x.ClippedSamples}\n" +
+          $"Output underrun samples: {x.OutputUnderrunSamples}\n" +
           $"Playback active: {x.RenderRunning}\n\n{x.VirtualDeviceStatus}\n\n{x.Detail}\n\n" +
           "The WSJT-X decode state and device hardware latency are not directly observable here.",
           "IF-AF-Audio link diagnostics",
@@ -1137,7 +1140,8 @@ namespace SkyRoof
           $"IF → DDC → AF → {(ctx.Settings.IfAf.AudioRoute == IfAfAudioRoute.PreferIfAfAudio ? "IF-AF-Audio" : "VAC")}" +
           $"\nQueue age: {x.ProcessingQueueLagMs:F1} ms (host estimate)" +
           $"\nWASAPI period: {x.RequestedRenderPeriodMs} ms (requested)" +
-          $"\nDrops: {x.DroppedBlocks}, clipping: {x.ClippedSamples}" +
+          $"\nDrops: {x.DroppedBlocks}, clipping: {x.ClippedSamples}, " +
+          $"output silence-padded: {x.OutputUnderrunSamples} samples" +
           $"\n{x.VirtualDeviceStatus}";
       }
     }
