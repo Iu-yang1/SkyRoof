@@ -420,7 +420,9 @@ namespace SkyRoof.AFC
             obs.SampleUtc < recoveryUntilUtc ? "Divergence recovery: verifying new IF" :
             sign == 0 && state.Control == AfcControlMode.Auto
               ? "Awaiting nominal RF/IF mapping"
-              : "Tracking reference"
+              : corroboratedFm && obs.Confidence < .6
+                ? "Weak FM carrier: temporal consistency verified"
+                : "Tracking reference"
         };
       }
     }

@@ -754,6 +754,7 @@ namespace SkyRoof.AFC
       "Divergence recovery: verifying new IF" => T("发散恢复：验证后续 IF 观测", "Divergence recovery: checking fresh IF"),
       "No carrier: reverted to orbital Doppler prediction" => T("载波消失，已恢复轨道多普勒预测", "Carrier lost: orbital Doppler only"),
       "No carrier: releasing stale AFC correction toward Doppler" => T("载波消失，正在平滑释放 AFC 旧修正", "Carrier lost: releasing stale AFC offset"),
+      "Weak FM carrier: temporal consistency verified" => T("弱 FM 载波：连续短窗频偏一致，已确认", "Weak FM carrier: temporal consistency verified"),
       "No carrier: holding last verified AFC bias; Doppler still running" => T("信号丢失：保持最后可信 AFC 修正，轨道多普勒继续", "Signal lost: holding verified AFC bias, orbital Doppler continues"),
       "No carrier: optional gentle residual release after 30s" => T("无信号超过30秒：按用户设置缓慢释放修正", "No carrier >30 s: optional gentle release"),
       "PTT active: AFC frozen" => T("正在发射，AFC 已冻结", "PTT active: AFC frozen"),
@@ -832,7 +833,10 @@ namespace SkyRoof.AFC
       bool validLatestReference = pipeline.LastObservation.HasValue &&
         latest.Generation == input.Generation && latest.Mode == currentMode &&
         latest.HasAbsoluteReference && !latest.Ambiguous &&
-        latest.Confidence >= .6;
+        (latest.Confidence >= .6 ||
+          (currentMode == AfcSignalMode.FM &&
+           latest.Confidence >= .22 && latest.SigmaHz <= 45 &&
+           s.State == AfcLockState.Locked));
       bool measured = validLatestReference &&
         s.LastObservationUtc != default &&
         (s.State is AfcLockState.Acquiring or AfcLockState.Locked or AfcLockState.Coasting or AfcLockState.Hold);
@@ -854,7 +858,14 @@ namespace SkyRoof.AFC
       metrics[1].ForeColor = measured && s.State == AfcLockState.Locked
         ? palette.Good : palette.Warning;
       string measureZh, measureEn;
-      if (pipeline.Completed == 0)
+      bool weakVerifiedFm = measured && currentMode == AfcSignalMode.FM &&
+        latest.Confidence < .6 && s.State == AfcLockState.Locked;
+      if (weakVerifiedFm)
+      {
+        measureZh = $"弱 FM 已时序确认：{latest.IfOffsetHz:+0;-0;0} Hz · σ {latest.SigmaHz:F0} Hz · 单窗质量 {latest.Confidence:P0}";
+        measureEn = $"Weak FM temporally verified: {latest.IfOffsetHz:+0;-0;0} Hz · σ {latest.SigmaHz:F0} Hz · individual quality {latest.Confidence:P0}";
+      }
+      else if (pipeline.Completed == 0)
       {
         int needed = AfcTrackingProfile.For(currentMode, cfg.SsbPilotEnabled,
           cfg.AcquisitionPreset).MinimumSamples;
