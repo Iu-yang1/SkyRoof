@@ -548,15 +548,8 @@ namespace SkyRoof.AFC
     {
       if (!active) return;
       if (control == AfcControlMode.Auto && !AutoAllowed) return;
-      if (control != AfcControlMode.Auto)
-        AbortPolarityCalibration();
-      else if (polarityProbe.State == AfcPolarityCalibrator.Phase.Failed)
-      {
-        // Clicking AUTO again explicitly retries calibration. FM must
-        // reacquire its nominal 12-kHz center, not use LockHere().
-        AbortPolarityCalibration();
-        owner.AfcController.Reset("Retrying verified CAT/IF calibration");
-      }
+      // No deliberate CAT tuning/restore cycle is needed to start Auto.
+      AbortPolarityCalibration();
       ctx.Settings.Afc.Control = control;
       owner.AfcController.Configure(currentMode, EffectiveControl());
       if (currentMode == AfcSignalMode.SSB && ctx.Settings.Afc.SsbPilotEnabled &&
@@ -579,45 +572,22 @@ namespace SkyRoof.AFC
               observation.Generation != input.Generation) return;
           var cfg = ctx.Settings.Afc;
           double readback = owner.GetAfcReadbackAt(observation.SampleUtc);
-          // An inferred sign from incidental Doppler motion is not proof.
-          // Only a deliberate, restored probe or an explicit operator
-          // mapping may open the automatic CAT servo.
-          bool explicitSign = cfg.RfIfSign is 1 or -1;
-          bool blocked = !explicitSign &&
-            polarityProbe.State != AfcPolarityCalibrator.Phase.Complete;
+          // Resolve the nominal IC-9700 12-kHz IF axis from the current
+          // receive mode without injecting a CAT probe or restore sequence.
+          // The controller still checks fresh IF, PTT, and closed-loop
+          // divergence; the user can override an inverted hardware path.
+          int sign = AfcDirectionResolver.Resolve(cfg.RfIfSign,
+            owner.RadioLink.TxCust != null
+              ? owner.RadioLink.DownlinkMode : Slicer.Mode.USB);
           owner.AfcController.Observe(observation, readback,
-            cfg.RfIfSign, Math.Clamp(cfg.MaxCorrectionHz, 1, 10000),
+            sign, Math.Clamp(cfg.MaxCorrectionHz, 1, 10000),
             Math.Clamp(cfg.FmDeadbandHz, 1, 500),
             Math.Clamp(cfg.ToneDeadbandHz, .5, 100),
             owner.IsAfcTransmitting,
             catReadbackIsTimeAligned: double.IsFinite(readback),
             confirmedOwnAfcReadback:
               owner.IsAfcReadbackConfirmedAt(observation.SampleUtc),
-            calibrationInProgress: blocked);
-          var snapshot = owner.AfcController.Snapshot;
-          bool eligible = !explicitSign &&
-            EffectiveControl() == AfcControlMode.Auto &&
-            !owner.IsAfcTransmitting &&
-            (snapshot.State == AfcLockState.Locked ||
-              polarityProbe.Active && snapshot.State == AfcLockState.Hold &&
-              (DateTime.UtcNow - snapshot.LastObservationUtc).TotalSeconds < 3);
-          var phaseBefore = polarityProbe.State;
-          bool probeAcknowledged = owner.IsAfcProbeReadbackConfirmedAt(
-            observation.SampleUtc, polarityProbe.PhaseStartedUtc);
-          polarityProbe.Observe(observation, readback,
-            probeAcknowledged, eligible, ctx.Settings.Cat.TuningStep,
-            DateTime.UtcNow, owner.PredictedRxCatRateHzPerSecond);
-          if (phaseBefore != polarityProbe.State)
-            Serilog.Log.Information(
-              "AFC polarity calibration: {Before} -> {After}, detail={Detail}, IF={If:F1} Hz, CAT={Cat:F0} Hz, readbackAck={Ack}, confidence={Confidence:P0}, sampleUtc={SampleUtc:o}",
-              phaseBefore, polarityProbe.State, polarityProbe.Detail,
-              observation.IfOffsetHz, readback, probeAcknowledged,
-              observation.Confidence, observation.SampleUtc);
-          if (polarityProbe.VerifiedSign != 0)
-            owner.AfcController.ConfirmCalibratedSign(
-              polarityProbe.VerifiedSign);
-          owner.SetAfcCalibrationOffsetHz(polarityProbe.OffsetHz,
-            polarityProbe.Active);
+            calibrationInProgress: false);
           spectrum.SetMeasurement(
             observation.HasAbsoluteReference && observation.Confidence > 0
               ? observation.IfOffsetHz : null,
@@ -734,17 +704,8 @@ namespace SkyRoof.AFC
     {
       RefreshLanguage();
       owner.AfcController.Tick(DateTime.UtcNow);
-      polarityProbe.Watchdog(DateTime.UtcNow,
-        active && EffectiveControl() == AfcControlMode.Auto &&
-        !owner.IsAfcTransmitting &&
-        (owner.AfcController.Snapshot.State == AfcLockState.Locked ||
-         polarityProbe.Active &&
-           owner.AfcController.Snapshot.State == AfcLockState.Hold &&
-           (DateTime.UtcNow -
-             owner.AfcController.Snapshot.LastObservationUtc).TotalSeconds < 3) &&
-        ctx.CatControl.Rx != null);
-      owner.SetAfcCalibrationOffsetHz(polarityProbe.OffsetHz,
-        polarityProbe.Active);
+      // Probe-free AFC: no temporary CAT calibration offsets or waiting.
+      owner.SetAfcCalibrationOffsetHz(0, false);
       var cfg = ctx.Settings.Afc;
       spectrum.SetReferenceLevel(cfg.SpectrumRefLevelDb);
       if (!ReferenceEquals(settingsGrid.SelectedObject, cfg))
@@ -851,16 +812,10 @@ namespace SkyRoof.AFC
         : T("状态: 关闭  ·  IF 输入尚未启动", "State: Off  ·  IF input not started");
       stateLabel.ForeColor = active &&
         s.State == AfcLockState.Locked ? palette.Good : palette.Warning;
-      string calibrationZh = polarityProbe.State switch
-      {
-        AfcPolarityCalibrator.Phase.Probing => "方向校准: 测试调谐",
-        AfcPolarityCalibrator.Phase.Restoring => "方向校准: 恢复并验证",
-        AfcPolarityCalibrator.Phase.Complete => "方向校准: 已验证",
-        AfcPolarityCalibrator.Phase.Failed =>
-          $"方向校准失败，禁止自动修正：{polarityProbe.Detail}",
-        _ => "方向校准: 等待可靠 CAT/IF 数据"
-      };
-      string calibrationEn = polarityProbe.Detail;
+      string calibrationZh = cfg.RfIfSign is 1 or -1
+        ? "手动 RF/IF 映射" : "RF/IF 模式推定（闭环发散保护）";
+      string calibrationEn = cfg.RfIfSign is 1 or -1
+        ? "Manual RF/IF mapping" : "Nominal IF mapping (divergence guarded)";
       stateDetail.Text = active
         ? T(
             $"{DetailText(s.Detail)}  ·  搜索 {cfg.TargetOffsetHz:+0;-0;0} Hz  ·  居中 {cfg.DesiredOffsetHz:+0;-0;0} Hz  ·  RF/IF 方向 {(s.MappingSign == 0 ? "待确认" : s.MappingSign.ToString("+0;-0"))}" +
