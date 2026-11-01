@@ -1206,8 +1206,14 @@ namespace SkyRoof
               Slicer.Mode.FM or Slicer.Mode.FM_D
               ? SstvIfModulation.Fm : SstvIfModulation.Ssb
         };
-        receiveSession.Start((SstvReceiveSource)rxSourceBox.SelectedIndex,
-          device.Id, ifMode);
+        if (rxSourceBox.SelectedIndex == 2 &&
+            ctx.IfAf?.IsRunning == true &&
+            string.Equals(ctx.IfAf.InputDeviceId, device.Id,
+              StringComparison.Ordinal))
+          receiveSession.StartShared(ctx.IfAf, ifMode);
+        else
+          receiveSession.Start((SstvReceiveSource)rxSourceBox.SelectedIndex,
+            device.Id, ifMode);
         rxToggleButton.Text = "停止接收";
         rxStatus.Text = "正在等待 SSTV 信号...";
       }

@@ -606,9 +606,16 @@ namespace SkyRoof.AFC
         currentMode = owner.CurrentAfcMode;
         AbortPolarityCalibration();
         var cfg = ctx.Settings.Afc;
-        input.Start(cfg.InputDeviceId, cfg.IfReferenceHz, currentMode,
-          cfg.SsbPilotEnabled, cfg.TargetOffsetHz,
-          cfg.InputSource, cfg.LoopbackDeviceId);
+        if (cfg.InputSource == AfcIfSource.WasapiCapture &&
+            ctx.IfAf?.IsRunning == true &&
+            string.Equals(ctx.IfAf.InputDeviceId, cfg.InputDeviceId,
+              StringComparison.Ordinal))
+          input.StartShared(ctx.IfAf, cfg.IfReferenceHz, currentMode,
+            cfg.SsbPilotEnabled, cfg.TargetOffsetHz);
+        else
+          input.Start(cfg.InputDeviceId, cfg.IfReferenceHz, currentMode,
+            cfg.SsbPilotEnabled, cfg.TargetOffsetHz,
+            cfg.InputSource, cfg.LoopbackDeviceId);
         if (!input.IsRunning)
           throw new InvalidOperationException("12 kHz IF input did not start. Check routing.");
         active = true;

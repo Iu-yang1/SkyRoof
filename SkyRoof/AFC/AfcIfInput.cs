@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Serilog;
 using VE3NEA;
+using SkyRoof.IF;
 
 namespace SkyRoof.AFC
 {
@@ -12,6 +13,7 @@ namespace SkyRoof.AFC
     private readonly InputSoundcard<float> input = new(
       captureBufferMilliseconds: 40, readerBlockSizeSamples: 1600);
     private readonly LoopbackInputSoundcard loopback = new();
+    private IfAfService? sharedIf;
     private readonly object sync = new();
     private readonly object displayGate = new();
     private readonly AfcIfDisplayAnalyzer displayAnalyzer = new();
@@ -95,9 +97,12 @@ namespace SkyRoof.AFC
     private double targetOffset;
 
     public event Action<AfcObservation>? ObservationAvailable;
-    public bool IsRunning => input.IsRunning || loopback.IsRunning;
+    public bool IsRunning => input.IsRunning || loopback.IsRunning ||
+      sharedIf?.IsRunning == true;
     public long Generation { get { lock (sync) return generation; } }
-    public string DeviceName => loopback.IsRunning ? loopback.GetDisplayName() : input.GetDisplayName();
+    public string DeviceName => sharedIf?.IsRunning == true
+      ? "Shared USB 12 kHz IF" : loopback.IsRunning ? loopback.GetDisplayName()
+        : input.GetDisplayName();
 
     public AfcIfInput()
     {
@@ -117,6 +122,7 @@ namespace SkyRoof.AFC
       if (source == AfcIfSource.PlaybackLoopback && string.IsNullOrWhiteSpace(loopbackDevice))
         throw new ArgumentException("Select the remote IF playback endpoint.");
       var newProcessor = new AfcSignalProcessing(48000, referenceHz);
+      DetachShared();
       input.Enabled = false;
       loopback.Enabled = false;
       if (source == AfcIfSource.PlaybackLoopback)
@@ -138,6 +144,31 @@ namespace SkyRoof.AFC
       }
       if (source == AfcIfSource.PlaybackLoopback) loopback.Enabled = true;
       else input.Enabled = true;
+    }
+
+    public void StartShared(IfAfService hub, double referenceHz,
+      AfcSignalMode signalMode, bool ssbPilot, double offset)
+    {
+      ArgumentNullException.ThrowIfNull(hub);
+      if (!hub.IsRunning) throw new InvalidOperationException("Shared IF input stopped");
+      Stop();
+      lock (sync)
+      {
+        generation++;
+        processor = new AfcSignalProcessing(48000, referenceHz);
+        mode = signalMode;
+        pilot = ssbPilot;
+        targetOffset = offset;
+      }
+      sharedIf = hub;
+      hub.RawIfAvailable += OnSamples;
+    }
+
+    private void DetachShared()
+    {
+      var hub = sharedIf;
+      sharedIf = null;
+      if (hub != null) hub.RawIfAvailable -= OnSamples;
     }
 
     public void UpdateTarget(AfcSignalMode signalMode, bool ssbPilot, double offset)
@@ -176,6 +207,7 @@ namespace SkyRoof.AFC
 
     public void Stop()
     {
+      DetachShared();
       input.Enabled = false;
       loopback.Enabled = false;
       lock (sync)

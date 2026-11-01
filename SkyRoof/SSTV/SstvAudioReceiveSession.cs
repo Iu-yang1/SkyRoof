@@ -8,6 +8,7 @@ using NAudio.Wave;
 using Serilog;
 using VE3NEA;
 using VE3NEA.SkySSTV;
+using SkyRoof.IF;
 
 namespace SkyRoof.SSTV
 {
@@ -35,6 +36,7 @@ namespace SkyRoof.SSTV
     private readonly InputSoundcard<float> capture = new(
       captureBufferMilliseconds: 40, readerBlockSizeSamples: 1600);
     private readonly LoopbackInputSoundcard loopback = new();
+    private IfAfService? sharedIf;
     private readonly object gate = new();
     private CancellationTokenSource? cancel;
     private Channel<float[]>? channel;
@@ -74,7 +76,8 @@ namespace SkyRoof.SSTV
     /// <summary>Ownership of the bitmap is transferred to event handlers.</summary>
     public event Action<Bitmap, string, bool, double>? RasterImageAvailable;
     public long DroppedBlocks => Interlocked.CompareExchange(ref dropped, 0, 0);
-    public bool IsRunning => capture.IsRunning || loopback.IsRunning;
+    public bool IsRunning => capture.IsRunning || loopback.IsRunning ||
+      sharedIf?.IsRunning == true;
 
     public SstvAudioReceiveSession()
     {
@@ -130,8 +133,40 @@ namespace SkyRoof.SSTV
       }
     }
 
+    public void StartShared(IfAfService hub, SstvIfModulation ifModulation)
+    {
+      ArgumentNullException.ThrowIfNull(hub);
+      if (!hub.IsRunning) throw new InvalidOperationException("Shared IF input stopped");
+      Stop();
+      Interlocked.Exchange(ref manuallyRequestedMode, null);
+      var next = Channel.CreateBounded<float[]>(new BoundedChannelOptions(16)
+      {
+        SingleReader = true,
+        SingleWriter = false,
+        FullMode = BoundedChannelFullMode.Wait
+      });
+      var token = new CancellationTokenSource();
+      lock (gate)
+      {
+        int version = ++epoch;
+        channel = next;
+        cancel = token;
+        Interlocked.Exchange(ref dropped, 0);
+        Interlocked.Exchange(ref autoVisCorrectionHz, 0);
+        worker = Task.Run(() => RunAsync(next.Reader, token.Token,
+          SstvReceiveSource.Capture12kIf, version, ifModulation));
+      }
+      sharedIf = hub;
+      hub.RawIfAvailable += OnSamples;
+    }
+
     public void Stop()
     {
+      if (sharedIf != null)
+      {
+        sharedIf.RawIfAvailable -= OnSamples;
+        sharedIf = null;
+      }
       capture.Enabled = false;
       loopback.Enabled = false;
       lock (gate)
