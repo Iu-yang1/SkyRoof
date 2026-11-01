@@ -7,7 +7,7 @@ namespace SkyRoof.SSTV
   /// Track the 1200-Hz horizontal sync tone throughout a Robot/PD picture.
   /// The header gives only an initial AF offset; the Doppler residual can
   /// continue to drift over a several-minute linear-satellite picture.
-  /// This conservative observation-only tracker adjusts the software
+  /// This bounded, faster observation-only tracker adjusts the software
   /// baseband translator, never RF CAT or transmitter tuning.
   /// </summary>
   public sealed class SstvNativeLineSyncAfc
@@ -92,7 +92,7 @@ namespace SkyRoof.SSTV
         if (double.IsFinite(residual) && Math.Abs(residual) <= 70)
         {
           estimatedOffsetHz = Math.Clamp(
-            estimatedOffsetHz + .22 * residual, -400, 400);
+            estimatedOffsetHz + .45 * residual, -400, 400);
           accepted++;
           OffsetUpdated?.Invoke(estimatedOffsetHz);
         }
