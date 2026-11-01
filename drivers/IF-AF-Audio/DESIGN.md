@@ -1,6 +1,6 @@
 # IF-AF-Audio 虚拟录音端点与低延迟链路设计
 
-> 当前状态：**用户态低延迟链路与状态条已实现；独立的 Windows 虚拟音频驱动尚未开发、签名或安装**。只有 Windows 设备管理器和录音设备列表真实存在端点后，WSJT-X 才能选择 `IF-AF-Audio`。不要以软件内部队列冒充 Windows 虚拟声卡。
+> 当前状态：**已引入基于 Microsoft SysVAD + MIT 开源 LoopIt7 Cable 的 WaveRT 驱动源代码与独立 IF-AF-Audio 端点补丁，并增加 Windows WDK 构建工作流；尚未经过实际 Windows 端点安装、真实音频环回、HLK 或微软正式签名验收**。请以驱动构建 Actions 结果和实机录音设备枚举为准。此阶段不能将软件内部队列冒充 Windows 虚拟声卡。
 
 ## 驱动分层设计
 

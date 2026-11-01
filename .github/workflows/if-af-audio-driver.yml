@@ -1,0 +1,60 @@
+name: IF-AF-Audio WDK Driver (experimental)
+
+on:
+  push:
+    branches: [IF-AF-Test]
+    paths:
+      - 'drivers/IF-AF-Audio/**'
+      - '.github/workflows/if-af-audio-driver.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wavert:
+    name: Build SysVAD WaveRT x64 + INF/CAT validation
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - name: Checkout SkyRoof
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
+
+      - name: Verify WDK and Python
+        shell: pwsh
+        run: |
+          python --version
+          $wdk = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\build" -Recurse -Filter WindowsDriver.Common.targets -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $wdk) { throw "Windows Driver Kit unavailable on runner; refusing to pretend a driver was compiled." }
+          Write-Host "WDK: $($wdk.FullName)"
+
+      - name: Fetch pinned SysVAD and apply MIT cable + SkyRoof overlay
+        shell: pwsh
+        run: ./drivers/IF-AF-Audio/scripts/fetch-sample.ps1 -Force
+
+      - name: Compile WaveRT + validate INF + produce unsigned CAT
+        shell: pwsh
+        run: ./drivers/IF-AF-Audio/scripts/build.ps1 -Configuration Release -Platform x64
+
+      - name: Verify package identity
+        shell: pwsh
+        run: |
+          $package = "drivers/IF-AF-Audio/vendor/audio/sysvad/TabletAudioSample/x64/Release/Package"
+          foreach ($name in @('IfAfAudio.sys', 'IfAfAudio.inf', 'ifafaudio.cat')) {
+            if (-not (Test-Path (Join-Path $package $name))) { throw "Missing $name" }
+          }
+          $inf = Get-Content (Join-Path $package 'IfAfAudio.inf') -Raw
+          if ($inf -notmatch 'Root\\IfAfAudio' -or $inf -notmatch 'IF-AF-Audio Playback') {
+            throw "Bad driver endpoint identity"
+          }
+          Write-Host "UNSIGNED DEVELOPMENT PACKAGE ONLY. NO INSTALLATION AND NO MICROSOFT RELEASE SIGNATURE."
+
+      - name: Upload unsigned developer package (never auto install)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: IF-AF-Audio-UNSIGNED-WDK-DEV-ONLY
+          path: drivers/IF-AF-Audio/vendor/audio/sysvad/TabletAudioSample/x64/Release/Package/*
+          if-no-files-found: error

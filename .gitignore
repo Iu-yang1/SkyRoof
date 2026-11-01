@@ -377,3 +377,6 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Experimental SysVAD source checkout and WDK build products (never commit)
+/drivers/IF-AF-Audio/vendor/
