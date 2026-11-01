@@ -44,3 +44,7 @@ Under **AFC → Advanced settings → Acquisition strategy (speed / sensitivity)
 | Sensitive | 500 ms | 375 ms | 375 ms | More integration for weak conditions |
 
 These are **minimum PCM observation durations**, not measured lock latency, guaranteed sensitivity improvements, or CAT tuning rates. The absolute carrier confidence threshold and readback safeguards remain unchanged. Overlapping windows share samples and are not counted as independent confidence confirmations. Suppressed-carrier SSB without a pilot remains Assist-only. A single in-flight DSP measurement prevents CPU overload; switch to Fast if CPU is limited.
+
+## IF-AF-Audio device architecture
+
+For the signed virtual microphone implementation and SkyRoof link-bar details, see [IF-AF-Audio virtual microphone and low-latency pipeline](../../drivers/IF-AF-Audio/README.md). The in-app user-mode route is implemented in this test branch; the signed WDK driver is not yet built or distributed.
