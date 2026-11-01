@@ -48,9 +48,9 @@ Build outputs are produced into ignored `vendor/` and never committed.
 
 `build.ps1` does a clean rebuild of both the SysVAD common library and
 TabletAudioSample driver, runs `InfVerif` and `Inf2Cat`, and stages
-**unsigned** `IfAfAudio.sys`, `IfAfAudio.inf` and `ifafaudio.cat`.
+**development-only** `IfAfAudio.sys`, `IfAfAudio.inf` and `ifafaudio.cat`.
 CI uses the Windows 2022 GitHub-hosted runner with VS2022 + WDK and uploads
-an explicitly unsigned development artifact. CI does not create a release,
+a development-only artifact (WDK may auto-test-sign the SYS, but the package has no Microsoft release signature). CI does not create a release,
 enable test-signing, disable Secure Boot, or install an unsigned driver.
 
 ## Validation gates
@@ -69,7 +69,7 @@ enable test-signing, disable Secure Boot, or install an unsigned driver.
    signing (attestation / WHQL as applicable) and acceptance testing.
    Open-source status does **not** eliminate Windows kernel signature checks.
 
-Do not install this unsigned CI artifact on a daily-use host, change boot
+Do not install this development-only CI artifact on a daily-use host, change boot
 security settings to bypass checks, or ship it with the normal SkyRoof setup.
 
 ### Provenance and licensing

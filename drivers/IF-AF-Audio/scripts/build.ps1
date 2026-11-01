@@ -117,4 +117,4 @@ Write-Host ''
 Get-ChildItem $output | ForEach-Object { Write-Host ("  {0,-20} {1:yyyy-MM-dd HH:mm:ss}" -f $_.Name, $_.LastWriteTime) }
 Write-Host ''
 Write-Host "output -> $output" -ForegroundColor Green
-Write-Host 'Next: drivers\IF-AF-Audio\README.md'
+Write-Host 'Next: driver-signing policy and isolated validation; NEVER install this package on a daily-use host.'

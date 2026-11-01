@@ -50,11 +50,14 @@ jobs:
           if ($inf -notmatch 'Root\\IfAfAudio' -or $inf -notmatch 'IF-AF-Audio Playback') {
             throw "Bad driver endpoint identity"
           }
-          Write-Host "UNSIGNED DEVELOPMENT PACKAGE ONLY. NO INSTALLATION AND NO MICROSOFT RELEASE SIGNATURE."
+          $sig = Get-AuthenticodeSignature (Join-Path $package 'IfAfAudio.sys')
+          Write-Host "Kernel SYS authenticode status: $($sig.Status)"
+          Write-Host "Kernel SYS signer: $($sig.SignerCertificate.Subject)"
+          Write-Host "DEVELOPMENT PACKAGE ONLY: build-system test signing is NOT Microsoft hardware release signing."
 
-      - name: Upload unsigned developer package (never auto install)
+      - name: Upload development package (NOT Microsoft release-signed)
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: IF-AF-Audio-UNSIGNED-WDK-DEV-ONLY
+          name: IF-AF-Audio-WDK-DEV-NOT-MS-RELEASE-SIGNED
           path: drivers/IF-AF-Audio/vendor/audio/sysvad/TabletAudioSample/x64/Release/Package/*
           if-no-files-found: error
