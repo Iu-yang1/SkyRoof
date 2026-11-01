@@ -1,6 +1,6 @@
 # IF-AF-Test: 12-kHz IF to SSB/CW/FM audio for WSJT-X
 
-Experimental branch `IF-AF-Test` only; disabled by default, no radio PTT/CAT changes and not part of an official release.
+Experimental branch `IF-AF-Test` only; disabled by default, with no PTT/CAT writes from the IF-to-AF demodulator. The separately enabled AFC Auto controller can write bounded **RX-only** CAT frequency corrections; this experiment has not been merged into an official release.
 
 SkyRoof now provides a shared, single-owner 48-kS/s real 12-kHz IF capture and an independent mono AF → VAC path. A quarter-rate NCO translates the real IF; a 257-tap complex FIR selects USB (positive) or LSB (negative) frequencies in a nominal 180–3300 Hz passband, rather than folding both sidebands with a real product detector. CW selects a narrower 250–1150-Hz band. FM uses a 129-tap complex lowpass, conjugate-product discriminator, DC blocker and 95-tap AF lowpass. FM deviations 2.5 and 5 kHz are supported in configuration. Output is a separate VAC soundcard, *not* the SDR Slicer Output Stream.
 

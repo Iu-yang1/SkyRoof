@@ -1,6 +1,6 @@
 # IF-AF-Test：12 kHz IF → SSB / CW / FM → WSJT-X
 
-> 仅适用于 `IF-AF-Test` 实验分支。默认关闭；不改动电台 PTT/CAT，不合并至正式 Release。已使用 IC-9700 实际 USB 12 kHz IF 与原机 LAN AF 双路录音对 USB 解调作离线对照；LSB/CW/FM 及 VB-CABLE 真实环回、WSJT-X 译码仍需分别做实机验收。
+> 仅适用于 `IF-AF-Test` 实验分支。默认关闭；IF→AF 解调器本身不发送 PTT/CAT；独立的 AFC Auto 模块可在用户启用后通过 CAT 修改接收频率。尚未合并至正式 Release。已使用 IC-9700 实际 USB 12 kHz IF 与原机 LAN AF 双路录音对 USB 解调作离线对照；LSB/CW/FM 及 VB-CABLE 真实环回、WSJT-X 译码仍需分别做实机验收。
 
 ## 实现与信号处理
 
@@ -9,7 +9,7 @@
 - CW：独立正/负 CW 通道，约 250–1150 Hz。
 - FM：129-tap 复数基带低通（约 8.8 kHz）、相邻样本共轭乘积鉴频、7.5 Hz 去直流和 95-tap AF 低通（约 3.4 kHz）。2500/5000 Hz 峰值频偏可配置。
 - 数字输出：48 kS/s 单声道浮点 AF，独立 OutputSoundcard<float> 输出到 Windows **虚拟声卡播放端点**。不借用 SDR Slicer → VAC 输出流。
-- **不会**修改 IC-9700 的发射、CAT、卫星数据库或手动多普勒设置。
+- **IF→AF 解调器**不会修改 IC-9700 的发射、CAT、卫星数据库或手动多普勒设置；独立 **AFC Auto** 功能会对 RX CAT 进行受限频率修正，不控制 TX 或 PTT。
 
 设计参考：[GNU Radio Frequency Xlating FIR Filter](https://wiki.gnuradio.org/index.php/Frequency_Xlating_FIR_Filter)、[GNU Radio 源码](https://github.com/gnuradio/gnuradio/blob/main/gr-filter/lib/freq_xlating_fir_filter_impl.cc)、[SoapySDR Device/Stream API](https://pothosware.github.io/SoapySDR/doxygen/latest/classSoapySDR_1_1Device.html)。采用其**频移-滤波、明确复数/实数样本格式、独占流所有权和显式采样率**理念；不声称直接复用 GNU Radio/SoapySDR 的软件或代码。
 
