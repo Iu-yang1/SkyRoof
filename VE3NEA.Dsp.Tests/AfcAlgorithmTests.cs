@@ -378,12 +378,13 @@ namespace VE3NEA.Dsp.Tests
 
 
     [Fact]
-    public void Controller_ConfirmedDivergentAfcReadbacksStopAutomaticWrites()
+    public void Controller_DivergenceRollsBackButReacquiresWithoutPermanentFault()
     {
       var controller = new AfcController();
       controller.Configure(AfcSignalMode.CW, AfcControlMode.Auto);
       controller.CenterOn(0);
       int[] increasinglyWrong = { 100, 160, 260, 420, 680, 800 };
+      double priorPeak = 0;
       for (int k = 0; k < increasinglyWrong.Length; k++)
       {
         controller.Observe(new(AfcSignalMode.CW,
@@ -391,19 +392,18 @@ namespace VE3NEA.Dsp.Tests
           145000000 + 50 * k, 1, 2000, 20, 5, false,
           catReadbackIsTimeAligned: true,
           confirmedOwnAfcReadback: true);
+        priorPeak = Math.Max(priorPeak, controller.Snapshot.CorrectionHz);
       }
-      controller.Snapshot.State.Should().Be(AfcLockState.Fault);
-      controller.Tick(T0.AddMinutes(1));
-      controller.Snapshot.State.Should().Be(AfcLockState.Fault,
-        "the background timer must not silently clear a convergence fault");
-      double frozen = controller.Snapshot.CorrectionHz;
+      controller.Snapshot.State.Should().NotBe(AfcLockState.Fault);
+      controller.Snapshot.CorrectionHz.Should().BeLessThan(priorPeak,
+        "confirmed divergence must roll back part of the stale correction");
+      controller.Tick(T0.AddSeconds(6));
+      controller.Snapshot.State.Should().NotBe(AfcLockState.Fault);
       controller.Observe(new(AfcSignalMode.CW,
-        T0.AddSeconds(10), 42, 1400, 1, 1, true),
-        145000400, 1, 2000, 20, 5, false,
-        catReadbackIsTimeAligned: true, confirmedOwnAfcReadback: true);
-      controller.Snapshot.CorrectionHz.Should().Be(frozen);
-      controller.LockHere();
-      controller.Snapshot.State.Should().Be(AfcLockState.Acquiring);
+        T0.AddSeconds(7), 42, 180, 1, 1, true),
+        145000200, 1, 2000, 20, 5, false);
+      controller.Snapshot.State.Should().NotBe(AfcLockState.Fault,
+        "a new valid carrier must be accepted without manual reset");
     }
 
     [Fact]
