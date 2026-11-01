@@ -35,7 +35,7 @@ function Check-Signature([string]$path, [bool]$expectVendor) {
   if ($sig.Status -ne 'Valid' -or -not $sig.SignerCertificate) {
     throw "VB-CABLE package component has invalid Windows signature: $path ($($sig.Status))"
   }
-  if ($expectVendor -and $sig.SignerCertificate.Subject -notmatch '(?i)Vincent Burel|VB-AUDIO') {
+  if ($expectVendor -and $sig.SignerCertificate.Subject -notmatch '(?i)Vincent Burel|Burel Vincent|VB-AUDIO') {
     throw "Unexpected VB-CABLE setup publisher: $($sig.SignerCertificate.Subject)"
   }
   Write-Host ("Verified: {0} ({1})" -f (Split-Path $path -Leaf), $sig.SignerCertificate.Subject)
