@@ -10,8 +10,10 @@ namespace SkyRoof.AFC
   /// <summary>True 12-kHz IF PCM input, independent of the CW AF decoder.</summary>
   public sealed class AfcIfInput : IDisposable
   {
-    private readonly InputSoundcard<float> input = new(
-      captureBufferMilliseconds: 40, readerBlockSizeSamples: 1600);
+    private InputSoundcard<float> input = new(
+      captureBufferMilliseconds: 40, readerBlockSizeSamples: 1600,
+      channelChoice: AudioChannelChoice.Left);
+    private AudioChannelChoice captureChannel = AudioChannelChoice.Left;
     private readonly LoopbackInputSoundcard loopback = new();
     private IfAfService? sharedIf;
     private readonly object sync = new();
@@ -138,7 +140,8 @@ namespace SkyRoof.AFC
 
     public void Start(string? device, double referenceHz,
       AfcSignalMode signalMode, bool ssbPilot, double offset,
-      AfcIfSource source = AfcIfSource.WasapiCapture, string? loopbackDevice = null)
+      AfcIfSource source = AfcIfSource.WasapiCapture, string? loopbackDevice = null,
+      AudioChannelChoice ifChannel = AudioChannelChoice.Left)
     {
       ObjectDisposedException.ThrowIf(disposed, this);
       if (source == AfcIfSource.WasapiCapture && string.IsNullOrWhiteSpace(device))
@@ -149,6 +152,18 @@ namespace SkyRoof.AFC
       DetachShared();
       input.Enabled = false;
       loopback.Enabled = false;
+      if (source == AfcIfSource.WasapiCapture && ifChannel != captureChannel)
+      {
+        // The channel selector is part of the WASAPI reader pipeline.
+        // Recreate it only on an explicit operator channel change.
+        input.SamplesAvailable -= OnSamples;
+        input.Dispose();
+        input = new InputSoundcard<float>(
+          captureBufferMilliseconds: 40, readerBlockSizeSamples: 1600,
+          channelChoice: ifChannel) { Retry = true };
+        input.SamplesAvailable += OnSamples;
+        captureChannel = ifChannel;
+      }
       if (source == AfcIfSource.PlaybackLoopback)
         loopback.SetDeviceId(loopbackDevice);
       else input.SetDeviceId(device);

@@ -25,6 +25,11 @@ namespace SkyRoof
     public string? InputDeviceId { get; set; } =
       Soundcard.GetPreferredSoundcardId(DataFlow.Capture, "USB Audio CODEC", "ICOM");
 
+    [DisplayName("IF 录音声道")]
+    [Description("选择 IC-9700 USB IF 实际所在声道。默认 Left；若双声道反相或一侧为 AF，不要混合。")]
+    [DefaultValue(AudioChannelChoice.Left)]
+    public AudioChannelChoice CaptureChannel { get; set; } = AudioChannelChoice.Left;
+
     [DisplayName("捕获策略（速度 / 灵敏度）")]
     [Description("Adaptive=约250ms开始短窗测频，随新增采样用多分辨率FFT和重叠窗改进精度；Fast=最短处理路径；Balanced=原有平衡策略；Sensitive=较长积分提高弱信号可靠性。不会降低CAT置信度/安全限制。")]
     [DefaultValue(AFC.AfcAcquisitionPreset.Adaptive)]

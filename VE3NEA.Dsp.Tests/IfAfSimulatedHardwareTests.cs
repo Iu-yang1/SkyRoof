@@ -104,6 +104,10 @@ namespace VE3NEA.Dsp.Tests
         IfAfSettings.Resolve(IfAfSelection.FollowRadio, Slicer.Mode.FM_D));
       Assert.Equal(IfAfMode.CwLsb,
         IfAfSettings.Resolve(IfAfSelection.CwLsb, Slicer.Mode.CW));
+      Assert.Equal(IfAfMode.Fm,
+        IfAfSettings.Resolve(IfAfSelection.FollowRadio, Slicer.Mode.FM));
+      Assert.Equal(IfAfMode.Lsb,
+        IfAfSettings.Resolve(IfAfSelection.Lsb, Slicer.Mode.USB));
     }
 
     private sealed class StereoSource : ISampleProvider

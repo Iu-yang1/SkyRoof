@@ -563,6 +563,7 @@ namespace SkyRoof.AFC
       if (active)
       {
         if (name is nameof(AfcSettings.InputDeviceId) or
+            nameof(AfcSettings.CaptureChannel) or
             nameof(AfcSettings.LoopbackDeviceId) or
             nameof(AfcSettings.InputSource) or
             nameof(AfcSettings.IfReferenceHz))
@@ -675,13 +676,14 @@ namespace SkyRoof.AFC
         if (cfg.InputSource == AfcIfSource.WasapiCapture &&
             ctx.IfAf?.IsRunning == true &&
             string.Equals(ctx.IfAf.InputDeviceId, cfg.InputDeviceId,
-              StringComparison.Ordinal))
+              StringComparison.Ordinal) &&
+            ctx.IfAf.CaptureChannel == cfg.CaptureChannel)
           input.StartShared(ctx.IfAf, cfg.IfReferenceHz, currentMode,
             cfg.SsbPilotEnabled, AfcSpectrumReference.AnalysisOffset(cfg, currentMode));
         else
           input.Start(cfg.InputDeviceId, cfg.IfReferenceHz, currentMode,
             cfg.SsbPilotEnabled, AfcSpectrumReference.AnalysisOffset(cfg, currentMode),
-            cfg.InputSource, cfg.LoopbackDeviceId);
+            cfg.InputSource, cfg.LoopbackDeviceId, cfg.CaptureChannel);
         if (!input.IsRunning)
           throw new InvalidOperationException("12 kHz IF input did not start. Check routing.");
         active = true;

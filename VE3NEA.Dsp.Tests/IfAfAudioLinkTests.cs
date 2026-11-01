@@ -100,6 +100,30 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void AutoSignedCableRenderWinsOverStaleManualVacId()
+    {
+      Assert.Equal("vbRender", IfAfSettings.ResolveRenderEndpoint(
+        IfAfAudioRoute.AutoSignedCable, "oldManual", "devRender", "vbRender"));
+      Assert.Equal("devRender", IfAfSettings.ResolveRenderEndpoint(
+        IfAfAudioRoute.PreferIfAfAudio, "oldManual", "devRender", "vbRender"));
+      Assert.Equal("oldManual", IfAfSettings.ResolveRenderEndpoint(
+        IfAfAudioRoute.ExistingVirtualCable, "oldManual", "devRender", "vbRender"));
+    }
+
+    [Theory]
+    [InlineData(-1, 0, true)]
+    [InlineData(480, 480, true)]
+    [InlineData(480, 960, false)]
+    [InlineData(480, 0, false)]
+    public void PCMFrameSequenceDetectsSingleDroppedChunk(
+      long expectedStart, long actualStart, bool contiguous) =>
+      Assert.Equal(contiguous, IfAfService.FramesContinuous(expectedStart, actualStart));
+
+    [Fact]
+    public void AfcAndIfAfIndependentCaptureDefaultsToSameLeftChannel() =>
+      Assert.Equal(AudioChannelChoice.Left, new AfcSettings().CaptureChannel);
+
+    [Fact]
     public void OnlyCompleteDeveloperPackageIsRecognized()
     {
       var folder = Path.Combine(Path.GetTempPath(),
