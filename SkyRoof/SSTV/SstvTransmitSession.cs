@@ -72,16 +72,15 @@ namespace SkyRoof.SSTV
       {
         var band = ctx.Settings.Transverter.GetCatBand(
           link.CorrectedUplinkFrequency);
-        if (band == null)
-          throw new InvalidOperationException(
-            "选定上行频率无法映射到发射机 CAT 频段。");
-        loHz = band.LoOffset;
+        if (band != null) loHz = band.LoOffset;
       }
 
       SstvTxGuard guard = SstvTxPolicy.Validate(
         link.Sat?.sat_id, link.Tx?.uuid,
         link.IsTerrestrial, link.HasUplink, link.HasObservation,
-        link.IsAboveHorizon, link.UplinkMode, link.CorrectedUplinkFrequency,
+        link.IsAboveHorizon,
+        link.TxCust != null ? link.UplinkMode : Slicer.Mode.FM,
+        link.CorrectedUplinkFrequency,
         loHz, cat?.LastReadTxFrequency ?? 0,
         cat?.CanPtt() == true,
         cat?.Ptt == true || ctx.CatControl.Rx?.Ptt == true,
@@ -92,26 +91,16 @@ namespace SkyRoof.SSTV
 
     private bool CheckLiveGuard(SstvTxGuard guard)
     {
-      var link = ctx.FrequencyControl.RadioLink;
       var cat = ctx.CatControl.Tx;
       if (cat == null || !cat.Ptt ||
           !cat.PttMayBeOwnedByApplication ||
-          link.UplinkMode != guard.Mode ||
           ctx.CwTransmit?.TxCatWritesFrozen == true)
         return false;
-      double lo = 0;
-      if (ctx.Settings.Transverter.TxCatOffsetEnabled)
-      {
-        var band = ctx.Settings.Transverter.GetCatBand(
-          link.CorrectedUplinkFrequency);
-        if (band == null) return false;
-        lo = band.LoOffset;
-      }
-      return SstvTxPolicy.StillSafe(
-        guard, link.Sat?.sat_id, link.Tx?.uuid,
-        link.HasObservation, link.IsAboveHorizon,
-        link.CorrectedUplinkFrequency, lo,
-        cat.LastReadTxFrequency, cat.Ptt,
+      // Remain keyed only while this application owns the PTT lease and
+      // hardware continues to report a fresh PTT-ON state. Never force a
+      // satellite, modulation or model-frequency match during picture TX.
+      return SstvTxPolicy.StillSafe(guard, null, null, false, false,
+        0, 0, cat.LastReadTxFrequency, cat.Ptt,
         cat.LastPttOnHardwareReadbackUtc, DateTime.UtcNow);
     }
 
@@ -190,7 +179,7 @@ namespace SkyRoof.SSTV
         }
         if (!acknowledged)
           throw new InvalidOperationException(
-            "CAT 未能确认发射状态、频率或 PTT 读回；发送已取消。");
+            "CAT 未能确认 PTT 发射状态；发送已取消。");
 
         // Allow the TX audio path and linear satellite relay to settle.
         await Task.Delay(250, local.Token);
@@ -209,7 +198,7 @@ namespace SkyRoof.SSTV
             throw new TimeoutException("SSTV 发射超时，已停止。");
           if (!CheckLiveGuard(guard))
             throw new InvalidOperationException(
-              "卫星或发射机状态变化，已紧急停止发射。");
+              "发射机 PTT 状态变化，已紧急停止发射。");
           Task done = await Task.WhenAny(playbackCompleted.Task,
             Task.Delay(300, local.Token));
           if (done == playbackCompleted.Task)
