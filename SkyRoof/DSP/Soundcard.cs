@@ -25,6 +25,10 @@ namespace VE3NEA
   internal sealed class RingBufferWaveProvider<T> : IWaveProvider
   {
     private float volume;
+    private readonly bool padSilenceOnUnderrun;
+    private readonly int channelCount;
+    private long underrunSamples;
+    public long UnderrunSamples => Interlocked.Read(ref underrunSamples);
 
     public RingBuffer<T> Buffer { get; }
     public WaveFormat WaveFormat { get; }
@@ -39,9 +43,10 @@ namespace VE3NEA
       }
     }
 
-    public RingBufferWaveProvider(int samplingRate)
+    public RingBufferWaveProvider(int samplingRate, bool padSilenceOnUnderrun = false)
     {
-      int channelCount = typeof(T) == typeof(Complex32) ? 2 : 1;
+      channelCount = typeof(T) == typeof(Complex32) ? 2 : 1;
+      this.padSilenceOnUnderrun = padSilenceOnUnderrun;
       WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(samplingRate, channelCount);
       Buffer = new RingBuffer<T>(2 * samplingRate);
     }
@@ -54,9 +59,20 @@ namespace VE3NEA
     public int Read(byte[] buffer, int offset, int count)
     {
       int read = Buffer.ReadBytes(buffer, offset, count);
+      int returned = read;
+      if (padSilenceOnUnderrun && read < count)
+      {
+        // Audio never restarts with old ring data. Fill underruns with
+        // exact zeros and report them; preserve the common output behavior
+        // for all non-IF-AF clients by default.
+        Array.Clear(buffer, offset + read, count - read);
+        Interlocked.Add(ref underrunSamples,
+          (count - read) / (sizeof(float) * channelCount));
+        returned = count;
+      }
       float gain = volume;
 
-      if (gain == 1f) return read;
+      if (gain == 1f) return returned;
 
       int floatByteCount = read - (read % sizeof(float));
       Span<float> samples = MemoryMarshal.Cast<byte, float>(buffer.AsSpan(offset, floatByteCount));
@@ -67,7 +83,7 @@ namespace VE3NEA
         for (int i = 0; i < samples.Length; i++)
           samples[i] *= gain;
 
-      return read;
+      return returned;
     }
   }
 
@@ -350,19 +366,21 @@ namespace VE3NEA
     private float volume;
     private readonly int requestedLatencyMs;
     public int RequestedLatencyMs => requestedLatencyMs;
+    public long UnderrunSamples => waveProvider.UnderrunSamples;
 
     public RingBuffer<T> Buffer => waveProvider.Buffer;
     public float Volume { get => volume; set => SetVolume(value); }
 
 
     public OutputSoundcard(string? audioDeviceId = null, int? samplingRate = null,
-      int latencyMilliseconds = 200)
+      int latencyMilliseconds = 200, bool padSilenceOnUnderrun = false)
       : base(audioDeviceId, samplingRate)
     {
       if (latencyMilliseconds is < 10 or > 1000)
         throw new ArgumentOutOfRangeException(nameof(latencyMilliseconds));
       requestedLatencyMs = latencyMilliseconds;
-      waveProvider = new RingBufferWaveProvider<T>(SamplingRate);
+      waveProvider = new RingBufferWaveProvider<T>(
+        SamplingRate, padSilenceOnUnderrun);
       waveProvider.Volume = volume;
     }
 
@@ -376,7 +394,11 @@ namespace VE3NEA
       waveProvider.Buffer.Clear();
       waveProvider.Volume = volume;
 
-      wasapiOut = new WasapiOut(mmDevice!, AudioClientShareMode.Shared, false, requestedLatencyMs);
+      // Event-driven shared WASAPI for the low-period IF path. Retain
+      // legacy polling for the compatibility 200-ms stream.
+      wasapiOut = new WasapiOut(mmDevice!,
+        AudioClientShareMode.Shared, requestedLatencyMs < 200,
+        requestedLatencyMs);
       wasapiOut.Init(waveProvider);
       wasapiOut.PlaybackStopped += Soundcard_Stopped;
       wasapiOut.Play();
