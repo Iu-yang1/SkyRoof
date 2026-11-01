@@ -2,7 +2,7 @@
 # Official donationware bundling grant: https://vb-audio.com/Services/licensing.htm
 param(
   [string]$Destination = 'Vendor/VB-CABLE',
-  [string]$ExpectedSha256 = ''
+  [string]$ExpectedSha256 = 'B950E39F01AF1D04EA623C8F6D8EB9B6EA5C477C637295FABF20631C85116BFB'
 )
 $ErrorActionPreference = 'Stop'
 $url = 'https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack45.zip'
