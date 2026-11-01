@@ -79,7 +79,7 @@ namespace SkyRoof.SSTV
         link.Sat?.sat_id, link.Tx?.uuid,
         link.IsTerrestrial, link.HasUplink, link.HasObservation,
         link.IsAboveHorizon,
-        link.TxCust != null ? link.UplinkMode : Slicer.Mode.FM,
+        link.TxCust != null ? link.UplinkMode : VE3NEA.Slicer.Mode.FM,
         link.CorrectedUplinkFrequency,
         loHz, cat?.LastReadTxFrequency ?? 0,
         cat?.CanPtt() == true,
