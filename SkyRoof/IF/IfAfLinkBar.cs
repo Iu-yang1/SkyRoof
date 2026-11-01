@@ -40,14 +40,14 @@ namespace SkyRoof.IF
     }
 
     private static void DrawStage(Graphics g, Rectangle bounds,
-      string label, Color color)
+      string label, Color color, Color textColor)
     {
       using var brush = new SolidBrush(color);
       g.FillRectangle(brush, bounds.Left + 4, bounds.Top + 9, 5, 5);
       TextRenderer.DrawText(g, label, SystemFonts.MessageBoxFont,
         new Rectangle(bounds.Left + 12, bounds.Top + 1,
           bounds.Width - 12, bounds.Height - 2),
-        SystemColors.ControlText, TextFormatFlags.VerticalCenter |
+        textColor, TextFormatFlags.VerticalCenter |
         TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis);
     }
 
@@ -82,7 +82,7 @@ namespace SkyRoof.IF
       for (int n = 0; n < 4; n++)
       {
         DrawStage(g, new Rectangle(n * w, 0, w, Height - 1),
-          stages[n], colors[n]);
+          stages[n], colors[n], ForeColor);
         if (n < 3)
           TextRenderer.DrawText(g, "›", Font,
             new Rectangle((n + 1) * w - 7, 0, 12, Height),
