@@ -428,6 +428,7 @@ namespace VE3NEA
     // without altering the established 200-ms behavior for other users.
     private readonly int captureBufferMilliseconds;
     private readonly int readerBlockSizeSamples;
+    private readonly AudioChannelChoice channelChoice;
 
     public int CaptureBufferMilliseconds => captureBufferMilliseconds;
     public int ReaderBlockSizeSamples => readerBlockSizeSamples;
@@ -436,7 +437,8 @@ namespace VE3NEA
       string? audioDeviceId = null,
       int? samplingRate = null,
       int captureBufferMilliseconds = 200,
-      int readerBlockSizeSamples = 4800)
+      int readerBlockSizeSamples = 4800,
+      AudioChannelChoice channelChoice = AudioChannelChoice.Mix)
       : base(audioDeviceId, samplingRate)
     {
       if (captureBufferMilliseconds is < 20 or > 1000)
@@ -445,6 +447,7 @@ namespace VE3NEA
         throw new ArgumentOutOfRangeException(nameof(readerBlockSizeSamples));
       this.captureBufferMilliseconds = captureBufferMilliseconds;
       this.readerBlockSizeSamples = readerBlockSizeSamples;
+      this.channelChoice = channelChoice;
     }
 
     protected override bool IsCurrentSoundcard(object? sender)
@@ -472,7 +475,9 @@ namespace VE3NEA
 
       ISampleProvider source = captureBuffer.ToSampleProvider();
       if (typeof(T) == typeof(float) && source.WaveFormat.Channels != 1)
-        source = new MonoMixSampleProvider(source);
+        source = channelChoice == AudioChannelChoice.Mix
+          ? new MonoMixSampleProvider(source)
+          : new IfChannelSelectSampleProvider(source, channelChoice);
       if (source.WaveFormat.SampleRate != SamplingRate)
         source = new WdlResamplingSampleProvider(source, SamplingRate);
       SampleSource = source;
