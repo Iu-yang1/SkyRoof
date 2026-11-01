@@ -1,5 +1,12 @@
 # Doppler-assisted FM / CW / SSB AFC
 
+## v1.62 fast AFC update (2026-11-01)
+
+Auto AFC no longer sends temporary CAT probe and restore commands. It starts with the nominal mode-based 12-kHz IF polarity (USB/FM/CW +1, LSB -1), or the operator's explicit +/-1 override. This is **a nominal assumption rather than verified hardware calibration**: different IF wiring, firmware, and converters can invert the response. The existing divergence fault, PTT freeze, signal confidence gate and correction clamp remain mandatory. IF analysis runs every ~250 ms after the first 0.5 s PCM window and the servo can move on the second valid observation. Hardware IC-9700 validation remains outstanding.
+
+The historical probe/restore instructions below describe the retired v1.60 approach, not current operation.
+
+
 **Language:** English | [简体中文](../zh-cn/fork-guide/afc.md)
 
 SkyRoof's AFC has an independent 12 kHz IF PCM capture path and shares the

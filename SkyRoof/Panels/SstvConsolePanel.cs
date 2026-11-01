@@ -39,11 +39,6 @@ namespace SkyRoof
       Text = "FSK ID", AutoSize = true,
       Padding = new Padding(2, 7, 2, 0)
     };
-    private readonly CheckBox txApproval = new()
-    {
-      Text = "已确认频率 / 功率", AutoSize = true,
-      Padding = new Padding(3, 7, 3, 0)
-    };
     private readonly Button txSendButton = new()
     {
       Text = "发射图片", Width = 90, Height = 30, Margin = new Padding(4),
@@ -65,6 +60,10 @@ namespace SkyRoof
     private readonly ComboBox rxDeviceBox = new()
     {
       DropDownStyle = ComboBoxStyle.DropDownList, Width = 280
+    };
+    private readonly ComboBox rxIfDemodBox = new()
+    {
+      DropDownStyle = ComboBoxStyle.DropDownList, Width = 145
     };
     private readonly CheckBox autoVisCorrection = new()
     {
@@ -321,6 +320,11 @@ namespace SkyRoof
       });
       rxSourceBox.SelectedIndexChanged += (_, _) => PopulateAudioDevices();
       rxSourceBox.SelectedIndex = 0;
+      rxIfDemodBox.Items.AddRange(new object[]
+      {
+        "IF: 跟随下行", "IF: SSB", "IF: FM"
+      });
+      rxIfDemodBox.SelectedIndex = 0;
       rxModeBox.Items.Add("自动识别 SSTV");
       // Display every TX mode in RX. Robot/PD are decoded by SkySignals;
       // remaining profiles use the manual/live raster receiver.
@@ -362,13 +366,7 @@ namespace SkyRoof
       ReloadUserTemplates();
       archiveList.DoubleClick += (_, _) => ShowSelectedHistory();
       txSendButton.Click += (_, _) => _ = SendImageAsync();
-      txApproval.CheckedChanged += (_, _) => UpdateTxAvailability();
-      // A changed audio route invalidates the operator's previous approval.
-      txOutputBox.SelectedIndexChanged += (_, _) =>
-      {
-        txApproval.Checked = false;
-        UpdateTxAvailability();
-      };
+      txOutputBox.SelectedIndexChanged += (_, _) => UpdateTxAvailability();
       txStopButton.Click += (_, _) => StopTransmit();
 
       PopulateTxOutputDevices();
@@ -399,6 +397,7 @@ namespace SkyRoof
       var page = new TabPage("接收 RX");
       var bar = Toolbar();
       bar.Controls.Add(rxSourceBox);
+      bar.Controls.Add(rxIfDemodBox);
       bar.Controls.Add(rxDeviceBox);
       bar.Controls.Add(rxToggleButton);
       var tuning = Toolbar();
@@ -487,7 +486,6 @@ namespace SkyRoof
         Dock = DockStyle.Bottom, Height = 78,
         WrapContents = true, AutoScroll = true, Padding = new Padding(2)
       };
-      actions.Controls.Add(txApproval);
       actions.Controls.Add(txSendButton);
       actions.Controls.Add(txStopButton);
       actions.Controls.Add(Btn("保存 WAV", () => _ = ExportWaveAsync(), 82));
@@ -1050,18 +1048,15 @@ namespace SkyRoof
       {
         txSendButton.Enabled = false;
         txStatus.Text = SstvTxPolicy.PttReleaseUnconfirmedMessage;
-        if (txApproval.Checked) txApproval.Checked = false;
         return;
       }
       if (releaseWasUnconfirmed)
       {
-        txStatus.Text = "CAT 已确认电台返回接收状态，请重新核对发射频率与功率。";
-        txApproval.Checked = false;
+        txStatus.Text = "CAT 已确认电台返回接收状态，可重新发送。";
       }
       txSendButton.Enabled =
         txOperationStop == null &&
         !transmitSession.IsSending &&
-        txApproval.Checked &&
         txPicture.Image is Bitmap &&
         txOutputBox.SelectedItem is DeviceEntry &&
         modeBox.SelectedItem is SstvTxModeProfile;
@@ -1088,25 +1083,12 @@ namespace SkyRoof
             MessageBoxButtons.OK, MessageBoxIcon.Information);
         return;
       }
-      if (!txApproval.Checked)
-      {
-        MessageBox.Show(this, "请先核对电台上行频率、发射许可及发射功率。", "SSTV",
-          MessageBoxButtons.OK, MessageBoxIcon.Information);
-        return;
-      }
-      if (MessageBox.Show(this,
-        $"确认通过所选声卡输出并启动电台 PTT 发送 {spec.Name}？" +
-        "\n\n开始后可随时点击“停止发射”。",
-        "确认 SSTV 发射", MessageBoxButtons.YesNo,
-        MessageBoxIcon.Warning) != DialogResult.Yes) return;
-
       string temporaryWave = Path.Combine(Path.GetTempPath(),
         $"SkyRoof_SstvTx_{Guid.NewGuid():N}.wav");
       using var operation = new CancellationTokenSource();
       txOperationStop = operation;
       txSendButton.Enabled = false;
       txStopButton.Enabled = true;
-      txApproval.Enabled = false;
       txOutputBox.Enabled = false;
       bool criticalPttAlertShown = false;
       try
@@ -1127,7 +1109,7 @@ namespace SkyRoof
         operation.Token.ThrowIfCancellationRequested();
         if (closed) return;
         await transmitSession.SendWavAsync(
-          temporaryWave, output.Id, txApproval.Checked,
+          temporaryWave, output.Id, true,
           message => { if (!closed) txStatus.Text = message; },
           operation.Token);
       }
@@ -1162,8 +1144,6 @@ namespace SkyRoof
         {
           txStopButton.Enabled = false;
           txOutputBox.Enabled = true;
-          txApproval.Enabled = true;
-          txApproval.Checked = false;
           UpdateTxAvailability();
           // Cancellation is not a successful STOP acknowledgement. Preserve
           // this alarm even if the cancellation catch said "stopped".
@@ -1217,7 +1197,17 @@ namespace SkyRoof
       }
       try
       {
-        receiveSession.Start((SstvReceiveSource)rxSourceBox.SelectedIndex, device.Id);
+        SstvIfModulation ifMode = rxIfDemodBox.SelectedIndex switch
+        {
+          1 => SstvIfModulation.Ssb,
+          2 => SstvIfModulation.Fm,
+          _ => ctx.FrequencyControl?.RadioLink?.TxCust != null &&
+            ctx.FrequencyControl.RadioLink.DownlinkMode is
+              Slicer.Mode.FM or Slicer.Mode.FM_D
+              ? SstvIfModulation.Fm : SstvIfModulation.Ssb
+        };
+        receiveSession.Start((SstvReceiveSource)rxSourceBox.SelectedIndex,
+          device.Id, ifMode);
         rxToggleButton.Text = "停止接收";
         rxStatus.Text = "正在等待 SSTV 信号...";
       }

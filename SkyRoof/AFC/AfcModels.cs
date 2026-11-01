@@ -42,7 +42,7 @@ namespace SkyRoof
     public double IfReferenceHz { get; set; } = 12000;
 
     [DisplayName("RF/IF 频率方向 (0=自动，±1=手动)")]
-    [Description("0 表示根据稳定信号和 CAT 调谐读回来学习频率方向。只有自动 CAT 修正需要方向判断，辅助模式不要求。")]
+    [Description("0=根据当前接收模式立即推定 IF/RF 方向，不执行 CAT 测试调谐；闭环发散保护会停止错误方向的写频。±1=人工覆盖，具体电台与 IF 路由应实测确认。")]
     [DefaultValue(0)]
     public int RfIfSign { get; set; } = 0;
 
@@ -84,6 +84,20 @@ namespace SkyRoof
 
 namespace SkyRoof.AFC
 {
+  /// <summary>
+  /// Initial polarity for conventional high-side 12-kHz IF reception.
+  /// This is a nominal mode mapping, NOT an RF/IF hardware calibration.
+  /// An inverted IF route can be overridden with RfIfSign = +/-1.
+  /// </summary>
+  public static class AfcDirectionResolver
+  {
+    public static int Resolve(int configuredSign, Slicer.Mode receiveMode)
+    {
+      if (configuredSign is 1 or -1) return configuredSign;
+      return receiveMode is Slicer.Mode.LSB or Slicer.Mode.LSB_D ? -1 : 1;
+    }
+  }
+
   public enum AfcSignalMode { FM, CW, SSB }
   public enum AfcControlMode { Off, Assist, Auto }
   public enum AfcLockState { Off, Acquiring, Locked, Coasting, Hold, Lost, Fault }

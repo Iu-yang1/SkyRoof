@@ -240,9 +240,9 @@ namespace SkyRoof.AFC
             for (int i = 0; i < n; i++)
               displayPcm[i] = buffer[(start + i) % buffer.Length];
           }
-          // Original measurement/CAT control scheduling remains unchanged.
-          // UI FFT is deliberately independent of the ~550ms AFC loop.
-          if (used >= 24000 && tick - lastAnalysisMs >= 550 &&
+          // Measure at 250 ms cadence once 500 ms of IF PCM is buffered.
+          // UI FFT is deliberately independent of the ~250ms AFC loop.
+          if (used >= 24000 && tick - lastAnalysisMs >= 250 &&
               Interlocked.CompareExchange(ref busy, 1, 0) == 0)
           {
             lastAnalysisMs = tick;

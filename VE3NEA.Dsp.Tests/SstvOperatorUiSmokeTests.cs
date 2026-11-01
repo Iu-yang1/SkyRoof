@@ -76,7 +76,7 @@ namespace VE3NEA.Dsp.Tests
             item => item is SstvTxModeProfile profile && profile.Name == "Robot 36");
           Assert.Contains(rxModes.Items.Cast<object>(),
             item => item is SstvTxModeProfile profile && profile.Name == "MC110-N");
-          Assert.False(Field<CheckBox>(panel, "txApproval").Checked);
+          Assert.Equal(3, Field<ComboBox>(panel, "rxIfDemodBox").Items.Count);
           Assert.False(Field<Button>(panel, "txStopButton").Enabled);
           Assert.False(Field<Button>(panel, "txSendButton").Enabled);
           Assert.Equal(-1, Field<ComboBox>(panel, "txOutputBox").SelectedIndex);
@@ -269,14 +269,11 @@ namespace VE3NEA.Dsp.Tests
           }
 
           // Simulate a prior OFF timeout without touching any real CAT device.
-          // Merely ticking operator approval must not rearm an unknown PTT.
+          // Removing the repeated TX confirmation must not bypass PTT safety.
           var txSession = Field<SstvTransmitSession>(panel, "transmitSession");
           typeof(SstvTransmitSession).GetField("releaseUnconfirmed",
             BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(txSession, 1);
-          var approval = Field<CheckBox>(panel, "txApproval");
-          approval.Checked = true;
           Invoke(panel, "UpdateTxAvailability");
-          Assert.False(approval.Checked);
           Assert.False(Field<Button>(panel, "txSendButton").Enabled);
           Assert.Equal(SstvTxPolicy.PttReleaseUnconfirmedMessage,
             Field<Label>(panel, "txStatus").Text);

@@ -254,7 +254,7 @@ namespace SkyRoof.AFC
           confirmations = 1;
           state = state with { State = AfcLockState.Acquiring,
             ObservedIfOffsetHz = obs.IfOffsetHz,
-            ErrorHz = 0, Confidence = obs.Confidence,
+            ErrorHz = obs.IfOffsetHz - anchorIfHz, Confidence = obs.Confidence,
             LastObservationUtc = obs.SampleUtc,
             Detail = "Acquiring selected carrier" };
           return;
@@ -289,7 +289,7 @@ namespace SkyRoof.AFC
           }
         }
         bool mayWrite = state.Control == AfcControlMode.Auto &&
-          confirmations >= 3 && sign != 0 && !transmitting &&
+          confirmations >= 2 && sign != 0 && !transmitting &&
           !calibrationInProgress;
         if (obs.Mode == AfcSignalMode.SSB && !obs.HasAbsoluteReference)
           mayWrite = false;
@@ -299,9 +299,9 @@ namespace SkyRoof.AFC
             ? fmDeadbandHz : toneDeadbandHz;
           if (Math.Abs(error) >= deadband)
           {
-            double step = Math.Clamp(sign * error * 0.45,
-              -Math.Min(50, 50 * deltaTime),
-              Math.Min(50, 50 * deltaTime));
+            double step = Math.Clamp(sign * error * 0.55,
+              -Math.Min(120, 250 * deltaTime),
+              Math.Min(120, 250 * deltaTime));
             acceptedCorrection = Math.Clamp(acceptedCorrection + step,
               -maxCorrectionHz, maxCorrectionHz);
           }
@@ -309,14 +309,14 @@ namespace SkyRoof.AFC
         state = state with
         {
           State = transmitting ? AfcLockState.Hold :
-            confirmations >= 3 ? AfcLockState.Locked : AfcLockState.Acquiring,
+            confirmations >= 2 ? AfcLockState.Locked : AfcLockState.Acquiring,
           MappingSign = sign,
           ObservedIfOffsetHz = obs.IfOffsetHz,
           ErrorHz = error, CorrectionHz = acceptedCorrection,
           Confidence = obs.Confidence, LastObservationUtc = obs.SampleUtc,
           Detail = transmitting ? "PTT active: AFC frozen" :
             sign == 0 && state.Control == AfcControlMode.Auto
-              ? "Learning IF/CAT polarity from observed tuning"
+              ? "Awaiting nominal RF/IF mapping"
               : "Tracking reference"
         };
       }

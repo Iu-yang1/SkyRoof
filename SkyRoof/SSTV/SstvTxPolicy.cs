@@ -26,28 +26,16 @@ namespace SkyRoof.SSTV
       long actualTxCatHz, bool canPtt, bool alreadyTransmitting,
       bool conflictingTxLease, bool operatorApproved, DateTime nowUtc)
     {
-      if (!operatorApproved)
-        throw new InvalidOperationException("请先确认发射频率、许可和功率。");
-      if (string.IsNullOrWhiteSpace(satelliteId) ||
-          string.IsNullOrWhiteSpace(transmitterId) || isTerrestrial ||
-          !hasUplink || !hasObservation || !isAboveHorizon)
-        throw new InvalidOperationException("请选择当前可见并有有效上行频率的卫星。");
-      if (mode is not (Slicer.Mode.USB or Slicer.Mode.USB_D or
-        Slicer.Mode.FM or Slicer.Mode.FM_D))
-        throw new InvalidOperationException("SSTV 发射需要 USB 或 FM 上行模式。");
-      if (!double.IsFinite(rfHz) || !double.IsFinite(loHz) ||
-          rfHz <= 0 || !SatnogsDbTransmitter.IsHamFrequency(rfHz))
-        throw new InvalidOperationException("所选上行频率不在支持的业余卫星频段。");
+      // TX is explicitly initiated by the Send Image button. Satellite
+      // selection, mode and computed frequency are informational, not a
+      // second authorization gate for an already configured transceiver.
       if (!canPtt || alreadyTransmitting || conflictingTxLease)
         throw new InvalidOperationException("发射机不可用或已有其他发射任务。");
-
-      long expected = checked((long)Math.Truncate(rfHz - loHz));
-      if (expected <= 0 || actualTxCatHz <= 0 ||
-          Math.Abs((double)actualTxCatHz - expected) > FrequencyToleranceHz)
-        throw new InvalidOperationException("未能确认发射机实际上行频率，请检查 CAT 读回。");
       if (nowUtc.Kind != DateTimeKind.Utc)
         throw new ArgumentException("A UTC timestamp is required.", nameof(nowUtc));
-
+      long expected = actualTxCatHz > 0 ? actualTxCatHz :
+        double.IsFinite(rfHz) && double.IsFinite(loHz) && rfHz > loHz
+          ? checked((long)Math.Truncate(rfHz - loHz)) : 0;
       return new SstvTxGuard(satelliteId, transmitterId, expected,
         rfHz, mode, nowUtc);
     }
@@ -77,22 +65,14 @@ namespace SkyRoof.SSTV
       long actualTxCatHz, bool pttReadbackOn,
       DateTime pttReadbackUtc, DateTime nowUtc)
     {
-      if (!hasObservation || !aboveHorizon ||
-          satelliteId != armed.SatelliteId ||
-          transmitterId != armed.TransmitterId ||
-          !double.IsFinite(expectedRfHz) || !double.IsFinite(loHz) ||
-          !SatnogsDbTransmitter.IsHamFrequency(expectedRfHz) ||
-          !pttReadbackOn || nowUtc.Kind != DateTimeKind.Utc ||
-          pttReadbackUtc.Kind != DateTimeKind.Utc ||
-          pttReadbackUtc > nowUtc ||
-          (nowUtc - pttReadbackUtc).TotalMilliseconds > MaximumPttReadbackAgeMs)
-        return false;
-
-      // Satellite Doppler is allowed to move during a multi-minute picture;
-      // compare to the *current* model, never to the original static CAT Hz.
-      double expectedCatHz = expectedRfHz - loHz;
-      return actualTxCatHz > 0 &&
-        Math.Abs(actualTxCatHz - expectedCatHz) <= FrequencyToleranceHz;
+      // A fresh hardware PTT-ON confirmation is the live interlock.
+      // Frequency/mode/satellite changes are no longer independent reasons
+      // to abort an SSTV picture; the operator controls radio configuration.
+      return pttReadbackOn &&
+        pttReadbackUtc.Kind == DateTimeKind.Utc &&
+        nowUtc.Kind == DateTimeKind.Utc &&
+        pttReadbackUtc <= nowUtc &&
+        (nowUtc - pttReadbackUtc).TotalMilliseconds <= MaximumPttReadbackAgeMs;
     }
   }
 }

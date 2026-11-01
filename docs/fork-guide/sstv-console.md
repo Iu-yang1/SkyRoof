@@ -1,5 +1,10 @@
 # SkyRoof SSTV Console
 
+## 12-kHz IF and direct SSTV TX update (v1.62)
+
+The real 48-kS/s 12-kHz IF receiver now supports separate SSB product detection and FM quadrature phase discrimination. Select IF demodulation by downlink mode, or explicitly choose SSB / FM if the satellite database is wrong. AF input remains unchanged. Send Image no longer requires a second confirmation or hard satellite/mode/frequency matching; operators are responsible for their actual RF settings and authorization. PTT ownership, fresh hardware ON/OFF readback, cancellation, timeouts and STOP recovery remain enforced. Software tests use synthetic IF PCM; hardware end-to-end acceptance is still required.
+
+
 Open **View → SSTV RX / TX** to access four dockable pages: Receive, Transmit, Gallery and QSO Log.
 
 ## Receive

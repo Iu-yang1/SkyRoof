@@ -3,7 +3,7 @@
   <!-- The single source of truth for the release version. Bump it here and nowhere else:
        MSBuild applies it to every project in the solution automatically, and the CI workflow
        runs build/Set-Version.ps1 to propagate it to the installer script and the docs. -->
-  <!-- Official v1.62 AFC FM measurement hotfix: publish merged PR #135 (IF PCM timestamp continuity and frequency candidate diagnostics). -->
+  <!-- Official v1.62 in-place SSTV IF FM/SSB and probe-free fast AFC replacement build: 2026-11-01. -->
   <PropertyGroup>
     <Product>SkyRoof</Product>
     <Version>1.62</Version>
