@@ -38,6 +38,37 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void Real12kFmIfRecoversSstvToneWithCarrierOffset()
+    {
+      const int fs = 48000;
+      const double toneHz = 1900;
+      var demod = new SstvIfAudioDemodulator(SstvIfModulation.Fm);
+      var decoded = new double[fs];
+      double phase = 0;
+      for (int n = 0; n < decoded.Length; n++)
+      {
+        double t = n / (double)fs;
+        // Real 12-kHz IF, 150-Hz Doppler residual, 2.5-kHz FM deviation.
+        double deviation = 2500 * Math.Sin(2 * Math.PI * toneHz * t);
+        phase += 2 * Math.PI * (12000 + 150 + deviation) / fs;
+        decoded[n] = demod.Process((float)(.75 * Math.Cos(phase)));
+      }
+      double real = 0, imag = 0, energy = 0;
+      const int discard = 4800;
+      for (int n = discard; n < decoded.Length; n++)
+      {
+        double angle = 2 * Math.PI * toneHz * n / fs;
+        real += decoded[n] * Math.Cos(angle);
+        imag += decoded[n] * Math.Sin(angle);
+        energy += decoded[n] * decoded[n];
+      }
+      double amplitude = 2 * Math.Sqrt(real * real + imag * imag) /
+        (decoded.Length - discard);
+      Assert.InRange(amplitude, 0.08, 1.2);
+      Assert.True(energy > 100);
+    }
+
+    [Fact]
     public void ResetClearsMixerHistory()
     {
       var demod = new SstvIfAudioDemodulator();
