@@ -610,8 +610,15 @@ namespace SkyRoof
         if (ctx.Settings.IfAf.Enabled && ctx.Settings.OutputStream.Enabled &&
             ctx.Settings.OutputStream.Type == DataStreamType.AudioToVac &&
             ctx.Settings.OutputStream.Vac == ifAfOutputId)
+        {
+          // ApplyOutputStreamSettings enables the legacy stream before this
+          // preflight. Tear down the experimental decoder first: a warning
+          // must never leave two active writers on one physical cable.
+          ctx.IfAf.Stop();
+          UpdateIfAfLinkBar();
           throw new InvalidOperationException(
             "IF-AF and SDR Output Stream cannot share one VAC render endpoint.");
+        }
         ctx.IfAf.Apply(ctx.Settings.IfAf, CurrentIfAfMode());
         UpdateIfAfLinkBar();
       }
