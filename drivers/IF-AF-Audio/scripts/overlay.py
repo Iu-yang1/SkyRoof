@@ -68,6 +68,20 @@ for file in patched:
     data = data.replace("Cable Out", "IF-AF-Audio")
     put(file, data)
 
+# Handle the base cable patch's EOF-only MSBuild hunk separately: some
+# Git-for-Windows autocrlf configurations cannot match it, although every
+# functional ring/endpoint hunk is byte-for-byte the upstream MIT patch.
+project_path = "TabletAudioSample/TabletAudioSample.vcxproj"
+project = load(project_path)
+target = "<TargetName>TabletAudioSample</TargetName>"
+if project.count(target) != 4:
+    raise ValueError("Pinned SysVAD project TargetName baseline changed")
+project = project.replace(target, "<TargetName>IfAfAudio</TargetName>")
+project = one(project, "</Project>",
+    '  <Target Name="InfVerif" AfterTargets="StampInf" BeforeTargets="PreBuildEvent" />\n</Project>',
+    project_path)
+put(project_path, project)
+
 # A separate PnP ROOT hardware ID, service, SYS and CAT prevent collision
 # with a previously installed LoopIt7 Cable or Microsoft's sample.
 inf_path = "TabletAudioSample/ComponentizedAudioSample.inx"

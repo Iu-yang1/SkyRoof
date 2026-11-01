@@ -49,7 +49,7 @@ try {
     git checkout -q FETCH_HEAD
     if ($LASTEXITCODE -ne 0) { throw 'Checkout of the pinned sample failed.' }
 
-    git apply --whitespace=nowarn $patch
+    git apply --whitespace=nowarn --exclude=audio/sysvad/TabletAudioSample/TabletAudioSample.vcxproj $patch
     if ($LASTEXITCODE -ne 0) { throw "The IF-AF-Audio patch did not apply to $commit." }
     python (Join-Path $driverRoot 'scripts\overlay.py') $vendor
     if ($LASTEXITCODE -ne 0) { throw 'SkyRoof IF-AF-Audio overlay failed; do not build a stale driver.' }
