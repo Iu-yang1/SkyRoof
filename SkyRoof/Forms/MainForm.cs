@@ -1151,7 +1151,10 @@ namespace SkyRoof
         $"Capture samples: {x.InputSamples}\nAF samples: {x.OutputSamples}\n" +
         $"Capture input RMS (latest block): {x.InputRmsDbfs:F1} dBFS\n" +
         $"AF RMS (latest block, after limit): {x.OutputRmsDbfs:F1} dBFS\n" +
-        $"AF peak (latest block, BEFORE limit): {x.OutputPeakBeforeLimitDbfs:F1} dBFS\n" +
+        $"AF peak (latest block, BEFORE ceiling): {x.OutputPeakBeforeLimitDbfs:F1} dBFS\n" +
+        $"AF applied gain (latest block): {x.AppliedAfGainDb:F1} dB\n" +
+        $"AF peak protection reduction (latest block): {x.PeakReductionDb:F1} dB\n" +
+        $"Peak-limited blocks since start: {x.PeakLimitedBlocks}\n" +
         $"Queue age: {x.ProcessingQueueLagMs:F1} ms (host estimate)\n" +
         $"WASAPI render period requested: {x.RequestedRenderPeriodMs} ms\n" +
         $"Dropped blocks: {x.DroppedBlocks}\n" +
@@ -1214,7 +1217,10 @@ namespace SkyRoof
           $"requested P: {status.Value.RequestedRenderPeriodMs} ms; " +
           $"drops: {status.Value.DroppedBlocks}; lifetime clip: {status.Value.ClippedSamples}; " +
           $"recent clip: {recentIfAfClips}/{recentIfAfOutputSamples}; " +
-          $"AF pre-limit peak: {status.Value.OutputPeakBeforeLimitDbfs:F1} dBFS; " +
+          $"AF pre-ceiling peak: {status.Value.OutputPeakBeforeLimitDbfs:F1} dBFS; " +
+          $"applied gain: {status.Value.AppliedAfGainDb:F1} dB; " +
+          $"peak safety reduction: {status.Value.PeakReductionDb:F1} dB; " +
+          $"limited blocks: {status.Value.PeakLimitedBlocks}; " +
           $"underrun: {status.Value.OutputUnderrunSamples}\n" +
           $"{status.Value.VirtualDeviceStatus}\n{status.Value.Detail}" : "IF-AF not started";
 

@@ -15,7 +15,10 @@ namespace SkyRoof.IF
     string VirtualDeviceStatus, long OutputUnderrunSamples,
     double OutputRmsDbfs = double.NaN,
     double OutputPeakBeforeLimitDbfs = double.NaN,
-    long LastBlockClippedSamples = 0);
+    long LastBlockClippedSamples = 0,
+    double AppliedAfGainDb = double.NaN,
+    double PeakReductionDb = 0,
+    long PeakLimitedBlocks = 0);
 
   /// <summary>Single-owner 48-kHz IF WASAPI stream; fans out unmodified IF
   /// to AFC and SSTV synchronously and produces filtered AF on a separate
@@ -41,6 +44,9 @@ namespace SkyRoof.IF
     private double lastOutputRmsDbfs = double.NegativeInfinity;
     private double lastOutputPeakBeforeLimitDbfs = double.NegativeInfinity;
     private long lastBlockClippedSamples;
+    private long peakLimitedBlocks;
+    private double lastAppliedAfGainDb;
+    private double lastPeakReductionDb;
     private string detail = "Stopped";
     private bool disposed;
     public event EventHandler<DataEventArgs<float>>? RawIfAvailable;
@@ -65,7 +71,10 @@ namespace SkyRoof.IF
       vac.UnderrunSamples,
       Volatile.Read(ref lastOutputRmsDbfs),
       Volatile.Read(ref lastOutputPeakBeforeLimitDbfs),
-      Interlocked.Read(ref lastBlockClippedSamples));
+      Interlocked.Read(ref lastBlockClippedSamples),
+      Volatile.Read(ref lastAppliedAfGainDb),
+      Volatile.Read(ref lastPeakReductionDb),
+      Interlocked.Read(ref peakLimitedBlocks));
 
     public void Apply(IfAfSettings config, IfAfMode mode)
     {
@@ -99,7 +108,11 @@ namespace SkyRoof.IF
       if (string.IsNullOrWhiteSpace(outputId))
         throw new InvalidOperationException("Choose a virtual audio render device.");
       if (config.FmDeviationHz is < 1000 or > 6000 ||
-          config.GainDb is < -40 or > 12 ||
+          config.FmGainDb is < -40 or > 12 ||
+          config.SsbGainDb is < -40 or > 24 ||
+          config.CwGainDb is < -40 or > 24 ||
+          config.SsbCwAgcTargetDbfs is < -36 or > -12 ||
+          config.SsbCwAgcMaxGainDb is < 0 or > 36 ||
           config.SsbLowHz is < 100 or > 750 ||
           config.SsbHighHz is < 1800 or > 4000 ||
           config.SsbHighHz - config.SsbLowHz < 1200)
@@ -123,7 +136,12 @@ namespace SkyRoof.IF
         VacRenderDeviceId = config.VacRenderDeviceId,
         AudioRoute = config.AudioRoute,
         LatencyPreset = config.LatencyPreset,
-        GainDb = config.GainDb,
+        SsbGainDb = config.SsbGainDb,
+        CwGainDb = config.CwGainDb,
+        FmGainDb = config.FmGainDb,
+        SsbCwAgcEnabled = config.SsbCwAgcEnabled,
+        SsbCwAgcTargetDbfs = config.SsbCwAgcTargetDbfs,
+        SsbCwAgcMaxGainDb = config.SsbCwAgcMaxGainDb,
         FmDeviationHz = config.FmDeviationHz,
         SsbLowHz = config.SsbLowHz,
         SsbHighHz = config.SsbHighHz
@@ -136,6 +154,9 @@ namespace SkyRoof.IF
       Interlocked.Exchange(ref clipped, 0);
       Interlocked.Exchange(ref lastProcessingLagUs, 0);
       Interlocked.Exchange(ref lastBlockClippedSamples, 0);
+      Interlocked.Exchange(ref peakLimitedBlocks, 0);
+      Volatile.Write(ref lastAppliedAfGainDb, 0);
+      Volatile.Write(ref lastPeakReductionDb, 0);
       Volatile.Write(ref lastRmsDbfs, double.NegativeInfinity);
       Volatile.Write(ref lastOutputRmsDbfs, double.NegativeInfinity);
       Volatile.Write(ref lastOutputPeakBeforeLimitDbfs, double.NegativeInfinity);
@@ -168,7 +189,7 @@ namespace SkyRoof.IF
         vac.Enabled = true;
         if (!vac.IsRunning) throw new InvalidOperationException("Virtual audio playback unavailable.");
         worker = Task.Run(() => RunAsync(next.Reader, source.Token, version,
-          config.FmDeviationHz, config.GainDb,
+          settings!, config.FmDeviationHz,
           config.SsbLowHz, config.SsbHighHz));
         capture.Enabled = true;
         if (!capture.IsRunning) throw new InvalidOperationException("IF capture unavailable.");
@@ -204,12 +225,12 @@ namespace SkyRoof.IF
     }
 
     private async Task RunAsync(ChannelReader<Frame> reader, CancellationToken stop,
-      int version, int deviation, int gainDb,
+      int version, IfAfSettings audioConfig, int deviation,
       int ssbLowHz, int ssbHighHz)
     {
       var dsp = new IfAfDemodulator((IfAfMode)Volatile.Read(ref requestedMode),
         deviation, ssbLowHz, ssbHighHz);
-      double scale = Math.Pow(10, gainDb / 20.0);
+      var leveler = new IfAfAudioLeveler(audioConfig);
       DateTime previous = default;
       int previousSamples = 0;
       long expectedStart = -1;
@@ -230,7 +251,11 @@ namespace SkyRoof.IF
             if (elapsed < -0.05 || elapsed > expected + .25)
               discontinuity = true;
           }
-          if (discontinuity) dsp.Reset();
+          if (discontinuity)
+          {
+            dsp.Reset();
+            leveler.Reset(); // never adapt gain across missing IF samples
+          }
           expectedStart = frame.FirstSampleIndex + frame.Data.Length;
           previous = frame.Utc;
           previousSamples = frame.Data.Length;
@@ -240,32 +265,22 @@ namespace SkyRoof.IF
               (long)Math.Round(queueLagMs * 1000));
           float[] af = new float[frame.Data.Length];
           dsp.Process(frame.Data, af);
-          double inputPower = 0, outputPower = 0, outputPeak = 0;
-          long blockClips = 0;
-          for (int i = 0; i < af.Length; i++)
-          {
-            double v = af[i] * scale;
-            inputPower += frame.Data[i] * frame.Data[i];
-            outputPeak = Math.Max(outputPeak, Math.Abs(v));
-            if (Math.Abs(v) > .999)
-            {
-              blockClips++;
-              v = Math.Clamp(v, -.999, .999);
-            }
-            outputPower += v * v;
-            af[i] = (float)v;
-          }
-          if (blockClips > 0) Interlocked.Add(ref clipped, blockClips);
-          // These describe only the latest 10-ms processing block, whereas
-          // ClippedSamples remains a lifetime counter. Report peak BEFORE
-          // limiting to distinguish an actual overload from old history.
+          double inputPower = 0;
+          for (int i = 0; i < frame.Data.Length; i++)
+            inputPower += (double)frame.Data[i] * frame.Data[i];
+          // The stream-continual DDC and AFC input remain bit-for-bit
+          // unchanged. The mode-aware leveler operates on decoded AF only.
+          IfAfLevelResult lev = leveler.Process(af, mode);
+          if (lev.ClippedSamples > 0)
+            Interlocked.Add(ref clipped, lev.ClippedSamples);
+          if (lev.PeakLimited) Interlocked.Increment(ref peakLimitedBlocks);
           Volatile.Write(ref lastRmsDbfs, 10 *
             Math.Log10(Math.Max(inputPower / frame.Data.Length, 1e-15)));
-          Volatile.Write(ref lastOutputRmsDbfs, 10 *
-            Math.Log10(Math.Max(outputPower / af.Length, 1e-15)));
-          Volatile.Write(ref lastOutputPeakBeforeLimitDbfs, 20 *
-            Math.Log10(Math.Max(outputPeak, 1e-15)));
-          Interlocked.Exchange(ref lastBlockClippedSamples, blockClips);
+          Volatile.Write(ref lastOutputRmsDbfs, lev.OutputRmsDbfs);
+          Volatile.Write(ref lastOutputPeakBeforeLimitDbfs, lev.PreLimitPeakDbfs);
+          Volatile.Write(ref lastAppliedAfGainDb, lev.EffectiveGainDb);
+          Volatile.Write(ref lastPeakReductionDb, lev.PeakReductionDb);
+          Interlocked.Exchange(ref lastBlockClippedSamples, lev.ClippedSamples);
           // OutputSoundcard has an independent bounded audio ring; no VAC
           // writes, CAT or UI work on the WASAPI capture callback.
           vac.AddSamples(af, 0, af.Length);

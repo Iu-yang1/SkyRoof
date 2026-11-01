@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Runtime.Serialization;
 using Newtonsoft.Json;
 using NAudio.CoreAudioApi;
 using VE3NEA;
@@ -105,9 +106,60 @@ namespace SkyRoof.IF
     [DefaultValue(3300)]
     public int SsbHighHz { get; set; } = 3300;
 
-    [DisplayName("AF output gain (dB)")]
+    // Legacy Settings.json contained one global GainDb. Read it, but never
+    // write that ambiguous key again. Preserve a user's safe FM attenuation;
+    // an old 0/-12 dB value is migrated to the safe -15 dB baseline.
+    private int? legacyGainDb;
+    private int fmGainDb = -15;
+    private bool explicitFmGain;
+    [JsonProperty("GainDb", NullValueHandling = NullValueHandling.Ignore)]
+    private int? LegacyGainDb
+    {
+      get => null;
+      set => legacyGainDb = value;
+    }
+
+    [OnDeserialized]
+    private void MigrateLegacyAudioGain(StreamingContext context)
+    {
+      if (!explicitFmGain && legacyGainDb.HasValue)
+        fmGainDb = Math.Min(-15, legacyGainDb.Value);
+      legacyGainDb = null;
+    }
+
+    [DisplayName("SSB output trim (dB)")]
+    [Description("Manual adjustment after SSB AGC. AGC controls long-term RMS; this trim is independent of FM and CW.")]
     [DefaultValue(0)]
-    public int GainDb { get; set; } = 0;
+    public int SsbGainDb { get; set; } = 0;
+
+    [DisplayName("CW output trim (dB)")]
+    [Description("Manual adjustment after the slow CW AGC. A slow release preserves keying gaps.")]
+    [DefaultValue(0)]
+    public int CwGainDb { get; set; } = 0;
+
+    [DisplayName("FM output gain (dB)")]
+    [Description("FM discriminator is frequency-deviation-normalized and needs its own gain; default -15 dB. Does not change SSB/CW volume.")]
+    [DefaultValue(-15)]
+    public int FmGainDb
+    {
+      get => fmGainDb;
+      set { fmGainDb = value; explicitFmGain = true; }
+    }
+
+    [DisplayName("SSB/CW slow automatic gain control")]
+    [Description("Bounded slow audio AGC after demodulation. Preserves the raw 12 kHz IF for AFC and avoids rapid pumping of FT4/FT8 or CW envelopes.")]
+    [DefaultValue(true)]
+    public bool SsbCwAgcEnabled { get; set; } = true;
+
+    [DisplayName("SSB/CW AGC target RMS (dBFS)")]
+    [Description("Target RMS for sufficiently strong demodulated audio; default -24 dBFS, not a guaranteed signal level.")]
+    [DefaultValue(-24)]
+    public int SsbCwAgcTargetDbfs { get; set; } = -24;
+
+    [DisplayName("SSB/CW AGC max gain (dB)")]
+    [Description("Maximum leveler boost. Capped to prevent unlimited amplification of receiver noise.")]
+    [DefaultValue(24)]
+    public int SsbCwAgcMaxGainDb { get; set; } = 24;
 
     [DisplayName("FM peak deviation (Hz)")]
     [Description("2500 Hz for narrow FM, 5000 Hz for wider FM. Must match the incoming modulation.")]

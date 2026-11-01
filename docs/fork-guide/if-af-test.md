@@ -129,3 +129,14 @@ The footer now uses the same native ToolStrip Webdings LED and Segoe UI text sty
 `Clipped since start` is a **cumulative** count of AF samples limited to ±0.999. Previously the footer used `ClippedSamples > 0`, permanently latching AF/V-MIC amber after even one old clip. The new LEDs compare successive status snapshots; they remain amber for about two seconds after newly clipped samples, then return green if all stages are healthy. No historical counts are erased.
 
 The diagnostic popup now distinguishes cumulative clips, new clips during the latest ~0.5 s UI interval, clips in the latest ~10 ms processing block, latest-block AF RMS and **pre-limit** AF peak. An input RMS measured in the latest block cannot establish the signal level during earlier accumulated clips. If new clipping persists or pre-limit peak reaches 0 dBFS, inspect IF capture, host audio controls, mode, AF gain and the recorded CABLE Output signal. Temporarily reducing AF gain by 6–12 dB can help diagnose headroom, but does not replace fixing the underlying cause.
+
+## Mode-aware post-demodulation AF leveling: SSB/CW slow AGC and independent FM
+
+The 48-kHz 12-kHz IF DDC and USB/LSB/CW/FM demodulator stay unchanged. Only **post-demodulation AF** is leveled; raw IF subscribers (AFC and SSTV) are unaffected.
+
+- USB/LSB/CW (including digital sidebands) use bounded slow RMS AGC by default: −24 dBFS target, +24 dB maximum adaptive boost; fast downward/slow upward gain tracking; silence below −80 dBFS freezes the level. SSB and CW have separate manual post-AGC trims and a switch to disable AGC for amplitude-linear measurements.
+- FM retains the existing quadrature discriminator with its calibrated deviation setting and an independent **FM output gain**, default −15 dB. FM deviation normalization must not be confused with SSB IF amplitude.
+- A per-10-ms-block peak ceiling at 0.89 (about −1 dBFS) reduces whole-block gain without hard waveform clipping. This is a no-lookahead block-level safety control, not a true-peak limiter and not proof of distortion-free RF demodulation. The diagnostics expose pre-ceiling peak, final applied gain, limiter reduction, and count of peak-protected blocks.
+- Previous `GainDb` values migrate to FM gain only: −15 dB or quieter preserved; louder historic presets clamped to the safe −15 dB baseline. SSB/CW gain controls are independent.
+
+Evaluate with actual 60–120 s IF and CABLE Output audio recordings for FM and SSB/CW, and compare WSJT-X FT4/FT8 decode stability. Passing synthetic CI tests cannot substitute for a radio/VB-CABLE hardware test.
