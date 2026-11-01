@@ -86,7 +86,7 @@ namespace SkyRoof.IF
       {
         SingleReader = true,
         SingleWriter = true,
-        FullMode = BoundedChannelFullMode.DropWrite
+        FullMode = BoundedChannelFullMode.Wait
       });
       var source = new CancellationTokenSource();
       queue = next;

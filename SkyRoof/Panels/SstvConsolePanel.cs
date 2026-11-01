@@ -322,7 +322,7 @@ namespace SkyRoof
       rxSourceBox.SelectedIndex = 0;
       rxIfDemodBox.Items.AddRange(new object[]
       {
-        "IF: 跟随下行", "IF: SSB", "IF: FM"
+        "IF: 跟随下行", "IF: USB", "IF: LSB", "IF: FM"
       });
       rxIfDemodBox.SelectedIndex = 0;
       rxModeBox.Items.Add("自动识别 SSTV");
@@ -1200,11 +1200,16 @@ namespace SkyRoof
         SstvIfModulation ifMode = rxIfDemodBox.SelectedIndex switch
         {
           1 => SstvIfModulation.Ssb,
-          2 => SstvIfModulation.Fm,
-          _ => ctx.FrequencyControl?.RadioLink?.TxCust != null &&
-            ctx.FrequencyControl.RadioLink.DownlinkMode is
-              Slicer.Mode.FM or Slicer.Mode.FM_D
-              ? SstvIfModulation.Fm : SstvIfModulation.Ssb
+          2 => SstvIfModulation.Lsb,
+          3 => SstvIfModulation.Fm,
+          _ => ctx.FrequencyControl?.RadioLink?.TxCust != null
+            ? ctx.FrequencyControl.RadioLink.DownlinkMode switch
+            {
+              Slicer.Mode.FM or Slicer.Mode.FM_D => SstvIfModulation.Fm,
+              Slicer.Mode.LSB or Slicer.Mode.LSB_D => SstvIfModulation.Lsb,
+              _ => SstvIfModulation.Ssb
+            }
+            : SstvIfModulation.Ssb
         };
         if (rxSourceBox.SelectedIndex == 2 &&
             ctx.IfAf?.IsRunning == true &&

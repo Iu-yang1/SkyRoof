@@ -13,7 +13,8 @@ namespace VE3NEA.Dsp.Tests
     {
       const int fs = 48000;
       const double toneHz = 1900;
-      var demod = new SstvIfAudioDemodulator();
+      var demod = new SstvIfAudioDemodulator(
+        sideband < 0 ? SstvIfModulation.Lsb : SstvIfModulation.Ssb);
       var output = new double[4800];
       for (int n = 0; n < output.Length; n++)
       {
@@ -22,10 +23,10 @@ namespace VE3NEA.Dsp.Tests
         output[n] = demod.Process(sample);
       }
 
-      // Skip the 129-tap FIR transient, verify the recovered tone energy
+      // Skip the complex sideband FIR transient, verify the recovered tone energy
       // in a matched 1900 Hz pair of Fourier coefficients.
       double real = 0, imag = 0, energy = 0;
-      for (int i = 256; i < output.Length; i++)
+      for (int i = 500; i < output.Length; i++)
       {
         double phi = 2 * Math.PI * toneHz * i / fs;
         real += output[i] * Math.Cos(phi);
@@ -33,7 +34,7 @@ namespace VE3NEA.Dsp.Tests
         energy += output[i] * output[i];
       }
       double coherent = Math.Sqrt(real * real + imag * imag);
-      Assert.InRange(coherent / (output.Length - 256), .15, .4);
+      Assert.InRange(coherent / (output.Length - 500), .15, .4);
       Assert.True(energy > 100);
     }
 

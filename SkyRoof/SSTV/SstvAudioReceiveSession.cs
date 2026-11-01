@@ -12,7 +12,7 @@ using SkyRoof.IF;
 
 namespace SkyRoof.SSTV
 {
-  public enum SstvIfModulation { Ssb, Fm }
+  public enum SstvIfModulation { Ssb, Fm, Lsb }
 
   public enum SstvReceiveSource
   {
@@ -359,109 +359,26 @@ namespace SkyRoof.SSTV
     }
   }
 
-  /// <summary>
-  /// Converts real 48-kS/s 12-kHz IF to SSTV AF. SSB uses a real
-  /// product detector; FM uses complex downconversion, band limiting and
-  /// phase discrimination. The two modulations are not interchangeable.
-  /// </summary>
+  /// <summary>Unified IF demodulation shared with the WSJT-X AF pipeline.
+  /// Real multiplication is intentionally NOT used: it folds opposite-sideband
+  /// noise and would make SSB worse than the IC-9700's own AF path.</summary>
   public sealed class SstvIfAudioDemodulator
   {
-    private const int TapCount = 129;
-    private const double Fs = 48000;
-    private const double CenterHz = 12000;
-    private const double FmDeviationHz = 2500;
-    private readonly double[] taps = new double[TapCount];
-    private readonly double[] delay = new double[TapCount];
-    private readonly double[] qDelay = new double[TapCount];
-    private readonly double[] audioTaps = new double[65];
-    private readonly double[] audioDelay = new double[65];
-    private readonly SstvIfModulation modulation;
-    private int write, audioWrite;
-    private double phase, lastI, lastQ, dc;
-    private bool haveLast;
+    private readonly IfAfDemodulator decoder;
 
     public SstvIfAudioDemodulator(
       SstvIfModulation modulation = SstvIfModulation.Ssb)
     {
-      this.modulation = modulation;
-      // FM needs Carson bandwidth for 2.5-kHz deviation and SSTV tones;
-      // the narrower SSB filter rejects out-of-channel IF interference.
-      BuildLowpass(taps, modulation == SstvIfModulation.Fm ? 6900 : 3000);
-      BuildLowpass(audioTaps, 3000);
+      decoder = new IfAfDemodulator(modulation switch
+      {
+        SstvIfModulation.Fm => IfAfMode.Fm,
+        SstvIfModulation.Lsb => IfAfMode.Lsb,
+        _ => IfAfMode.Usb
+      });
     }
 
-    private static void BuildLowpass(double[] kernel, double cutoff)
-    {
-      double sum = 0;
-      for (int i = 0; i < kernel.Length; i++)
-      {
-        int d = i - (kernel.Length - 1) / 2;
-        double sinc = d == 0 ? 2 * cutoff / Fs :
-          Math.Sin(2 * Math.PI * cutoff / Fs * d) / (Math.PI * d);
-        double window = .54 - .46 * Math.Cos(2 * Math.PI * i /
-          (kernel.Length - 1));
-        sum += kernel[i] = sinc * window;
-      }
-      for (int i = 0; i < kernel.Length; i++) kernel[i] /= sum;
-    }
+    public double Process(float sample) => decoder.Process(sample);
 
-    public double Process(float sample)
-    {
-      double iMix = 2.0 * sample * Math.Cos(phase);
-      double qMix = -2.0 * sample * Math.Sin(phase);
-      phase += 2.0 * Math.PI * CenterHz / Fs;
-      if (phase >= 2 * Math.PI) phase -= 2 * Math.PI;
-      delay[write] = iMix;
-      qDelay[write] = qMix;
-      double iBase = 0, qBase = 0;
-      int at = write;
-      for (int k = 0; k < TapCount; k++)
-      {
-        iBase += taps[k] * delay[at];
-        if (modulation == SstvIfModulation.Fm)
-          qBase += taps[k] * qDelay[at];
-        if (--at < 0) at = TapCount - 1;
-      }
-      if (++write == TapCount) write = 0;
-      if (modulation == SstvIfModulation.Ssb)
-        return iBase;
-
-      double instantaneous = 0;
-      if (haveLast)
-      {
-        // No unwrapping is required for adjacent complex sample phases.
-        // Reject near-silence to avoid large spurious phase derivatives.
-        double power = iBase * iBase + qBase * qBase;
-        if (power > 1e-10)
-          instantaneous = Math.Atan2(qBase * lastI - iBase * lastQ,
-            iBase * lastI + qBase * lastQ) *
-            Fs / (2 * Math.PI * FmDeviationHz);
-      }
-      lastI = iBase;
-      lastQ = qBase;
-      haveLast = true;
-      // Carrier offset / Doppler is a DC term in discriminator output.
-      dc += .0005 * (instantaneous - dc);
-      audioDelay[audioWrite] = instantaneous - dc;
-      double audio = 0;
-      at = audioWrite;
-      for (int k = 0; k < audioTaps.Length; k++)
-      {
-        audio += audioTaps[k] * audioDelay[at];
-        if (--at < 0) at = audioTaps.Length - 1;
-      }
-      if (++audioWrite == audioTaps.Length) audioWrite = 0;
-      return Math.Clamp(audio, -1.0, 1.0);
-    }
-
-    public void Reset()
-    {
-      Array.Clear(delay);
-      Array.Clear(qDelay);
-      Array.Clear(audioDelay);
-      write = audioWrite = 0;
-      phase = lastI = lastQ = dc = 0;
-      haveLast = false;
-    }
+    public void Reset() => decoder.Reset();
   }
 }
