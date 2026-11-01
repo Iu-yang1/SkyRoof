@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using Newtonsoft.Json;
 using NAudio.CoreAudioApi;
 using VE3NEA;
 
@@ -41,14 +42,22 @@ namespace SkyRoof.IF
 
     [DisplayName("AF audio route")]
     [Description("PreferIfAfAudio requires a genuine installed IF-AF-Audio Windows virtual capture + playback device. ExistingVirtualCable uses the selected device below. No sound driver is silently installed.")]
-    [DefaultValue(IfAfAudioRoute.PreferIfAfAudio)]
-    public IfAfAudioRoute AudioRoute { get; set; } = IfAfAudioRoute.PreferIfAfAudio;
+    [DefaultValue(IfAfAudioRoute.ExistingVirtualCable)]
+    public IfAfAudioRoute AudioRoute { get; set; } = IfAfAudioRoute.ExistingVirtualCable;
 
     [DisplayName("AF output latency preset")]
     [Description("Requested shared-mode WASAPI render buffer; 20ms can glitch on some devices. Actual hardware/OS end-to-end latency is measured separately.")]
     [DefaultValue(IfAfLatencyPreset.Balanced40Ms)]
     public IfAfLatencyPreset LatencyPreset { get; set; } =
       IfAfLatencyPreset.Balanced40Ms;
+
+    [DisplayName("IF-AF-Audio driver status")]
+    [Description("A real Windows microphone requires a signed virtual audio driver. This field reports whether both dedicated audio endpoints are installed; naming an in-process buffer does not create an endpoint.")]
+    [ReadOnly(true)]
+    [JsonIgnore]
+    public string DriverStatus => IfAfAudioEndpointDiscovery.Detect().Ready
+      ? "Ready: IF-AF-Audio capture and playback installed"
+      : "Not installed: signed virtual audio driver required";
 
     [DisplayName("Virtual audio render device")]
     [Description("Only for ExistingVirtualCable. Choose CABLE Input/VAC playback; never IC-9700 USB Audio CODEC (TX).")]
