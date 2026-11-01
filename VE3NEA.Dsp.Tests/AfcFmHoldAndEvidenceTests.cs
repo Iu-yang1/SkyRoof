@@ -96,7 +96,8 @@ namespace VE3NEA.Dsp.Tests
         436795000, 1, 2000, 20, 5, false);
       c.Snapshot.State.Should().NotBe(AfcLockState.Fault);
       c.Snapshot.CorrectionHz.Should().BeGreaterThan(0);
-      c.Snapshot.CorrectionHz.Should().BeInRange(before - 100, before + 100);
+      c.Snapshot.CorrectionHz.Should().BeInRange(before - 120.1, before + 120.1,
+        "the first new FM measurement may issue at most one 120-Hz CAT servo step");
     }
 
     [Fact]
