@@ -103,12 +103,31 @@ namespace SkyRoof.AFC
       // Mix at the original sample rate. FIR rejects the negative-frequency
       // image before decimation: no direct 12-kHz real-PCM-as-IQ shortcut.
       var mixed = new Complex[samples.Length];
-      for (int n = 0; n < samples.Length; n++)
+      if (Math.Abs(ifReferenceHz * 4 - sampleRate) < 1e-7)
       {
-        double phase = phaseStep * n;
-        mixed[n] = new Complex(
-          samples[n] * Math.Cos(phase),
-          samples[n] * Math.Sin(phase));
+        // IC-9700 nominal 12 kHz / 48 kS/s is exactly a quarter-cycle
+        // mixer. This removes ~2 trigonometric evaluations per IF sample
+        // and cumulative NCO phase error while retaining the original
+        // FIR image rejection and carrier frequency convention.
+        for (int n = 0; n < samples.Length; n++)
+          mixed[n] = (n & 3) switch
+          {
+            0 => new Complex(samples[n], 0),
+            1 => new Complex(0, -samples[n]),
+            2 => new Complex(-samples[n], 0),
+            _ => new Complex(0, samples[n])
+          };
+      }
+      else
+      {
+        // Custom IF reference frequencies retain full NCO precision.
+        for (int n = 0; n < samples.Length; n++)
+        {
+          double phase = phaseStep * n;
+          mixed[n] = new Complex(
+            samples[n] * Math.Cos(phase),
+            samples[n] * Math.Sin(phase));
+        }
       }
       for (int i = 0; i < count; i++)
       {
