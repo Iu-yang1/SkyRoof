@@ -518,7 +518,14 @@ namespace SkyRoof.AFC
     {
       string name = e.ChangedItem.PropertyDescriptor?.Name ?? "";
       if (name == nameof(AfcSettings.RfIfSign))
+      {
         AbortPolarityCalibration();
+        // A verified user direction change clears an earlier mismatch
+        // and starts a fresh target without a stale residual servo offset.
+        owner.AfcController.Reset("RF/IF sign changed by operator");
+        if (active)
+          owner.AfcController.Configure(currentMode, EffectiveControl());
+      }
       if (active)
       {
         if (name is nameof(AfcSettings.InputDeviceId) or
@@ -727,6 +734,7 @@ namespace SkyRoof.AFC
       "AFC divergent: verified sign reversed, backtracking" => T("AFC 发散：确认频率方向反转并回退", "AFC divergence: verified polarity reversal and rollback"),
       "Manual RF/IF sign conflicts with AFC readback; backtracking" => T("手动 RF/IF 方向与读回矛盾，正在回退", "Manual RF/IF polarity conflicts with readback: rolling back"),
       "Manual RF/IF sign requires review" => T("手动 RF/IF 方向需要检查", "Review manually configured RF/IF direction"),
+      "Manual RF/IF polarity conflict: releasing correction" => T("RF/IF 方向冲突：正在释放旧修正", "RF/IF polarity conflict: releasing stale correction"),
       "Divergence recovery: verifying new IF" => T("发散恢复：验证后续 IF 观测", "Divergence recovery: checking fresh IF"),
       "No carrier: reverted to orbital Doppler prediction" => T("载波消失，已恢复轨道多普勒预测", "Carrier lost: orbital Doppler only"),
       "No carrier: releasing stale AFC correction toward Doppler" => T("载波消失，正在平滑释放 AFC 旧修正", "Carrier lost: releasing stale AFC offset"),

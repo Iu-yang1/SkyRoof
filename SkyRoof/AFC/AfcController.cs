@@ -421,6 +421,23 @@ namespace SkyRoof.AFC
         lastDecayTickUtc = nowUtc;
         double age = (nowUtc - predictor.LastValidUtc).TotalSeconds;
         if (age < 0) return;
+        if (waitForManualSign)
+        {
+          // A persistently wrong manual RF/IF sign must not leave the old
+          // offset attached while continuous FM prevents the stale timeout.
+          if (!transmitting && dt > 0)
+          {
+            double release = 160 * dt;
+            acceptedCorrection = Math.Abs(acceptedCorrection) <= release ? 0 :
+              acceptedCorrection - Math.CopySign(release, acceptedCorrection);
+          }
+          state = state with
+          {
+            State = AfcLockState.Coasting, CorrectionHz = acceptedCorrection,
+            Detail = "Manual RF/IF polarity conflict: releasing correction"
+          };
+          return;
+        }
         double horizon = state.Mode == AfcSignalMode.FM ? 1.5 :
           state.Mode == AfcSignalMode.CW ? 2.5 : 2.0;
         if (age >= .6 && age <= horizon &&
