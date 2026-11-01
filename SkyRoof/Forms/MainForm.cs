@@ -21,6 +21,7 @@ namespace SkyRoof
     private MouseButtons LastRotatorStatusMouseButton;
     private ToolStripProfessionalRenderer? ThemeRenderer;
     private readonly EmbeddedSkyCatHost EmbeddedSkyCat = new();
+    private IfAfComparisonForm? ifAfComparisonForm;
     internal void ApplyEmbeddedSkyCatSettings() =>
       EmbeddedSkyCat.Apply(ctx.Settings.Cat.Embedded);
     internal bool EmbeddedSkyCatRunning => EmbeddedSkyCat.IsRunning;
@@ -40,6 +41,7 @@ namespace SkyRoof
       ConfigureCwConsoleMenuItem();
       ConfigureSstvConsoleMenuItem();
       ConfigureOnvifCameraMenu();
+      ConfigureIfAfComparisonMenu();
       ConfigureGitHubThemeMenuItems();
       AddOrbitSourceMenuItems();
       AddLogArchiveMenuItem();
@@ -238,6 +240,7 @@ namespace SkyRoof
 
       // save settings
       ctx.Settings.Ui.StoreDockingLayout(DockHost);
+      ifAfComparisonForm?.Close();
       ctx.ClosePanels();
 
       ctx.Settings.Ui.StoreWindowPosition(this);
@@ -1072,6 +1075,32 @@ namespace SkyRoof
           MessageBoxButtons.OK,
           MessageBoxIcon.Error);
       }
+    }
+
+    private void ConfigureIfAfComparisonMenu()
+    {
+      var item = new ToolStripMenuItem("Record IC-9700 IF + LAN AF (Test)…");
+      item.Click += (_, _) => OpenIfAfComparisonRecorder();
+      toolsToolStripMenuItem.DropDownItems.Add(item);
+    }
+
+    internal void OpenIfAfComparisonRecorder()
+    {
+      if (ifAfComparisonForm is { IsDisposed: false })
+      {
+        ifAfComparisonForm.Show();
+        ifAfComparisonForm.BringToFront();
+        ifAfComparisonForm.Focus();
+        return;
+      }
+      var form = new IfAfComparisonForm(ctx);
+      ifAfComparisonForm = form;
+      form.FormClosed += (_, _) =>
+      {
+        if (ReferenceEquals(ifAfComparisonForm, form))
+          ifAfComparisonForm = null;
+      };
+      form.Show(this);
     }
 
     private void AddEmbeddedSkyCatMenuItem()

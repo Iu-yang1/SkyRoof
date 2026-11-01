@@ -37,6 +37,7 @@ namespace SkyRoof.IF
 
     public bool IsRunning => capture?.IsRunning == true;
     public string? InputDeviceId => settings?.InputDeviceId;
+    public AudioChannelChoice CaptureChannel => settings?.CaptureChannel ?? AudioChannelChoice.Left;
     public IfAfStatus Status => new(IsRunning, (IfAfMode)Volatile.Read(ref requestedMode),
       Interlocked.Read(ref inputSamples), Interlocked.Read(ref outputSamples),
       Interlocked.Read(ref dropped), Interlocked.Read(ref clipped),

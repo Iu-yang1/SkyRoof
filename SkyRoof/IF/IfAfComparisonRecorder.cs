@@ -155,9 +155,9 @@ namespace SkyRoof.IF
         Log.Warning("Dual capture: IF device {Device} is not identified as an IC-9700 USB endpoint", ifEntry.Name);
       if (hub?.IsRunning == true &&
           string.Equals(hub.InputDeviceId, ifDevice, StringComparison.Ordinal) &&
-          ifChannel != AudioChannelChoice.Left)
+          ifChannel != hub.CaptureChannel)
         throw new InvalidOperationException(
-          "Shared IF-AF uses the Left channel. Choose Left for recording, or disable IF-AF and capture another channel directly.");
+          "Shared IF-AF uses a different input channel. Match its configured channel or disable IF-AF first.");
 
       startUtc = DateTime.UtcNow;
       folder = Path.Combine(parentFolder, "IF-AF_" +
