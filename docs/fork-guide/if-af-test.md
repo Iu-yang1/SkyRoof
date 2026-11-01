@@ -31,3 +31,16 @@ A bounded alpha-beta residual predictor coasts through 1.5 s FM / 2.5 s CW / 2.0
 Verified, time-aligned **AFC-authored** CAT readbacks indicating repeated divergence cause bounded rollback and reacquisition, rather than latching Fault while leaving a stale offset. Sign reversal is eligible only for auto polarity with repeated independent CAT/IF evidence. An explicit manual sign is never silently flipped. Rate limits and AFC servo bounds remain in place.
 
 `AFC trace` and `AFC watchdog` logs expose IF candidate, quality and sigma, estimated/observed residual, CAT readback attribution, correction, state transitions and PTT status. Synthetic tests include transient 400-ms FM, keyed CW, piloted SSB, drop-outs, outliers and divergence. These are **software checks**, not measured IC-9700 AFC lock-time or RF sensitivity guarantees.
+
+## Selectable AFC acquisition strategy
+
+Under **AFC → Advanced settings → Acquisition strategy (speed / sensitivity)** select **Adaptive (default)**, **Fast**, **Balanced**, or **Sensitive**. Editing changes the acquisition profile immediately, invalidates stale IF estimates, and does not reopen WASAPI.
+
+| Preset | First FM IF window | CW | Piloted SSB | Behavior |
+| --- | ---: | ---: | ---: | --- |
+| Adaptive | 250 ms | 250 ms | 250 ms | Quick first estimate, grow the window, adaptive 4096/8192/16384-point FFT and additional FM overlapping-window check |
+| Fast | 250 ms | 250 ms | 300 ms | Lower CPU load and short transmissions |
+| Balanced | 400 ms | 375 ms | 375 ms | Previous reference behavior |
+| Sensitive | 500 ms | 375 ms | 375 ms | More integration for weak conditions |
+
+These are **minimum PCM observation durations**, not measured lock latency, guaranteed sensitivity improvements, or CAT tuning rates. The absolute carrier confidence threshold and readback safeguards remain unchanged. Overlapping windows share samples and are not counted as independent confidence confirmations. Suppressed-carrier SSB without a pilot remains Assist-only. A single in-flight DSP measurement prevents CPU overload; switch to Fast if CPU is limited.
