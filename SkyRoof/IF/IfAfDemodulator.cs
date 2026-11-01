@@ -25,15 +25,23 @@ namespace SkyRoof.IF
     private bool haveFm;
     private double fmDc;
     private readonly double fmDeviation;
+    private readonly int ssbLowHz, ssbHighHz;
     private IfAfMode mode;
     public IfAfMode Mode => mode;
     public long SamplesProcessed { get; private set; }
     public long NonFiniteSamples { get; private set; }
 
-    public IfAfDemodulator(IfAfMode mode = IfAfMode.Usb, double fmDeviationHz = 2500)
+    public IfAfDemodulator(IfAfMode mode = IfAfMode.Usb,
+      double fmDeviationHz = 2500, int ssbLowHz = 180, int ssbHighHz = 3300)
     {
       if (fmDeviationHz is < 1000 or > 6000)
         throw new ArgumentOutOfRangeException(nameof(fmDeviationHz));
+      if (ssbLowHz is < 100 or > 750 ||
+          ssbHighHz is < 1800 or > 4000 || ssbHighHz - ssbLowHz < 1200)
+        throw new ArgumentOutOfRangeException(nameof(ssbHighHz),
+          "SSB passband must be between 100–4000 Hz and at least 1200 Hz wide.");
+      this.ssbLowHz = ssbLowHz;
+      this.ssbHighHz = ssbHighHz;
       fmDeviation = fmDeviationHz;
       Configure(mode);
     }
@@ -44,8 +52,10 @@ namespace SkyRoof.IF
         throw new ArgumentOutOfRangeException(nameof(selected));
       mode = selected;
       double sign = selected is IfAfMode.Lsb or IfAfMode.CwLsb ? -1 : 1;
-      double low = selected is IfAfMode.CwUsb or IfAfMode.CwLsb ? 250 : 180;
-      double high = selected is IfAfMode.CwUsb or IfAfMode.CwLsb ? 1150 : 3300;
+      double low = selected is IfAfMode.CwUsb or IfAfMode.CwLsb
+        ? 250 : ssbLowHz;
+      double high = selected is IfAfMode.CwUsb or IfAfMode.CwLsb
+        ? 1150 : ssbHighHz;
       double mid = sign * (low + high) / 2;
       double halfBand = (high - low) / 2;
       double[] baseband = Lowpass(SsbTaps, halfBand);

@@ -34,6 +34,14 @@ namespace SkyRoof.IF
     [TypeConverter(typeof(OutputSoundcardNameConverter))]
     public string? VacRenderDeviceId { get; set; }
 
+    [DisplayName("SSB AF low cut (Hz)")]
+    [DefaultValue(180)]
+    public int SsbLowHz { get; set; } = 180;
+
+    [DisplayName("SSB AF high cut (Hz)")]
+    [DefaultValue(3300)]
+    public int SsbHighHz { get; set; } = 3300;
+
     [DisplayName("AF output gain (dB)")]
     [DefaultValue(0)]
     public int GainDb { get; set; } = 0;

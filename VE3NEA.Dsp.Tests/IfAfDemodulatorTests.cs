@@ -132,5 +132,15 @@ namespace VE3NEA.Dsp.Tests
       Assert.InRange(ToneAmplitude(y, 1500), .30, .51);
       Assert.All(y, v => Assert.True(float.IsFinite(v)));
     }
+    [Fact]
+    public void ConfigurableSsbPassbandSuppressesAudioOutsideSelectedUpperEdge()
+    {
+      var x = Generate(3200);
+      var dsp = new IfAfDemodulator(IfAfMode.Usb, 2500, 200, 2300);
+      var y = new float[x.Length];
+      dsp.Process(x, y);
+      Assert.True(ToneAmplitude(y, 3200) < .020);
+    }
+
   }
 }

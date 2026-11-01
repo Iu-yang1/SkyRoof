@@ -54,7 +54,10 @@ namespace SkyRoof.IF
           string.IsNullOrWhiteSpace(config.VacRenderDeviceId))
         throw new InvalidOperationException("Select both the IF capture and VAC render endpoints.");
       if (config.FmDeviationHz is < 1000 or > 6000 ||
-          config.GainDb is < -40 or > 12)
+          config.GainDb is < -40 or > 12 ||
+          config.SsbLowHz is < 100 or > 750 ||
+          config.SsbHighHz is < 1800 or > 4000 ||
+          config.SsbHighHz - config.SsbLowHz < 1200)
         throw new ArgumentOutOfRangeException(nameof(config),
           "FM deviation or output gain outside the safe test range.");
       // Never play the demodulated receive audio into a radio's TX CODEC.
@@ -74,7 +77,9 @@ namespace SkyRoof.IF
         Mode = config.Mode,
         VacRenderDeviceId = config.VacRenderDeviceId,
         GainDb = config.GainDb,
-        FmDeviationHz = config.FmDeviationHz
+        FmDeviationHz = config.FmDeviationHz,
+        SsbLowHz = config.SsbLowHz,
+        SsbHighHz = config.SsbHighHz
       };
       Volatile.Write(ref requestedMode, (int)mode);
       int version = ++generation;
@@ -104,7 +109,8 @@ namespace SkyRoof.IF
         vac.Enabled = true;
         if (!vac.IsRunning) throw new InvalidOperationException("Virtual audio playback unavailable.");
         worker = Task.Run(() => RunAsync(next.Reader, source.Token, version,
-          config.FmDeviationHz, config.GainDb));
+          config.FmDeviationHz, config.GainDb,
+          config.SsbLowHz, config.SsbHighHz));
         capture.Enabled = true;
         if (!capture.IsRunning) throw new InvalidOperationException("IF capture unavailable.");
         detail = "48-kHz IF -> independent VAC AF";
@@ -139,9 +145,11 @@ namespace SkyRoof.IF
     }
 
     private async Task RunAsync(ChannelReader<Frame> reader, CancellationToken stop,
-      int version, int deviation, int gainDb)
+      int version, int deviation, int gainDb,
+      int ssbLowHz, int ssbHighHz)
     {
-      var dsp = new IfAfDemodulator((IfAfMode)Volatile.Read(ref requestedMode), deviation);
+      var dsp = new IfAfDemodulator((IfAfMode)Volatile.Read(ref requestedMode),
+        deviation, ssbLowHz, ssbHighHz);
       double scale = Math.Pow(10, gainDb / 20.0);
       DateTime previous = default;
       int previousSamples = 0;
