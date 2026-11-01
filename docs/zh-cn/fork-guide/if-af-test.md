@@ -100,3 +100,22 @@
 ## IF-AF-Audio device architecture
 
 For the signed virtual microphone implementation and SkyRoof link-bar details, see [IF-AF-Audio 虚拟声卡与低延迟链路](../../../drivers/IF-AF-Audio/DESIGN.md). The in-app user-mode route is implemented in this test branch; the signed WDK driver is not yet built or distributed.
+
+
+## SO-50 AFC 修复：弱 FM 验证与丢失信号保持
+
+先前 FM 中存在分层置信度拒绝：测频器只接受 ≥40% 的置信度、控制器和预测器需要 ≥60%。即使有低标准差的候选（例如 −694 Hz、σ≈17 Hz、质量26%）也可能一直显示候选，RX AFC 为 0 Hz。
+
+实验分支现在采用**低质量候选 + 时序一致性**：FM 估计器可提交置信度 ≥22%、足够信噪指标且有限 σ 的候选；当其质量低于标准的 60% 但 σ≤45 Hz，须至少连续 **3 个时间间隔≥80 ms 且相邻频偏差≤max(55 Hz, 2.5σ)** 的观测才允许通过伺服器的有效测量验证。重叠短窗有相同采样，故不宣称三次是统计独立；单帧低质量仍不得写 CAT。连续候选不一致、质量更低、幅度不合理或者无信号时自动重新累积。普通 CW/SSB 的置信度门槛未降低。
+
+### 丢失信号后的修正保持（重要行为变更）
+
+旧代码超过约1.5 s FM 预测后以 **160 Hz/s** 把已确认的 RX AFC 偏移归零。现在新增高级设置 **信号丢失后的 AFC 修正策略**：
+
+- **HoldLast（默认，SO-50 推荐）**：保持最后可信的 RX AFC **附加频偏**不变；SkyRoof 的原有卫星轨道多普勒修正照常变化；有新的可信载波时从原偏移恢复闭环。语音静音、QSB、弱信号拒绝、CW 电键间隙不触发频率归零。UI 可显示 Hold / Lost，但不代表 RX 校正量重置。
+- **GentleRelease（明确选用才启用）**：无可信载波 **30 秒后**，以最多 **10 Hz/s** 缓慢释放到 0；PTT 时冻结这一释放。
+- 用户手动改频、切卫星／切接收模式、禁用 AFC／重建输入或目标仍会重置对应的动态 AFC 校正；发散时经真实 AFC CAT 读回验证的方向冲突仍可进行有界回退，不属于“无信号自动归零”。
+
+例如，AFC 曾修正 −800 Hz，信号消失 10 秒：默认 HoldLast 下仍保持 −800 Hz，轨道多普勒继续计算。截图中的 26% 候选只有在连续多次可信一致后才会被标记为“**弱 FM 已时序确认**”；显示的原始单窗质量不会被伪造为 60%。
+
+实际误锁率、动态多普勒、环路 CAT 方向仍需要 IC-9700 双路 WAV 和真实通联验证。
