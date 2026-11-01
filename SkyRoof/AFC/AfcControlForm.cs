@@ -47,6 +47,8 @@ namespace SkyRoof.AFC
     private readonly Label controlHint = new();
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 250 };
     private AfcSignalMode currentMode;
+    private AfcLockState lastLoggedLockState = AfcLockState.Off;
+    private DateTime lastLoggedAfcUtc;
     private bool active;
 
     internal bool CaptureRunning => active && input.IsRunning;
@@ -579,16 +581,37 @@ namespace SkyRoof.AFC
           int nominal = AfcDirectionResolver.Resolve(0,
             owner.RadioLink.TxCust != null
               ? owner.RadioLink.DownlinkMode : Slicer.Mode.USB);
+          bool ownReadback = owner.IsAfcReadbackConfirmedAt(observation.SampleUtc);
           owner.AfcController.Observe(observation, readback,
             cfg.RfIfSign, Math.Clamp(cfg.MaxCorrectionHz, 1, 10000),
             Math.Clamp(cfg.FmDeadbandHz, 1, 500),
             Math.Clamp(cfg.ToneDeadbandHz, .5, 100),
             owner.IsAfcTransmitting,
             catReadbackIsTimeAligned: double.IsFinite(readback),
-            confirmedOwnAfcReadback:
-              owner.IsAfcReadbackConfirmedAt(observation.SampleUtc),
+            confirmedOwnAfcReadback: ownReadback,
             calibrationInProgress: false,
             nominalSign: nominal);
+          var tracking = owner.AfcController.Snapshot;
+          if (tracking.State != lastLoggedLockState ||
+              (observation.SampleUtc - lastLoggedAfcUtc).TotalSeconds >= 1)
+          {
+            Serilog.Log.Information(
+              "AFC trace: mode={Mode} state={State} confidence={Confidence:F2} " +
+              "sigmaHz={Sigma:F1} reference={Reference} ambiguous={Ambiguous} " +
+              "measuredIfHz={MeasuredIfHz:F1} predictedIfHz={PredictedIfHz:F1} " +
+              "errorHz={ErrorHz:F1} rxCorrectionHz={CorrectionHz:F1} " +
+              "mappingSign={Sign} catReadbackHz={CatHz:F0} " +
+              "ownAfcReadback={OwnReadback} ptt={Ptt} generation={Generation} detail={Detail}",
+              currentMode, tracking.State, observation.Confidence,
+              observation.SigmaHz, observation.HasAbsoluteReference,
+              observation.Ambiguous, observation.IfOffsetHz,
+              tracking.ObservedIfOffsetHz, tracking.ErrorHz,
+              tracking.CorrectionHz, tracking.MappingSign, readback,
+              ownReadback, owner.IsAfcTransmitting,
+              observation.Generation, tracking.Detail);
+            lastLoggedLockState = tracking.State;
+            lastLoggedAfcUtc = observation.SampleUtc;
+          }
           spectrum.SetMeasurement(
             observation.HasAbsoluteReference && observation.Confidence > 0
               ? observation.IfOffsetHz : null,
@@ -720,6 +743,16 @@ namespace SkyRoof.AFC
     {
       RefreshLanguage();
       owner.AfcController.Tick(DateTime.UtcNow, owner.IsAfcTransmitting);
+      var watchdog = owner.AfcController.Snapshot;
+      if (active && watchdog.State != lastLoggedLockState)
+      {
+        Serilog.Log.Information(
+          "AFC watchdog: mode={Mode} state={State} rxCorrectionHz={Hz:F1} " +
+          "predictedIfHz={IfHz:F1} detail={Detail}",
+          currentMode, watchdog.State, watchdog.CorrectionHz,
+          watchdog.ObservedIfOffsetHz, watchdog.Detail);
+        lastLoggedLockState = watchdog.State;
+      }
       // Apply a controlled release of stale AFC residual even if no more
       // IF callbacks arrive after squelch. RX CAT remains single-owner.
       owner.ApplyAfcRxCorrection();
