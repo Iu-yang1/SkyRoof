@@ -117,3 +117,9 @@ An exit code of 1 from the driver manager is a generic PowerShell failure, not p
 - `Partial VB-CABLE installation detected`: reboot first; if still incomplete, repair through the original vendor setup/Device Manager, not by deleting independently owned drivers.
 
 After a successful install, reboot and confirm the **CABLE Input** render and **CABLE Output** capture endpoints. CI validates payload integrity and script diagnostics, but does not claim a real kernel-driver installation test.
+
+## 2026-11-01: IF→AF route cleanup and native status LEDs
+
+The AF audio route dropdown now contains only `AutoSignedCable` (automatic paired VB-CABLE/VAC Lite render and capture endpoints) and `ExistingVirtualCable` (manual render endpoint; capture pairing not verified). Persisted numeric value `0` or the historic name `PreferIfAfAudio` migrates to `AutoSignedCable`; the old numeric values `1` and `2` retain their meaning.
+
+The footer now uses the same native ToolStrip Webdings LED and Segoe UI text style as RX CAT for `IF`, `DDC`, `AF`, and `V-MIC`. Grey means inactive; green means the local stage is working; amber means warming up, recovery, a recent drop/underrun or an unverified capture pairing; red means a stopped/failed stage. A green V-MIC does **not** prove WSJT-X receives or decodes. Manual cables deliberately show an amber V-MIC because the capture endpoint is not independently paired. Click any LED, label or Q/P readout to open existing diagnostics. Q is estimated software queue age; P is requested WASAPI period, not measured end-to-end latency.

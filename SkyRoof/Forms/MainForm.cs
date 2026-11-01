@@ -22,8 +22,10 @@ namespace SkyRoof
     private ToolStripProfessionalRenderer? ThemeRenderer;
     private readonly EmbeddedSkyCatHost EmbeddedSkyCat = new();
     private IfAfComparisonForm? ifAfComparisonForm;
-    private IfAfLinkBar? ifAfLinkBar;
-    private ToolStripControlHost? ifAfLinkHost;
+    private readonly ToolStripStatusLabel[] ifAfStageLeds = new ToolStripStatusLabel[4];
+    private readonly ToolStripStatusLabel[] ifAfStageLabels = new ToolStripStatusLabel[4];
+    private ToolStripStatusLabel? ifAfTimingLabel;
+    private IfAfStatus? previousIfAfStatus;
     internal void ApplyEmbeddedSkyCatSettings() =>
       EmbeddedSkyCat.Apply(ctx.Settings.Cat.Embedded);
     internal bool EmbeddedSkyCatRunning => EmbeddedSkyCat.IsRunning;
@@ -603,8 +605,6 @@ namespace SkyRoof
         var route = ctx.Settings.IfAf.AudioRoute;
         string? ifAfOutputId = IfAfSettings.ResolveRenderEndpoint(route,
           ctx.Settings.IfAf.VacRenderDeviceId,
-          route == IfAfAudioRoute.PreferIfAfAudio
-            ? IfAfAudioEndpointDiscovery.Detect().RenderId : null,
           route == IfAfAudioRoute.AutoSignedCable
             ? IfAfSignedCableDiscovery.Detect().RenderId : null);
         if (ctx.Settings.IfAf.Enabled && ctx.Settings.OutputStream.Enabled &&
@@ -1098,61 +1098,114 @@ namespace SkyRoof
 
     private void ConfigureIfAfLinkBar()
     {
-      ifAfLinkBar = new IfAfLinkBar
+      // Match RX CAT: each IF stage is a native ToolStrip LED + text pair.
+      // Avoid the old narrow custom-painted strip and its clipped labels.
+      string[] labels = { "IF", "DDC", "AF", "V-MIC" };
+      int index = StatusStrip.Items.IndexOf(RxCatLedLabel);
+      if (index < 0) index = StatusStrip.Items.Count;
+      for (int i = 0; i < labels.Length; i++)
       {
-        BackColor = StatusStrip.BackColor,
-        ForeColor = StatusStrip.ForeColor
-      };
-      ifAfLinkHost = new ToolStripControlHost(ifAfLinkBar)
+        var led = new ToolStripStatusLabel("n")
+        {
+          Name = "IfAf" + labels[i].Replace("-", "") + "LedLabel",
+          Font = new Font("Webdings", 9F),
+          ForeColor = SystemColors.GrayText,
+          AutoSize = false,
+          Size = new Size(21, 30),
+          TextAlign = ContentAlignment.MiddleCenter,
+          ToolTipText = labels[i] + " receiver stage"
+        };
+        var text = new ToolStripStatusLabel(labels[i])
+        {
+          Name = "IfAf" + labels[i].Replace("-", "") + "StatusLabel",
+          Font = new Font("Segoe UI", 10F),
+          TextAlign = ContentAlignment.MiddleLeft,
+          Margin = new Padding(0, 3, 5, 2)
+        };
+        led.Click += ShowIfAfLinkDiagnostics;
+        text.Click += ShowIfAfLinkDiagnostics;
+        ifAfStageLeds[i] = led;
+        ifAfStageLabels[i] = text;
+        StatusStrip.Items.Insert(index++, led);
+        StatusStrip.Items.Insert(index++, text);
+      }
+      ifAfTimingLabel = new ToolStripStatusLabel("Q:--  P:--")
       {
-        AutoSize = false,
-        Size = new Size(333, 27),
-        Visible = false,
-        ToolTipText = "IF-AF experimental receive pipeline: Q = software queue age, " +
-          "P = requested WASAPI playback period (NOT measured end-to-end latency)"
+        Name = "IfAfTimingLabel",
+        Font = new Font("Segoe UI", 9F),
+        ToolTipText = "Q: software processing queue age; P: requested WASAPI period, not physical latency"
       };
-      ifAfLinkBar.Click += (_, _) =>
-      {
-        if (ctx.IfAf == null) return;
-        var x = ctx.IfAf.Status;
-        MessageBox.Show(this,
-          $"IF-AF-Audio link\n\nMode: {x.Mode}\n" +
-          $"Capture samples: {x.InputSamples}\nAF samples: {x.OutputSamples}\n" +
-          $"Capture input RMS: {x.InputRmsDbfs:F1} dBFS\n" +
-          $"Queue age: {x.ProcessingQueueLagMs:F1} ms (host estimate)\n" +
-          $"WASAPI render period requested: {x.RequestedRenderPeriodMs} ms\n" +
-          $"Dropped blocks: {x.DroppedBlocks}\nClipped: {x.ClippedSamples}\n" +
-          $"Output underrun samples: {x.OutputUnderrunSamples}\n" +
-          $"Playback active: {x.RenderRunning}\n\n{x.VirtualDeviceStatus}\n\n{x.Detail}\n\n" +
-          "The WSJT-X decode state and device hardware latency are not directly observable here.",
-          "IF-AF-Audio link diagnostics",
-          MessageBoxButtons.OK, MessageBoxIcon.Information);
-      };
-      int index = StatusStrip.Items.IndexOf(VacStatusLabel);
-      StatusStrip.Items.Insert(index >= 0 ? index + 1 : StatusStrip.Items.Count,
-        ifAfLinkHost);
+      ifAfTimingLabel.Click += ShowIfAfLinkDiagnostics;
+      StatusStrip.Items.Insert(index, ifAfTimingLabel);
+      UpdateIfAfLinkBar();
     }
+
+    private void ShowIfAfLinkDiagnostics(object? sender, EventArgs e)
+    {
+      if (ctx.IfAf == null) return;
+      var x = ctx.IfAf.Status;
+      MessageBox.Show(this,
+        $"IF-AF-Audio link\n\nMode: {x.Mode}\n" +
+        $"Capture samples: {x.InputSamples}\nAF samples: {x.OutputSamples}\n" +
+        $"Capture input RMS: {x.InputRmsDbfs:F1} dBFS\n" +
+        $"Queue age: {x.ProcessingQueueLagMs:F1} ms (host estimate)\n" +
+        $"WASAPI render period requested: {x.RequestedRenderPeriodMs} ms\n" +
+        $"Dropped blocks: {x.DroppedBlocks}\nClipped: {x.ClippedSamples}\n" +
+        $"Output underrun samples: {x.OutputUnderrunSamples}\n" +
+        $"Playback active: {x.RenderRunning}\n\n{x.VirtualDeviceStatus}\n\n{x.Detail}\n\n" +
+        "The WSJT-X decode state and device hardware latency are not directly observable here.",
+        "IF-AF-Audio link diagnostics",
+        MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    private static Color IfAfLedColor(IfAfLinkState state) => state switch
+    {
+      IfAfLinkState.Ok => Color.Lime,
+      IfAfLinkState.Warning => Color.DarkOrange,
+      IfAfLinkState.Error => Color.Red,
+      _ => SystemColors.GrayText
+    };
 
     private void UpdateIfAfLinkBar()
     {
-      if (ifAfLinkBar == null || ifAfLinkHost == null) return;
+      if (ifAfStageLeds[0] == null || ifAfTimingLabel == null) return;
       bool enabled = ctx.Settings.IfAf.Enabled;
-      ifAfLinkHost.Visible = enabled;
-      ifAfLinkBar.BackColor = StatusStrip.BackColor;
-      ifAfLinkBar.ForeColor = StatusStrip.ForeColor;
-      ifAfLinkBar.UpdateLink(enabled, ctx.Settings.IfAf.AudioRoute,
-        ctx.IfAf?.Status);
-      if (enabled && ctx.IfAf != null)
+      IfAfStatus? status = ctx.IfAf?.Status;
+      if (status.HasValue && previousIfAfStatus.HasValue &&
+          status.Value.InputSamples < previousIfAfStatus.Value.InputSamples)
+        previousIfAfStatus = null; // capture restarted
+
+      var indicators = IfAfLinkBar.Evaluate(enabled,
+        ctx.Settings.IfAf.AudioRoute, status, previousIfAfStatus, DateTime.UtcNow);
+      var stages = new[] { indicators.If, indicators.Ddc,
+        indicators.Af, indicators.VirtualMic };
+      string[] stageNames = { "IF capture", "DDC / demodulator",
+        "AF output", "Virtual microphone (paired endpoints)" };
+      string detail = status.HasValue
+        ? $"Mode: {status.Value.Mode}; input: {status.Value.InputSamples}; " +
+          $"AF: {status.Value.OutputSamples}; Q: {status.Value.ProcessingQueueLagMs:F1} ms; " +
+          $"requested P: {status.Value.RequestedRenderPeriodMs} ms; " +
+          $"drops: {status.Value.DroppedBlocks}; clip: {status.Value.ClippedSamples}; " +
+          $"underrun: {status.Value.OutputUnderrunSamples}\n" +
+          $"{status.Value.VirtualDeviceStatus}\n{status.Value.Detail}" : "IF-AF not started";
+
+      for (int i = 0; i < stages.Length; i++)
       {
-        var x = ctx.IfAf.Status;
-        ifAfLinkHost.ToolTipText =
-          $"IF → DDC → AF → {(ctx.Settings.IfAf.AudioRoute == IfAfAudioRoute.PreferIfAfAudio ? "IF-AF-Audio" : "VAC")}" +
-          $"\nQueue age: {x.ProcessingQueueLagMs:F1} ms (host estimate)" +
-          $"\nWASAPI period: {x.RequestedRenderPeriodMs} ms (requested)" +
-          $"\nDrops: {x.DroppedBlocks}, clipping: {x.ClippedSamples}, " +
-          $"output silence-padded: {x.OutputUnderrunSamples} samples" +
-          $"\n{x.VirtualDeviceStatus}";
+        ifAfStageLeds[i].ForeColor = IfAfLedColor(stages[i]);
+        string tip = $"{stageNames[i]}: {stages[i]}\n{detail}";
+        ifAfStageLeds[i].ToolTipText = tip;
+        ifAfStageLabels[i].ToolTipText = tip;
       }
+      ifAfTimingLabel.Visible = enabled && status.HasValue;
+      if (ifAfTimingLabel.Visible)
+      {
+        ifAfTimingLabel.Text =
+          $"Q:{status!.Value.ProcessingQueueLagMs:F0}ms  " +
+          $"P:{status.Value.RequestedRenderPeriodMs}ms";
+        ifAfTimingLabel.ToolTipText =
+          "Q = estimated processing queue age; P = requested WASAPI period (NOT hardware or end-to-end latency)\n" + detail;
+      }
+      previousIfAfStatus = enabled ? status : null;
     }
 
     private void ConfigureIfAfComparisonMenu()

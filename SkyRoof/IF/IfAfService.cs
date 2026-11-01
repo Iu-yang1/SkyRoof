@@ -70,29 +70,20 @@ namespace SkyRoof.IF
           !Enum.IsDefined(typeof(IfAfAudioRoute), config.AudioRoute))
         throw new ArgumentOutOfRangeException(nameof(config),
           "Invalid IF-AF audio route or buffer preset.");
-      var pair = config.AudioRoute == IfAfAudioRoute.PreferIfAfAudio
-        ? IfAfAudioEndpointDiscovery.Detect()
-        : default;
       var signed = config.AudioRoute == IfAfAudioRoute.AutoSignedCable
         ? IfAfSignedCableDiscovery.Detect()
         : default;
-      virtualDeviceStatus = config.AudioRoute switch
-      {
-        IfAfAudioRoute.PreferIfAfAudio => pair.Status,
-        IfAfAudioRoute.AutoSignedCable => signed.Status,
-        _ => "Operator-selected virtual render endpoint (capture pair not verified)"
-      };
+      virtualDeviceStatus = config.AudioRoute == IfAfAudioRoute.AutoSignedCable
+        ? signed.Status
+        : "Operator-selected virtual render endpoint (capture pair not verified)";
       string? outputId = IfAfSettings.ResolveRenderEndpoint(config.AudioRoute,
-        config.VacRenderDeviceId, pair.RenderId, signed.RenderId);
+        config.VacRenderDeviceId, signed.RenderId);
       // This recording end belongs to WSJT-X; using it as IF creates feedback.
       if (config.AudioRoute == IfAfAudioRoute.AutoSignedCable &&
           string.Equals(config.InputDeviceId, signed.CaptureId,
             StringComparison.OrdinalIgnoreCase))
         throw new InvalidOperationException(
           "IF capture must not be the selected virtual cable recording endpoint. Select IC-9700 USB IF.");
-      if (config.AudioRoute == IfAfAudioRoute.PreferIfAfAudio && !pair.Ready)
-        throw new InvalidOperationException(pair.Status +
-          " Prefer an installed vendor cable (AutoSignedCable).");
       if (config.AudioRoute == IfAfAudioRoute.AutoSignedCable && !signed.Ready)
         throw new InvalidOperationException(signed.Status +
           " Get VB-CABLE from https://vb-audio.com/Cable/ or use ExistingVirtualCable.");

@@ -173,3 +173,9 @@
 - `Partial VB-CABLE installation detected`：先重启 Windows；如仍存在半安装状态，再使用原厂 setup 界面或 Windows 设备管理器处理，不自动卸载来源不明的共享驱动。
 
 安装成功后重启，再确认 Windows “播放”中有 **CABLE Input**、“录音”中有 **CABLE Output**，状态正常；随后在 SkyRoof 重新检测音频端点。GitHub CI 只验证签名、管理脚本与安装器内容，不在 CI 中加载内核驱动。
+
+## 2026-11-01：IF→AF 配置与状态栏统一
+
+`AF audio route` 只保留两个有效选项：`AutoSignedCable`（自动识别 VB-CABLE / VAC Lite 成对录音与播放端点，默认）和 `ExistingVirtualCable`（明确指定虚拟播放端点，录音端不自动验证）。旧版配置中的数值 `0` 或字符串 `PreferIfAfAudio` 会在加载时迁移为 `AutoSignedCable`，不会再显示已停止使用的自研驱动选项。既有数值 `1` 与 `2` 不改变含义。
+
+主窗口底部状态栏使用与 RX CAT 相同的 Webdings 圆灯 + Segoe UI 文本样式，分为 `IF`、`DDC`、`AF` 和 `V-MIC`。灰灯表示未启用；绿灯仅代表该本地阶段工作；橙灯代表启动中、短时欠载/丢块或无法核验完整端点对；红灯表示停止或明确故障。手动 `ExistingVirtualCable` 模式下，即使输出在播放，`V-MIC` 也保持橙色，因为程序未证明对应录音端点存在。绿灯**不能证明 WSJT-X 已收到或解码音频**。点击任一状态灯、名称或 `Q/P` 指标可打开完整 IF→AF 诊断。Q 是软件队列时延估计，P 是请求的 WASAPI 播放周期，并非端到端实测延迟。

@@ -8,7 +8,28 @@ namespace SkyRoof.IF
 {
   public enum IfAfSelection { FollowRadio, Usb, Lsb, CwUsb, CwLsb, Fm }
 
-  public enum IfAfAudioRoute { PreferIfAfAudio, ExistingVirtualCable, AutoSignedCable }
+  // Keep the persisted numeric values 1 and 2. Legacy value 0 (or its
+  // previous string label) is migrated when older Settings.json is loaded.
+  [JsonConverter(typeof(IfAfAudioRouteJsonConverter))]
+  public enum IfAfAudioRoute { ExistingVirtualCable = 1, AutoSignedCable = 2 }
+
+  public sealed class IfAfAudioRouteJsonConverter : JsonConverter<IfAfAudioRoute>
+  {
+    public override IfAfAudioRoute ReadJson(JsonReader reader, Type objectType,
+      IfAfAudioRoute existingValue, bool hasExistingValue, JsonSerializer serializer)
+    {
+      string? value = Convert.ToString(reader.Value);
+      return string.Equals(value, "1", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(value, nameof(IfAfAudioRoute.ExistingVirtualCable),
+          StringComparison.OrdinalIgnoreCase)
+        ? IfAfAudioRoute.ExistingVirtualCable : IfAfAudioRoute.AutoSignedCable;
+    }
+
+    public override void WriteJson(JsonWriter writer, IfAfAudioRoute value,
+      JsonSerializer serializer) =>
+      writer.WriteValue((int)(value == IfAfAudioRoute.ExistingVirtualCable
+        ? IfAfAudioRoute.ExistingVirtualCable : IfAfAudioRoute.AutoSignedCable));
+  }
 
   public enum IfAfLatencyPreset
   {
@@ -41,7 +62,7 @@ namespace SkyRoof.IF
     public IfAfSelection Mode { get; set; } = IfAfSelection.FollowRadio;
 
     [DisplayName("AF audio route")]
-    [Description("AutoSignedCable detects an installed VB-CABLE or VAC Lite playback/capture pair. ExistingVirtualCable uses your selected output. PreferIfAfAudio is a legacy experimental route and is not installed by SkyRoof.")]
+    [Description("AutoSignedCable (recommended) automatically pairs VB-CABLE / VAC Lite playback and recording endpoints. ExistingVirtualCable uses a manually selected playback endpoint without automatic capture pairing.")]
     [DefaultValue(IfAfAudioRoute.AutoSignedCable)]
     public IfAfAudioRoute AudioRoute { get; set; } = IfAfAudioRoute.AutoSignedCable;
 
@@ -93,12 +114,11 @@ namespace SkyRoof.IF
     [DefaultValue(2500)]
     public int FmDeviationHz { get; set; } = 2500;
 
-    /// <summary>Resolve effective renderer for playback and legacy stream collision guard.</summary>
+    /// <summary>Resolve the vendor render endpoint; never fall back to radio TX.</summary>
     public static string? ResolveRenderEndpoint(IfAfAudioRoute route,
-      string? manualRenderId, string? developerRenderId, string? signedRenderId) =>
+      string? manualRenderId, string? signedRenderId) =>
       route switch
       {
-        IfAfAudioRoute.PreferIfAfAudio => developerRenderId,
         IfAfAudioRoute.AutoSignedCable => signedRenderId,
         IfAfAudioRoute.ExistingVirtualCable => manualRenderId,
         _ => null

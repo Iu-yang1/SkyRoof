@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.IO;
+using Newtonsoft.Json;
 using SkyRoof.IF;
 using VE3NEA;
 using Xunit;
@@ -103,11 +104,100 @@ namespace VE3NEA.Dsp.Tests
     public void AutoSignedCableRenderWinsOverStaleManualVacId()
     {
       Assert.Equal("vbRender", IfAfSettings.ResolveRenderEndpoint(
-        IfAfAudioRoute.AutoSignedCable, "oldManual", "devRender", "vbRender"));
-      Assert.Equal("devRender", IfAfSettings.ResolveRenderEndpoint(
-        IfAfAudioRoute.PreferIfAfAudio, "oldManual", "devRender", "vbRender"));
+        IfAfAudioRoute.AutoSignedCable, "oldManual", "vbRender"));
       Assert.Equal("oldManual", IfAfSettings.ResolveRenderEndpoint(
-        IfAfAudioRoute.ExistingVirtualCable, "oldManual", "devRender", "vbRender"));
+        IfAfAudioRoute.ExistingVirtualCable, "oldManual", "vbRender"));
+    }
+
+    [Theory]
+    [InlineData("0", IfAfAudioRoute.AutoSignedCable)]
+    [InlineData("\"PreferIfAfAudio\"", IfAfAudioRoute.AutoSignedCable)]
+    [InlineData("1", IfAfAudioRoute.ExistingVirtualCable)]
+    [InlineData("\"ExistingVirtualCable\"", IfAfAudioRoute.ExistingVirtualCable)]
+    [InlineData("2", IfAfAudioRoute.AutoSignedCable)]
+    [InlineData("\"AutoSignedCable\"", IfAfAudioRoute.AutoSignedCable)]
+    public void LegacyIfAfRouteSettingsMigrateWithoutBreakingJson(
+      string routeJson, IfAfAudioRoute expected)
+    {
+      var settings = JsonConvert.DeserializeObject<IfAfSettings>(
+        "{\"AudioRoute\":" + routeJson + "}");
+      Assert.NotNull(settings);
+      Assert.Equal(expected, settings.AudioRoute);
+      Assert.DoesNotContain("PreferIfAfAudio",
+        JsonConvert.SerializeObject(settings));
+    }
+
+    [Fact]
+    public void RouteSelectorContainsExactlyTwoSupportedProviders()
+    {
+      Assert.Equal(new[] { "ExistingVirtualCable", "AutoSignedCable" },
+        Enum.GetNames<IfAfAudioRoute>());
+    }
+
+    private static IfAfStatus ActiveStatus(DateTime now) => new(
+      true, IfAfMode.Usb, 48000, 48000, 0, 0, now, -37.5,
+      0, "48-kHz IF -> CABLE Input", 20, true,
+      "VB-CABLE playback and recording endpoints detected (signature not independently verified).",
+      0);
+
+    [Fact]
+    public void FooterStagesMatchCatStatusWhenReceivePipelineIsHealthy()
+    {
+      var now = DateTime.UtcNow;
+      var live = ActiveStatus(now);
+      var result = IfAfLinkBar.Evaluate(true, IfAfAudioRoute.AutoSignedCable,
+        live, live with { InputSamples = 24000, OutputSamples = 24000 }, now);
+      Assert.Equal(IfAfLinkState.Ok, result.If);
+      Assert.Equal(IfAfLinkState.Ok, result.Ddc);
+      Assert.Equal(IfAfLinkState.Ok, result.Af);
+      Assert.Equal(IfAfLinkState.Ok, result.VirtualMic);
+    }
+
+    [Fact]
+    public void FooterStagesShowInactiveAndStaleCaptureWithoutFakeGreen()
+    {
+      var now = DateTime.UtcNow;
+      var live = ActiveStatus(now);
+      var disabled = IfAfLinkBar.Evaluate(false,
+        IfAfAudioRoute.AutoSignedCable, live, null, now);
+      Assert.Equal(IfAfLinkState.Inactive, disabled.If);
+      Assert.Equal(IfAfLinkState.Inactive, disabled.VirtualMic);
+      var stale = IfAfLinkBar.Evaluate(true, IfAfAudioRoute.AutoSignedCable,
+        live with { LastInputUtc = now.AddSeconds(-6) }, live, now);
+      Assert.NotEqual(IfAfLinkState.Ok, stale.If);
+      Assert.NotEqual(IfAfLinkState.Ok, stale.Ddc);
+    }
+
+    [Fact]
+    public void FooterStagesReportNewDropAndUnderrunOnlyDuringActiveInterval()
+    {
+      var now = DateTime.UtcNow;
+      var previous = ActiveStatus(now) with {
+        InputSamples = 24000, OutputSamples = 24000,
+        OutputUnderrunSamples = 400 };
+      var live = ActiveStatus(now) with {
+        DroppedBlocks = 1, OutputUnderrunSamples = 410 };
+      var troubled = IfAfLinkBar.Evaluate(true,
+        IfAfAudioRoute.AutoSignedCable, live, previous, now);
+      Assert.Equal(IfAfLinkState.Warning, troubled.Ddc);
+      Assert.Equal(IfAfLinkState.Warning, troubled.Af);
+      var recovered = IfAfLinkBar.Evaluate(true,
+        IfAfAudioRoute.AutoSignedCable,
+        live with { InputSamples = 72000, OutputSamples = 72000 },
+        live, now);
+      Assert.Equal(IfAfLinkState.Ok, recovered.Ddc);
+      Assert.Equal(IfAfLinkState.Ok, recovered.Af);
+    }
+
+    [Fact]
+    public void ManualVacDoesNotClaimPairedRecordingMicrophone()
+    {
+      var now = DateTime.UtcNow;
+      var live = ActiveStatus(now);
+      var result = IfAfLinkBar.Evaluate(true,
+        IfAfAudioRoute.ExistingVirtualCable, live, null, now);
+      Assert.Equal(IfAfLinkState.Ok, result.Af);
+      Assert.Equal(IfAfLinkState.Warning, result.VirtualMic);
     }
 
     [Theory]
