@@ -2,6 +2,7 @@ using System;
 using FluentAssertions;
 using SkyRoof;
 using SkyRoof.AFC;
+using VE3NEA;
 using Xunit;
 
 namespace VE3NEA.Dsp.Tests
@@ -645,6 +646,36 @@ namespace VE3NEA.Dsp.Tests
       Observe(7.2, 145000000, 80, true);
       probe.State.Should().Be(AfcPolarityCalibrator.Phase.Complete);
       probe.VerifiedSign.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(Slicer.Mode.USB, 1)]
+    [InlineData(Slicer.Mode.FM, 1)]
+    [InlineData(Slicer.Mode.CW, 1)]
+    [InlineData(Slicer.Mode.LSB, -1)]
+    [InlineData(Slicer.Mode.LSB_D, -1)]
+    public void AFC_ResolvesNominalIfAxisWithoutCatProbe(
+      Slicer.Mode radioMode, int expected)
+    {
+      AfcDirectionResolver.Resolve(0, radioMode).Should().Be(expected);
+      AfcDirectionResolver.Resolve(-1, radioMode).Should().Be(-1);
+      AfcDirectionResolver.Resolve(1, radioMode).Should().Be(1);
+    }
+
+    [Fact]
+    public void AFC_AutoStartsAfterSecondValidIfMeasurement()
+    {
+      var controller = new AfcController();
+      controller.Configure(AfcSignalMode.FM, AfcControlMode.Auto);
+      controller.Observe(new(AfcSignalMode.FM, T0, 67, 180, 5, .95, true),
+        145000000, 1, 2000, 20, 5, false);
+      controller.Snapshot.CorrectionHz.Should().Be(0);
+      controller.Snapshot.ErrorHz.Should().BeApproximately(180, 1);
+      controller.Observe(new(AfcSignalMode.FM, T0.AddMilliseconds(250),
+        67, 180, 5, .95, true),
+        145000000, 1, 2000, 20, 5, false);
+      controller.Snapshot.CorrectionHz.Should().BeGreaterThan(0);
+      controller.Snapshot.State.Should().Be(AfcLockState.Locked);
     }
 
   }
