@@ -1,5 +1,6 @@
 ﻿using VE3NEA;
 using Newtonsoft.Json;
+using SkyRoof.IF;
 using Serilog;
 using System.ComponentModel;
 using System.Text;
@@ -82,6 +83,10 @@ namespace SkyRoof
     [DisplayName("FM / CW / SSB AFC")]
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public AfcSettings Afc { get; set; } = new();
+
+    [DisplayName("12 kHz IF -> AF / WSJT-X (Test)")]
+    [TypeConverter(typeof(ExpandableObjectConverter))]
+    public IfAfSettings IfAf { get; set; } = new();
 
 
     [DisplayName("Transverter")]

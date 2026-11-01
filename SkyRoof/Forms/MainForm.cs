@@ -5,6 +5,7 @@ using MathNet.Numerics;
 using Serilog;
 using SGPdotNET.Observation;
 using SkyRoof.CW;
+using SkyRoof.IF;
 using VE3NEA;
 using VE3NEA.Clock;
 using WeifenLuo.WinFormsUI.Docking;
@@ -132,6 +133,8 @@ namespace SkyRoof
           ctx.Settings.CwConsole,
           new CwOperatorTransmitInterlock());
       ApplyOutputStreamSettings();
+      ctx.IfAf = new IfAfService();
+      ApplyIfAfSettings();
       ApplyKissServerSettings();
       ctx.CatControl.ApplySettings();
       GainWidget.ApplyRfGain();
@@ -255,6 +258,8 @@ namespace SkyRoof
       // down the shared SDR/audio devices they may be observing.
       ctx.CwAudio?.Dispose();
       ctx.CwAudio = null;
+      ctx.IfAf?.Dispose();
+      ctx.IfAf = null;
 
       // dispose sdr and dsp
       ctx.Sdr?.Dispose();
@@ -584,6 +589,31 @@ namespace SkyRoof
       ctx.CwAudio?.ApplySettings();
     }
 
+    internal void ApplyIfAfSettings()
+    {
+      if (ctx.IfAf == null) return;
+      try
+      {
+        if (ctx.Settings.IfAf.Enabled && ctx.Settings.OutputStream.Enabled &&
+            ctx.Settings.OutputStream.Type == DataStreamType.AudioToVac &&
+            ctx.Settings.OutputStream.Vac == ctx.Settings.IfAf.VacRenderDeviceId)
+          throw new InvalidOperationException(
+            "IF-AF and SDR Output Stream cannot share one VAC render endpoint.");
+        ctx.IfAf.Apply(ctx.Settings.IfAf, CurrentIfAfMode());
+      }
+      catch (Exception ex)
+      {
+        Serilog.Log.Error(ex, "Experimental IF-AF route failed");
+        MessageBox.Show(this, ex.Message, "IF-AF Test",
+          MessageBoxButtons.OK, MessageBoxIcon.Warning);
+      }
+    }
+
+    private IfAfMode CurrentIfAfMode() =>
+      IfAfSettings.Resolve(ctx.Settings.IfAf.Mode,
+        ctx.FrequencyControl.RadioLink.TxCust == null
+          ? Slicer.Mode.USB : ctx.FrequencyControl.RadioLink.DownlinkMode);
+
     internal void ApplyKissServerSettings()
     {
       var sett = ctx.Settings.Telemetry.KissServer;
@@ -599,6 +629,7 @@ namespace SkyRoof
       ctx.AudioVacSoundcard.SetDeviceId(sett.Vac);
       ctx.IqVacSoundcard.SetDeviceId(sett.Vac);
       EnableDisableVac();
+      if (ctx.IfAf != null) ApplyIfAfSettings();
     }
 
     private void EnableDisableVac()
@@ -1916,6 +1947,7 @@ namespace SkyRoof
 
     private void timer_Tick(object sender, EventArgs e)
     {
+      ctx.IfAf?.UpdateMode(CurrentIfAfMode());
       // 8 Hz (125 ms) ticks
       TickCount += 1;
 

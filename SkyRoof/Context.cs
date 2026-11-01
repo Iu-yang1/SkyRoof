@@ -1,6 +1,7 @@
 ﻿using MathNet.Numerics;
 using VE3NEA;
 using SkyRoof.CW;
+using SkyRoof.IF;
 
 namespace SkyRoof
 {
@@ -54,6 +55,7 @@ namespace SkyRoof
     public CatControl CatControl = new();
     internal PttHotkeyController? PttHotkey;
     public CwAudioSourceController? CwAudio;
+    public IfAfService? IfAf;
     public CwReceiveWorker? CwReceiveWorker;
     public CwTransmitController? CwTransmit;
 

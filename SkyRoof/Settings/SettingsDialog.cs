@@ -368,6 +368,8 @@ namespace SkyRoof
 
       if (ChangedFields.Exists(s => s.StartsWith("SkyRoof.OutputStreamSettings.")))
         ctx.MainForm.ApplyOutputStreamSettings();
+      if (ChangedFields.Exists(s => s.StartsWith("SkyRoof.IF.IfAfSettings.")))
+        ctx.MainForm.ApplyIfAfSettings();
 
       if (ChangedFields.Exists(s => s.StartsWith("SkyRoof.KissServerSettings.")))
         ctx.MainForm.ApplyKissServerSettings();
