@@ -163,5 +163,84 @@ namespace VE3NEA.Dsp.Tests
         "once the verified sign is inverted the controller must stop climbing in the wrong direction");
     }
 
+    [Theory]
+    [InlineData(AfcSignalMode.FM, false, 12000, 100)]
+    [InlineData(AfcSignalMode.CW, false, 12000, 100)]
+    [InlineData(AfcSignalMode.SSB, true, 12000, 125)]
+    public void AdaptivePresetCanSchedule250MillisecondFirstObservation(
+      AfcSignalMode mode, bool pilot, int minimum, int cadence)
+    {
+      var profile = AfcTrackingProfile.For(mode, pilot,
+        AfcAcquisitionPreset.Adaptive);
+      profile.MinimumSamples.Should().Be(minimum);
+      profile.CadenceMilliseconds.Should().Be(cadence);
+      profile.WindowSamples.Should().BeGreaterThan(profile.MinimumSamples,
+        "adaptive acquisition keeps accumulating samples after the first fix");
+    }
+
+    [Fact]
+    public void FastAndSensitivePresetsChangeLatencyWithoutBypassingPilotPolicy()
+    {
+      var fast = AfcTrackingProfile.For(AfcSignalMode.FM, false,
+        AfcAcquisitionPreset.Fast);
+      var sensitive = AfcTrackingProfile.For(AfcSignalMode.FM, false,
+        AfcAcquisitionPreset.Sensitive);
+      fast.MinimumSamples.Should().BeLessThan(sensitive.MinimumSamples);
+      sensitive.WindowSamples.Should().BeGreaterThan(fast.WindowSamples);
+      var speech = AfcTrackingProfile.For(AfcSignalMode.SSB, false,
+        AfcAcquisitionPreset.Fast);
+      speech.MinimumSamples.Should().Be(36000);
+      speech.CoastSeconds.Should().Be(0,
+        "an unpiloted SSB signal cannot become an absolute AFC reference");
+    }
+
+    [Theory]
+    [InlineData(AfcAcquisitionPreset.Adaptive)]
+    [InlineData(AfcAcquisitionPreset.Fast)]
+    public void FMCanEstimateCarrierFromInitial250Milliseconds(
+      AfcAcquisitionPreset preset)
+    {
+      var pcm = new float[12000];
+      double phase = 0;
+      for (int i = 0; i < pcm.Length; i++)
+      {
+        double t = i / (double)Fs;
+        phase += 2 * Math.PI / Fs *
+          (12000 + 145 + 450 * Math.Sin(2 * Math.PI * 500 * t));
+        pcm[i] = (float)(.4 * Math.Cos(phase));
+      }
+      var obs = new AfcSignalProcessing().Analyze(pcm, AfcSignalMode.FM,
+        Epoch, 13, acquisitionPreset: preset);
+      obs.HasAbsoluteReference.Should().BeTrue();
+      obs.IfOffsetHz.Should().BeApproximately(145, 60);
+      obs.Confidence.Should().BeGreaterThan(.6);
+    }
+
+    [Fact]
+    public void AdaptiveCwShortBurstRemainsWithinSelectedNarrowGate()
+    {
+      float[] pcm = new float[12000];
+      for (int i = 0; i < pcm.Length; i++)
+      {
+        double t = i / (double)Fs;
+        pcm[i] = (float)(.45 * Math.Cos(2 * Math.PI * 12125 * t) +
+          .15 * Math.Cos(2 * Math.PI * 12425 * t));
+      }
+      var obs = new AfcSignalProcessing().Analyze(pcm, AfcSignalMode.CW,
+        Epoch, 14, expectedOffsetHz: 125,
+        acquisitionPreset: AfcAcquisitionPreset.Adaptive);
+      obs.HasAbsoluteReference.Should().BeTrue();
+      obs.IfOffsetHz.Should().BeApproximately(125, 8);
+    }
+
+    [Fact]
+    public void AdaptiveShortInputDoesNotPretendToHaveLongWindowInformation()
+    {
+      var pcm = new float[9000]; // only 187.5 ms
+      var obs = new AfcSignalProcessing().Analyze(pcm, AfcSignalMode.FM,
+        Epoch, 15, acquisitionPreset: AfcAcquisitionPreset.Adaptive);
+      obs.HasAbsoluteReference.Should().BeFalse();
+    }
+
   }
 }

@@ -75,7 +75,7 @@ namespace SkyRoof.AFC
       double search = toneMode && carrierTracked ? carrierSearchHz : expectedOffsetHz;
       AfcObservation result = mode switch
       {
-        AfcSignalMode.FM => EstimateFm(bb, utc, generation),
+        AfcSignalMode.FM => EstimateFm(bb, utc, generation, acquisitionPreset),
         AfcSignalMode.CW => EstimateTone(bb, mode, utc, generation,
           search, acquisitionPreset),
         AfcSignalMode.SSB when ssbPilot =>
@@ -121,7 +121,50 @@ namespace SkyRoof.AFC
       return output;
     }
 
-    private AfcObservation EstimateFm(Complex[] bb, DateTime utc, long generation)
+    private AfcObservation EstimateFm(Complex[] bb, DateTime utc,
+      long generation, AfcAcquisitionPreset preset)
+    {
+      var primary = EstimateFmSingle(bb, utc, generation);
+      // Once more independent time information arrives, run a second
+      // overlapping short-time estimator. Agreement may refine the offset;
+      // disagreement REDUCES certainty, never creates a false lock.
+      // Both analyses share samples; never treat them as independent CAT
+      // confirmations or inflate the confidence score.
+      if (preset != AfcAcquisitionPreset.Adaptive || bb.Length < 11500 ||
+          !primary.HasAbsoluteReference)
+        return primary;
+      int half = bb.Length / 2;
+      var recent = new Complex[half];
+      Array.Copy(bb, half, recent, 0, half);
+      var shortResult = EstimateFmSingle(recent, utc, generation);
+      if (!shortResult.HasAbsoluteReference)
+        return primary;
+      double difference = Math.Abs(primary.IfOffsetHz - shortResult.IfOffsetHz);
+      if (difference > Math.Max(90, 3 * Math.Max(primary.SigmaHz,
+          shortResult.SigmaHz)))
+        return primary with
+        {
+          SigmaHz = Math.Max(primary.SigmaHz, difference * .5),
+          Confidence = primary.Confidence * .6,
+          HasAbsoluteReference = false,
+          Ambiguous = true
+        };
+      double weight = Math.Clamp(
+        primary.SigmaHz / Math.Max(1, primary.SigmaHz + shortResult.SigmaHz),
+        .10, .30);
+      return primary with
+      {
+        IfOffsetHz = primary.IfOffsetHz * (1 - weight) +
+          shortResult.IfOffsetHz * weight,
+        // Overlap makes the measurements correlated: no spurious reduction
+        // in sigma below the reliable single-window lower bound.
+        SigmaHz = Math.Max(5, primary.SigmaHz),
+        Confidence = Math.Min(primary.Confidence, shortResult.Confidence)
+      };
+    }
+
+    private AfcObservation EstimateFmSingle(Complex[] bb, DateTime utc,
+      long generation)
     {
       const int segments = 6;
       if (bb.Length < 1024) return new(AfcSignalMode.FM, utc, generation, 0, 9999, 0, false);
@@ -200,8 +243,8 @@ namespace SkyRoof.AFC
           ? sensitive : fast;
       // Optional third, longer resolution for an already available weak
       // carrier: no extra time-to-first-fix penalty in Adaptive mode.
-      if (preset is AfcAcquisitionPreset.Adaptive or
-          AfcAcquisitionPreset.Sensitive && bb.Length >= 16384)
+      if ((preset is AfcAcquisitionPreset.Adaptive or
+          AfcAcquisitionPreset.Sensitive) && bb.Length >= 16384)
       {
         var deep = EstimateToneWindow(bb, mode, utc, generation,
           expectedHz, 16384);
@@ -272,8 +315,9 @@ namespace SkyRoof.AFC
 
     private double EstimateFmSpectralQuality(Complex[] bb)
     {
-      const int n = 8192;
-      if (bb.Length < n) return 0;
+      int n = bb.Length >= 8192 ? 8192 :
+        bb.Length >= 4096 ? 4096 : 0;
+      if (n == 0) return 0;
       var s = new Complex[n];
       for (int i = 0; i < n; i++)
       {
@@ -306,8 +350,9 @@ namespace SkyRoof.AFC
 
     private double FmSpectralCenter(Complex[] bb)
     {
-      const int n = 8192;
-      if (bb.Length < n) return double.NaN;
+      int n = bb.Length >= 8192 ? 8192 :
+        bb.Length >= 4096 ? 4096 : 0;
+      if (n == 0) return double.NaN;
       var spectrum = new Complex[n];
       for (int i = 0; i < n; i++)
       {
