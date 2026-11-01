@@ -26,6 +26,8 @@ namespace SkyRoof
     private readonly ToolStripStatusLabel[] ifAfStageLabels = new ToolStripStatusLabel[4];
     private ToolStripStatusLabel? ifAfTimingLabel;
     private IfAfStatus? previousIfAfStatus;
+    private DateTime lastIfAfClipUtc;
+    private long recentIfAfClips, recentIfAfOutputSamples;
     internal void ApplyEmbeddedSkyCatSettings() =>
       EmbeddedSkyCat.Apply(ctx.Settings.Cat.Embedded);
     internal bool EmbeddedSkyCatRunning => EmbeddedSkyCat.IsRunning;
@@ -1147,10 +1149,17 @@ namespace SkyRoof
       MessageBox.Show(this,
         $"IF-AF-Audio link\n\nMode: {x.Mode}\n" +
         $"Capture samples: {x.InputSamples}\nAF samples: {x.OutputSamples}\n" +
-        $"Capture input RMS: {x.InputRmsDbfs:F1} dBFS\n" +
+        $"Capture input RMS (latest block): {x.InputRmsDbfs:F1} dBFS\n" +
+        $"AF RMS (latest block, after limit): {x.OutputRmsDbfs:F1} dBFS\n" +
+        $"AF peak (latest block, BEFORE limit): {x.OutputPeakBeforeLimitDbfs:F1} dBFS\n" +
         $"Queue age: {x.ProcessingQueueLagMs:F1} ms (host estimate)\n" +
         $"WASAPI render period requested: {x.RequestedRenderPeriodMs} ms\n" +
-        $"Dropped blocks: {x.DroppedBlocks}\nClipped: {x.ClippedSamples}\n" +
+        $"Dropped blocks: {x.DroppedBlocks}\n" +
+        $"Clipped since start: {x.ClippedSamples} (cumulative)\n" +
+        $"New clipped since last status check: {recentIfAfClips} " +
+        $"of {recentIfAfOutputSamples} samples " +
+        $"({(recentIfAfOutputSamples > 0 ? 100.0 * recentIfAfClips / recentIfAfOutputSamples : 0):F2}%)\n" +
+        $"Clipped in most recent ~10ms block: {x.LastBlockClippedSamples}\n" +
         $"Output underrun samples: {x.OutputUnderrunSamples}\n" +
         $"Playback active: {x.RenderRunning}\n\n{x.VirtualDeviceStatus}\n\n{x.Detail}\n\n" +
         "The WSJT-X decode state and device hardware latency are not directly observable here.",
@@ -1171,12 +1180,30 @@ namespace SkyRoof
       if (ifAfStageLeds[0] == null || ifAfTimingLabel == null) return;
       bool enabled = ctx.Settings.IfAf.Enabled;
       IfAfStatus? status = ctx.IfAf?.Status;
+      DateTime nowUtc = DateTime.UtcNow;
+      if (!enabled || (status.HasValue && previousIfAfStatus.HasValue &&
+          status.Value.InputSamples < previousIfAfStatus.Value.InputSamples))
+      {
+        previousIfAfStatus = null; // disabled or capture restarted
+        lastIfAfClipUtc = default;
+      }
+      recentIfAfClips = recentIfAfOutputSamples = 0;
       if (status.HasValue && previousIfAfStatus.HasValue &&
-          status.Value.InputSamples < previousIfAfStatus.Value.InputSamples)
-        previousIfAfStatus = null; // capture restarted
-
+          status.Value.OutputSamples >= previousIfAfStatus.Value.OutputSamples)
+      {
+        recentIfAfClips = Math.Max(0,
+          status.Value.ClippedSamples - previousIfAfStatus.Value.ClippedSamples);
+        recentIfAfOutputSamples = Math.Max(0,
+          status.Value.OutputSamples - previousIfAfStatus.Value.OutputSamples);
+        if (recentIfAfClips > 0) lastIfAfClipUtc = nowUtc;
+      }
+      // Hold the amber indicator for 2s after a REAL recent overload, not
+      // forever after one historical clipped sample.
+      bool recentClipWarning = lastIfAfClipUtc != default &&
+        (nowUtc - lastIfAfClipUtc).TotalSeconds < 2;
       var indicators = IfAfLinkBar.Evaluate(enabled,
-        ctx.Settings.IfAf.AudioRoute, status, previousIfAfStatus, DateTime.UtcNow);
+        ctx.Settings.IfAf.AudioRoute, status, previousIfAfStatus,
+        nowUtc, recentClipWarning);
       var stages = new[] { indicators.If, indicators.Ddc,
         indicators.Af, indicators.VirtualMic };
       string[] stageNames = { "IF capture", "DDC / demodulator",
@@ -1185,7 +1212,9 @@ namespace SkyRoof
         ? $"Mode: {status.Value.Mode}; input: {status.Value.InputSamples}; " +
           $"AF: {status.Value.OutputSamples}; Q: {status.Value.ProcessingQueueLagMs:F1} ms; " +
           $"requested P: {status.Value.RequestedRenderPeriodMs} ms; " +
-          $"drops: {status.Value.DroppedBlocks}; clip: {status.Value.ClippedSamples}; " +
+          $"drops: {status.Value.DroppedBlocks}; lifetime clip: {status.Value.ClippedSamples}; " +
+          $"recent clip: {recentIfAfClips}/{recentIfAfOutputSamples}; " +
+          $"AF pre-limit peak: {status.Value.OutputPeakBeforeLimitDbfs:F1} dBFS; " +
           $"underrun: {status.Value.OutputUnderrunSamples}\n" +
           $"{status.Value.VirtualDeviceStatus}\n{status.Value.Detail}" : "IF-AF not started";
 

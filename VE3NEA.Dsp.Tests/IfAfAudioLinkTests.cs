@@ -190,6 +190,62 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void HistoricalClippingAloneDoesNotPermanentlyLatchAmberLed()
+    {
+      var now = DateTime.UtcNow;
+      var current = ActiveStatus(now) with {
+        InputSamples = 240000, OutputSamples = 240000, ClippedSamples = 20000
+      };
+      var prior = current with {
+        InputSamples = 216000, OutputSamples = 216000
+      };
+      var indicators = IfAfLinkBar.Evaluate(true,
+        IfAfAudioRoute.AutoSignedCable, current, prior, now);
+      Assert.Equal(IfAfLinkState.Ok, indicators.Af);
+      Assert.Equal(IfAfLinkState.Ok, indicators.VirtualMic);
+    }
+
+    [Fact]
+    public void NewlyClippedSamplesWarnThenRecoverAfterNoNewClips()
+    {
+      var now = DateTime.UtcNow;
+      var before = ActiveStatus(now) with {
+        InputSamples = 24000, OutputSamples = 24000, ClippedSamples = 15
+      };
+      var during = ActiveStatus(now) with {
+        InputSamples = 48000, OutputSamples = 48000, ClippedSamples = 55
+      };
+      var warning = IfAfLinkBar.Evaluate(true,
+        IfAfAudioRoute.AutoSignedCable, during, before, now);
+      Assert.Equal(IfAfLinkState.Warning, warning.Af);
+      Assert.Equal(IfAfLinkState.Warning, warning.VirtualMic);
+      var held = IfAfLinkBar.Evaluate(true,
+        IfAfAudioRoute.AutoSignedCable,
+        during with { InputSamples = 72000, OutputSamples = 72000 },
+        during, now.AddSeconds(1), holdRecentClipWarning: true);
+      Assert.Equal(IfAfLinkState.Warning, held.Af);
+      var recovered = IfAfLinkBar.Evaluate(true,
+        IfAfAudioRoute.AutoSignedCable,
+        during with { InputSamples = 96000, OutputSamples = 96000 },
+        during with { InputSamples = 72000, OutputSamples = 72000 },
+        now.AddSeconds(4));
+      Assert.Equal(IfAfLinkState.Ok, recovered.Af);
+      Assert.Equal(IfAfLinkState.Ok, recovered.VirtualMic);
+    }
+
+    [Fact]
+    public void FirstStatusSnapshotDoesNotTreatPreexistingClipsAsRecent()
+    {
+      var now = DateTime.UtcNow;
+      var s = ActiveStatus(now) with {
+        InputSamples = 200000, OutputSamples = 200000, ClippedSamples = 5698815
+      };
+      var x = IfAfLinkBar.Evaluate(true,
+        IfAfAudioRoute.AutoSignedCable, s, null, now);
+      Assert.Equal(IfAfLinkState.Ok, x.Af);
+    }
+
+    [Fact]
     public void ManualVacDoesNotClaimPairedRecordingMicrophone()
     {
       var now = DateTime.UtcNow;

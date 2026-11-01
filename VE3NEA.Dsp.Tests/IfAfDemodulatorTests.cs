@@ -133,6 +133,20 @@ namespace VE3NEA.Dsp.Tests
       Assert.All(y, v => Assert.True(float.IsFinite(v)));
     }
     [Fact]
+    public void NormalLowLevelUsbSignalDoesNotCauseDdcOutputClipping()
+    {
+      // A weak IF input such as ~-38 dBFS must not acquire 30+ dB of
+      // unexplained gain in the SSB DDC. This isolates FIR/NCO from any
+      // host-device glitch or gain setting that might cause real clipping.
+      var x = Generate(1500);
+      for (int i = 0; i < x.Length; i++) x[i] *= 0.045f;
+      var af = Decode(IfAfMode.Usb, x, 480);
+      double maxAbs = 0;
+      foreach (float sample in af) maxAbs = Math.Max(maxAbs, Math.Abs(sample));
+      Assert.InRange(maxAbs, 0.01, 0.05);
+    }
+
+    [Fact]
     public void ConfigurableSsbPassbandSuppressesAudioOutsideSelectedUpperEdge()
     {
       var x = Generate(3200);

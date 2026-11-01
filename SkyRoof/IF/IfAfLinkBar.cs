@@ -17,7 +17,7 @@ namespace SkyRoof.IF
     /// avoid a permanent warning from an already recovered startup underrun.</summary>
     public static IfAfLinkIndicators Evaluate(bool enabled,
       IfAfAudioRoute route, IfAfStatus? current, IfAfStatus? previous,
-      DateTime nowUtc)
+      DateTime nowUtc, bool holdRecentClipWarning = false)
     {
       if (!enabled) return new(IfAfLinkState.Inactive,
         IfAfLinkState.Inactive, IfAfLinkState.Inactive, IfAfLinkState.Inactive);
@@ -31,9 +31,16 @@ namespace SkyRoof.IF
       bool fresh = s.LastInputUtc != default &&
         (nowUtc - s.LastInputUtc).TotalSeconds is >= -2 and <= 2;
       bool inputMoving = started && fresh && s.InputSamples > 0;
-      bool dropsIncreased = s.DroppedBlocks > (previous.HasValue &&
-        previous.Value.DroppedBlocks <= s.DroppedBlocks
-          ? previous.Value.DroppedBlocks : 0);
+      // Cumulative counters are historical diagnostics, not latched alarms.
+      // The first observation establishes a baseline (it may already
+      // contain many clips from an earlier burst).
+      bool sameStream = previous.HasValue &&
+        s.OutputSamples >= previous.Value.OutputSamples &&
+        s.InputSamples >= previous.Value.InputSamples;
+      bool dropsIncreased = sameStream &&
+        s.DroppedBlocks > previous!.Value.DroppedBlocks;
+      bool clipsIncreased = sameStream &&
+        s.ClippedSamples > previous!.Value.ClippedSamples;
       bool outputMoving = s.OutputSamples > 0 &&
         (!previous.HasValue ||
           s.OutputSamples < previous.Value.OutputSamples ||
@@ -41,8 +48,8 @@ namespace SkyRoof.IF
           s.InputSamples == previous.Value.InputSamples);
       bool processing = inputMoving && outputMoving &&
         s.OutputSamples <= s.InputSamples;
-      bool underrunsIncreased = previous.HasValue &&
-        s.OutputUnderrunSamples > previous.Value.OutputUnderrunSamples;
+      bool underrunsIncreased = sameStream &&
+        s.OutputUnderrunSamples > previous!.Value.OutputUnderrunSamples;
       bool highLag = s.ProcessingQueueLagMs > 200;
       bool paired = s.VirtualDeviceStatus.Contains("endpoints detected",
         StringComparison.OrdinalIgnoreCase);
@@ -58,7 +65,7 @@ namespace SkyRoof.IF
           dropsIncreased || highLag ? IfAfLinkState.Warning : IfAfLinkState.Ok;
       IfAfLinkState af = !s.RenderRunning ? fail :
         !processing ? IfAfLinkState.Warning :
-          underrunsIncreased || s.ClippedSamples > 0
+          underrunsIncreased || clipsIncreased || holdRecentClipWarning
             ? IfAfLinkState.Warning : IfAfLinkState.Ok;
       // In manual mode the application cannot prove that a matching capture
       // endpoint exists; do not use green for an unverified microphone.

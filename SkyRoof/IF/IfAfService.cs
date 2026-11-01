@@ -12,7 +12,10 @@ namespace SkyRoof.IF
     long ClippedSamples, DateTime LastInputUtc, double InputRmsDbfs,
     double ProcessingQueueLagMs, string Detail,
     int RequestedRenderPeriodMs, bool RenderRunning,
-    string VirtualDeviceStatus, long OutputUnderrunSamples);
+    string VirtualDeviceStatus, long OutputUnderrunSamples,
+    double OutputRmsDbfs = double.NaN,
+    double OutputPeakBeforeLimitDbfs = double.NaN,
+    long LastBlockClippedSamples = 0);
 
   /// <summary>Single-owner 48-kHz IF WASAPI stream; fans out unmodified IF
   /// to AFC and SSTV synchronously and produces filtered AF on a separate
@@ -35,6 +38,9 @@ namespace SkyRoof.IF
     private long inputSamples, outputSamples, dropped, clipped;
     private long lastUtcTicks;
     private double lastRmsDbfs = double.NegativeInfinity;
+    private double lastOutputRmsDbfs = double.NegativeInfinity;
+    private double lastOutputPeakBeforeLimitDbfs = double.NegativeInfinity;
+    private long lastBlockClippedSamples;
     private string detail = "Stopped";
     private bool disposed;
     public event EventHandler<DataEventArgs<float>>? RawIfAvailable;
@@ -56,7 +62,10 @@ namespace SkyRoof.IF
       Volatile.Read(ref lastRmsDbfs),
       Interlocked.Read(ref lastProcessingLagUs) / 1000.0, detail,
       vac.RequestedLatencyMs, vac.IsRunning, virtualDeviceStatus,
-      vac.UnderrunSamples);
+      vac.UnderrunSamples,
+      Volatile.Read(ref lastOutputRmsDbfs),
+      Volatile.Read(ref lastOutputPeakBeforeLimitDbfs),
+      Interlocked.Read(ref lastBlockClippedSamples));
 
     public void Apply(IfAfSettings config, IfAfMode mode)
     {
@@ -126,6 +135,10 @@ namespace SkyRoof.IF
       Interlocked.Exchange(ref dropped, 0);
       Interlocked.Exchange(ref clipped, 0);
       Interlocked.Exchange(ref lastProcessingLagUs, 0);
+      Interlocked.Exchange(ref lastBlockClippedSamples, 0);
+      Volatile.Write(ref lastRmsDbfs, double.NegativeInfinity);
+      Volatile.Write(ref lastOutputRmsDbfs, double.NegativeInfinity);
+      Volatile.Write(ref lastOutputPeakBeforeLimitDbfs, double.NegativeInfinity);
       detail = "Starting";
       // 8 x ~10-ms IF chunks caps queueing to ~80 ms. A stalled
       // consumer drops excess frames instead of accumulating seconds of
@@ -227,20 +240,32 @@ namespace SkyRoof.IF
               (long)Math.Round(queueLagMs * 1000));
           float[] af = new float[frame.Data.Length];
           dsp.Process(frame.Data, af);
-          double power = 0;
+          double inputPower = 0, outputPower = 0, outputPeak = 0;
+          long blockClips = 0;
           for (int i = 0; i < af.Length; i++)
           {
             double v = af[i] * scale;
-            power += frame.Data[i] * frame.Data[i];
+            inputPower += frame.Data[i] * frame.Data[i];
+            outputPeak = Math.Max(outputPeak, Math.Abs(v));
             if (Math.Abs(v) > .999)
             {
-              Interlocked.Increment(ref clipped);
+              blockClips++;
               v = Math.Clamp(v, -.999, .999);
             }
+            outputPower += v * v;
             af[i] = (float)v;
           }
+          if (blockClips > 0) Interlocked.Add(ref clipped, blockClips);
+          // These describe only the latest 10-ms processing block, whereas
+          // ClippedSamples remains a lifetime counter. Report peak BEFORE
+          // limiting to distinguish an actual overload from old history.
           Volatile.Write(ref lastRmsDbfs, 10 *
-            Math.Log10(Math.Max(power / frame.Data.Length, 1e-15)));
+            Math.Log10(Math.Max(inputPower / frame.Data.Length, 1e-15)));
+          Volatile.Write(ref lastOutputRmsDbfs, 10 *
+            Math.Log10(Math.Max(outputPower / af.Length, 1e-15)));
+          Volatile.Write(ref lastOutputPeakBeforeLimitDbfs, 20 *
+            Math.Log10(Math.Max(outputPeak, 1e-15)));
+          Interlocked.Exchange(ref lastBlockClippedSamples, blockClips);
           // OutputSoundcard has an independent bounded audio ring; no VAC
           // writes, CAT or UI work on the WASAPI capture callback.
           vac.AddSamples(af, 0, af.Length);
