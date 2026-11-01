@@ -230,8 +230,12 @@ namespace SkyRoof.AFC
         confidence *= Math.Clamp(250.0 / Math.Max(250, disagreement), 0, 1);
         sigma = Math.Max(sigma, disagreement * 0.25);
       }
-      bool valid = double.IsFinite(median) && Math.Abs(median) < 8000 &&
-        power > 1e-8 && confidence >= 0.4 && sigma <= 150;
+      // A weak-but-narrow FM candidate may enter temporal corroboration.
+      // It is NOT a CAT-ready reference by itself: the controller requires
+      // three consistent fresh measurement epochs before upgrading it.
+      bool valid = double.IsFinite(median) && Math.Abs(median) < 6800 &&
+        power > 1e-8 && snrRatio >= .65 &&
+        confidence >= .22 && sigma <= 150;
       // Keep the measured candidate and its numerical quality even when
       // confidence / IF ambiguity rejects it as an AFC reference. Previously
       // a rejected nonzero FM offset was reported as 0% without any reason,

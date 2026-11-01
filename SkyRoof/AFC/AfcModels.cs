@@ -6,6 +6,7 @@ using VE3NEA;
 namespace SkyRoof
 {
   public enum AfcIfSource { WasapiCapture, PlaybackLoopback }
+  public enum AfcSignalLossPolicy { HoldLast, GentleRelease }
 
   /// <summary>
   /// Frequency tracking is independent of the saved satellite/transponder
@@ -75,6 +76,12 @@ namespace SkyRoof
     [DisplayName("AFC 最大修正量 (Hz)")]
     [DefaultValue(2000.0)]
     public double MaxCorrectionHz { get; set; } = 2000;
+
+    [DisplayName("信号丢失后的 AFC 修正策略")]
+    [Description("HoldLast（推荐）=保留最后确认的 RX AFC 频偏，卫星轨道多普勒继续运行，不因短暂静音或 QSB 快速归零。GentleRelease=无信号 30 秒后以 10 Hz/s 缓慢回归。人工调谐、切卫星、关闭 AFC 仍会重置修正。")]
+    [DefaultValue(AfcSignalLossPolicy.HoldLast)]
+    public AfcSignalLossPolicy SignalLossPolicy { get; set; } =
+      AfcSignalLossPolicy.HoldLast;
 
     [DisplayName("FM 写频死区 (Hz)")]
     [DefaultValue(20.0)]

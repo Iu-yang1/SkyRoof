@@ -33,8 +33,17 @@ namespace SkyRoof.AFC
     private DateTime recoveryUntilUtc;
     private bool waitForManualSign;
     private AfcBurstPredictor predictor = new();
+    private readonly AfcFmEvidenceGate weakFmGate = new();
+    private AfcSignalLossPolicy lossPolicy = AfcSignalLossPolicy.HoldLast;
 
     public AfcSnapshot Snapshot { get { lock (sync) return state; } }
+
+    public void ConfigureSignalLoss(AfcSignalLossPolicy policy)
+    {
+      if (!Enum.IsDefined(typeof(AfcSignalLossPolicy), policy))
+        throw new ArgumentOutOfRangeException(nameof(policy));
+      lock (sync) lossPolicy = policy; // Do not reset active AFC correction.
+    }
 
     public void Reset(string reason = "AFC target reset")
     {
@@ -57,6 +66,7 @@ namespace SkyRoof.AFC
         divergenceVotes = 0;
         previousConfirmedIfHz = double.NaN;
         predictor.Reset();
+        weakFmGate.Reset();
         recoveryUntilUtc = lastDecayTickUtc = default;
         waitForManualSign = false;
         lastProcess = default;
@@ -93,6 +103,7 @@ namespace SkyRoof.AFC
           divergenceVotes = 0;
           previousConfirmedIfHz = double.NaN;
           predictor.Reset();
+          weakFmGate.Reset();
           recoveryUntilUtc = default;
           waitForManualSign = false;
           confirmations = 0;
@@ -118,6 +129,7 @@ namespace SkyRoof.AFC
         previousConfirmedError = previousConfirmedCatHz = double.NaN;
         divergenceVotes = 0;
         previousConfirmedIfHz = double.NaN;
+        weakFmGate.Reset();
         predictor = new AfcBurstPredictor(mode == AfcSignalMode.FM ? 1.5 :
           mode == AfcSignalMode.CW ? 2.5 : 2.0,
           mode == AfcSignalMode.FM ? 90 : mode == AfcSignalMode.CW ? 35 : 30);
@@ -138,6 +150,7 @@ namespace SkyRoof.AFC
         divergenceVotes = 0;
         confirmations = 0;
         predictor.Reset();
+        weakFmGate.Reset();
         recoveryUntilUtc = default;
         waitForManualSign = false;
         if (state.State == AfcLockState.Fault)
@@ -228,6 +241,7 @@ namespace SkyRoof.AFC
           divergenceVotes = 0;
           previousConfirmedIfHz = double.NaN;
           predictor.Reset();
+          weakFmGate.Reset();
           recoveryUntilUtc = default;
           waitForManualSign = false;
           state = state with { CorrectionHz = 0, State = AfcLockState.Acquiring };
@@ -235,12 +249,19 @@ namespace SkyRoof.AFC
         lastProcess = obs.SampleUtc;
         double deltaTime = state.LastObservationUtc == default ? 1 :
           Math.Clamp((obs.SampleUtc - state.LastObservationUtc).TotalSeconds, 0.01, 5);
+        // Weak FM may be recognized from successive consistent narrow-
+        // sigma observations, without globally weakening the CW/SSB gate.
+        // Each new epoch must contain new PCM (>=80 ms); overlapping
+        // windows are NOT claimed to be independent measurements.
+        bool corroboratedFm = weakFmGate.Observe(obs);
+        double verifiedQuality = corroboratedFm
+          ? Math.Max(.62, obs.Confidence) : obs.Confidence;
         bool reliable = obs.HasAbsoluteReference && !obs.Ambiguous &&
-          obs.Confidence >= .6 && double.IsFinite(obs.IfOffsetHz) &&
-          double.IsFinite(obs.SigmaHz) &&
+          (obs.Confidence >= .6 || corroboratedFm) &&
+          double.IsFinite(obs.IfOffsetHz) && double.IsFinite(obs.SigmaHz) &&
           obs.SigmaHz <= (obs.Mode == AfcSignalMode.FM ? 150 : 20);
         if (!reliable || !predictor.Update(obs.IfOffsetHz,
-            obs.SigmaHz, obs.Confidence, obs.SampleUtc))
+            obs.SigmaHz, verifiedQuality, obs.SampleUtc))
         {
           bool coasting = predictor.TryPredict(obs.SampleUtc, out double forecast);
           state = state with
@@ -453,12 +474,16 @@ namespace SkyRoof.AFC
         }
         else if (age > horizon)
         {
-          // The orbital Doppler model always continues. An unverified AFC
-          // residual is slowly removed after the prediction horizon.
-          // Never alter the RX correction while TX is active.
-          if (!transmitting && dt > 0)
+          // Missing FM speech, CW key-up and QSB are not evidence that the
+          // last measured residual was wrong. The orbital Doppler model
+          // continues to move the radio, while the bounded AFC RX bias
+          // remains unchanged by default. No CAT command is generated
+          // by prediction or by a noise-only window.
+          bool optionalDecay = lossPolicy == AfcSignalLossPolicy.GentleRelease &&
+            age > 30 && !transmitting && dt > 0;
+          if (optionalDecay)
           {
-            double release = 160 * dt;
+            double release = 10 * dt; // explicitly selected, gentle policy
             acceptedCorrection = Math.Abs(acceptedCorrection) <= release ? 0 :
               acceptedCorrection - Math.CopySign(release, acceptedCorrection);
           }
@@ -466,9 +491,9 @@ namespace SkyRoof.AFC
           {
             State = age >= horizon + 2 ? AfcLockState.Lost : AfcLockState.Hold,
             CorrectionHz = acceptedCorrection,
-            Detail = acceptedCorrection == 0
-              ? "No carrier: reverted to orbital Doppler prediction"
-              : "No carrier: releasing stale AFC correction toward Doppler"
+            Detail = optionalDecay
+              ? "No carrier: optional gentle residual release after 30s"
+              : "No carrier: holding last verified AFC bias; Doppler still running"
           };
         }
       }
@@ -483,6 +508,7 @@ namespace SkyRoof.AFC
         centerNext = false;
         acceptedCorrection = 0;
         predictor.Reset();
+        weakFmGate.Reset();
         waitForManualSign = false;
         recoveryUntilUtc = default;
         // Preserve polarity evidence through routine hand tuning: those

@@ -517,6 +517,8 @@ namespace SkyRoof.AFC
       object? sender, PropertyValueChangedEventArgs e)
     {
       string name = e.ChangedItem.PropertyDescriptor?.Name ?? "";
+      if (name == nameof(AfcSettings.SignalLossPolicy))
+        owner.AfcController.ConfigureSignalLoss(ctx.Settings.Afc.SignalLossPolicy);
       if (name == nameof(AfcSettings.AcquisitionPreset))
       {
         input.SetAcquisitionPreset(ctx.Settings.Afc.AcquisitionPreset);
@@ -671,6 +673,7 @@ namespace SkyRoof.AFC
         if (!AutoAllowed && cfg.Control == AfcControlMode.Auto)
           cfg.Control = AfcControlMode.Assist;
         owner.AfcController.Configure(currentMode, EffectiveControl());
+        owner.AfcController.ConfigureSignalLoss(cfg.SignalLossPolicy);
         owner.UpdateRxAfcCheckbox(EffectiveControl() == AfcControlMode.Auto);
         if (currentMode == AfcSignalMode.SSB && cfg.SsbPilotEnabled)
           owner.AfcController.CenterOn(cfg.DesiredOffsetHz);
@@ -751,6 +754,8 @@ namespace SkyRoof.AFC
       "Divergence recovery: verifying new IF" => T("发散恢复：验证后续 IF 观测", "Divergence recovery: checking fresh IF"),
       "No carrier: reverted to orbital Doppler prediction" => T("载波消失，已恢复轨道多普勒预测", "Carrier lost: orbital Doppler only"),
       "No carrier: releasing stale AFC correction toward Doppler" => T("载波消失，正在平滑释放 AFC 旧修正", "Carrier lost: releasing stale AFC offset"),
+      "No carrier: holding last verified AFC bias; Doppler still running" => T("信号丢失：保持最后可信 AFC 修正，轨道多普勒继续", "Signal lost: holding verified AFC bias, orbital Doppler continues"),
+      "No carrier: optional gentle residual release after 30s" => T("无信号超过30秒：按用户设置缓慢释放修正", "No carrier >30 s: optional gentle release"),
       "PTT active: AFC frozen" => T("正在发射，AFC 已冻结", "PTT active: AFC frozen"),
       "Learning IF/CAT polarity from observed tuning" => T("正在根据 CAT 调谐学习 IF 频率方向", "Learning IF/CAT polarity from observed tuning"),
       "Tracking reference" => T("正在跟踪参考信号", "Tracking reference"),
