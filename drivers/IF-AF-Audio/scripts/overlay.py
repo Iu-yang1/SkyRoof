@@ -19,12 +19,25 @@ if not (base / "EndpointsCommon" / "CableRing.cpp").is_file():
     raise SystemExit("Missing patched CCableRing: run fetch-sample.ps1 first")
 
 
+def _codec(path: Path) -> str:
+    # Microsoft source occasionally uses UTF-16LE for .rc / VCXPROJ.
+    # Preserve its original BOM when writing patched files.
+    header = path.read_bytes()[:3]
+    if header[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        return "utf-16"
+    if header == b"\xef\xbb\xbf":
+        return "utf-8-sig"
+    return "utf-8"
+
+
 def load(relative: str) -> str:
-    return (base / relative).read_text(encoding="utf-8-sig")
+    path = base / relative
+    return path.read_text(encoding=_codec(path))
 
 
 def put(relative: str, content: str) -> None:
-    (base / relative).write_text(content, encoding="utf-8", newline="\r\n")
+    path = base / relative
+    path.write_text(content, encoding=_codec(path), newline="\r\n")
 
 
 def one(content: str, old: str, new: str, place: str) -> str:
