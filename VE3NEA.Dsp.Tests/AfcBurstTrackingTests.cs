@@ -111,8 +111,8 @@ namespace VE3NEA.Dsp.Tests
       controller.Snapshot.State.Should().Be(AfcLockState.Coasting);
       controller.Tick(Epoch.AddMilliseconds(2000));
       controller.Tick(Epoch.AddMilliseconds(2800));
-      controller.Snapshot.CorrectionHz.Should().BeLessThan(locked,
-        "the last residual must be released if no valid FM arrives");
+      controller.Snapshot.CorrectionHz.Should().Be(locked,
+        "SO-50 gaps preserve the last verified residual while orbital Doppler continues");
       controller.Observe(new(AfcSignalMode.FM,
         Epoch.AddMilliseconds(3000), 12, 40, 4, .99, true),
         436795000, 1, 2000, 20, 5, false);
