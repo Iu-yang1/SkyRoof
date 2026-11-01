@@ -134,7 +134,9 @@ begin
   else if ResultCode <> 0 then
     MsgBox('Original VB-CABLE installation returned error ' +
       IntToStr(ResultCode) + '. SkyRoof remains installed. Check Windows ' +
-      'driver security logs and use Settings to retry.', mbError, MB_OK);
+      'driver security logs and use Settings to retry. Diagnostics: ' +
+      ExpandConstant('{app}\ThirdParty\VB-CABLE\VB-CABLE-manager.log'),
+      mbError, MB_OK);
 end;
 #endif
 

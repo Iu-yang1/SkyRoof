@@ -105,3 +105,15 @@ disabled. The experimental installer now bundles SkyRoof plus the **unmodified o
 - Legacy SDR Audio-to-VAC and automatically selected VB-CABLE CABLE Input may not be used simultaneously. The IF-AF path also rejects using the same VB-CABLE recording endpoint (CABLE Output) as its IF source. Detect missing 10-ms PCM blocks using the capture sample sequence; do not splice NCO phase across a lost block.
 - In a 30-second segment of actual 2026-11-01 IC-9700 **USB** IF and LAN AF captures, a matching 257-tap complex USB sideband filter produced an approximately **0.953** short-time envelope correlation after +320-ms relative alignment; the wrong LSB sideband produced approximately **0.018**. Other modes and real VB-CABLE/WSJT-X receive performance still require independent hardware tests.
 - For real hardware acceptance, verify the full VB-CABLE render/capture pair and reboot, start with AFC Assist, test USB/LSB/CW/FM separately, inspect IF PCM counters and output underruns, confirm CW pitch and FM deviation, then carefully enable AFC Auto with verified CAT frequency direction. Ensure PTT freezes AFC writes and HoldLast retains the RX correction through signal gaps. Compare WSJT-X FT4/FT8/Q65 decodes over multiple periods, not one isolated decode.
+
+## VB-CABLE installation failures (exit code 1)
+
+An exit code of 1 from the driver manager is a generic PowerShell failure, not proof of a driver-signature issue. Use a new experimental integrated installer, then retry **Settings → Install VB-CABLE**. The elevated manager now writes `ThirdParty\\VB-CABLE\\VB-CABLE-manager.log` under the SkyRoof installation folder, and the failure dialog includes its precise `VB-CABLE FAILED at stage [...]` message, the vendor setup exit status when available, and the log path.
+
+- `Bundled archive and SHA256`: repair the complete original archive and hash manifest by reinstalling the bundled SkyRoof installer.
+- `Original setup Authenticode signature` / `Original driver catalog signature`: inspect Windows certificate validation; never bypass code-signing policy.
+- `Original vendor setup (Install)`: inspect the log and `C:\\Windows\\INF\\setupapi.dev.log` for the Windows driver-installation reason.
+- `Windows device discovery`: inspect `Get-PnpDevice -Class MEDIA` and `Get-PnpDevice -Class AudioEndpoint` output.
+- `Partial VB-CABLE installation detected`: reboot first; if still incomplete, repair through the original vendor setup/Device Manager, not by deleting independently owned drivers.
+
+After a successful install, reboot and confirm the **CABLE Input** render and **CABLE Output** capture endpoints. CI validates payload integrity and script diagnostics, but does not claim a real kernel-driver installation test.

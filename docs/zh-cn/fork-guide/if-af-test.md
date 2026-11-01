@@ -159,3 +159,17 @@
 6. **端到端：**记录 VB-CABLE 捕获 WAV 与原始 LAN AF（使用独立设备录制，避免混音回环）并对齐包络，检查 WSJT-X FT4/FT8/Q65 信号水位、音频频偏与解码结果。需按多个独立周期统计，不能只凭一次成功判定等效接收性能。
 
 在 2026-11-01 原始 IC-9700 **USB 模式** IF/LAN AF 对照录音的 50–80 s 片段中，离线 USB 复数滤波 AF 与 LAN AF 短时包络相关约 **0.953**（相对时移约 **+320 ms**）；换用 LSB 解调得到约 **0.018**。这证明了该录音的 USB 频谱方向与软件 USB 选边带的一致性，但既不是第三方虚拟声卡驱动环回测试，也不是对 LSB/CW/FM 独立实机验收。
+
+## VB-CABLE 安装失败（退出码 1）的现场诊断
+
+如果设置窗口提示 `Vendor driver manager exit code: 1`，不要自行禁用驱动签名检查，也不要改用未经签名的自编译虚拟声卡驱动。此退出码来自管理 PowerShell 的异常路径，并不能单凭数字区分官方驱动安装、PnP 部分注册和哈希校验失败。
+
+从修复后的实验安装包重新安装 SkyRoof 后，通过“设置 → 安装 VB-CABLE”重试。脚本将在 `SkyRoof\\ThirdParty\\VB-CABLE\\VB-CABLE-manager.log`（实际位于 SkyRoof 安装目录下）保存当前一次安装的完整诊断，并在失败弹窗显示 `VB-CABLE FAILED at stage [...]`、异常描述和原厂 Setup 退出码。日志可能写入管理员权限受保护的安装目录，正常用户只需读取，不应手动修改原始 ZIP、CAT 或 SYS。
+
+- `Bundled archive and SHA256`：检查安装目录下原始包及 `.sha256` 清单是否完整；重新运行官方集成安装包可恢复二者。
+- `Original setup Authenticode signature` / `Original driver catalog signature`：检查 Windows 证书链、时间与设备策略，勿绕过签名验证。
+- `Original vendor setup (Install)`：原厂安装器返回失败。收集管理日志与 `C:\\Windows\\INF\\setupapi.dev.log`，排查 Windows 驱动安装错误。
+- `Windows device discovery`：检查 `Get-PnpDevice -Class MEDIA` 与 `Get-PnpDevice -Class AudioEndpoint`，确认设备状态。
+- `Partial VB-CABLE installation detected`：先重启 Windows；如仍存在半安装状态，再使用原厂 setup 界面或 Windows 设备管理器处理，不自动卸载来源不明的共享驱动。
+
+安装成功后重启，再确认 Windows “播放”中有 **CABLE Input**、“录音”中有 **CABLE Output**，状态正常；随后在 SkyRoof 重新检测音频端点。GitHub CI 只验证签名、管理脚本与安装器内容，不在 CI 中加载内核驱动。

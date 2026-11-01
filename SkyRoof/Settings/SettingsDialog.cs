@@ -128,6 +128,7 @@ namespace SkyRoof
       string folder = Path.Combine(AppContext.BaseDirectory, "ThirdParty", "VB-CABLE");
       string manager = Path.Combine(folder, "Manage-VbCable.ps1");
       string archive = Path.Combine(folder, "VBCABLE_Driver_Pack45.zip");
+      string managerLog = Path.Combine(folder, "VB-CABLE-manager.log");
       if (!File.Exists(manager) || !File.Exists(archive))
       {
         DialogResult redirect = MessageBox.Show(SettingsLanguage.Text(
@@ -178,8 +179,29 @@ namespace SkyRoof
         await process.WaitForExitAsync();
         grid.Refresh();
         if (process.ExitCode != 0 && process.ExitCode != 3010)
+        {
+          // The UAC-elevated PowerShell window may close before its error is
+          // readable. Show the manager's last diagnostic phase directly.
+          string evidence = SettingsLanguage.Text(
+            "未找到驱动安装日志。", "No driver installation log was created.");
+          try
+          {
+            if (File.Exists(managerLog))
+            {
+              string log = File.ReadAllText(managerLog);
+              int marker = log.LastIndexOf("VB-CABLE FAILED at stage [",
+                StringComparison.Ordinal);
+              if (marker >= 0) log = log.Substring(marker);
+              evidence = log.Length > 1800 ? log.Substring(log.Length - 1800) : log;
+            }
+          }
+          catch (IOException) { }
+          catch (UnauthorizedAccessException) { }
           throw new InvalidOperationException(
-            $"Vendor driver manager exit code: {process.ExitCode}. Inspect the PowerShell console and SetupAPI.dev.log.");
+            SettingsLanguage.Text(
+              $"VB-CABLE 安装失败（退出码 {process.ExitCode}）。\n诊断日志：{managerLog}\n\n{evidence}",
+              $"VB-CABLE installation failed (exit code {process.ExitCode}).\nDiagnostic log: {managerLog}\n\n{evidence}"));
+        }
         MessageBox.Show(SettingsLanguage.Text(
           "原厂安装/卸载操作已返回。建议重新启动 Windows，再在设置中重新检测 CABLE Input / CABLE Output。",
           "The vendor installer finished. Restart Windows and rescan both CABLE Input and CABLE Output."),
