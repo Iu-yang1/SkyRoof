@@ -46,7 +46,10 @@ namespace SkyRoof.IF
       IfAfSsbVoiceNotch ssbVoiceNotch = IfAfSsbVoiceNotch.Off,
       IfAfSsbNoiseReduction ssbNoiseReduction = IfAfSsbNoiseReduction.Off)
     {
-      if (fmDeviationHz is < 1000 or > 6000)
+      // 6.25-kHz FM preset uses +/-900 Hz peak deviation. This guard
+      // must cover every supported preset, or the receive worker faults
+      // before it can produce any AF samples.
+      if (fmDeviationHz is < 500 or > 6000)
         throw new ArgumentOutOfRangeException(nameof(fmDeviationHz));
       IfAfFilterSettings.ValidateAll(ssbLowHz, ssbHighHz, cwCenterHz,
         cwBandwidthHz, fmIfCutoffHz, fmAfCutoffHz);
