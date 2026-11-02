@@ -6,6 +6,7 @@ on:
     paths:
       - 'docs/**'
       - 'README.md'
+      - 'README.zh-CN.md'
       - '.github/workflows/deploy-docfx.yml'
       - '.github/workflows/docs-validation.yml'
       - 'benchmarks/cw-recorded-corpus/**'
@@ -23,6 +24,15 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify bilingual README language switches
+        shell: bash
+        run: |
+          test -s README.md
+          test -s README.zh-CN.md
+          grep -Fq '[简体中文](README.zh-CN.md)' README.md
+          grep -Fq '[English](README.md)' README.zh-CN.md
+          grep -Fq '## Fork extensions' README.md
+          grep -Fq '## Fork 扩展功能' README.zh-CN.md
       - name: Validate CW docs/corpus release inputs
         shell: pwsh
         run: ./scripts/validate-cw-release.ps1 -DocsOnly
