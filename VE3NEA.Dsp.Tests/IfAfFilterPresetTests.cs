@@ -171,6 +171,65 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Theory]
+    [InlineData(IfAfFmBandwidth.Narrow6_25k)]
+    [InlineData(IfAfFmBandwidth.Normal12k)]
+    public void BothFmPresetsStartAndProduceContinuousFiniteAf(
+      IfAfFmBandwidth preset)
+    {
+      // Regression: the 6.25-kHz preset configures a 900-Hz deviation,
+      // which the decoder previously rejected (<1000 Hz). Since decoder
+      // construction ran outside the worker try/catch, it silently died,
+      // leaving capture alive and dropping every subsequent PCM frame.
+      var config = new IfAfSettings { FmBandwidth = preset };
+      var dsp = new IfAfDemodulator(IfAfMode.Fm,
+        config.EffectiveFmDeviationHz,
+        config.EffectiveSsbLowHz, config.EffectiveSsbHighHz,
+        config.EffectiveCwCenterHz, config.EffectiveCwBandwidthHz,
+        config.EffectiveFmIfCutoffHz, config.EffectiveFmAfCutoffHz);
+      var leveler = new IfAfAudioLeveler(config);
+      double phase = 0, power = 0;
+      int measured = 0;
+      const int blockSize = 480;
+      for (int block = 0; block < 50; block++)
+      {
+        var input = new float[blockSize];
+        var output = new float[blockSize];
+        for (int i = 0; i < blockSize; i++)
+        {
+          double t = (block * blockSize + i) / (double)Rate;
+          double instantaneousHz = 12000 + 90 +
+            config.EffectiveFmDeviationHz * .48 *
+            Math.Sin(2 * Math.PI * 900 * t);
+          phase += 2 * Math.PI * instantaneousHz / Rate;
+          input[i] = (float)(.45 * Math.Cos(phase));
+        }
+        dsp.Process(input, output);
+        leveler.Process(output, IfAfMode.Fm);
+        Assert.All(output, value => Assert.True(float.IsFinite(value)));
+        if (block >= 12)
+          foreach (float sample in output)
+          {
+            power += sample * sample;
+            measured++;
+          }
+      }
+      Assert.Equal(50L * blockSize, dsp.SamplesProcessed);
+      double rms = Math.Sqrt(power / measured);
+      Assert.InRange(rms, .018, .5);
+    }
+
+    [Fact]
+    public void FmDeviationValidationCoversNarrowPresetButRejectsImpossibleValues()
+    {
+      Assert.Equal(900, new IfAfSettings {
+        FmBandwidth = IfAfFmBandwidth.Narrow6_25k
+      }.EffectiveFmDeviationHz);
+      _ = new IfAfDemodulator(IfAfMode.Fm, fmDeviationHz: 900);
+      Assert.Throws<ArgumentOutOfRangeException>(() =>
+        new IfAfDemodulator(IfAfMode.Fm, fmDeviationHz: 499));
+    }
+
+    [Theory]
     [InlineData(IfAfSsbBandwidth.Narrow1_2k, 950)]
     [InlineData(IfAfSsbBandwidth.Normal2_7k, 1400)]
     [InlineData(IfAfSsbBandwidth.Wide3k, 1650)]
