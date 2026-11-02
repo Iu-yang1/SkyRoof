@@ -69,7 +69,7 @@ namespace SkyRoof.IF
             ? IfAfLinkState.Warning : IfAfLinkState.Ok;
       // In manual mode the application cannot prove that a matching capture
       // endpoint exists; do not use green for an unverified microphone.
-      IfAfLinkState mic = !s.RenderRunning ? fail :
+      IfAfLinkState mic = !started || !s.RenderRunning ? fail :
         route != IfAfAudioRoute.AutoSignedCable || !paired
           ? IfAfLinkState.Warning :
         af == IfAfLinkState.Ok ? IfAfLinkState.Ok : af;
