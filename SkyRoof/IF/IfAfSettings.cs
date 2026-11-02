@@ -100,6 +100,9 @@ namespace SkyRoof.IF
     public IfAfFmPresetConverter() : base(typeof(IfAfFmBandwidth)) { }
   }
 
+  public enum IfAfFmVoiceProcessing { Off, Voice50us, Voice75us }
+  public enum IfAfSsbVoiceNotch { Off, Tone1000Hz, Tone1500Hz }
+
   public enum IfAfLatencyPreset
   {
     Fast20Ms = 20,
@@ -212,6 +215,32 @@ namespace SkyRoof.IF
     public int EffectiveFmDeviationHz =>
       FmBandwidth == IfAfFmBandwidth.Narrow6_25k ? 900 : 2500;
 
+    [Category("Audio enhancements")]
+    [DisplayName("FM voice processing")]
+    [Description("Off preserves discriminator audio (digital/telemetry safe). Voice50us / Voice75us add the corresponding analog FM de-emphasis after AF filtering.")]
+    [DefaultValue(IfAfFmVoiceProcessing.Off)]
+    public IfAfFmVoiceProcessing FmVoiceProcessing { get; set; } =
+      IfAfFmVoiceProcessing.Off;
+
+    [Category("Audio enhancements")]
+    [DisplayName("FM voice squelch")]
+    [Description("Optional RF power-based voice squelch only. Off by default so weak-signal digital/FM data and AFC raw IF are never silently muted.")]
+    [DefaultValue(false)]
+    public bool FmVoiceSquelchEnabled { get; set; } = false;
+
+    [Category("Audio enhancements")]
+    [DisplayName("FM voice squelch threshold (dBFS)")]
+    [Description("Filtered complex IF carrier-power threshold. Calibrate using the IF RMS; not an RF S-meter or calibrated SINAD.")]
+    [DefaultValue(-45)]
+    public int FmVoiceSquelchDbfs { get; set; } = -45;
+
+    [Category("Audio enhancements")]
+    [DisplayName("SSB voice notch")]
+    [Description("Optional narrow fixed-frequency audio notch to suppress a stable 1000/1500 Hz interfering tone. Disabled for USB-D/LSB-D and CW.")]
+    [DefaultValue(IfAfSsbVoiceNotch.Off)]
+    public IfAfSsbVoiceNotch SsbVoiceNotch { get; set; } =
+      IfAfSsbVoiceNotch.Off;
+
     // Legacy Settings.json contained one global GainDb. Read it, but never
     // write that ambiguous key again. Preserve a user's safe FM attenuation;
     // an old 0/-12 dB value is migrated to the safe -15 dB baseline.
@@ -300,7 +329,9 @@ namespace SkyRoof.IF
         };
       return radio switch
       {
-        Slicer.Mode.LSB or Slicer.Mode.LSB_D => IfAfMode.Lsb,
+        Slicer.Mode.LSB => IfAfMode.Lsb,
+        Slicer.Mode.USB_D => IfAfMode.UsbDigital,
+        Slicer.Mode.LSB_D => IfAfMode.LsbDigital,
         Slicer.Mode.CW => IfAfMode.CwUsb,
         Slicer.Mode.FM or Slicer.Mode.FM_D => IfAfMode.Fm,
         _ => IfAfMode.Usb

@@ -76,7 +76,10 @@ namespace SkyRoof.IF
         _ => ssbTrim
       };
       double requestedGain = trim;
-      if (enableAgc && mode != IfAfMode.Fm)
+      // Digital-mode symbols must retain relative amplitudes. Do not use
+      // voice RMS AGC for WSJT-X USB-D / LSB-D receive.
+      if (enableAgc && mode is not (IfAfMode.Fm or
+          IfAfMode.UsbDigital or IfAfMode.LsbDigital))
       {
         // SSB/CW AGC release is deliberately slow to preserve FT4/FT8
         // symbol envelopes and avoid increasing gain in Morse key-up gaps.

@@ -8,7 +8,7 @@ namespace SkyRoof.IF
   /// sideband. FM uses quadrature phase discrimination and post-demod LPF.
   /// Unlike a real product detector, a complex FIR rejects the opposite
   /// sideband rather than folding its noise into the wanted audio.</summary>
-  public enum IfAfMode { Usb, Lsb, CwUsb, CwLsb, Fm }
+  public enum IfAfMode { Usb, Lsb, CwUsb, CwLsb, Fm, UsbDigital, LsbDigital }
 
   public sealed class IfAfDemodulator
   {
@@ -23,11 +23,13 @@ namespace SkyRoof.IF
     private int phaseIndex;
     private Complex lastFm;
     private bool haveFm;
+    private double lastFmPower;
     private double fmDc;
     private readonly double fmDeviation;
     private readonly int ssbLowHz, ssbHighHz;
     private readonly int cwCenterHz, cwBandwidthHz, fmIfCutoffHz, fmAfCutoffHz;
     private readonly IfAfCwAudioFilter cwAudio;
+    private readonly IfAfVoiceEnhancements voice;
     private IfAfMode mode;
     public IfAfMode Mode => mode;
     public long SamplesProcessed { get; private set; }
@@ -36,7 +38,10 @@ namespace SkyRoof.IF
     public IfAfDemodulator(IfAfMode mode = IfAfMode.Usb,
       double fmDeviationHz = 2500, int ssbLowHz = 180, int ssbHighHz = 3300,
       int cwCenterHz = 700, int cwBandwidthHz = 900,
-      int fmIfCutoffHz = 8800, int fmAfCutoffHz = 3400)
+      int fmIfCutoffHz = 8800, int fmAfCutoffHz = 3400,
+      IfAfFmVoiceProcessing fmVoice = IfAfFmVoiceProcessing.Off,
+      bool fmSquelch = false, int fmSquelchDbfs = -45,
+      IfAfSsbVoiceNotch ssbVoiceNotch = IfAfSsbVoiceNotch.Off)
     {
       if (fmDeviationHz is < 1000 or > 6000)
         throw new ArgumentOutOfRangeException(nameof(fmDeviationHz));
@@ -50,6 +55,8 @@ namespace SkyRoof.IF
       this.fmAfCutoffHz = fmAfCutoffHz;
       fmDeviation = fmDeviationHz;
       cwAudio = new IfAfCwAudioFilter(cwCenterHz, cwBandwidthHz);
+      voice = new IfAfVoiceEnhancements(fmVoice, fmSquelch,
+        fmSquelchDbfs, ssbVoiceNotch);
       Configure(mode);
     }
 
@@ -58,14 +65,16 @@ namespace SkyRoof.IF
       if (!Enum.IsDefined(typeof(IfAfMode), selected))
         throw new ArgumentOutOfRangeException(nameof(selected));
       mode = selected;
-      double sign = selected is IfAfMode.Lsb or IfAfMode.CwLsb ? -1 : 1;
+      double sign = selected is IfAfMode.Lsb or IfAfMode.CwLsb or
+        IfAfMode.LsbDigital ? -1 : 1;
       bool cw = selected is IfAfMode.CwUsb or IfAfMode.CwLsb;
       // Keep a fixed, broad complex CW sideband preselector. Narrow CW
       // filtering is performed by the calibrated cascaded audio biquads;
       // applying both nominal bandwidths in series previously halved the
       // actual -3 dB width and exaggerated ringing at 100/200 Hz.
-      double low = cw ? 50 : ssbLowHz;
-      double high = cw ? 2300 : ssbHighHz;
+      bool digital = selected is IfAfMode.UsbDigital or IfAfMode.LsbDigital;
+      double low = cw ? 50 : digital ? 100 : ssbLowHz;
+      double high = cw ? 2300 : digital ? 3500 : ssbHighHz;
       double mid = sign * (low + high) / 2;
       double halfBand = (high - low) / 2;
       double[] baseband = Lowpass(SsbTaps, halfBand);
@@ -159,6 +168,7 @@ namespace SkyRoof.IF
         value = filtered.Real;
         if (mode is IfAfMode.CwUsb or IfAfMode.CwLsb)
           value = cwAudio.Process(value);
+        value = voice.Process(value, mode);
       }
       else
       {
@@ -172,6 +182,7 @@ namespace SkyRoof.IF
         double raw = 0;
         double power = filtered.Real * filtered.Real +
           filtered.Imaginary * filtered.Imaginary;
+        lastFmPower = power;
         if (haveFm && power > 1e-10 && lastFm.Magnitude * lastFm.Magnitude > 1e-10)
         {
           Complex delta = filtered * Complex.Conjugate(lastFm);
@@ -193,6 +204,7 @@ namespace SkyRoof.IF
           if (--idx < 0) idx = AfTaps - 1;
         }
         if (++audioWrite == AfTaps) audioWrite = 0;
+        value = voice.Process(value, mode, lastFmPower);
       }
       if (++write == SsbTaps) write = 0;
       SamplesProcessed++;
@@ -213,7 +225,9 @@ namespace SkyRoof.IF
       write = audioWrite = phaseIndex = 0;
       lastFm = Complex.Zero;
       fmDc = 0;
+      lastFmPower = 0;
       haveFm = false;
+      voice.Reset();
       cwAudio.Reset();
       SamplesProcessed = NonFiniteSamples = 0;
     }

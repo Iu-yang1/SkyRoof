@@ -146,7 +146,10 @@ namespace VE3NEA.Dsp.Tests
       double center = SidebandLevel(cfg, 700, mode);
       double adjacent = SidebandLevel(cfg, 1200, mode);
       Assert.True(center > .25, $"CW 700 Hz center lost: {center}");
-      Assert.True(adjacent < center * .25,
+      // Correcting the too-narrow legacy CW passband slightly reduces
+      // rejection at 500 Hz offset; preserve at least 10.5 dB while
+      // measuring the actual -3 dB width separately.
+      Assert.True(adjacent < center * .30,
         $"CW narrow filter failed to reject adjacent tone: {adjacent}/{center}");
     }
 

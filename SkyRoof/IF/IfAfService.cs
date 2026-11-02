@@ -114,7 +114,10 @@ namespace SkyRoof.IF
           config.SsbGainDb is < -40 or > 24 ||
           config.CwGainDb is < -40 or > 24 ||
           config.SsbCwAgcTargetDbfs is < -36 or > -12 ||
-          config.SsbCwAgcMaxGainDb is < 0 or > 36)
+          config.SsbCwAgcMaxGainDb is < 0 or > 36 ||
+          config.FmVoiceSquelchDbfs is < -95 or > -10 ||
+          !Enum.IsDefined(typeof(IfAfFmVoiceProcessing), config.FmVoiceProcessing) ||
+          !Enum.IsDefined(typeof(IfAfSsbVoiceNotch), config.SsbVoiceNotch))
         throw new ArgumentOutOfRangeException(nameof(config),
           "Invalid mode filter preset or output gain.");
       IfAfFilterSettings.ValidateAll(config.EffectiveSsbLowHz,
@@ -147,7 +150,11 @@ namespace SkyRoof.IF
         SsbCwAgcMaxGainDb = config.SsbCwAgcMaxGainDb,
         SsbBandwidth = config.SsbBandwidth,
         CwBandwidth = config.CwBandwidth,
-        FmBandwidth = config.FmBandwidth
+        FmBandwidth = config.FmBandwidth,
+        FmVoiceProcessing = config.FmVoiceProcessing,
+        FmVoiceSquelchEnabled = config.FmVoiceSquelchEnabled,
+        FmVoiceSquelchDbfs = config.FmVoiceSquelchDbfs,
+        SsbVoiceNotch = config.SsbVoiceNotch
       };
       Volatile.Write(ref requestedMode, (int)mode);
       int version = ++generation;
@@ -233,7 +240,9 @@ namespace SkyRoof.IF
         audioConfig.EffectiveFmDeviationHz,
         audioConfig.EffectiveSsbLowHz, audioConfig.EffectiveSsbHighHz,
         audioConfig.EffectiveCwCenterHz, audioConfig.EffectiveCwBandwidthHz,
-        audioConfig.EffectiveFmIfCutoffHz, audioConfig.EffectiveFmAfCutoffHz);
+        audioConfig.EffectiveFmIfCutoffHz, audioConfig.EffectiveFmAfCutoffHz,
+        audioConfig.FmVoiceProcessing, audioConfig.FmVoiceSquelchEnabled,
+        audioConfig.FmVoiceSquelchDbfs, audioConfig.SsbVoiceNotch);
       var leveler = new IfAfAudioLeveler(audioConfig);
       DateTime previous = default;
       int previousSamples = 0;
