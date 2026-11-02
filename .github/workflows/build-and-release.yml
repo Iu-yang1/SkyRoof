@@ -3,7 +3,7 @@ name: Build and Release
 on:
   workflow_dispatch:
   # Updating Directory.Build.props on master triggers a release build.
-  # Existing v1.62 may be explicitly republished to replace its installer.
+  # Bump the version to publish a new release; never overwrite an older tag.
   push:
     branches: [master]
     paths:
@@ -108,6 +108,11 @@ jobs:
       - name: Run release tests
         run: dotnet test VE3NEA.Dsp.Tests/VE3NEA.Dsp.Tests.csproj -c Release -p:Platform=x64 --no-restore
 
+      # Verify the publisher-signed unmodified basic VB-CABLE Donationware.
+      - name: Stage original VB-CABLE
+        shell: pwsh
+        run: ./scripts/prepare-vbcable.ps1
+
       - name: Install Inno Setup
         run: choco upgrade innosetup --yes --no-progress
         shell: powershell
@@ -120,13 +125,17 @@ jobs:
         shell: pwsh
 
       - name: Package with Inno Setup
-        run: '"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "install\SkyRoof.iss"'
+        run: '"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DIF_AF_BUNDLE_VBCABLE "install\SkyRoof.iss"'
         shell: cmd
 
       # Catch missing .NET runtime NuGet DLLs in the INSTALLED payload.
       - name: Verify installed runtime dependencies
         shell: pwsh
         run: ./scripts/test-installer-payload.ps1
+
+      - name: Verify original VB-CABLE installation payload
+        shell: pwsh
+        run: ./scripts/test-vbcable-installer-payload.ps1
 
       - name: Upload Unsigned Artifact
         id: upload-unsigned-artifact
@@ -187,58 +196,26 @@ jobs:
           fail_on_unmatched_files: true
           target_commitish: ${{ github.sha }}
           body: |
-            SkyRoof Fork v.${{ steps.get_version.outputs.version }} (based on VE3NEA/SkyRoof v.1.56)
-
+            SkyRoof Fork v.${{ steps.get_version.outputs.version }} — IC-9700 IF→AF receiver release.
+            
             ### English
-            - v1.62 refresh: SSTV real 12-kHz IF adds separate SSB / FM demodulators and selectable IF routing; TX removes repeat prompts and satellite/frequency/mode prechecks but preserves hardware PTT interlocks.
-            - AFC starts from nominal mode-based RF/IF mapping without CAT probe/restore, uses 250-ms analysis scheduling and faster bounded feedback; inverted hardware IF may require manual sign override.
-            - Software-only regression coverage; RF/IF CAT mapping and SSTV pictures still need end-to-end hardware validation.
-            - Fix AFC FM frequency measurement starvation when consecutive 12-kHz IF audio buffers repeat hardware timestamps; preserve PCM until the measurement window fills.
-            - Show IF measurement status and unverified FM offset candidates instead of reporting a missing measurement as 0 Hz.
-            - SSTV editor now supports up to eight independently movable/colorable/sizeable text layers, duplicate and delete layers, and an insertable macro menu for callsigns, RSV, QTH, time and MHz.
-            - Image loading downscales large originals, clipboard images use the same bounded pipeline, and thumbnails reuse cached image previews.
-            - SSTV gallery: thumbnail left-click reuses an existing picture without adding duplicates; right-click opens actions; history tab can import/export/delete images.
-            - RX and TX share a numeric-only 1200/1500/1900/2300 Hz orange/black MMSSTV tone scale; the RX lower strip displays AF/IF activity.
-            - SSTV RX mode dropdown now lists all 43 TX profiles, including native Robot/PD; native modes continue automatic VIS decoding.
-            - Three independent callsign/caption text layers with drag-to-position, size and color controls; saved layouts can be deleted.
-            - Integrated SSTV Console with 43 transmit modes, extended VIS/N-VIS reception, AF/12-kHz IF sources, image editing, CW/FSK ID, gallery and QSO log.
-            - SSTV satellite-aware Doppler tracking and CAT/PTT/STOP controls; keyboard Escape cancels transmission and reports its state.
-            - Virtual IC-9700 TCP CAT/STOP fault-injection tests, 5-minute Doppler sweep and SSTV Windows UI regression checks.
-            - New Simplified Chinese / English selector in Settings; saved UI language and presentation-only PropertyGrid translations.
-            - AFC Live Tracking, Advanced Settings and operator diagnostic text support both languages.
-            - IC-9700 LAN Spectrum toolbar: START / STOP, CLEAR, SYNC, SETS; readable REF, VBW, AVG, SMOOTH, ZOOM labels.
-            - Includes DPI-responsive two-row scope toolbar refinements and MORE popup lifetime crash fix.
-            - Fix: RX CAT frequency readback remains available to AFC even with Ignore Dial Knob.
-            - Preserve timestamp-aware CAT readback and divergence monitoring without injecting a calibration CAT probe.
-            - Preserve TX frequency and persistent satellite/transponder offsets.
-
+            - Production 48-kS/s real 12-kHz USB IF → SSB/CW/FM → Windows virtual audio cable for WSJT-X.
+            - Correct 6.25-kHz FM 900-Hz deviation startup validation and visible decoder failure handling.
+            - Remove experimental dual USB IF/LAN AF capture recording and excessive DSP diagnostics, retaining four-stage status and error/drop counters.
+            - Keep bounded queues, independent FM gain, SSB/CW AGC, audio peak protection, SO-50 weak-FM AFC verification, and HoldLast loss policy.
+            - Installer optionally bundles original verified basic VB-Audio VB-CABLE Donationware (www.vb-cable.com); professional users require appropriate licensing.
+            - CI does not establish real RF sensitivity, device round-trip latency, or WSJT-X decode equivalence.
+            
             ### 中文
-            - v1.62 修复版：SSTV 12 kHz 实数 IF 增加独立 FM 鉴频和 SSB 解调；发送图片移除重复确认和卫星频率模式强制核对，保留硬件 PTT 互锁。
-            - AFC 使用模式推定初始 IF/RF 方向，不再先做 CAT 测试调谐和恢复；测量调度约 250 ms，闭环修正加速且保留发散停写。
-            - 已增加合成 PCM 软件测试；实际 IC-9700 路由、调谐方向与 SSTV 图片完整解码仍需实机验收。
-            - 修复 AFC 12 kHz IF 音频时间戳重复时错误清空测频缓冲，解决频谱显示正常但 FM 测频无法启动的问题。
-            - 增加测量状态和未经验证的 FM IF 候选频偏显示；未测量时不再误报 0 Hz。
-            - SSTV 图片编辑器现支持最多八个独立文字图层，允许复制、删除、缩放、拖动与更改文字颜色；变量菜单新增呼号、RSV、QTH、UTC 与 MHz。
-            - 优化大尺寸图片加载、剪贴板图像处理和缩略图缓存，减少重复解码与生成。
-            - 修复 SSTV 缩略图左右键导致重复新增的问题；图库／历史增加导入、导出及删除图片。
-            - RX/TX 使用统一的 MMSSTV 橙黑色 1200/1500/1900/2300 Hz 音调参考，RX 黑色区域显示 AF/IF 频谱。
-            - SSTV 接收模式列表与发射端 43 种模式保持一致，包含由原生解码器自动识别的 Robot/PD。
-            - TX 图片新增独立己方／对方呼号及自定义文字图层，支持拖动、字号和颜色调整，模板可保存并删除。
-            - 集成 SSTV 控制台：43 种图片发射模式、扩展 VIS/N-VIS 接收、AF/12 kHz IF 声源、图片编辑、CW/FSK ID、图库及通联日志。
-            - SSTV 卫星多普勒跟踪及 CAT/PTT/STOP 控制；Esc 可停止发射并即时显示状态。
-            - 新增虚拟 IC-9700 TCP CAT/断连模拟、五分钟多普勒扫频测试及 Windows SSTV 界面自动测试。
-            - 设置页新增简体中文 / English 切换，保留原始配置键名及参数功能，界面语言可持久化。
-            - AFC 实时跟踪、控制状态、诊断信息与高级设置提供中英双语。
-            - IC-9700 LAN 频谱工具栏使用 START / STOP、CLEAR、SYNC、SETS 英文按钮。
-            - 包含 DPI 双行布局和 MORE 菜单对象释放异常修复。
-            - 停用旧版 CAT 探针校准；新 AFC 优先快速捕获，保留 CAT 读回时效及发散保护。
-            - 保留原有中英界面和频谱 UI 调整，不改变 TX、永久转发器偏移或卫星轨道模型。
-
-            Full changelog / 完整更新记录:
-            https://github.com/Iu-yang1/SkyRoof/blob/master/FORK-CHANGELOG.md
-
-            Official release; Windows installer may be unsigned. / 正式发布；Windows 安装包可能未进行数字签名。
-          # body: This is an experimental build, please ignore.
+            - 正式加入 IC-9700 12 kHz 实数 USB IF → SSB/CW/FM 解调 → 虚拟声卡 → WSJT-X。
+            - 修复 FM 6.25 kHz 的 900 Hz 频偏校验和解调线程静默退出。
+            - 移除实验 IF/LAN AF 双路对照录音与冗长 DSP 诊断；保留四段链路状态和错误、丢块、欠载计数。
+            - 保留有界缓冲、SSB/CW AGC、FM 独立增益、削波保护、SO-50 弱 FM AFC 证据门与失号 HoldLast。
+            - 可选捆绑经验证的原厂基础版 VB-CABLE Donationware；专业使用须按厂商要求获得许可。
+            - 软件测试不能代替真实 RF 灵敏度、端到端时延或 WSJT-X 解码验收。
+            
+            Changelog / 更新记录: https://github.com/Iu-yang1/SkyRoof/blob/master/FORK-CHANGELOG.md
+            
           files:  install/SkyRoofSetup-v.${{ steps.get_version.outputs.version }}.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
