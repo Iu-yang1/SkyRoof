@@ -21,13 +21,21 @@ namespace SkyRoof
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public OrbitSourceSettings OrbitSources { get; set; } = new();
 
+    // Explicit browsable root sections: do not rely on implicit metadata
+    // when the PropertyGrid's language provider decorates descriptors.
+    [Browsable(true)]
+    [DisplayName("User")]
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public UserSettings User { get; set; } = new();
 
 
+    [Browsable(true)]
+    [DisplayName("Audio")]
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public AudioSettings Audio { get; set; } = new();
 
+    [Browsable(true)]
+    [DisplayName("OutputStream")]
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public OutputStreamSettings OutputStream { get; set; } = new();
 
