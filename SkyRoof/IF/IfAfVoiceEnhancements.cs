@@ -10,6 +10,7 @@ namespace SkyRoof.IF
     private readonly bool fmSquelch;
     private readonly double fmPowerThreshold;
     private readonly IfAfSsbVoiceNotch ssbNotch;
+    private readonly IfAfAdaptiveNotch? adaptiveNotch;
     private readonly double nb0, nb1, nb2, na1, na2;
     private double nz1, nz2;
     private double fmSmoothPower, fmGate = 1, deemph;
@@ -26,6 +27,8 @@ namespace SkyRoof.IF
       this.fmSquelch = fmSquelch;
       fmPowerThreshold = Math.Pow(10, fmSquelchDbfs / 10.0);
       this.ssbNotch = ssbNotch;
+      if (ssbNotch == IfAfSsbVoiceNotch.AutoTracking)
+        adaptiveNotch = new IfAfAdaptiveNotch();
       int hz = ssbNotch switch
       {
         IfAfSsbVoiceNotch.Tone1000Hz => 1000,
@@ -49,6 +52,7 @@ namespace SkyRoof.IF
       nz1 = nz2 = deemph = fmSmoothPower = 0;
       fmGate = fmSquelch ? 0 : 1;
       previousMode = null;
+      adaptiveNotch?.Reset();
     }
 
     internal double Process(double sample, IfAfMode mode, double fmIqPower = 0)
@@ -58,6 +62,9 @@ namespace SkyRoof.IF
         Reset();
         previousMode = mode;
       }
+      if ((mode is IfAfMode.Usb or IfAfMode.Lsb) &&
+          ssbNotch == IfAfSsbVoiceNotch.AutoTracking)
+        return adaptiveNotch!.Process(sample);
       if ((mode is IfAfMode.Usb or IfAfMode.Lsb) &&
           ssbNotch != IfAfSsbVoiceNotch.Off)
       {

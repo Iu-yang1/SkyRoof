@@ -101,7 +101,7 @@ namespace SkyRoof.IF
   }
 
   public enum IfAfFmVoiceProcessing { Off, Voice50us, Voice75us }
-  public enum IfAfSsbVoiceNotch { Off, Tone1000Hz, Tone1500Hz }
+  public enum IfAfSsbVoiceNotch { Off, Tone1000Hz, Tone1500Hz, AutoTracking }
 
   public enum IfAfLatencyPreset
   {
@@ -236,7 +236,7 @@ namespace SkyRoof.IF
 
     [Category("Audio enhancements")]
     [DisplayName("SSB voice notch")]
-    [Description("Optional narrow fixed-frequency audio notch to suppress a stable 1000/1500 Hz interfering tone. Disabled for USB-D/LSB-D and CW.")]
+    [Description("Optional 1000/1500 Hz manual voice notch or AutoTracking. AutoTracking requires a stable isolated carrier across three spectral windows; experimental and OFF by default. Digital USB-D/LSB-D and CW always bypass it.")]
     [DefaultValue(IfAfSsbVoiceNotch.Off)]
     public IfAfSsbVoiceNotch SsbVoiceNotch { get; set; } =
       IfAfSsbVoiceNotch.Off;

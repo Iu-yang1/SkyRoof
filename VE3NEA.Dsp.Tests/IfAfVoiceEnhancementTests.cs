@@ -67,6 +67,35 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void AutoTrackingNotchLocksStableInterfererAndLeavesDigitalBypassed()
+    {
+      const int tone = 1000;
+      var auto = Decode(tone, IfAfMode.Usb, IfAfSsbVoiceNotch.AutoTracking);
+      var raw = Decode(tone, IfAfMode.Usb, IfAfSsbVoiceNotch.Off);
+      var digital = Decode(tone, IfAfMode.UsbDigital,
+        IfAfSsbVoiceNotch.AutoTracking);
+      // Auto tracker needs three 171-ms windows before acquiring a
+      // stable narrowband interferer; evaluate only the final 20%.
+      double AmplitudeLast(float[] pcm)
+      {
+        double re = 0, im = 0;
+        for (int i = 38400; i < 48000; i++)
+        {
+          double angle = 2 * Math.PI * tone * i / Rate;
+          re += pcm[i] * Math.Cos(angle);
+          im -= pcm[i] * Math.Sin(angle);
+        }
+        return 2 * Math.Sqrt(re * re + im * im) / 9600;
+      }
+      double muted = AmplitudeLast(auto);
+      double reference = AmplitudeLast(raw);
+      double kept = AmplitudeLast(digital);
+      Assert.True(reference > .25 && muted < reference * .3,
+        $"Auto notch did not suppress stable {tone} Hz tone: {muted}/{reference}");
+      Assert.InRange(kept / reference, .99, 1.01);
+    }
+
+    [Fact]
     public void AnalogNotchRetainsNearbySpeech()
     {
       var notch = IfAfSsbVoiceNotch.Tone1000Hz;
