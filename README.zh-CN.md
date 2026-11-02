@@ -24,7 +24,7 @@
 | **多普勒辅助 AFC** | 利用 FM 及 CW/导频信号进行接收频偏估计，提供置信度门控、受限的**仅接收 RX CAT** 频率修正、失号 HoldLast 机制与调试界面；不修改上行或 TX 频率。 | [AFC 指南](docs/zh-cn/fork-guide/afc.md) |
 | **CW Console / Pileup** | Skimmer 风格横向瀑布图、多信号跟踪、最多八路接收槽位、DeepCW 辅助解码、连续消息记录、可选 HamNoise 处理，以及人工触发的 CI-V CW 发报和 F1–F8 宏。 | [CW 控制台](docs/zh-cn/users_guide/cw_console.md) |
 | **SSTV Console** | 可停靠 SSTV 收发、图库和通联日志；提供 **43 种发射配置**、VIS 处理、AF/IF 接收、图片和多达八层文字模板、UTC 通联记录及 ADIF 导出。接收能力取决于相应制式解码器。 | [SSTV 指南](docs/zh-cn/fork-guide/sstv-console.md) |
-| **旋转器与网络摄像头** | 基于实际反馈的多航点 PARK、跟踪与手动控制互锁、GS-232B/rotctld 增强、**RC-3040S 原生 LAN 控制**，以及支持硬件视频解码的 ONVIF 摄像头面板。 | [旋转器](docs/zh-cn/fork-guide/rotator-and-ui.md) · [RC-3040S](docs/zh-cn/fork-guide/rc3040s-lan.md) · [ONVIF](docs/zh-cn/fork-guide/onvif-camera.md) |
+| **旋转器与网络摄像头** | 基于实际反馈的多航点 PARK、跟踪与手动控制互锁、GS-232B/rotctld 增强、**RC-3040S 原生 LAN 控制**，以及支持硬件视频解码的 ONVIF 摄像头面板。 | [旋转器](docs/zh-cn/fork-guide/rotator-and-ui.md) · [RC-3040S（英文指南）](docs/fork-guide/rc3040s-lan.md) · [ONVIF](docs/zh-cn/fork-guide/onvif-camera.md) |
 | **界面与可靠性** | GitHub Light/Dark、粉蓝白主题，设置窗口与部分控制界面支持简体中文/English 切换；修复布局/DPI 问题，支持配置备份恢复、敏感凭据保护及 Windows 自动化回归测试。 | [Fork 概览](docs/zh-cn/fork-guide/overview.md) · [更新日志](FORK-CHANGELOG.md) |
 
 ### IC-9700 + WSJT-X 接收链路示例
