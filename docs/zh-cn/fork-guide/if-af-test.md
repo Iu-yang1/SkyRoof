@@ -217,6 +217,10 @@
 
 **P2 — 实时性能和峰值保护：** 因 IF 中心频率 12 kHz 恰好是 48 kHz 的四分之一，SSB/CW 复数 NCO+FIR 可在配置时为四个相位预计算实值卷积权重，实时路径减少复数乘法，保持波形数学等价；FM 仍保留独立的复数鉴频。AF 工作块通过 `ArrayPool<float>` 复用，仅在同步写入 WASAPI 缓冲后释放。峰值保护对过大峰值立即降低增益、约 150ms 平滑释放，避免限制器下一 10ms 帧直接反弹引发泵吸。诊断窗口添加每个处理块的 `DSP time`，请结合 10ms 输入块比较。此轮**没有实施抽取/重采样大规模改造**，须先证明现有 CPU 负载需要该风险较高的步骤。
 
-**P3 — 可选音频增强：** 实现默认关闭的 SSB 1/1.5 kHz 窄陷波、实验性自动稳定载波陷波、FM 50/75μs 语音去加重和 FM 功率门控静噪，并通过模拟测试检查关闭时行为不变。宽带谱减/神经网络降噪**尚未部署**；此类功能必须先得到弱信号、Q65/FT4/CW 点划损失率的实测证据。参考 [GNU Radio FIR 设计](https://www.gnuradio.org/doc/doxygen/classgr_1_1filter_1_1firdes.html)、[SDRangel NFM](https://github.com/f4exb/sdrangel/blob/master/plugins/channelrx/demodnfm/readme.md)、[GNU Radio FM Deemphasis](https://wiki.gnuradio.org/index.php/FM_Deemphasis) 及 [Power Squelch](https://wiki.gnuradio.org/index.php/Power_Squelch)。
+**P3 — 可选音频增强：** 实现默认关闭的 SSB 1/1.5 kHz 窄陷波、实验性自动稳定载波陷波、FM 50/75μs 语音去加重和 FM 功率门控静噪，并通过模拟测试检查关闭时行为不变。另提供默认关闭的 **SSB voice noise reduction = Mild**：2048 点 STFT、50% 重叠、sqrt-Hann WOLA，使用每帧频谱中位数估计背景噪声功率，对低于语音主峰的频点施加最多约 8 dB 的衰减并跨帧平滑。仅模拟 SSB 语音经过此处理，附加约 42.7 ms 延迟，数字模式、CW、FM 均旁路。该简易掩蔽算法不是经验证的 MMSE-LSA 或神经网络降噪，不能保证改善所有噪声条件，可能产生轻微音乐噪声；需要实测语音可懂度、弱信号 SNR 和失真。参考 [GNU Radio FIR 设计](https://www.gnuradio.org/doc/doxygen/classgr_1_1filter_1_1firdes.html)、[SDRangel NFM](https://github.com/f4exb/sdrangel/blob/master/plugins/channelrx/demodnfm/readme.md)、[GNU Radio FM Deemphasis](https://wiki.gnuradio.org/index.php/FM_Deemphasis) 及 [Power Squelch](https://wiki.gnuradio.org/index.php/Power_Squelch)。
 
 **验收边界：** 所有增加的 DSP 测试为合成 48k/12k IF、模拟声卡路径或频率响应测试；它们不是 IC-9700 真正的硬件 ENOB、SINAD、QSO 成功率、端到端延迟的证明。需另行录制 `CABLE Output` 并结合原始 IF/LAN AF WAV 比较幅度、频响、CW 包络、FM 无信号状态和数字解码。
+
+### 可选语音降噪验收提示
+
+测试 `SSB voice noise reduction = Off / Mild` 时，保持原始 IF 录音、接收滤波器、AGC 和 VB-CABLE 端点一致，只更换噪声处理。对同一段 60–120 s 真实 SSB 接收记录分析语音可懂度、频域噪声地板、峰值、音色和约 42.7 ms 额外时延。**不可将 Mild 模式用于 FT8/FT4/Q65 音频输入**；即便手动选择 USB-D 路径，程序也会自动旁路语音降噪。对于自动陷波，请检查是否误把语音谐波作为窄带干扰而衰减。

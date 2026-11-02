@@ -102,6 +102,7 @@ namespace SkyRoof.IF
 
   public enum IfAfFmVoiceProcessing { Off, Voice50us, Voice75us }
   public enum IfAfSsbVoiceNotch { Off, Tone1000Hz, Tone1500Hz, AutoTracking }
+  public enum IfAfSsbNoiseReduction { Off, Mild }
 
   public enum IfAfLatencyPreset
   {
@@ -240,6 +241,13 @@ namespace SkyRoof.IF
     [DefaultValue(IfAfSsbVoiceNotch.Off)]
     public IfAfSsbVoiceNotch SsbVoiceNotch { get; set; } =
       IfAfSsbVoiceNotch.Off;
+
+    [Category("Audio enhancements")]
+    [DisplayName("SSB voice noise reduction")]
+    [Description("Optional mild spectral Wiener-style suppressor, <=8 dB attenuation per spectral bin. Adds ~43 ms latency; designed for analog voice ONLY. Digital USB-D/LSB-D, CW and FM bypass this stage. Default Off.")]
+    [DefaultValue(IfAfSsbNoiseReduction.Off)]
+    public IfAfSsbNoiseReduction SsbNoiseReduction { get; set; } =
+      IfAfSsbNoiseReduction.Off;
 
     // Legacy Settings.json contained one global GainDb. Read it, but never
     // write that ambiguous key again. Preserve a user's safe FM attenuation;

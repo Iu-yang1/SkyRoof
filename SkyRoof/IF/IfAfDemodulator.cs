@@ -43,7 +43,8 @@ namespace SkyRoof.IF
       int fmIfCutoffHz = 8800, int fmAfCutoffHz = 3400,
       IfAfFmVoiceProcessing fmVoice = IfAfFmVoiceProcessing.Off,
       bool fmSquelch = false, int fmSquelchDbfs = -45,
-      IfAfSsbVoiceNotch ssbVoiceNotch = IfAfSsbVoiceNotch.Off)
+      IfAfSsbVoiceNotch ssbVoiceNotch = IfAfSsbVoiceNotch.Off,
+      IfAfSsbNoiseReduction ssbNoiseReduction = IfAfSsbNoiseReduction.Off)
     {
       if (fmDeviationHz is < 1000 or > 6000)
         throw new ArgumentOutOfRangeException(nameof(fmDeviationHz));
@@ -58,7 +59,7 @@ namespace SkyRoof.IF
       fmDeviation = fmDeviationHz;
       cwAudio = new IfAfCwAudioFilter(cwCenterHz, cwBandwidthHz);
       voice = new IfAfVoiceEnhancements(fmVoice, fmSquelch,
-        fmSquelchDbfs, ssbVoiceNotch);
+        fmSquelchDbfs, ssbVoiceNotch, ssbNoiseReduction);
       Configure(mode);
     }
 

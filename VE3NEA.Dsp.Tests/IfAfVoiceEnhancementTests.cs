@@ -96,6 +96,42 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void OptionalMildSpectralDenoiserReducesStationaryVoiceNoise()
+    {
+      var rnd = new Random(7272);
+      float[] noiseIf = new float[Rate * 2];
+      for (int i = 0; i < noiseIf.Length; i++)
+        noiseIf[i] = (float)(rnd.NextDouble() * 2 - 1) * .08f;
+      var raw = new float[noiseIf.Length];
+      var mild = new float[noiseIf.Length];
+      new IfAfDemodulator(IfAfMode.Usb).Process(noiseIf, raw);
+      new IfAfDemodulator(IfAfMode.Usb,
+        ssbNoiseReduction: IfAfSsbNoiseReduction.Mild).Process(noiseIf, mild);
+      double pRaw = 0, pMild = 0;
+      for (int i = Rate; i < noiseIf.Length; i++)
+      {
+        Assert.True(float.IsFinite(mild[i]));
+        pRaw += raw[i] * raw[i];
+        pMild += mild[i] * mild[i];
+      }
+      Assert.True(pMild < pRaw * .92,
+        $"Optional SSB denoiser should reduce stationary noise: {pMild}/{pRaw}");
+    }
+
+    [Fact]
+    public void OptionalVoiceDenoiserNeverTouchesDigitalDataModes()
+    {
+      var ifPcm = IfTone(1000, .18f);
+      var analog = new float[Rate];
+      var digital = new float[Rate];
+      new IfAfDemodulator(IfAfMode.UsbDigital).Process(ifPcm, analog);
+      new IfAfDemodulator(IfAfMode.UsbDigital,
+        ssbNoiseReduction: IfAfSsbNoiseReduction.Mild).Process(ifPcm, digital);
+      for (int i = 0; i < Rate; i++)
+        Assert.InRange(Math.Abs(digital[i] - analog[i]), 0, 1e-6);
+    }
+
+    [Fact]
     public void AnalogNotchRetainsNearbySpeech()
     {
       var notch = IfAfSsbVoiceNotch.Tone1000Hz;

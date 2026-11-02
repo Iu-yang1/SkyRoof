@@ -11,16 +11,19 @@ namespace SkyRoof.IF
     private readonly double fmPowerThreshold;
     private readonly IfAfSsbVoiceNotch ssbNotch;
     private readonly IfAfAdaptiveNotch? adaptiveNotch;
+    private readonly IfAfSpectralNoiseReducer? noiseReducer;
     private readonly double nb0, nb1, nb2, na1, na2;
     private double nz1, nz2;
     private double fmSmoothPower, fmGate = 1, deemph;
     private IfAfMode? previousMode;
 
     internal IfAfVoiceEnhancements(IfAfFmVoiceProcessing fmVoice,
-      bool fmSquelch, int fmSquelchDbfs, IfAfSsbVoiceNotch ssbNotch)
+      bool fmSquelch, int fmSquelchDbfs, IfAfSsbVoiceNotch ssbNotch,
+      IfAfSsbNoiseReduction noiseReduction)
     {
       if (!Enum.IsDefined(typeof(IfAfFmVoiceProcessing), fmVoice) ||
           !Enum.IsDefined(typeof(IfAfSsbVoiceNotch), ssbNotch) ||
+          !Enum.IsDefined(typeof(IfAfSsbNoiseReduction), noiseReduction) ||
           fmSquelchDbfs is < -95 or > -10)
         throw new ArgumentOutOfRangeException(nameof(fmSquelchDbfs));
       this.fmVoice = fmVoice;
@@ -29,6 +32,8 @@ namespace SkyRoof.IF
       this.ssbNotch = ssbNotch;
       if (ssbNotch == IfAfSsbVoiceNotch.AutoTracking)
         adaptiveNotch = new IfAfAdaptiveNotch();
+      if (noiseReduction == IfAfSsbNoiseReduction.Mild)
+        noiseReducer = new IfAfSpectralNoiseReducer();
       int hz = ssbNotch switch
       {
         IfAfSsbVoiceNotch.Tone1000Hz => 1000,
@@ -53,6 +58,7 @@ namespace SkyRoof.IF
       fmGate = fmSquelch ? 0 : 1;
       previousMode = null;
       adaptiveNotch?.Reset();
+      noiseReducer?.Reset();
     }
 
     internal double Process(double sample, IfAfMode mode, double fmIqPower = 0)
@@ -62,18 +68,19 @@ namespace SkyRoof.IF
         Reset();
         previousMode = mode;
       }
-      if ((mode is IfAfMode.Usb or IfAfMode.Lsb) &&
-          ssbNotch == IfAfSsbVoiceNotch.AutoTracking)
-        return adaptiveNotch!.Process(sample);
-      if ((mode is IfAfMode.Usb or IfAfMode.Lsb) &&
-          ssbNotch != IfAfSsbVoiceNotch.Off)
+      if (mode is IfAfMode.Usb or IfAfMode.Lsb)
       {
-        double y = nb0 * sample + nz1;
-        nz1 = nb1 * sample - na1 * y + nz2;
-        nz2 = nb2 * sample - na2 * y;
-        return y;
+        if (ssbNotch == IfAfSsbVoiceNotch.AutoTracking)
+          sample = adaptiveNotch!.Process(sample);
+        else if (ssbNotch != IfAfSsbVoiceNotch.Off)
+        {
+          double y = nb0 * sample + nz1;
+          nz1 = nb1 * sample - na1 * y + nz2;
+          nz2 = nb2 * sample - na2 * y;
+          sample = y;
+        }
+        return noiseReducer?.Process(sample) ?? sample;
       }
-
       if (mode != IfAfMode.Fm) return sample;
       if (fmVoice != IfAfFmVoiceProcessing.Off)
       {
