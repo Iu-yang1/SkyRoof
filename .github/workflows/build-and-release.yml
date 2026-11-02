@@ -196,26 +196,21 @@ jobs:
           fail_on_unmatched_files: true
           target_commitish: ${{ github.sha }}
           body: |
-            SkyRoof Fork v.${{ steps.get_version.outputs.version }} — IC-9700 IF→AF receiver release.
-            
+            SkyRoof Fork v.${{ steps.get_version.outputs.version }} — Settings layout hotfix.
+
             ### English
-            - Production 48-kS/s real 12-kHz USB IF → SSB/CW/FM → Windows virtual audio cable for WSJT-X.
-            - Correct 6.25-kHz FM 900-Hz deviation startup validation and visible decoder failure handling.
-            - Remove experimental dual USB IF/LAN AF capture recording and excessive DSP diagnostics, retaining four-stage status and error/drop counters.
-            - Keep bounded queues, independent FM gain, SSB/CW AGC, audio peak protection, SO-50 weak-FM AFC verification, and HoldLast loss policy.
-            - Installer optionally bundles original verified basic VB-Audio VB-CABLE Donationware (www.vb-cable.com); professional users require appropriate licensing.
-            - CI does not establish real RF sensitivity, device round-trip latency, or WSJT-X decode equivalence.
-            
+            - Restore Orbit / Ephemeris Sources, User, Audio and OutputStream sections previously obscured by top toolbars.
+            - Keep the VB-CABLE and language toolbars in their own layout rows, without covering settings.
+            - Preserve all settings, English/Chinese labels, IF→AF DSP, AFC and PTT behavior.
+            - Original verified basic VB-CABLE optional installer remains. Application installer may be unsigned.
+
             ### 中文
-            - 正式加入 IC-9700 12 kHz 实数 USB IF → SSB/CW/FM 解调 → 虚拟声卡 → WSJT-X。
-            - 修复 FM 6.25 kHz 的 900 Hz 频偏校验和解调线程静默退出。
-            - 移除实验 IF/LAN AF 双路对照录音与冗长 DSP 诊断；保留四段链路状态和错误、丢块、欠载计数。
-            - 保留有界缓冲、SSB/CW AGC、FM 独立增益、削波保护、SO-50 弱 FM AFC 证据门与失号 HoldLast。
-            - 可选捆绑经验证的原厂基础版 VB-CABLE Donationware；专业使用须按厂商要求获得许可。
-            - 软件测试不能代替真实 RF 灵敏度、端到端时延或 WSJT-X 解码验收。
-            
+            - 修复 VB-CABLE 与语言栏覆盖 PropertyGrid，恢复“轨道与星历来源、用户信息、音频、音频输出流”。
+            - 设置界面采用独立三行布局，避免顶部控件遮挡设置项。
+            - 保留原配置、中英语言、IF→AF、AFC 和电台控制功能。
+
             Changelog / 更新记录: https://github.com/Iu-yang1/SkyRoof/blob/master/FORK-CHANGELOG.md
-            
+
           files:  install/SkyRoofSetup-v.${{ steps.get_version.outputs.version }}.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

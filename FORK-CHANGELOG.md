@@ -1,3 +1,21 @@
+# SkyRoof Fork v.1.64 / SkyRoof Fork 1.64 版本说明
+
+Release date / 发布日期: 2026-11-02. Settings dialog layout correction.
+
+## English
+- Fixed top VB-CABLE and language toolbars covering the first four Settings sections: Orbit / Ephemeris Sources, User, Audio, OutputStream.
+- Replaced overlapping Dock layouts with independent TableLayoutPanel rows; kept all existing settings values and serialized JSON names.
+- Added Windows bilingual PropertyGrid, nonoverlap and settings persistence regression tests.
+- No changes to IC-9700 IF→AF, AFC, PTT or satellite Doppler.
+
+## 中文
+- 修复 VB-CABLE 工具栏及语言选择栏遮挡设置列表前四项（轨道与星历来源、用户信息、音频、音频输出流）的问题。
+- 改为独立三行布局，保留原设置内容、序列化键名和中英标签。
+- 增加 Windows 真实 PropertyGrid 显示、工具栏不重叠及配置保存测试。
+- 未修改电台 IF→AF 解调、AFC、PTT 或卫星多普勒。
+
+---
+
 # SkyRoof Fork v.1.63 / SkyRoof Fork 1.63 版本说明
 
 Release date / 发布日期: 2026-11-02.
