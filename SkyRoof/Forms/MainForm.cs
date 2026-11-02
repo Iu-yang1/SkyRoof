@@ -21,10 +21,8 @@ namespace SkyRoof
     private MouseButtons LastRotatorStatusMouseButton;
     private ToolStripProfessionalRenderer? ThemeRenderer;
     private readonly EmbeddedSkyCatHost EmbeddedSkyCat = new();
-    private IfAfComparisonForm? ifAfComparisonForm;
     private readonly ToolStripStatusLabel[] ifAfStageLeds = new ToolStripStatusLabel[4];
     private readonly ToolStripStatusLabel[] ifAfStageLabels = new ToolStripStatusLabel[4];
-    private ToolStripStatusLabel? ifAfTimingLabel;
     private IfAfStatus? previousIfAfStatus;
     private DateTime lastIfAfClipUtc;
     private long recentIfAfClips, recentIfAfOutputSamples;
@@ -47,7 +45,6 @@ namespace SkyRoof
       ConfigureCwConsoleMenuItem();
       ConfigureSstvConsoleMenuItem();
       ConfigureOnvifCameraMenu();
-      ConfigureIfAfComparisonMenu();
       ConfigureIfAfLinkBar();
       ConfigureGitHubThemeMenuItems();
       AddOrbitSourceMenuItems();
@@ -247,7 +244,6 @@ namespace SkyRoof
 
       // save settings
       ctx.Settings.Ui.StoreDockingLayout(DockHost);
-      ifAfComparisonForm?.Close();
       ctx.ClosePanels();
 
       ctx.Settings.Ui.StoreWindowPosition(this);
@@ -614,7 +610,7 @@ namespace SkyRoof
             ctx.Settings.OutputStream.Vac == ifAfOutputId)
         {
           // ApplyOutputStreamSettings enables the legacy stream before this
-          // preflight. Tear down the experimental decoder first: a warning
+          // preflight. Tear down the IF decoder first: a warning
           // must never leave two active writers on one physical cable.
           ctx.IfAf.Stop();
           UpdateIfAfLinkBar();
@@ -626,8 +622,8 @@ namespace SkyRoof
       }
       catch (Exception ex)
       {
-        Serilog.Log.Error(ex, "Experimental IF-AF route failed");
-        MessageBox.Show(this, ex.Message, "IF-AF Test",
+        Serilog.Log.Error(ex, "IF-AF receive route failed");
+        MessageBox.Show(this, ex.Message, "IF-AF Receiver",
           MessageBoxButtons.OK, MessageBoxIcon.Warning);
       }
     }
@@ -698,13 +694,9 @@ namespace SkyRoof
       {
         var state = ctx.IfAf.Status;
         VacStatusLabel.ToolTipText +=
-          $"\nIF-AF TEST {state.Mode} {(state.Running ? "RUNNING" : "STOPPED")}" +
-          $"\nIF 48 kS/s RMS={state.InputRmsDbfs:F1} dBFS" +
-          $"\nFrames={state.InputSamples} Out={state.OutputSamples}" +
-          $"\nQueue drops={state.DroppedBlocks} AF clipping={state.ClippedSamples}" +
-          $"\nQueue age={state.ProcessingQueueLagMs:F1} ms (not total audio latency)" +
-          $"\nWASAPI requested period={state.RequestedRenderPeriodMs} ms, " +
-          $"underrun={state.OutputUnderrunSamples} samples" +
+          $"\nIF→AF {state.Mode}: {(state.Running ? "RUNNING" : "STOPPED")}" +
+          $"\nIF: {state.InputSamples}  AF: {state.OutputSamples}" +
+          $"\nDropped blocks: {state.DroppedBlocks}; underruns: {state.OutputUnderrunSamples}" +
           $"\n{state.Detail}";
       }
     }
@@ -1131,14 +1123,6 @@ namespace SkyRoof
         StatusStrip.Items.Insert(index++, led);
         StatusStrip.Items.Insert(index++, text);
       }
-      ifAfTimingLabel = new ToolStripStatusLabel("Q:--  P:--")
-      {
-        Name = "IfAfTimingLabel",
-        Font = new Font("Segoe UI", 9F),
-        ToolTipText = "Q: software processing queue age; P: requested WASAPI period, not physical latency"
-      };
-      ifAfTimingLabel.Click += ShowIfAfLinkDiagnostics;
-      StatusStrip.Items.Insert(index, ifAfTimingLabel);
       UpdateIfAfLinkBar();
     }
 
@@ -1147,28 +1131,13 @@ namespace SkyRoof
       if (ctx.IfAf == null) return;
       var x = ctx.IfAf.Status;
       MessageBox.Show(this,
-        $"IF-AF-Audio link\n\nMode: {x.Mode}\n" +
-        $"Capture samples: {x.InputSamples}\nAF samples: {x.OutputSamples}\n" +
-        $"Capture input RMS (latest block): {x.InputRmsDbfs:F1} dBFS\n" +
-        $"AF RMS (latest block, after limit): {x.OutputRmsDbfs:F1} dBFS\n" +
-        $"AF peak (latest block, BEFORE ceiling): {x.OutputPeakBeforeLimitDbfs:F1} dBFS\n" +
-        $"AF applied gain (latest block): {x.AppliedAfGainDb:F1} dB\n" +
-        $"DSP time (latest block): {x.DspBlockProcessingMs:F2} ms\n" +
-        $"AF peak protection reduction (latest block): {x.PeakReductionDb:F1} dB\n" +
-        $"Peak-limited blocks since start: {x.PeakLimitedBlocks}\n" +
-        $"Queue age: {x.ProcessingQueueLagMs:F1} ms (host estimate)\n" +
-        $"WASAPI render period requested: {x.RequestedRenderPeriodMs} ms\n" +
-        $"Dropped blocks: {x.DroppedBlocks}\n" +
-        $"Clipped since start: {x.ClippedSamples} (cumulative)\n" +
-        $"New clipped since last status check: {recentIfAfClips} " +
-        $"of {recentIfAfOutputSamples} samples " +
-        $"({(recentIfAfOutputSamples > 0 ? 100.0 * recentIfAfClips / recentIfAfOutputSamples : 0):F2}%)\n" +
-        $"Clipped in most recent ~10ms block: {x.LastBlockClippedSamples}\n" +
-        $"Output underrun samples: {x.OutputUnderrunSamples}\n" +
-        $"Playback active: {x.RenderRunning}\n\n{x.VirtualDeviceStatus}\n\n{x.Detail}\n\n" +
-        "The WSJT-X decode state and device hardware latency are not directly observable here.",
-        "IF-AF-Audio link diagnostics",
-        MessageBoxButtons.OK, MessageBoxIcon.Information);
+        $"Mode: {x.Mode}  Receiver: {(x.Running ? "Running" : "Stopped")}\n" +
+        $"IF / AF samples: {x.InputSamples} / {x.OutputSamples}\n" +
+        $"Input / output RMS: {x.InputRmsDbfs:F1} / {x.OutputRmsDbfs:F1} dBFS\n" +
+        $"Dropped blocks: {x.DroppedBlocks}; output underruns: {x.OutputUnderrunSamples}\n" +
+        $"AF clipped samples: {x.ClippedSamples}\n\n" +
+        x.VirtualDeviceStatus + "\n" + x.Detail,
+        "IF→AF Receiver", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private static Color IfAfLedColor(IfAfLinkState state) => state switch
@@ -1181,7 +1150,7 @@ namespace SkyRoof
 
     private void UpdateIfAfLinkBar()
     {
-      if (ifAfStageLeds[0] == null || ifAfTimingLabel == null) return;
+      if (ifAfStageLeds[0] == null) return;
       bool enabled = ctx.Settings.IfAf.Enabled;
       IfAfStatus? status = ctx.IfAf?.Status;
       DateTime nowUtc = DateTime.UtcNow;
@@ -1213,18 +1182,11 @@ namespace SkyRoof
       string[] stageNames = { "IF capture", "DDC / demodulator",
         "AF output", "Virtual microphone (paired endpoints)" };
       string detail = status.HasValue
-        ? $"Mode: {status.Value.Mode}; input: {status.Value.InputSamples}; " +
-          $"AF: {status.Value.OutputSamples}; Q: {status.Value.ProcessingQueueLagMs:F1} ms; " +
-          $"requested P: {status.Value.RequestedRenderPeriodMs} ms; " +
-          $"drops: {status.Value.DroppedBlocks}; lifetime clip: {status.Value.ClippedSamples}; " +
-          $"recent clip: {recentIfAfClips}/{recentIfAfOutputSamples}; " +
-          $"AF pre-ceiling peak: {status.Value.OutputPeakBeforeLimitDbfs:F1} dBFS; " +
-          $"applied gain: {status.Value.AppliedAfGainDb:F1} dB; " +
-          $"DSP block: {status.Value.DspBlockProcessingMs:F2} ms; " +
-          $"peak safety reduction: {status.Value.PeakReductionDb:F1} dB; " +
-          $"limited blocks: {status.Value.PeakLimitedBlocks}; " +
-          $"underrun: {status.Value.OutputUnderrunSamples}\n" +
-          $"{status.Value.VirtualDeviceStatus}\n{status.Value.Detail}" : "IF-AF not started";
+        ? $"Mode: {status.Value.Mode}; IF: {status.Value.InputSamples}; " +
+          $"AF: {status.Value.OutputSamples}; dropped: {status.Value.DroppedBlocks}; " +
+          $"underrun: {status.Value.OutputUnderrunSamples}; clip: {status.Value.ClippedSamples}\n" +
+          $"{status.Value.VirtualDeviceStatus}\n{status.Value.Detail}"
+        : "IF→AF receiver not started";
 
       for (int i = 0; i < stages.Length; i++)
       {
@@ -1233,42 +1195,7 @@ namespace SkyRoof
         ifAfStageLeds[i].ToolTipText = tip;
         ifAfStageLabels[i].ToolTipText = tip;
       }
-      ifAfTimingLabel.Visible = enabled && status.HasValue;
-      if (ifAfTimingLabel.Visible)
-      {
-        ifAfTimingLabel.Text =
-          $"Q:{status!.Value.ProcessingQueueLagMs:F0}ms  " +
-          $"P:{status.Value.RequestedRenderPeriodMs}ms";
-        ifAfTimingLabel.ToolTipText =
-          "Q = estimated processing queue age; P = requested WASAPI period (NOT hardware or end-to-end latency)\n" + detail;
-      }
       previousIfAfStatus = enabled ? status : null;
-    }
-
-    private void ConfigureIfAfComparisonMenu()
-    {
-      var item = new ToolStripMenuItem("Record IC-9700 IF + LAN AF (Test)…");
-      item.Click += (_, _) => OpenIfAfComparisonRecorder();
-      toolsToolStripMenuItem.DropDownItems.Add(item);
-    }
-
-    internal void OpenIfAfComparisonRecorder()
-    {
-      if (ifAfComparisonForm is { IsDisposed: false })
-      {
-        ifAfComparisonForm.Show();
-        ifAfComparisonForm.BringToFront();
-        ifAfComparisonForm.Focus();
-        return;
-      }
-      var form = new IfAfComparisonForm(ctx);
-      ifAfComparisonForm = form;
-      form.FormClosed += (_, _) =>
-      {
-        if (ReferenceEquals(ifAfComparisonForm, form))
-          ifAfComparisonForm = null;
-      };
-      form.Show(this);
     }
 
     private void AddEmbeddedSkyCatMenuItem()
@@ -1855,8 +1782,8 @@ namespace SkyRoof
       if (ctx.Settings.IfAf.Enabled)
       {
         MessageBox.Show(this,
-          "IF-AF TEST 使用独立 VAC 输出；请在设置中关闭 IF-AF 后再操作此 SDR 输出开关。",
-          "IF-AF Test", MessageBoxButtons.OK, MessageBoxIcon.Information);
+          "IF→AF 使用独立虚拟声卡输出；请先在设置中关闭 IF→AF，再操作 SDR 输出开关。",
+          "IF-AF Receiver", MessageBoxButtons.OK, MessageBoxIcon.Information);
         return;
       }
       ctx.Settings.OutputStream.Enabled = !ctx.Settings.OutputStream.Enabled;

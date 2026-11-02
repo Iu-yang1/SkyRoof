@@ -90,10 +90,6 @@ namespace SkyRoof
 
       RecordMenu.Items.Add(new ToolStripSeparator());
       RecordMenu.Items.Add(audioSourceMenu);
-      RecordMenu.Items.Add(new ToolStripSeparator());
-      var dualCapture = new ToolStripMenuItem("Record IC-9700 USB IF + LAN AF…");
-      dualCapture.Click += (_, _) => ctx.MainForm.OpenIfAfComparisonRecorder();
-      RecordMenu.Items.Add(dualCapture);
       UpdateAudioSourceMenu();
     }
 

@@ -84,7 +84,7 @@ namespace SkyRoof
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public AfcSettings Afc { get; set; } = new();
 
-    [DisplayName("12 kHz IF -> AF / WSJT-X (Test)")]
+    [DisplayName("12 kHz IF → AF / WSJT-X")]
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public IfAfSettings IfAf { get; set; } = new();
 

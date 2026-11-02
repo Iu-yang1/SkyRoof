@@ -112,7 +112,7 @@ namespace SkyRoof.IF
     Compatible200Ms = 200
   }
 
-  /// <summary>Opt-in IF-AF test path. Uses only receiver PCM; no CAT or PTT
+  /// <summary>IF-AF receive path. Uses only receiver PCM; no CAT or PTT
   /// writes. VAC device must be an explicit Windows RENDER endpoint and never
   /// the IC-9700 USB Audio CODEC playback/TX input.</summary>
   public sealed class IfAfSettings
