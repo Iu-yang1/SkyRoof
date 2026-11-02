@@ -96,9 +96,9 @@ namespace VE3NEA.Dsp.Tests
     [Fact]
     public void ModeMappingIncludesInvertedAndDataSidebands()
     {
-      Assert.Equal(IfAfMode.Lsb,
+      Assert.Equal(IfAfMode.LsbDigital,
         IfAfSettings.Resolve(IfAfSelection.FollowRadio, Slicer.Mode.LSB_D));
-      Assert.Equal(IfAfMode.Usb,
+      Assert.Equal(IfAfMode.UsbDigital,
         IfAfSettings.Resolve(IfAfSelection.FollowRadio, Slicer.Mode.USB_D));
       Assert.Equal(IfAfMode.Fm,
         IfAfSettings.Resolve(IfAfSelection.FollowRadio, Slicer.Mode.FM_D));
