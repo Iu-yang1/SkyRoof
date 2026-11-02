@@ -162,6 +162,7 @@ public sealed class SettingsLanguageTests
         }
 
         var english = VisibleRootLabels(grid);
+        Assert.Contains("Orbit / Ephemeris Sources", english);
         Assert.Contains("User", english);
         Assert.Contains("Audio", english);
         Assert.Contains("OutputStream", english);
@@ -175,6 +176,7 @@ public sealed class SettingsLanguageTests
         grid.SelectedObject = edited;
         Application.DoEvents();
         var chinese = VisibleRootLabels(grid);
+        Assert.Contains("轨道与星历来源", chinese);
         Assert.Contains("用户信息", chinese);
         Assert.Contains("音频", chinese);
         Assert.Contains("音频输出流", chinese);
@@ -190,6 +192,56 @@ public sealed class SettingsLanguageTests
     thread.SetApartmentState(ApartmentState.STA);
     thread.Start();
     Assert.True(thread.Join(TimeSpan.FromSeconds(20)));
+    if (error != null) throw new Xunit.Sdk.XunitException(error.ToString());
+  }
+
+  [Fact]
+  public void SettingsDialogToolbarsDoNotOccludeTopPropertyGridSections()
+  {
+    Exception? error = null;
+    var thread = new Thread(() =>
+    {
+      try
+      {
+        using var dialog = new SettingsDialog();
+        var fields = typeof(SettingsDialog).GetFields(
+          System.Reflection.BindingFlags.Instance |
+          System.Reflection.BindingFlags.NonPublic);
+        var grid = (PropertyGrid)fields.Single(field => field.Name == "grid")
+          .GetValue(dialog)!;
+        grid.SelectedObject = new Settings();
+
+        var flags = System.Reflection.BindingFlags.Instance |
+          System.Reflection.BindingFlags.NonPublic;
+        typeof(SettingsDialog).GetMethod("InstallLanguageSelector", flags)!
+          .Invoke(dialog, null);
+        typeof(SettingsDialog).GetMethod("InstallSignedCableToolbar", flags)!
+          .Invoke(dialog, null);
+
+        dialog.CreateControl();
+        dialog.PerformLayout();
+        var layout = (TableLayoutPanel)fields.Single(field =>
+          field.Name == "settingsLayout").GetValue(dialog)!;
+        layout.PerformLayout();
+        var cable = layout.GetControlFromPosition(0, 0);
+        var language = layout.GetControlFromPosition(0, 1);
+
+        Assert.NotNull(cable);
+        Assert.NotNull(language);
+        Assert.Same(grid, layout.GetControlFromPosition(0, 2));
+        Assert.Same(layout, grid.Parent);
+        // Previous direct Dock=Top controls covered the first four rows.
+        Assert.True(grid.Top >= cable!.Bottom);
+        Assert.True(grid.Top >= language!.Bottom);
+        Assert.True(grid.Height > 400);
+        Assert.True(grid.Bottom <= layout.ClientSize.Height);
+        Assert.Equal(3, layout.RowCount);
+      }
+      catch (Exception ex) { error = ex; }
+    });
+    thread.SetApartmentState(ApartmentState.STA);
+    thread.Start();
+    Assert.True(thread.Join(TimeSpan.FromSeconds(15)));
     if (error != null) throw new Xunit.Sdk.XunitException(error.ToString());
   }
 
