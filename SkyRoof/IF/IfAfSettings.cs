@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Globalization;
 using System.Runtime.Serialization;
 using Newtonsoft.Json;
 using NAudio.CoreAudioApi;
@@ -30,6 +31,71 @@ namespace SkyRoof.IF
       JsonSerializer serializer) =>
       writer.WriteValue((int)(value == IfAfAudioRoute.ExistingVirtualCable
         ? IfAfAudioRoute.ExistingVirtualCable : IfAfAudioRoute.AutoSignedCable));
+  }
+
+  // Enum numeric values are the nominal full two-sided IF / AF bandwidth.
+  [TypeConverter(typeof(IfAfSsbPresetConverter))]
+  public enum IfAfSsbBandwidth
+  {
+    Narrow1_2k = 1200, Narrow1_8k = 1800, Speech2_1k = 2100,
+    Speech2_4k = 2400, Normal2_7k = 2700, Wide3k = 3000,
+    Wide3_3k = 3300
+  }
+  [TypeConverter(typeof(IfAfCwPresetConverter))]
+  public enum IfAfCwBandwidth
+  {
+    UltraNarrow100 = 100, VeryNarrow200 = 200, Narrow300 = 300,
+    Narrow400 = 400, Normal500 = 500, Wide800 = 800, Wide1000 = 1000
+  }
+  [TypeConverter(typeof(IfAfFmPresetConverter))]
+  public enum IfAfFmBandwidth { Narrow6_25k = 6250, Normal12k = 12000 }
+
+  // Display friendly 1.2 kHz / 300 Hz labels in the PropertyGrid dropdown
+  // while persisting stable enum integers in Settings.json.
+  public abstract class IfAfBandwidthPresetConverter : EnumConverter
+  {
+    protected IfAfBandwidthPresetConverter(Type type) : base(type) { }
+
+    private string Label(Enum value)
+    {
+      int hz = Convert.ToInt32(value, CultureInfo.InvariantCulture);
+      if (EnumType == typeof(IfAfCwBandwidth))
+        return hz.ToString(CultureInfo.InvariantCulture) + " Hz";
+      return (hz / 1000.0).ToString(EnumType == typeof(IfAfSsbBandwidth)
+        ? "0.0" : "0.##", CultureInfo.InvariantCulture) + " kHz";
+    }
+
+    public override object? ConvertTo(ITypeDescriptorContext? context,
+      CultureInfo? culture, object? value, Type destinationType)
+    {
+      if (destinationType == typeof(string) && value is Enum entry &&
+          entry.GetType() == EnumType)
+        return Label(entry);
+      return base.ConvertTo(context, culture, value, destinationType);
+    }
+
+    public override object? ConvertFrom(ITypeDescriptorContext? context,
+      CultureInfo? culture, object value)
+    {
+      if (value is string label)
+        foreach (Enum entry in Enum.GetValues(EnumType))
+          if (string.Equals(Label(entry), label.Trim(),
+            StringComparison.OrdinalIgnoreCase))
+            return entry;
+      return base.ConvertFrom(context, culture, value);
+    }
+  }
+  public sealed class IfAfSsbPresetConverter : IfAfBandwidthPresetConverter
+  {
+    public IfAfSsbPresetConverter() : base(typeof(IfAfSsbBandwidth)) { }
+  }
+  public sealed class IfAfCwPresetConverter : IfAfBandwidthPresetConverter
+  {
+    public IfAfCwPresetConverter() : base(typeof(IfAfCwBandwidth)) { }
+  }
+  public sealed class IfAfFmPresetConverter : IfAfBandwidthPresetConverter
+  {
+    public IfAfFmPresetConverter() : base(typeof(IfAfFmBandwidth)) { }
   }
 
   public enum IfAfLatencyPreset
@@ -98,13 +164,50 @@ namespace SkyRoof.IF
     [TypeConverter(typeof(OutputSoundcardNameConverter))]
     public string? VacRenderDeviceId { get; set; }
 
-    [DisplayName("SSB AF low cut (Hz)")]
-    [DefaultValue(180)]
-    public int SsbLowHz { get; set; } = 180;
+    [Category("Receive filters")]
+    [DisplayName("SSB bandwidth")]
+    [Description("USB / LSB audio passband width. Presets: 1.2, 1.8, 2.1, 2.4, 2.7, 3.0 and 3.3 kHz. 2.7 kHz is normal voice, 3.0/3.3 kHz is wider voice / digital. All modes use an 180-Hz lower edge.")]
+    [DefaultValue(IfAfSsbBandwidth.Wide3k)]
+    public IfAfSsbBandwidth SsbBandwidth { get; set; } = IfAfSsbBandwidth.Wide3k;
 
-    [DisplayName("SSB AF high cut (Hz)")]
-    [DefaultValue(3300)]
-    public int SsbHighHz { get; set; } = 3300;
+    [Category("Receive filters")]
+    [DisplayName("CW bandwidth")]
+    [Description("CW audio bandpass centered at 700 Hz. Choose 100, 200, 300, 400, 500, 800 or 1000 Hz. 100/200 Hz are for well-centered, stable CW; 500 Hz is normal. Applies to both CW sidebands.")]
+    [DefaultValue(IfAfCwBandwidth.Normal500)]
+    public IfAfCwBandwidth CwBandwidth { get; set; } = IfAfCwBandwidth.Normal500;
+
+    [Category("Receive filters")]
+    [DisplayName("FM bandwidth")]
+    [Description("Nominal complex IF passband width. Narrow 6.25 kHz uses lower FM deviation and a tighter audio filter; 12 kHz suits ordinary narrowband FM. Actual transition skirts are not brick-wall.")]
+    [DefaultValue(IfAfFmBandwidth.Normal12k)]
+    public IfAfFmBandwidth FmBandwidth { get; set; } = IfAfFmBandwidth.Normal12k;
+
+    // Keep older numeric filter fields readable without exposing them in the
+    // UI or writing redundant, potentially conflicting JSON settings.
+    private int? legacySsbLow, legacySsbHigh;
+    [JsonProperty("SsbLowHz", NullValueHandling = NullValueHandling.Ignore)]
+    private int? LegacySsbLow { get => null; set => legacySsbLow = value; }
+    [JsonProperty("SsbHighHz", NullValueHandling = NullValueHandling.Ignore)]
+    private int? LegacySsbHigh { get => null; set => legacySsbHigh = value; }
+    [JsonProperty("FmDeviationHz", NullValueHandling = NullValueHandling.Ignore)]
+    private int? LegacyFmDeviation { get => null; set { } }
+
+    [JsonIgnore]
+    public int EffectiveSsbLowHz => 180;
+    [JsonIgnore]
+    public int EffectiveSsbHighHz => EffectiveSsbLowHz + (int)SsbBandwidth;
+    [JsonIgnore]
+    public int EffectiveCwCenterHz => 700;
+    [JsonIgnore]
+    public int EffectiveCwBandwidthHz => (int)CwBandwidth;
+    [JsonIgnore]
+    public int EffectiveFmIfCutoffHz => (int)FmBandwidth / 2;
+    [JsonIgnore]
+    public int EffectiveFmAfCutoffHz =>
+      FmBandwidth == IfAfFmBandwidth.Narrow6_25k ? 1700 : 3000;
+    [JsonIgnore]
+    public int EffectiveFmDeviationHz =>
+      FmBandwidth == IfAfFmBandwidth.Narrow6_25k ? 1000 : 2500;
 
     // Legacy Settings.json contained one global GainDb. Read it, but never
     // write that ambiguous key again. Preserve a user's safe FM attenuation;
@@ -125,6 +228,16 @@ namespace SkyRoof.IF
       if (!explicitFmGain && legacyGainDb.HasValue)
         fmGainDb = Math.Min(-15, legacyGainDb.Value);
       legacyGainDb = null;
+      // Only migrate old SSB edges if no newer explicit bandwidth was saved.
+      // Default older passband 180-3300 Hz maps to the closest 3.0-kHz preset.
+      if (SsbBandwidth == IfAfSsbBandwidth.Wide3k &&
+          legacySsbLow.HasValue && legacySsbHigh.HasValue)
+      {
+        int width = legacySsbHigh.Value - legacySsbLow.Value;
+        SsbBandwidth = width <= 1900 ? IfAfSsbBandwidth.Narrow1_2k :
+          width <= 2850 ? IfAfSsbBandwidth.Normal2_7k : IfAfSsbBandwidth.Wide3k;
+      }
+      legacySsbLow = legacySsbHigh = null;
     }
 
     [DisplayName("SSB output trim (dB)")]
@@ -160,11 +273,6 @@ namespace SkyRoof.IF
     [Description("Maximum leveler boost. Capped to prevent unlimited amplification of receiver noise.")]
     [DefaultValue(24)]
     public int SsbCwAgcMaxGainDb { get; set; } = 24;
-
-    [DisplayName("FM peak deviation (Hz)")]
-    [Description("2500 Hz for narrow FM, 5000 Hz for wider FM. Must match the incoming modulation.")]
-    [DefaultValue(2500)]
-    public int FmDeviationHz { get; set; } = 2500;
 
     /// <summary>Resolve the vendor render endpoint; never fall back to radio TX.</summary>
     public static string? ResolveRenderEndpoint(IfAfAudioRoute route,

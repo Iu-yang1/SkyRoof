@@ -2,7 +2,7 @@
 
 Experimental branch `IF-AF-Test` only; disabled by default, with no PTT/CAT writes from the IF-to-AF demodulator. The separately enabled AFC Auto controller can write bounded **RX-only** CAT frequency corrections; this experiment has not been merged into an official release.
 
-SkyRoof now provides a shared, single-owner 48-kS/s real 12-kHz IF capture and an independent mono AF → VAC path. A quarter-rate NCO translates the real IF; a 257-tap complex FIR selects USB (positive) or LSB (negative) frequencies in a nominal 180–3300 Hz passband, rather than folding both sidebands with a real product detector. CW selects a narrower 250–1150-Hz band. FM uses a 129-tap complex lowpass, conjugate-product discriminator, DC blocker and 95-tap AF lowpass. FM deviations 2.5 and 5 kHz are supported in configuration. Output is a separate VAC soundcard, *not* the SDR Slicer Output Stream.
+SkyRoof now provides a shared, single-owner 48-kS/s real 12-kHz IF capture and an independent mono AF → VAC path. A quarter-rate NCO translates the real IF; a 257-tap complex FIR selects USB (positive) or LSB (negative) frequencies in one of seven nominal SSB audio passbands (1.2/1.8/2.1/2.4/2.7/3.0/3.3 kHz, 180 Hz lower edge), rather than folding both sidebands with a real product detector. CW selects a 700-Hz-centered audio filter with 100/200/300/400/500/800/1000-Hz selectable bandwidth. FM uses a 129-tap complex lowpass, conjugate-product discriminator, DC blocker and 95-tap AF lowpass. The UI selects a nominal 6.25/12-kHz full IF bandwidth preset, with associated AF cutoff and discriminator-deviation normalization. Output is a separate VAC soundcard, *not* the SDR Slicer Output Stream.
 
 Settings → **12 kHz IF -> AF / WSJT-X (Test)**: select IC-9700's USB microphone/capture endpoint carrying IF, normally the Left channel; choose a dedicated virtual playback endpoint (e.g. VB-CABLE **CABLE Input**, never radio USB Audio CODEC speaker/TX); enable the feature; choose FollowRadio or explicit USB/LSB/CW/FM. WSJT-X receives from corresponding **CABLE Output**. The SkyCAT 4534 proxy prevents conflicting frequency/mode writers while SkyRoof owns satellite Doppler.
 
@@ -140,3 +140,9 @@ The 48-kHz 12-kHz IF DDC and USB/LSB/CW/FM demodulator stay unchanged. Only **po
 - Previous `GainDb` values migrate to FM gain only: −15 dB or quieter preserved; louder historic presets clamped to the safe −15 dB baseline. SSB/CW gain controls are independent.
 
 Evaluate with actual 60–120 s IF and CABLE Output audio recordings for FM and SSB/CW, and compare WSJT-X FT4/FT8 decode stability. Passing synthetic CI tests cannot substitute for a radio/VB-CABLE hardware test.
+
+## Simple mode bandwidth selectors
+
+Settings → Receive filters contains only three user-facing selectors; there are no raw IF/AF cutoff fields to calculate. SSB offers **1.2 / 1.8 / 2.1 / 2.4 / 2.7 / 3.0 / 3.3 kHz** (default 3.0 kHz; 180 Hz low edge). CW offers **100 / 200 / 300 / 400 / 500 / 800 / 1000 Hz** (default 500 Hz, 700 Hz center AF pitch). FM offers nominal **6.25 / 12 kHz** full complex IF bandwidth (default 12 kHz), internally controlling IF lowpass, AF lowpass and deviation-normalization values. Finite FIR transition skirts mean these are **not** measured brick-wall/-3 dB widths or radio channel spacings.
+
+Changes take effect on Apply via the existing IF→AF pipeline recreation, not RF CAT/PTT or the AFC raw-IF path. For FT4/FT8 use wide SSB and verify edge tones. For 100/200 Hz CW ensure the receiver sidetone is close to 700 Hz. For ordinary narrowband FM start with the 12-kHz preset, and use 6.25-kHz only for genuinely narrower signals.

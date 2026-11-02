@@ -107,17 +107,20 @@ namespace SkyRoof.IF
           " Get VB-CABLE from https://vb-audio.com/Cable/ or use ExistingVirtualCable.");
       if (string.IsNullOrWhiteSpace(outputId))
         throw new InvalidOperationException("Choose a virtual audio render device.");
-      if (config.FmDeviationHz is < 1000 or > 6000 ||
+      if (!Enum.IsDefined(typeof(IfAfSsbBandwidth), config.SsbBandwidth) ||
+          !Enum.IsDefined(typeof(IfAfCwBandwidth), config.CwBandwidth) ||
+          !Enum.IsDefined(typeof(IfAfFmBandwidth), config.FmBandwidth) ||
           config.FmGainDb is < -40 or > 12 ||
           config.SsbGainDb is < -40 or > 24 ||
           config.CwGainDb is < -40 or > 24 ||
           config.SsbCwAgcTargetDbfs is < -36 or > -12 ||
-          config.SsbCwAgcMaxGainDb is < 0 or > 36 ||
-          config.SsbLowHz is < 100 or > 750 ||
-          config.SsbHighHz is < 1800 or > 4000 ||
-          config.SsbHighHz - config.SsbLowHz < 1200)
+          config.SsbCwAgcMaxGainDb is < 0 or > 36)
         throw new ArgumentOutOfRangeException(nameof(config),
-          "FM deviation or output gain outside the safe test range.");
+          "Invalid mode filter preset or output gain.");
+      IfAfFilterSettings.ValidateAll(config.EffectiveSsbLowHz,
+        config.EffectiveSsbHighHz, config.EffectiveCwCenterHz,
+        config.EffectiveCwBandwidthHz, config.EffectiveFmIfCutoffHz,
+        config.EffectiveFmAfCutoffHz);
       // Never play the demodulated receive audio into a radio's TX CODEC.
       var vacEntry = Soundcard.ListDevices(NAudio.CoreAudioApi.DataFlow.Render);
       AudioDeviceEntry? target = Array.Find(vacEntry,
@@ -142,9 +145,9 @@ namespace SkyRoof.IF
         SsbCwAgcEnabled = config.SsbCwAgcEnabled,
         SsbCwAgcTargetDbfs = config.SsbCwAgcTargetDbfs,
         SsbCwAgcMaxGainDb = config.SsbCwAgcMaxGainDb,
-        FmDeviationHz = config.FmDeviationHz,
-        SsbLowHz = config.SsbLowHz,
-        SsbHighHz = config.SsbHighHz
+        SsbBandwidth = config.SsbBandwidth,
+        CwBandwidth = config.CwBandwidth,
+        FmBandwidth = config.FmBandwidth
       };
       Volatile.Write(ref requestedMode, (int)mode);
       int version = ++generation;
@@ -189,8 +192,7 @@ namespace SkyRoof.IF
         vac.Enabled = true;
         if (!vac.IsRunning) throw new InvalidOperationException("Virtual audio playback unavailable.");
         worker = Task.Run(() => RunAsync(next.Reader, source.Token, version,
-          settings!, config.FmDeviationHz,
-          config.SsbLowHz, config.SsbHighHz));
+          settings!));
         capture.Enabled = true;
         if (!capture.IsRunning) throw new InvalidOperationException("IF capture unavailable.");
         detail = $"48-kHz IF -> {target.Name}, requested render period {(int)config.LatencyPreset} ms";
@@ -225,11 +227,13 @@ namespace SkyRoof.IF
     }
 
     private async Task RunAsync(ChannelReader<Frame> reader, CancellationToken stop,
-      int version, IfAfSettings audioConfig, int deviation,
-      int ssbLowHz, int ssbHighHz)
+      int version, IfAfSettings audioConfig)
     {
       var dsp = new IfAfDemodulator((IfAfMode)Volatile.Read(ref requestedMode),
-        deviation, ssbLowHz, ssbHighHz);
+        audioConfig.EffectiveFmDeviationHz,
+        audioConfig.EffectiveSsbLowHz, audioConfig.EffectiveSsbHighHz,
+        audioConfig.EffectiveCwCenterHz, audioConfig.EffectiveCwBandwidthHz,
+        audioConfig.EffectiveFmIfCutoffHz, audioConfig.EffectiveFmAfCutoffHz);
       var leveler = new IfAfAudioLeveler(audioConfig);
       DateTime previous = default;
       int previousSamples = 0;

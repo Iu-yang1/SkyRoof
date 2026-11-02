@@ -26,23 +26,30 @@ namespace SkyRoof.IF
     private double fmDc;
     private readonly double fmDeviation;
     private readonly int ssbLowHz, ssbHighHz;
+    private readonly int cwCenterHz, cwBandwidthHz, fmIfCutoffHz, fmAfCutoffHz;
+    private readonly IfAfCwAudioFilter cwAudio;
     private IfAfMode mode;
     public IfAfMode Mode => mode;
     public long SamplesProcessed { get; private set; }
     public long NonFiniteSamples { get; private set; }
 
     public IfAfDemodulator(IfAfMode mode = IfAfMode.Usb,
-      double fmDeviationHz = 2500, int ssbLowHz = 180, int ssbHighHz = 3300)
+      double fmDeviationHz = 2500, int ssbLowHz = 180, int ssbHighHz = 3300,
+      int cwCenterHz = 700, int cwBandwidthHz = 900,
+      int fmIfCutoffHz = 8800, int fmAfCutoffHz = 3400)
     {
       if (fmDeviationHz is < 1000 or > 6000)
         throw new ArgumentOutOfRangeException(nameof(fmDeviationHz));
-      if (ssbLowHz is < 100 or > 750 ||
-          ssbHighHz is < 1800 or > 4000 || ssbHighHz - ssbLowHz < 1200)
-        throw new ArgumentOutOfRangeException(nameof(ssbHighHz),
-          "SSB passband must be between 100–4000 Hz and at least 1200 Hz wide.");
+      IfAfFilterSettings.ValidateAll(ssbLowHz, ssbHighHz, cwCenterHz,
+        cwBandwidthHz, fmIfCutoffHz, fmAfCutoffHz);
       this.ssbLowHz = ssbLowHz;
       this.ssbHighHz = ssbHighHz;
+      this.cwCenterHz = cwCenterHz;
+      this.cwBandwidthHz = cwBandwidthHz;
+      this.fmIfCutoffHz = fmIfCutoffHz;
+      this.fmAfCutoffHz = fmAfCutoffHz;
       fmDeviation = fmDeviationHz;
+      cwAudio = new IfAfCwAudioFilter(cwCenterHz, cwBandwidthHz);
       Configure(mode);
     }
 
@@ -52,10 +59,9 @@ namespace SkyRoof.IF
         throw new ArgumentOutOfRangeException(nameof(selected));
       mode = selected;
       double sign = selected is IfAfMode.Lsb or IfAfMode.CwLsb ? -1 : 1;
-      double low = selected is IfAfMode.CwUsb or IfAfMode.CwLsb
-        ? 250 : ssbLowHz;
-      double high = selected is IfAfMode.CwUsb or IfAfMode.CwLsb
-        ? 1150 : ssbHighHz;
+      bool cw = selected is IfAfMode.CwUsb or IfAfMode.CwLsb;
+      double low = cw ? cwCenterHz - cwBandwidthHz / 2.0 : ssbLowHz;
+      double high = cw ? cwCenterHz + cwBandwidthHz / 2.0 : ssbHighHz;
       double mid = sign * (low + high) / 2;
       double halfBand = (high - low) / 2;
       double[] baseband = Lowpass(SsbTaps, halfBand);
@@ -66,8 +72,8 @@ namespace SkyRoof.IF
         sideband[k] = new Complex(baseband[k] * Math.Cos(angle),
           baseband[k] * Math.Sin(angle));
       }
-      Array.Copy(Lowpass(FmTaps, 8800), fmFilter, FmTaps);
-      Array.Copy(Lowpass(AfTaps, 3400), afFilter, AfTaps);
+      Array.Copy(Lowpass(FmTaps, fmIfCutoffHz), fmFilter, FmTaps);
+      Array.Copy(Lowpass(AfTaps, fmAfCutoffHz), afFilter, AfTaps);
       Reset();
     }
 
@@ -119,6 +125,8 @@ namespace SkyRoof.IF
           if (--idx < 0) idx = SsbTaps - 1;
         }
         value = filtered.Real;
+        if (mode is IfAfMode.CwUsb or IfAfMode.CwLsb)
+          value = cwAudio.Process(value);
       }
       else
       {
@@ -174,6 +182,7 @@ namespace SkyRoof.IF
       lastFm = Complex.Zero;
       fmDc = 0;
       haveFm = false;
+      cwAudio.Reset();
       SamplesProcessed = NonFiniteSamples = 0;
     }
   }
