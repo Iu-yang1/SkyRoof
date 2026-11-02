@@ -60,7 +60,11 @@ namespace SkyRoof.IF
       Fourier.Forward(spectrum, FourierOptions.Matlab);
 
       int count = 0;
-      for (int k = 8; k < N / 2; k++)
+      // Estimate the stationary noise floor INSIDE the useful SSB audio
+      // band (roughly 280..3400 Hz). Including all Nyquist bins would
+      // be dominated by the existing SSB channel filter's stopband zeros
+      // and make median noise power nearly zero (no suppression).
+      for (int k = 12; k <= 145; k++)
         powerSorted[count++] = spectrum[k].Magnitude *
           spectrum[k].Magnitude;
       Array.Sort(powerSorted, 0, count);
