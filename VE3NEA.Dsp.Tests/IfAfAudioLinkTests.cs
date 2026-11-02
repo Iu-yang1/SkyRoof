@@ -190,6 +190,26 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void StartupDecoderFailureIsReportedOnEveryAudioStage()
+    {
+      var now = DateTime.UtcNow;
+      var failed = ActiveStatus(now) with {
+        Running = false,
+        InputSamples = 370176,
+        OutputSamples = 0,
+        DroppedBlocks = 764,
+        Detail = "IF-AF worker failed: invalid FM deviation",
+        RenderRunning = true
+      };
+      var states = IfAfLinkBar.Evaluate(true,
+        IfAfAudioRoute.AutoSignedCable, failed, null, now);
+      Assert.Equal(IfAfLinkState.Error, states.If);
+      Assert.Equal(IfAfLinkState.Error, states.Ddc);
+      Assert.Equal(IfAfLinkState.Error, states.Af);
+      Assert.Equal(IfAfLinkState.Error, states.VirtualMic);
+    }
+
+    [Fact]
     public void HistoricalClippingAloneDoesNotPermanentlyLatchAmberLed()
     {
       var now = DateTime.UtcNow;
