@@ -19,6 +19,7 @@ namespace SkyRoof
     private Button? cableOfficialDownload;
     private Button? cableRefresh;
     private Button? cableUninstall;
+    private TableLayoutPanel? settingsLayout;
 
 
     internal SettingsDialog()
@@ -92,9 +93,32 @@ namespace SkyRoof
         grid.SelectedObject = edited;
         RefreshLanguageCaptions();
       };
-      Controls.Add(languageBar);
-      // Dock order: top bar precedes the fill PropertyGrid.
-      Controls.SetChildIndex(languageBar, 0);
+      // A dedicated table avoids overlaying the top of the PropertyGrid.
+      // Previously the two new Dock=Top toolbars were placed over the
+      // existing Dock=Fill grid, hiding its first four Settings sections.
+      // Explicit rows guarantee that the grid begins BELOW both toolbars.
+      settingsLayout = new TableLayoutPanel
+      {
+        Dock = DockStyle.Fill,
+        Margin = Padding.Empty,
+        Padding = Padding.Empty,
+        ColumnCount = 1,
+        RowCount = 3
+      };
+      settingsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+      settingsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 37F));
+      settingsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
+      settingsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+      languageBar.Dock = DockStyle.Fill;
+      grid.Dock = DockStyle.Fill;
+      grid.Margin = Padding.Empty;
+      Controls.Remove(grid);
+      settingsLayout.Controls.Add(languageBar, 0, 1);
+      settingsLayout.Controls.Add(grid, 0, 2);
+      Controls.Add(settingsLayout);
+      // Match the original Designer ordering of Dock=Fill grid and bottom
+      // command button panel. The TableLayoutPanel owns all top spacing.
+      Controls.SetChildIndex(settingsLayout, 0);
       RefreshLanguageCaptions();
     }
 
@@ -117,8 +141,10 @@ namespace SkyRoof
       bar.Controls.Add(cableOfficialDownload);
       bar.Controls.Add(cableUninstall);
       bar.Controls.Add(cableRefresh);
-      Controls.Add(bar);
-      Controls.SetChildIndex(bar, 1);
+      bar.Dock = DockStyle.Fill;
+      if (settingsLayout == null)
+        throw new InvalidOperationException("Settings layout has not been initialized.");
+      settingsLayout.Controls.Add(bar, 0, 0);
       RefreshLanguageCaptions();
     }
 
