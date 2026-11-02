@@ -16,7 +16,11 @@ namespace SkyRoof.IF
     {
       IfAfFilterSettings.ValidateCw(centerHz, bandwidthHz);
       double omega = 2 * Math.PI * centerHz / IfAfDemodulator.Rate;
-      double q = (double)centerHz / bandwidthHz;
+      // Two equal RBJ bandpasses in cascade narrow the -3 dB width to
+      // roughly 64% of a single section. With the broad complex CW
+      // preselector, 1.56 compensates this cascade for all UI presets
+      // (100..1000 Hz). A response-grid regression test verifies this.
+      double q = (double)centerHz / (bandwidthHz * 1.56);
       double alpha = Math.Sin(omega) / (2 * q);
       double a0 = 1 + alpha;
       // RBJ audio EQ cookbook: constant-peak-gain bandpass, cascade 2 poles

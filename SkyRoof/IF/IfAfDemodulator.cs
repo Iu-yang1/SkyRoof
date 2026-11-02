@@ -60,8 +60,12 @@ namespace SkyRoof.IF
       mode = selected;
       double sign = selected is IfAfMode.Lsb or IfAfMode.CwLsb ? -1 : 1;
       bool cw = selected is IfAfMode.CwUsb or IfAfMode.CwLsb;
-      double low = cw ? cwCenterHz - cwBandwidthHz / 2.0 : ssbLowHz;
-      double high = cw ? cwCenterHz + cwBandwidthHz / 2.0 : ssbHighHz;
+      // Keep a fixed, broad complex CW sideband preselector. Narrow CW
+      // filtering is performed by the calibrated cascaded audio biquads;
+      // applying both nominal bandwidths in series previously halved the
+      // actual -3 dB width and exaggerated ringing at 100/200 Hz.
+      double low = cw ? 50 : ssbLowHz;
+      double high = cw ? 2300 : ssbHighHz;
       double mid = sign * (low + high) / 2;
       double halfBand = (high - low) / 2;
       double[] baseband = Lowpass(SsbTaps, halfBand);
@@ -77,7 +81,35 @@ namespace SkyRoof.IF
       Reset();
     }
 
+    /// <summary>Designs a normalized Blackman FIR with its -3 dB point at
+    /// the requested cutoff, rather than using the sinc transition midpoint
+    /// (~-6 dB) as the displayed bandwidth boundary.</summary>
     private static double[] Lowpass(int size, double cutoff)
+    {
+      const double minus3 = 0.7071067811865476;
+      double lo = Math.Max(1, cutoff - 1200);
+      double hi = Math.Min(Rate / 2.0 - 1, cutoff + 1200);
+      for (int i = 0; i < 24; i++)
+      {
+        double mid = (lo + hi) / 2;
+        double[] trial = DesignLowpass(size, mid);
+        if (ResponseAt(trial, cutoff) > minus3) hi = mid;
+        else lo = mid;
+      }
+      return DesignLowpass(size, (lo + hi) / 2);
+    }
+
+    private static double ResponseAt(double[] taps, double hz)
+    {
+      // Linear phase FIR: frequency response referenced to its midpoint
+      // is purely real. This needs just one cosine sum at configuration.
+      double center = (taps.Length - 1) / 2.0, sum = 0;
+      for (int i = 0; i < taps.Length; i++)
+        sum += taps[i] * Math.Cos(2 * Math.PI * hz * (i - center) / Rate);
+      return Math.Abs(sum);
+    }
+
+    private static double[] DesignLowpass(int size, double cutoff)
     {
       double[] taps = new double[size];
       double sum = 0;

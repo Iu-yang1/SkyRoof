@@ -61,8 +61,10 @@ namespace SkyRoof.IF
       int hz = Convert.ToInt32(value, CultureInfo.InvariantCulture);
       if (EnumType == typeof(IfAfCwBandwidth))
         return hz.ToString(CultureInfo.InvariantCulture) + " Hz";
-      return (hz / 1000.0).ToString(EnumType == typeof(IfAfSsbBandwidth)
-        ? "0.0" : "0.##", CultureInfo.InvariantCulture) + " kHz";
+      return (hz == 12000 && EnumType == typeof(IfAfFmBandwidth)
+        ? "12.5" : (hz / 1000.0).ToString(
+          EnumType == typeof(IfAfSsbBandwidth) ? "0.0" : "0.##",
+          CultureInfo.InvariantCulture)) + " kHz";
     }
 
     public override object? ConvertTo(ITypeDescriptorContext? context,
@@ -178,7 +180,7 @@ namespace SkyRoof.IF
 
     [Category("Receive filters")]
     [DisplayName("FM bandwidth")]
-    [Description("Nominal complex IF passband width. Narrow 6.25 kHz uses lower FM deviation and a tighter audio filter; 12 kHz suits ordinary narrowband FM. Actual transition skirts are not brick-wall.")]
+    [Description("FM channel-spacing presets: 6.25 kHz (6 kHz IF, 2.1 kHz AF, ±0.9 kHz deviation) and 12.5 kHz (11 kHz IF, 3.0 kHz AF, ±2.5 kHz deviation).")]
     [DefaultValue(IfAfFmBandwidth.Normal12k)]
     public IfAfFmBandwidth FmBandwidth { get; set; } = IfAfFmBandwidth.Normal12k;
 
@@ -201,13 +203,14 @@ namespace SkyRoof.IF
     [JsonIgnore]
     public int EffectiveCwBandwidthHz => (int)CwBandwidth;
     [JsonIgnore]
-    public int EffectiveFmIfCutoffHz => (int)FmBandwidth / 2;
+    public int EffectiveFmIfCutoffHz =>
+      FmBandwidth == IfAfFmBandwidth.Narrow6_25k ? 3000 : 5500;
     [JsonIgnore]
     public int EffectiveFmAfCutoffHz =>
-      FmBandwidth == IfAfFmBandwidth.Narrow6_25k ? 1700 : 3000;
+      FmBandwidth == IfAfFmBandwidth.Narrow6_25k ? 2100 : 3000;
     [JsonIgnore]
     public int EffectiveFmDeviationHz =>
-      FmBandwidth == IfAfFmBandwidth.Narrow6_25k ? 1000 : 2500;
+      FmBandwidth == IfAfFmBandwidth.Narrow6_25k ? 900 : 2500;
 
     // Legacy Settings.json contained one global GainDb. Read it, but never
     // write that ambiguous key again. Preserve a user's safe FM attenuation;

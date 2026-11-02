@@ -49,7 +49,7 @@ namespace VE3NEA.Dsp.Tests
     [InlineData(IfAfCwBandwidth.UltraNarrow100, "100 Hz")]
     [InlineData(IfAfCwBandwidth.Normal500, "500 Hz")]
     [InlineData(IfAfFmBandwidth.Narrow6_25k, "6.25 kHz")]
-    [InlineData(IfAfFmBandwidth.Normal12k, "12 kHz")]
+    [InlineData(IfAfFmBandwidth.Normal12k, "12.5 kHz")]
     public void BandwidthDropdownUsesReadableUnitsAndCanRoundTrip(
       Enum preset, string label)
     {
@@ -70,7 +70,7 @@ namespace VE3NEA.Dsp.Tests
       Assert.Equal(IfAfFmBandwidth.Normal12k, defaults.FmBandwidth);
       Assert.Equal(3180, defaults.EffectiveSsbHighHz);
       Assert.Equal(700, defaults.EffectiveCwCenterHz);
-      Assert.Equal(6000, defaults.EffectiveFmIfCutoffHz);
+      Assert.Equal(5500, defaults.EffectiveFmIfCutoffHz);
       Assert.Equal(3000, defaults.EffectiveFmAfCutoffHz);
     }
 
@@ -155,16 +155,47 @@ namespace VE3NEA.Dsp.Tests
     {
       var narrow = new IfAfSettings { FmBandwidth = IfAfFmBandwidth.Narrow6_25k };
       var normal = new IfAfSettings { FmBandwidth = IfAfFmBandwidth.Normal12k };
-      Assert.Equal(3125, narrow.EffectiveFmIfCutoffHz);
-      Assert.Equal(1700, narrow.EffectiveFmAfCutoffHz);
-      Assert.Equal(1000, narrow.EffectiveFmDeviationHz);
-      Assert.Equal(6000, normal.EffectiveFmIfCutoffHz);
+      Assert.Equal(3000, narrow.EffectiveFmIfCutoffHz);
+      Assert.Equal(2100, narrow.EffectiveFmAfCutoffHz);
+      Assert.Equal(900, narrow.EffectiveFmDeviationHz);
+      Assert.Equal(5500, normal.EffectiveFmIfCutoffHz);
       Assert.Equal(3000, normal.EffectiveFmAfCutoffHz);
       Assert.Equal(2500, normal.EffectiveFmDeviationHz);
       IfAfFilterSettings.ValidateFm(narrow.EffectiveFmIfCutoffHz,
         narrow.EffectiveFmAfCutoffHz);
       IfAfFilterSettings.ValidateFm(normal.EffectiveFmIfCutoffHz,
         normal.EffectiveFmAfCutoffHz);
+    }
+
+    [Theory]
+    [InlineData(IfAfSsbBandwidth.Narrow1_2k, 950)]
+    [InlineData(IfAfSsbBandwidth.Normal2_7k, 1400)]
+    [InlineData(IfAfSsbBandwidth.Wide3k, 1650)]
+    public void CalibratedSsbMinus3DbEdgesPreserveDesignWidth(
+      IfAfSsbBandwidth preset, int centerTestHz)
+    {
+      var cfg = new IfAfSettings { SsbBandwidth = preset };
+      int middle = (cfg.EffectiveSsbLowHz + cfg.EffectiveSsbHighHz) / 2;
+      double center = SidebandLevel(cfg, middle);
+      double edge = SidebandLevel(cfg, cfg.EffectiveSsbLowHz);
+      Assert.True(center > .35, $"center gain {center}");
+      Assert.InRange(20 * Math.Log10(edge / center), -4, -2);
+      Assert.True(Math.Abs(centerTestHz - middle) < 250);
+    }
+
+    [Theory]
+    [InlineData(IfAfCwBandwidth.UltraNarrow100)]
+    [InlineData(IfAfCwBandwidth.Narrow300)]
+    [InlineData(IfAfCwBandwidth.Normal500)]
+    [InlineData(IfAfCwBandwidth.Wide1000)]
+    public void CwThreeDbBandwidthIsApproximatelySelectedWidth(
+      IfAfCwBandwidth width)
+    {
+      var cfg = new IfAfSettings { CwBandwidth = width };
+      double center = SidebandLevel(cfg, 700, IfAfMode.CwUsb);
+      int highEdge = 700 + (int)width / 2;
+      double edge = SidebandLevel(cfg, highEdge, IfAfMode.CwUsb);
+      Assert.InRange(20 * Math.Log10(edge / center), -5.0, -1.0);
     }
 
     [Fact]
