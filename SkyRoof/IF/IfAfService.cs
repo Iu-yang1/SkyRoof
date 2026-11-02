@@ -61,7 +61,10 @@ namespace SkyRoof.IF
     internal static bool FramesContinuous(long expectedStart, long actualStart) =>
       expectedStart < 0 || expectedStart == actualStart;
 
-    public bool IsRunning => capture?.IsRunning == true && vac.IsRunning;
+    // A running WASAPI capture/render pair does not imply a living decoder.
+    // Surface a worker that failed during startup as a stopped pipeline.
+    public bool IsRunning => capture?.IsRunning == true && vac.IsRunning &&
+      worker?.IsCompleted == false;
     public string? InputDeviceId => settings?.InputDeviceId;
     public string? VacRenderDeviceId => resolvedRenderId;
     public AudioChannelChoice CaptureChannel => settings?.CaptureChannel ?? AudioChannelChoice.Left;
@@ -237,14 +240,20 @@ namespace SkyRoof.IF
       if (!target.Writer.TryWrite(new Frame(data, e.Utc, generation, startIndex)))
       {
         Interlocked.Increment(ref dropped);
-        detail = "PCM overrun; decoder will reset on discontinuity";
+        // Do not hide a fatal decoder exception behind later queue drops.
+        if (!detail.StartsWith("IF-AF worker failed:", StringComparison.Ordinal))
+          detail = "PCM overrun; decoder will reset on discontinuity";
       }
     }
 
     private async Task RunAsync(ChannelReader<Frame> reader, CancellationToken stop,
       int version, IfAfSettings audioConfig)
     {
-      var dsp = new IfAfDemodulator((IfAfMode)Volatile.Read(ref requestedMode),
+      // DSP construction may throw (for example when a preset and its
+      // validation contract disagree). It must be inside the catch below.
+      try
+      {
+        var dsp = new IfAfDemodulator((IfAfMode)Volatile.Read(ref requestedMode),
         audioConfig.EffectiveFmDeviationHz,
         audioConfig.EffectiveSsbLowHz, audioConfig.EffectiveSsbHighHz,
         audioConfig.EffectiveCwCenterHz, audioConfig.EffectiveCwBandwidthHz,
@@ -256,8 +265,6 @@ namespace SkyRoof.IF
       DateTime previous = default;
       int previousSamples = 0;
       long expectedStart = -1;
-      try
-      {
         await foreach (var frame in reader.ReadAllAsync(stop))
         {
           if (version != generation) return;
