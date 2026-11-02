@@ -63,7 +63,7 @@ namespace SkyRoof.IF
       IfAfLinkState ddc = !started
         ? fail : !processing ? IfAfLinkState.Warning :
           dropsIncreased || highLag ? IfAfLinkState.Warning : IfAfLinkState.Ok;
-      IfAfLinkState af = !s.RenderRunning ? fail :
+      IfAfLinkState af = !started || !s.RenderRunning ? fail :
         !processing ? IfAfLinkState.Warning :
           underrunsIncreased || clipsIncreased || holdRecentClipWarning
             ? IfAfLinkState.Warning : IfAfLinkState.Ok;
