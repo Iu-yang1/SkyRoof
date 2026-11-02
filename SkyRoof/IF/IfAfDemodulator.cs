@@ -15,6 +15,8 @@ namespace SkyRoof.IF
     public const int Rate = 48000;
     private const int SsbTaps = 257, FmTaps = 129, AfTaps = 95;
     private readonly Complex[] iqDelay = new Complex[SsbTaps];
+    private readonly float[] rawDelay = new float[SsbTaps];
+    private readonly double[][] realSsbWeights = new double[4][];
     private readonly Complex[] sideband = new Complex[SsbTaps];
     private readonly double[] fmFilter = new double[FmTaps];
     private readonly float[] audioDelay = new float[AfTaps];
@@ -85,6 +87,22 @@ namespace SkyRoof.IF
         sideband[k] = new Complex(baseband[k] * Math.Cos(angle),
           baseband[k] * Math.Sin(angle));
       }
+      // Precompute signed real convolution weights for the four exact
+      // quadrature NCO phases. This avoids 257 complex multiplications
+      // per 48k sample and preserves the same phase-coherent waveform.
+      for (int phase = 0; phase < 4; phase++)
+      {
+        var weights = new double[SsbTaps];
+        for (int k = 0; k < SsbTaps; k++)
+          weights[k] = ((phase - k) & 3) switch
+          {
+            0 => 2 * sideband[k].Real,
+            1 => 2 * sideband[k].Imaginary,
+            2 => -2 * sideband[k].Real,
+            _ => -2 * sideband[k].Imaginary
+          };
+        realSsbWeights[phase] = weights;
+      }
       Array.Copy(Lowpass(FmTaps, fmIfCutoffHz), fmFilter, FmTaps);
       Array.Copy(Lowpass(AfTaps, fmAfCutoffHz), afFilter, AfTaps);
       Reset();
@@ -147,31 +165,34 @@ namespace SkyRoof.IF
       }
       // 12k / 48k = 1/4; a quadrature NCO avoids trigonometric phase
       // accumulation error and preserves exact phase across block boundaries.
-      Complex mixed = (phaseIndex++ & 3) switch
-      {
-        0 => new Complex(2 * sample, 0),
-        1 => new Complex(0, -2 * sample),
-        2 => new Complex(-2 * sample, 0),
-        _ => new Complex(0, 2 * sample)
-      };
-      iqDelay[write] = mixed;
+      int phaseNow = phaseIndex++ & 3;
+      rawDelay[write] = sample;
       double value;
       if (mode != IfAfMode.Fm)
       {
-        Complex filtered = Complex.Zero;
+        double sum = 0;
+        double[] weights = realSsbWeights[phaseNow];
         int idx = write;
         for (int k = 0; k < SsbTaps; k++)
         {
-          filtered += sideband[k] * iqDelay[idx];
+          sum += weights[k] * rawDelay[idx];
           if (--idx < 0) idx = SsbTaps - 1;
         }
-        value = filtered.Real;
+        value = sum;
         if (mode is IfAfMode.CwUsb or IfAfMode.CwLsb)
           value = cwAudio.Process(value);
         value = voice.Process(value, mode);
       }
       else
       {
+        Complex mixed = phaseNow switch
+        {
+          0 => new Complex(2 * sample, 0),
+          1 => new Complex(0, -2 * sample),
+          2 => new Complex(-2 * sample, 0),
+          _ => new Complex(0, 2 * sample)
+        };
+        iqDelay[write] = mixed;
         Complex filtered = Complex.Zero;
         int idx = write;
         for (int k = 0; k < FmTaps; k++)
@@ -221,6 +242,7 @@ namespace SkyRoof.IF
     public void Reset()
     {
       Array.Clear(iqDelay);
+      Array.Clear(rawDelay);
       Array.Clear(audioDelay);
       write = audioWrite = phaseIndex = 0;
       lastFm = Complex.Zero;

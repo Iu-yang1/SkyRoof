@@ -21,6 +21,7 @@ namespace SkyRoof.IF
     private double rmsEnvelope;
     private double agcGain = 1;
     private bool agcAcquired;
+    private double peakGainHold = 1;
 
     public IfAfAudioLeveler(IfAfSettings config)
     {
@@ -47,6 +48,7 @@ namespace SkyRoof.IF
       rmsEnvelope = 0;
       agcGain = 1;
       agcAcquired = false;
+      peakGainHold = 1;
       lastMode = null;
     }
 
@@ -111,8 +113,19 @@ namespace SkyRoof.IF
       // then scale the entire block linearly. This avoids hard-clipped
       // samples and avoids the EVM/harmonic penalty of tanh soft-clipping.
       double requestedPeak = peak * requestedGain;
-      double reduction = requestedPeak > Ceiling
+      double safeReduction = requestedPeak > Ceiling
         ? Ceiling / requestedPeak : 1;
+      // Reduce immediately on a strong transient to avoid hard clipping.
+      // Release over ~150 ms across subsequent 10-ms blocks instead of
+      // switching abruptly to unity at the next frame boundary.
+      if (safeReduction < peakGainHold) peakGainHold = safeReduction;
+      else
+      {
+        double duration = audio.Length / (double)IfAfDemodulator.Rate;
+        double alpha = 1 - Math.Exp(-duration / .150);
+        peakGainHold += alpha * (safeReduction - peakGainHold);
+      }
+      double reduction = Math.Min(1, peakGainHold);
       double finalGain = requestedGain * reduction;
       double deliveredPower = 0;
       long clipped = 0;
@@ -132,7 +145,7 @@ namespace SkyRoof.IF
         20 * Math.Log10(Math.Max(requestedPeak, 1e-15)),
         20 * Math.Log10(Math.Max(finalGain, 1e-15)),
         -20 * Math.Log10(reduction),
-        reduction < 0.999999,
+        safeReduction < 0.999999,
         clipped);
     }
   }

@@ -208,3 +208,15 @@
 | FM | 6.25 / 12 kHz | 12 kHz | 标称 IF 双边带宽，分别对应约 3.125/6.0 kHz 复数 IF 低通截止，1.7/3.0 kHz AF 低通，默认频偏归一化 1/2.5 kHz |
 
 **调谐注意：** 这些是软件滤波器名义参数，不是精确通带的 −3 dB 实测带宽，也不是电台信道间隔。CW 固定 700 Hz 中心，如果电台的 CW 音调偏离中心、特别是使用 100/200 Hz 档，应先核对接收音调。WSJT-X FT4/FT8 通常优先 SSB 3.0/3.3 kHz，并检查软件瀑布图边缘衰减。FM 6.25 kHz 档只适用于较窄频偏/占用带宽的信号，对普通宽频偏 FM 应选择 12 kHz 并验证实际 AF。旧配置的 SSB 截止频率可映射到就近预设。
+
+## P0–P3 接收链 DSP 迭代（2026-11-02）
+
+**P0 — 带宽校准：** 257-tap Blackman 复数 SSB FIR 与 FM IF/AF 低通现在用响应函数反求设计截止频率，确保预设名义边缘接近实际 −3 dB，而不是 sinc 的过渡带中点。CW 的两级 IIR 带通获得约 1.56 倍设计补偿并配合固定宽带的复数预选器，以避免原先 CW 500 Hz 档实际仅约一半带宽的问题。FM 仍保留兼容枚举 `Normal12k` 的持久化数值 12000，但设置页显示 **12.5 kHz 信道间隔**；按照 SDRangel NFM 预设，6.25/12.5 kHz 档分别匹配 6.0/11 kHz IF 通带、2.1/3.0 kHz AF 截止及 ±0.9/2.5 kHz 预期频偏。使用 Blackman FIR 的有限过渡带，标称值不等于实机测量的矩形占用频宽。
+
+**P1 — 解调与增益分离：** 自动 FollowRadio 遇到 `USB_D`/`LSB_D` 时使用 `UsbDigital`/`LsbDigital` 内部模式，直接使用 100–3500 Hz 的宽 AF 选择边带，不运行语音 SSB/CW RMS AGC 和语音陷波。普通模拟 USB/LSB 继续执行有上限的慢速 AGC。输出仍保留约 −1 dBFS 的峰值保护。新增的 FM 语音静噪和去加重**默认关闭**：静噪是经低通后的 IF 平均功率门控（50ms 时间常数、约 10ms 渐变开门），可选阈值，不能当作可靠的弱载波/数字模式判断；去加重提供 Off、50μs、75μs，**卫星数据/非语音 FM 建议保持 Off**。模拟 SSB 陷波提供 Off、1 kHz、1.5 kHz 固定陷波，数字模式自动旁路。后两者属于可选试听处理，不保证自动识别干扰。
+
+**P2 — 实时性能和峰值保护：** 因 IF 中心频率 12 kHz 恰好是 48 kHz 的四分之一，SSB/CW 复数 NCO+FIR 可在配置时为四个相位预计算实值卷积权重，实时路径减少复数乘法，保持波形数学等价；FM 仍保留独立的复数鉴频。AF 工作块通过 `ArrayPool<float>` 复用，仅在同步写入 WASAPI 缓冲后释放。峰值保护对过大峰值立即降低增益、约 150ms 平滑释放，避免限制器下一 10ms 帧直接反弹引发泵吸。诊断窗口添加每个处理块的 `DSP time`，请结合 10ms 输入块比较。此轮**没有实施抽取/重采样大规模改造**，须先证明现有 CPU 负载需要该风险较高的步骤。
+
+**P3 — 可选音频增强：** 实现可关闭的模拟 SSB 1/1.5 kHz 窄陷波、FM 50/75μs 语音去加重和 FM 功率门控静噪，并通过模拟测试检查关闭时行为不变。自动干扰追踪和谱减/神经网络降噪**尚未部署**；这类功能必须先得到弱信号、Q65/FT4/CW 点划损失率的实测证据。参考 [GNU Radio FIR 设计](https://www.gnuradio.org/doc/doxygen/classgr_1_1filter_1_1firdes.html)、[SDRangel NFM](https://github.com/f4exb/sdrangel/blob/master/plugins/channelrx/demodnfm/readme.md)、[GNU Radio FM Deemphasis](https://wiki.gnuradio.org/index.php/FM_Deemphasis) 及 [Power Squelch](https://wiki.gnuradio.org/index.php/Power_Squelch)。
+
+**验收边界：** 所有增加的 DSP 测试为合成 48k/12k IF、模拟声卡路径或频率响应测试；它们不是 IC-9700 真正的硬件 ENOB、SINAD、QSO 成功率、端到端延迟的证明。需另行录制 `CABLE Output` 并结合原始 IF/LAN AF WAV 比较幅度、频响、CW 包络、FM 无信号状态和数字解码。

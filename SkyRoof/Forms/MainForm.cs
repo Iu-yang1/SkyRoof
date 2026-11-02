@@ -1153,6 +1153,7 @@ namespace SkyRoof
         $"AF RMS (latest block, after limit): {x.OutputRmsDbfs:F1} dBFS\n" +
         $"AF peak (latest block, BEFORE ceiling): {x.OutputPeakBeforeLimitDbfs:F1} dBFS\n" +
         $"AF applied gain (latest block): {x.AppliedAfGainDb:F1} dB\n" +
+        $"DSP time (latest block): {x.DspBlockProcessingMs:F2} ms\n" +
         $"AF peak protection reduction (latest block): {x.PeakReductionDb:F1} dB\n" +
         $"Peak-limited blocks since start: {x.PeakLimitedBlocks}\n" +
         $"Queue age: {x.ProcessingQueueLagMs:F1} ms (host estimate)\n" +
@@ -1219,6 +1220,7 @@ namespace SkyRoof
           $"recent clip: {recentIfAfClips}/{recentIfAfOutputSamples}; " +
           $"AF pre-ceiling peak: {status.Value.OutputPeakBeforeLimitDbfs:F1} dBFS; " +
           $"applied gain: {status.Value.AppliedAfGainDb:F1} dB; " +
+          $"DSP block: {status.Value.DspBlockProcessingMs:F2} ms; " +
           $"peak safety reduction: {status.Value.PeakReductionDb:F1} dB; " +
           $"limited blocks: {status.Value.PeakLimitedBlocks}; " +
           $"underrun: {status.Value.OutputUnderrunSamples}\n" +

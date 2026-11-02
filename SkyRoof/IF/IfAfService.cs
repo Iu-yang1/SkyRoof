@@ -1,4 +1,6 @@
 using System;
+using System.Buffers;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -18,7 +20,8 @@ namespace SkyRoof.IF
     long LastBlockClippedSamples = 0,
     double AppliedAfGainDb = double.NaN,
     double PeakReductionDb = 0,
-    long PeakLimitedBlocks = 0);
+    long PeakLimitedBlocks = 0,
+    double DspBlockProcessingMs = double.NaN);
 
   /// <summary>Single-owner 48-kHz IF WASAPI stream; fans out unmodified IF
   /// to AFC and SSTV synchronously and produces filtered AF on a separate
@@ -47,6 +50,7 @@ namespace SkyRoof.IF
     private long peakLimitedBlocks;
     private double lastAppliedAfGainDb;
     private double lastPeakReductionDb;
+    private double lastDspBlockMs;
     private string detail = "Stopped";
     private bool disposed;
     public event EventHandler<DataEventArgs<float>>? RawIfAvailable;
@@ -74,7 +78,8 @@ namespace SkyRoof.IF
       Interlocked.Read(ref lastBlockClippedSamples),
       Volatile.Read(ref lastAppliedAfGainDb),
       Volatile.Read(ref lastPeakReductionDb),
-      Interlocked.Read(ref peakLimitedBlocks));
+      Interlocked.Read(ref peakLimitedBlocks),
+      Volatile.Read(ref lastDspBlockMs));
 
     public void Apply(IfAfSettings config, IfAfMode mode)
     {
@@ -167,6 +172,7 @@ namespace SkyRoof.IF
       Interlocked.Exchange(ref peakLimitedBlocks, 0);
       Volatile.Write(ref lastAppliedAfGainDb, 0);
       Volatile.Write(ref lastPeakReductionDb, 0);
+      Volatile.Write(ref lastDspBlockMs, 0);
       Volatile.Write(ref lastRmsDbfs, double.NegativeInfinity);
       Volatile.Write(ref lastOutputRmsDbfs, double.NegativeInfinity);
       Volatile.Write(ref lastOutputPeakBeforeLimitDbfs, double.NegativeInfinity);
@@ -276,28 +282,40 @@ namespace SkyRoof.IF
           if (queueLagMs >= 0 && queueLagMs < 60000)
             Interlocked.Exchange(ref lastProcessingLagUs,
               (long)Math.Round(queueLagMs * 1000));
-          float[] af = new float[frame.Data.Length];
-          dsp.Process(frame.Data, af);
-          double inputPower = 0;
-          for (int i = 0; i < frame.Data.Length; i++)
-            inputPower += (double)frame.Data[i] * frame.Data[i];
-          // The stream-continual DDC and AFC input remain bit-for-bit
-          // unchanged. The mode-aware leveler operates on decoded AF only.
-          IfAfLevelResult lev = leveler.Process(af, mode);
-          if (lev.ClippedSamples > 0)
-            Interlocked.Add(ref clipped, lev.ClippedSamples);
-          if (lev.PeakLimited) Interlocked.Increment(ref peakLimitedBlocks);
-          Volatile.Write(ref lastRmsDbfs, 10 *
-            Math.Log10(Math.Max(inputPower / frame.Data.Length, 1e-15)));
-          Volatile.Write(ref lastOutputRmsDbfs, lev.OutputRmsDbfs);
-          Volatile.Write(ref lastOutputPeakBeforeLimitDbfs, lev.PreLimitPeakDbfs);
-          Volatile.Write(ref lastAppliedAfGainDb, lev.EffectiveGainDb);
-          Volatile.Write(ref lastPeakReductionDb, lev.PeakReductionDb);
-          Interlocked.Exchange(ref lastBlockClippedSamples, lev.ClippedSamples);
-          // OutputSoundcard has an independent bounded audio ring; no VAC
-          // writes, CAT or UI work on the WASAPI capture callback.
-          vac.AddSamples(af, 0, af.Length);
-          Interlocked.Add(ref outputSamples, af.Length);
+          // Reuse scratch AF blocks: WASAPI's bounded ring copies PCM
+          // synchronously, so the rented array can be returned after Write.
+          // This eliminates a managed allocation per 10-ms IF block.
+          long startedTicks = Stopwatch.GetTimestamp();
+          float[] af = ArrayPool<float>.Shared.Rent(frame.Data.Length);
+          try
+          {
+            int count = frame.Data.Length;
+            dsp.Process(frame.Data, af.AsSpan(0, count));
+            double inputPower = 0;
+            for (int i = 0; i < count; i++)
+              inputPower += (double)frame.Data[i] * frame.Data[i];
+            // Shared AFC/SSTV raw IF is unaffected by post-demod leveling.
+            IfAfLevelResult lev = leveler.Process(af.AsSpan(0, count), mode);
+            if (lev.ClippedSamples > 0)
+              Interlocked.Add(ref clipped, lev.ClippedSamples);
+            if (lev.PeakLimited) Interlocked.Increment(ref peakLimitedBlocks);
+            Volatile.Write(ref lastRmsDbfs, 10 *
+              Math.Log10(Math.Max(inputPower / count, 1e-15)));
+            Volatile.Write(ref lastOutputRmsDbfs, lev.OutputRmsDbfs);
+            Volatile.Write(ref lastOutputPeakBeforeLimitDbfs, lev.PreLimitPeakDbfs);
+            Volatile.Write(ref lastAppliedAfGainDb, lev.EffectiveGainDb);
+            Volatile.Write(ref lastPeakReductionDb, lev.PeakReductionDb);
+            Interlocked.Exchange(ref lastBlockClippedSamples, lev.ClippedSamples);
+            vac.AddSamples(af, 0, count);
+            Interlocked.Add(ref outputSamples, count);
+          }
+          finally
+          {
+            ArrayPool<float>.Shared.Return(af);
+            Volatile.Write(ref lastDspBlockMs,
+              (Stopwatch.GetTimestamp() - startedTicks) *
+              1000.0 / Stopwatch.Frequency);
+          }
         }
       }
       catch (OperationCanceledException) { }
