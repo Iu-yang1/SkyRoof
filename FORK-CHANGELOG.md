@@ -1,3 +1,25 @@
+# SkyRoof Fork v.1.63 / SkyRoof Fork 1.63 版本说明
+
+Release date / 发布日期: 2026-11-02.
+
+## English
+
+- Production IC-9700 48-kS/s real 12-kHz USB IF → SSB/CW/FM AF → Windows virtual cable for WSJT-X; raw IF is shared with AFC/SSTV where possible.
+- FM 6.25-kHz (900-Hz deviation) startup fixed; decoder failures surfaced to the link status.
+- Removed experimental dual USB IF/LAN AF comparison recorder and verbose per-block diagnostics; normal recording and four-stage IF/DDC/AF/V-MIC health display remain.
+- Preserved bounded queues, peak protection, slow SSB/CW AGC, FM gain, weak-FM evidence gate, HoldLast and RX-only CAT/PTT safety.
+- Optional original basic VB-CABLE Donationware package, verified for publisher and integrity. No experimental SysVAD kernel driver is shipped.
+
+## 中文
+
+- 正式提供 IC-9700 12 kHz 实数 IF → SSB/CW/FM → 虚拟声卡 → WSJT-X 接收功能，AFC/SSTV 可共享原始 IF。
+- 修复 6.25 kHz FM 900 Hz 频偏导致的静默无声与解调异常诊断。
+- 移除实验性双路 IF/LAN AF 对照录音和冗长 DSP 诊断，保留普通录音及 IF/DDC/AF/V-MIC 链路状态。
+- 保留受限音频增益、削峰、缓冲、SO-50 弱 FM 置信度验证、AFC HoldLast 与 RX/TX 安全互锁。
+- 正式安装包可选安装原厂基础版 VB-CABLE Donationware；不分发未正式签名的内核驱动。
+
+---
+
 # SkyRoof Fork v.1.62 / SkyRoof Fork 1.62 版本说明
 
 Release date / 发布日期: 2026-10-31. SSTV Console integration release.

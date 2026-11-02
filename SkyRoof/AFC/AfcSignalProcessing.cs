@@ -21,6 +21,7 @@ namespace SkyRoof.AFC
     private AfcSignalMode carrierMode;
     private double carrierSearchHz;
     private bool carrierTracked;
+    private bool fmCandidateAcquired;
     public int SampleRate => sampleRate;
 
     public AfcSignalProcessing(int sampleRate = 48000, double ifReferenceHz = 12000)
@@ -54,12 +55,15 @@ namespace SkyRoof.AFC
     }
 
     public AfcObservation Analyze(ReadOnlySpan<float> pcm, AfcSignalMode mode,
-      DateTime utc, long generation, double expectedOffsetHz = 0, bool ssbPilot = false)
+      DateTime utc, long generation, double expectedOffsetHz = double.NaN,
+      bool ssbPilot = false,
+      AfcAcquisitionPreset acquisitionPreset = AfcAcquisitionPreset.Balanced)
     {
-      if (pcm.Length < sampleRate / 3)
+      var profile = AfcTrackingProfile.For(mode, ssbPilot, acquisitionPreset);
+      if (pcm.Length < profile.MinimumSamples)
         return new(mode, utc, generation, 0, double.PositiveInfinity, 0, false);
-      // Work on the last two seconds only. Never process an unlimited backlog.
-      pcm = pcm.Slice(Math.Max(0, pcm.Length - 2 * sampleRate));
+      // Only the newest mode-specific window contributes to this estimate.
+      pcm = pcm.Slice(Math.Max(0, pcm.Length - profile.WindowSamples));
       var bb = Downconvert(pcm);
       bool toneMode = mode == AfcSignalMode.CW || (mode == AfcSignalMode.SSB && ssbPilot);
       if (carrierGeneration != generation || carrierMode != mode)
@@ -68,17 +72,33 @@ namespace SkyRoof.AFC
         carrierMode = mode;
         carrierSearchHz = expectedOffsetHz;
         carrierTracked = false;
+        fmCandidateAcquired = false;
       }
-      double search = toneMode && carrierTracked ? carrierSearchHz : expectedOffsetHz;
+      // Tone defaults to 0 Hz, but unselected FM must remain unrestricted.
+      double search = toneMode && carrierTracked ? carrierSearchHz :
+        double.IsFinite(expectedOffsetHz) ? expectedOffsetHz : 0;
       AfcObservation result = mode switch
       {
-        AfcSignalMode.FM => EstimateFm(bb, utc, generation),
-        AfcSignalMode.CW => EstimateTone(bb, mode, utc, generation, search),
+        AfcSignalMode.FM => EstimateFm(bb, utc, generation, acquisitionPreset),
+        AfcSignalMode.CW => EstimateTone(bb, mode, utc, generation,
+          search, acquisitionPreset),
         AfcSignalMode.SSB when ssbPilot =>
-          EstimateTone(bb, mode, utc, generation, search),
+          EstimateTone(bb, mode, utc, generation, search, acquisitionPreset),
         AfcSignalMode.SSB => EstimateSsbRelative(bb, utc, generation),
         _ => new(mode, utc, generation, 0, double.PositiveInfinity, 0, false)
       };
+      if (mode == AfcSignalMode.FM &&
+          double.IsFinite(expectedOffsetHz) && !fmCandidateAcquired)
+      {
+        // An operator click is only an initial acquisition hint; it never
+        // directly authorizes CAT. After the first qualified match the
+        // servo may move the FM carrier away from the original click.
+        if (Math.Abs(result.IfOffsetHz - expectedOffsetHz) > 1500)
+          result = result with { HasAbsoluteReference = false,
+            Ambiguous = true };
+        else if (result.HasAbsoluteReference && !result.Ambiguous)
+          fmCandidateAcquired = true;
+      }
       if (toneMode && result.HasAbsoluteReference && !result.Ambiguous)
       {
         carrierSearchHz = result.IfOffsetHz;
@@ -99,12 +119,31 @@ namespace SkyRoof.AFC
       // Mix at the original sample rate. FIR rejects the negative-frequency
       // image before decimation: no direct 12-kHz real-PCM-as-IQ shortcut.
       var mixed = new Complex[samples.Length];
-      for (int n = 0; n < samples.Length; n++)
+      if (Math.Abs(ifReferenceHz * 4 - sampleRate) < 1e-7)
       {
-        double phase = phaseStep * n;
-        mixed[n] = new Complex(
-          samples[n] * Math.Cos(phase),
-          samples[n] * Math.Sin(phase));
+        // IC-9700 nominal 12 kHz / 48 kS/s is exactly a quarter-cycle
+        // mixer. This removes ~2 trigonometric evaluations per IF sample
+        // and cumulative NCO phase error while retaining the original
+        // FIR image rejection and carrier frequency convention.
+        for (int n = 0; n < samples.Length; n++)
+          mixed[n] = (n & 3) switch
+          {
+            0 => new Complex(samples[n], 0),
+            1 => new Complex(0, -samples[n]),
+            2 => new Complex(-samples[n], 0),
+            _ => new Complex(0, samples[n])
+          };
+      }
+      else
+      {
+        // Custom IF reference frequencies retain full NCO precision.
+        for (int n = 0; n < samples.Length; n++)
+        {
+          double phase = phaseStep * n;
+          mixed[n] = new Complex(
+            samples[n] * Math.Cos(phase),
+            samples[n] * Math.Sin(phase));
+        }
       }
       for (int i = 0; i < count; i++)
       {
@@ -117,7 +156,50 @@ namespace SkyRoof.AFC
       return output;
     }
 
-    private AfcObservation EstimateFm(Complex[] bb, DateTime utc, long generation)
+    private AfcObservation EstimateFm(Complex[] bb, DateTime utc,
+      long generation, AfcAcquisitionPreset preset)
+    {
+      var primary = EstimateFmSingle(bb, utc, generation);
+      // Once more independent time information arrives, run a second
+      // overlapping short-time estimator. Agreement may refine the offset;
+      // disagreement REDUCES certainty, never creates a false lock.
+      // Both analyses share samples; never treat them as independent CAT
+      // confirmations or inflate the confidence score.
+      if (preset != AfcAcquisitionPreset.Adaptive || bb.Length < 11500 ||
+          !primary.HasAbsoluteReference)
+        return primary;
+      int half = bb.Length / 2;
+      var recent = new Complex[half];
+      Array.Copy(bb, half, recent, 0, half);
+      var shortResult = EstimateFmSingle(recent, utc, generation);
+      if (!shortResult.HasAbsoluteReference)
+        return primary;
+      double difference = Math.Abs(primary.IfOffsetHz - shortResult.IfOffsetHz);
+      if (difference > Math.Max(90, 3 * Math.Max(primary.SigmaHz,
+          shortResult.SigmaHz)))
+        return primary with
+        {
+          SigmaHz = Math.Max(primary.SigmaHz, difference * .5),
+          Confidence = primary.Confidence * .6,
+          HasAbsoluteReference = false,
+          Ambiguous = true
+        };
+      double weight = Math.Clamp(
+        primary.SigmaHz / Math.Max(1, primary.SigmaHz + shortResult.SigmaHz),
+        .10, .30);
+      return primary with
+      {
+        IfOffsetHz = primary.IfOffsetHz * (1 - weight) +
+          shortResult.IfOffsetHz * weight,
+        // Overlap makes the measurements correlated: no spurious reduction
+        // in sigma below the reliable single-window lower bound.
+        SigmaHz = Math.Max(5, primary.SigmaHz),
+        Confidence = Math.Min(primary.Confidence, shortResult.Confidence)
+      };
+    }
+
+    private AfcObservation EstimateFmSingle(Complex[] bb, DateTime utc,
+      long generation)
     {
       const int segments = 6;
       if (bb.Length < 1024) return new(AfcSignalMode.FM, utc, generation, 0, 9999, 0, false);
@@ -164,8 +246,12 @@ namespace SkyRoof.AFC
         confidence *= Math.Clamp(250.0 / Math.Max(250, disagreement), 0, 1);
         sigma = Math.Max(sigma, disagreement * 0.25);
       }
-      bool valid = double.IsFinite(median) && Math.Abs(median) < 8000 &&
-        power > 1e-8 && confidence >= 0.4 && sigma <= 150;
+      // A weak-but-narrow FM candidate may enter temporal corroboration.
+      // It is NOT a CAT-ready reference by itself: the controller requires
+      // three consistent fresh measurement epochs before upgrading it.
+      bool valid = double.IsFinite(median) && Math.Abs(median) < 6800 &&
+        power > 1e-8 && snrRatio >= .65 &&
+        confidence >= .22 && sigma <= 150;
       // Keep the measured candidate and its numerical quality even when
       // confidence / IF ambiguity rejects it as an AFC reference. Previously
       // a rejected nonzero FM offset was reported as 0% without any reason,
@@ -176,27 +262,56 @@ namespace SkyRoof.AFC
     }
 
     private AfcObservation EstimateTone(Complex[] bb, AfcSignalMode mode,
-      DateTime utc, long generation, double expectedHz)
+      DateTime utc, long generation, double expectedHz,
+      AfcAcquisitionPreset preset)
     {
-      // 8192 points at 24 kS/s: 2.93-Hz bins. Windowed-FFT interpolation is
-      // refined by phase slope over successive key-down sections later.
-      const int fftSize = 8192;
+      // Prefer an ~171-ms 4096-point FFT for short Morse key-downs.
+      // A second ~341-ms window has finer bins for weaker longer carriers.
+      // Both are locally gated around the operator-selected tone; neither
+      // is allowed to jump to an unrelated strong CW pileup station.
+      var fast = EstimateToneWindow(bb, mode, utc, generation,
+        expectedHz, 4096);
+      if (fast.HasAbsoluteReference && fast.Confidence >= .88 &&
+          fast.SigmaHz <= 4)
+        return fast;
+      var sensitive = EstimateToneWindow(bb, mode, utc, generation,
+        expectedHz, 8192);
+      var best = sensitive.HasAbsoluteReference &&
+        (!fast.HasAbsoluteReference ||
+         sensitive.Confidence >= fast.Confidence - .05)
+          ? sensitive : fast;
+      // Optional third, longer resolution for an already available weak
+      // carrier: no extra time-to-first-fix penalty in Adaptive mode.
+      if ((preset is AfcAcquisitionPreset.Adaptive or
+          AfcAcquisitionPreset.Sensitive) && bb.Length >= 16384)
+      {
+        var deep = EstimateToneWindow(bb, mode, utc, generation,
+          expectedHz, 16384);
+        if (deep.HasAbsoluteReference &&
+            (!best.HasAbsoluteReference ||
+              deep.Confidence >= best.Confidence - .08) &&
+            (best.HasAbsoluteReference
+              ? Math.Abs(deep.IfOffsetHz - best.IfOffsetHz) <= 12 : true))
+          best = deep;
+      }
+      return best;
+    }
+
+    private AfcObservation EstimateToneWindow(Complex[] bb,
+      AfcSignalMode mode, DateTime utc, long generation,
+      double expectedHz, int fftSize)
+    {
       if (bb.Length < fftSize)
         return new(mode, utc, generation, 0, 9999, 0, false);
       var spectrum = new Complex[fftSize];
       int start = bb.Length - fftSize;
       for (int i = 0; i < fftSize; i++)
       {
-        double hann = 0.5 - 0.5 * Math.Cos(2 * Math.PI * i / (fftSize - 1));
+        double hann = .5 - .5 * Math.Cos(2 * Math.PI * i / (fftSize - 1));
         spectrum[i] = bb[start + i] * hann;
       }
       Fourier(spectrum);
       double binHz = sampleRate / 2.0 / fftSize;
-      // Search the target's local interval, never the strongest unrelated
-      // station across the whole IF. CW initial selection can be adjusted
-      // in the UI to follow individual pileup signals.
-      // Explicitly selected IF targets get a narrow admission gate; a nearby
-      // stronger pileup station must not silently become the new target.
       double span = mode == AfcSignalMode.CW ? 55 : 50;
       int low = (int)Math.Ceiling((expectedHz - span) / binHz);
       int high = (int)Math.Floor((expectedHz + span) / binHz);
@@ -204,21 +319,20 @@ namespace SkyRoof.AFC
       int bestBin = 0, count = 0;
       for (int b = low; b <= high; b++)
       {
-        double p = Power(spectrum, b);
+        double power = Power(spectrum, b);
         count++;
-        if (p > best) { best = p; bestBin = b; }
+        if (power > best) { best = power; bestBin = b; }
       }
       if (best <= 0 || count <= 12)
         return new(mode, utc, generation, 0, 9999, 0, false);
-      // Main-lobe energy spans several adjacent Hann FFT bins. Treating
-      // those bins as noise makes even a strong clean CW carrier appear
-      // low-confidence and prevents Center & Lock from acquiring.
-      double noiseSum = 0;
+      double noiseSum = 0, secondPeak = 0;
       int noiseCount = 0;
       for (int b = low; b <= high; b++)
       {
-        if (Math.Abs(b - bestBin) <= 4) continue;
-        noiseSum += Power(spectrum, b);
+        if (Math.Abs(b - bestBin) <= (fftSize == 4096 ? 2 : 4)) continue;
+        double power = Power(spectrum, b);
+        noiseSum += power;
+        secondPeak = Math.Max(secondPeak, power);
         noiseCount++;
       }
       double noise = Math.Max(1e-18, noiseSum / Math.Max(1, noiseCount));
@@ -228,30 +342,21 @@ namespace SkyRoof.AFC
       double y2 = Math.Log(Math.Max(1e-18, Power(spectrum, bestBin + 1)));
       double curvature = y0 - 2 * y1 + y2;
       double fraction = Math.Abs(curvature) > 1e-7
-        ? Math.Clamp(0.5 * (y0 - y2) / curvature, -0.5, 0.5)
-        : 0;
+        ? Math.Clamp(.5 * (y0 - y2) / curvature, -.5, .5) : 0;
       double hz = (bestBin + fraction) * binHz;
-      double sigma = Math.Max(0.5, binHz / Math.Sqrt(Math.Max(1, ratio)));
+      double sigma = Math.Max(.5, binHz / Math.Sqrt(Math.Max(1, ratio)));
       double confidence = Math.Clamp((10 * Math.Log10(Math.Max(1, ratio)) - 5) / 18, 0, 1);
-      double secondPeak = 0;
-      for (int b = low; b <= high; b++)
-      {
-        if (Math.Abs(b - bestBin) <= 4) continue;
-        secondPeak = Math.Max(secondPeak, Power(spectrum, b));
-      }
-      bool ambiguous = secondPeak > best * 0.40 &&
-        secondPeak > noise * 12;
-      bool valid = confidence >= 0.5 && double.IsFinite(hz) && !ambiguous;
+      bool ambiguous = secondPeak > best * .40 && secondPeak > noise * 12;
+      bool valid = confidence >= .5 && double.IsFinite(hz) && !ambiguous;
       return new(mode, utc, generation, hz, sigma,
         valid ? confidence : 0, valid, ambiguous);
     }
 
-
-
     private double EstimateFmSpectralQuality(Complex[] bb)
     {
-      const int n = 8192;
-      if (bb.Length < n) return 0;
+      int n = bb.Length >= 8192 ? 8192 :
+        bb.Length >= 4096 ? 4096 : 0;
+      if (n == 0) return 0;
       var s = new Complex[n];
       for (int i = 0; i < n; i++)
       {
@@ -284,8 +389,9 @@ namespace SkyRoof.AFC
 
     private double FmSpectralCenter(Complex[] bb)
     {
-      const int n = 8192;
-      if (bb.Length < n) return double.NaN;
+      int n = bb.Length >= 8192 ? 8192 :
+        bb.Length >= 4096 ? 4096 : 0;
+      if (n == 0) return double.NaN;
       var spectrum = new Complex[n];
       for (int i = 0; i < n; i++)
       {

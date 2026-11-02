@@ -1,0 +1,359 @@
+using System;
+using System.ComponentModel;
+using System.IO;
+using Newtonsoft.Json;
+using SkyRoof.IF;
+using VE3NEA;
+using Xunit;
+
+namespace VE3NEA.Dsp.Tests
+{
+  public sealed class IfAfAudioLinkTests
+  {
+    [Theory]
+    [InlineData("IF-AF-Audio Playback", true)]
+    [InlineData("Speakers (IF-AF-Audio Playback)", true)]
+    [InlineData("扬声器 (IF-AF-Audio Playback)", true)]
+    [InlineData("扬声器（IF-AF-Audio Playback）", true)]
+    [InlineData("扬声器 (Fake IF-AF-Audio Playback)", false)]
+    [InlineData("Speakers (USB Audio CODEC)", false)]
+    [InlineData("ICOM_VAUDIO-1 (Icom Virtual Audio Device)", false)]
+    [InlineData("IF-AF-Audio", false)]
+    public void PlaybackRouteOnlyRecognizesDedicatedVirtualPlayback(
+      string name, bool valid) =>
+      Assert.Equal(valid, IfAfAudioEndpointDiscovery.IsExpectedRenderName(name));
+
+    [Theory]
+    [InlineData("IF-AF-Audio", true)]
+    [InlineData("Microphone (IF-AF-Audio)", true)]
+    [InlineData("麦克风 (IF-AF-Audio)", true)]
+    [InlineData("麦克风（IF-AF-Audio）", true)]
+    [InlineData("麦克风 (Fake IF-AF-Audio)", false)]
+    [InlineData("IF-AF-Audio Playback", false)]
+    [InlineData("Microphone (USB Audio CODEC)", false)]
+    public void InputRouteOnlyRecognizesDedicatedVirtualCapture(
+      string name, bool valid) =>
+      Assert.Equal(valid, IfAfAudioEndpointDiscovery.IsExpectedCaptureName(name));
+
+    [Fact]
+    public void VirtualDeviceNeedsBothEndpoints()
+    {
+      Assert.False(new IfAfEndpointPair("one", null, "missing").Ready);
+      Assert.False(new IfAfEndpointPair(null, "two", "missing").Ready);
+      Assert.True(new IfAfEndpointPair("one", "two", "both").Ready);
+    }
+
+    private static AudioDeviceEntry Device(string id, string name) => new(id, name);
+
+    [Fact]
+    public void AutoDiscoverPairsOnlyMatchingVbCableRenderAndCapture()
+    {
+      var result = IfAfSignedCableDiscovery.Select(
+        new[] { Device("radioTx", "Speakers (USB Audio CODEC)"),
+                Device("vbOut", "CABLE Input (VB-Audio Virtual Cable)") },
+        new[] { Device("vbIn", "CABLE Output (VB-Audio Virtual Cable)"),
+                Device("radioRx", "Microphone (USB Audio CODEC)") });
+      Assert.True(result.Ready);
+      Assert.Equal("vbOut", result.RenderId);
+      Assert.Equal("vbIn", result.CaptureId);
+      Assert.Equal("VB-CABLE", result.Provider);
+    }
+
+    [Fact]
+    public void AutoDiscoverFallsBackToVacLiteWithoutDefaultSpeakers()
+    {
+      var result = IfAfSignedCableDiscovery.Select(
+        new[] { Device("lineOut", "Line 1 (Virtual Audio Cable)"),
+                Device("realSpeakers", "Speakers (Realtek Audio)") },
+        new[] { Device("lineIn", "Line 1 (Virtual Audio Cable)") });
+      Assert.True(result.Ready);
+      Assert.Equal("lineOut", result.RenderId);
+      Assert.Equal("lineIn", result.CaptureId);
+      Assert.Equal("VAC Lite", result.Provider);
+    }
+
+    [Fact]
+    public void AutoDiscoverRejectsMissingOrAmbiguousPairs()
+    {
+      var output = Device("vbOut", "CABLE Input (VB-Audio Virtual Cable)");
+      var input = Device("vbIn", "CABLE Output (VB-Audio Virtual Cable)");
+      Assert.False(IfAfSignedCableDiscovery.Select(new[] { output },
+        Array.Empty<AudioDeviceEntry>()).Ready);
+      Assert.False(IfAfSignedCableDiscovery.Select(new[] { output, output },
+        new[] { input }).Ready);
+      Assert.False(IfAfSignedCableDiscovery.Select(
+        new[] { Device("test", "Speakers (USB Audio CODEC)") },
+        new[] { input }).Ready);
+      Assert.False(IfAfSignedCableDiscovery.Select(
+        new[] { Device("both", "CABLE Input (VB-Audio Virtual Cable)") },
+        new[] { Device("both", "CABLE Output (VB-Audio Virtual Cable)") }).Ready);
+    }
+
+    [Theory]
+    [InlineData("CABLE Input (VB-Audio Virtual Cable)", true)]
+    [InlineData("CABLE Input", true)]
+    [InlineData("CABLE Output (VB-Audio Virtual Cable)", false)]
+    [InlineData("USB Audio CODEC", false)]
+    [InlineData("CABLE Input (Some Other Vendor)", false)]
+    public void DetectVbCableEndpointNames(string name, bool expected)
+    {
+      Assert.Equal(expected, IfAfSignedCableDiscovery.IsVbCableEnd(name, "CABLE Input"));
+    }
+
+    [Fact]
+    public void AutoSignedCableRenderWinsOverStaleManualVacId()
+    {
+      Assert.Equal("vbRender", IfAfSettings.ResolveRenderEndpoint(
+        IfAfAudioRoute.AutoSignedCable, "oldManual", "vbRender"));
+      Assert.Equal("oldManual", IfAfSettings.ResolveRenderEndpoint(
+        IfAfAudioRoute.ExistingVirtualCable, "oldManual", "vbRender"));
+    }
+
+    [Theory]
+    [InlineData("0", IfAfAudioRoute.AutoSignedCable)]
+    [InlineData("\"PreferIfAfAudio\"", IfAfAudioRoute.AutoSignedCable)]
+    [InlineData("1", IfAfAudioRoute.ExistingVirtualCable)]
+    [InlineData("\"ExistingVirtualCable\"", IfAfAudioRoute.ExistingVirtualCable)]
+    [InlineData("2", IfAfAudioRoute.AutoSignedCable)]
+    [InlineData("\"AutoSignedCable\"", IfAfAudioRoute.AutoSignedCable)]
+    public void LegacyIfAfRouteSettingsMigrateWithoutBreakingJson(
+      string routeJson, IfAfAudioRoute expected)
+    {
+      var settings = JsonConvert.DeserializeObject<IfAfSettings>(
+        "{\"AudioRoute\":" + routeJson + "}");
+      Assert.NotNull(settings);
+      Assert.Equal(expected, settings.AudioRoute);
+      Assert.DoesNotContain("PreferIfAfAudio",
+        JsonConvert.SerializeObject(settings));
+    }
+
+    [Fact]
+    public void RouteSelectorContainsExactlyTwoSupportedProviders()
+    {
+      Assert.Equal(new[] { "ExistingVirtualCable", "AutoSignedCable" },
+        Enum.GetNames<IfAfAudioRoute>());
+    }
+
+    private static IfAfStatus ActiveStatus(DateTime now) => new(
+      true, IfAfMode.Usb, 48000, 48000, 0, 0, now, -37.5,
+      0, "48-kHz IF -> CABLE Input", 20, true,
+      "VB-CABLE playback and recording endpoints detected (signature not independently verified).",
+      0);
+
+    [Fact]
+    public void FooterStagesMatchCatStatusWhenReceivePipelineIsHealthy()
+    {
+      var now = DateTime.UtcNow;
+      var live = ActiveStatus(now);
+      var result = IfAfLinkBar.Evaluate(true, IfAfAudioRoute.AutoSignedCable,
+        live, live with { InputSamples = 24000, OutputSamples = 24000 }, now);
+      Assert.Equal(IfAfLinkState.Ok, result.If);
+      Assert.Equal(IfAfLinkState.Ok, result.Ddc);
+      Assert.Equal(IfAfLinkState.Ok, result.Af);
+      Assert.Equal(IfAfLinkState.Ok, result.VirtualMic);
+    }
+
+    [Fact]
+    public void FooterStagesShowInactiveAndStaleCaptureWithoutFakeGreen()
+    {
+      var now = DateTime.UtcNow;
+      var live = ActiveStatus(now);
+      var disabled = IfAfLinkBar.Evaluate(false,
+        IfAfAudioRoute.AutoSignedCable, live, null, now);
+      Assert.Equal(IfAfLinkState.Inactive, disabled.If);
+      Assert.Equal(IfAfLinkState.Inactive, disabled.VirtualMic);
+      var stale = IfAfLinkBar.Evaluate(true, IfAfAudioRoute.AutoSignedCable,
+        live with { LastInputUtc = now.AddSeconds(-6) }, live, now);
+      Assert.NotEqual(IfAfLinkState.Ok, stale.If);
+      Assert.NotEqual(IfAfLinkState.Ok, stale.Ddc);
+    }
+
+    [Fact]
+    public void FooterStagesReportNewDropAndUnderrunOnlyDuringActiveInterval()
+    {
+      var now = DateTime.UtcNow;
+      var previous = ActiveStatus(now) with {
+        InputSamples = 24000, OutputSamples = 24000,
+        OutputUnderrunSamples = 400 };
+      var live = ActiveStatus(now) with {
+        DroppedBlocks = 1, OutputUnderrunSamples = 410 };
+      var troubled = IfAfLinkBar.Evaluate(true,
+        IfAfAudioRoute.AutoSignedCable, live, previous, now);
+      Assert.Equal(IfAfLinkState.Warning, troubled.Ddc);
+      Assert.Equal(IfAfLinkState.Warning, troubled.Af);
+      var recovered = IfAfLinkBar.Evaluate(true,
+        IfAfAudioRoute.AutoSignedCable,
+        live with { InputSamples = 72000, OutputSamples = 72000 },
+        live, now);
+      Assert.Equal(IfAfLinkState.Ok, recovered.Ddc);
+      Assert.Equal(IfAfLinkState.Ok, recovered.Af);
+    }
+
+    [Fact]
+    public void StartupDecoderFailureIsReportedOnEveryAudioStage()
+    {
+      var now = DateTime.UtcNow;
+      var failed = ActiveStatus(now) with {
+        Running = false,
+        InputSamples = 370176,
+        OutputSamples = 0,
+        DroppedBlocks = 764,
+        Detail = "IF-AF worker failed: invalid FM deviation",
+        RenderRunning = true
+      };
+      var states = IfAfLinkBar.Evaluate(true,
+        IfAfAudioRoute.AutoSignedCable, failed, null, now);
+      Assert.Equal(IfAfLinkState.Error, states.If);
+      Assert.Equal(IfAfLinkState.Error, states.Ddc);
+      Assert.Equal(IfAfLinkState.Error, states.Af);
+      Assert.Equal(IfAfLinkState.Error, states.VirtualMic);
+    }
+
+    [Fact]
+    public void HistoricalClippingAloneDoesNotPermanentlyLatchAmberLed()
+    {
+      var now = DateTime.UtcNow;
+      var current = ActiveStatus(now) with {
+        InputSamples = 240000, OutputSamples = 240000, ClippedSamples = 20000
+      };
+      var prior = current with {
+        InputSamples = 216000, OutputSamples = 216000
+      };
+      var indicators = IfAfLinkBar.Evaluate(true,
+        IfAfAudioRoute.AutoSignedCable, current, prior, now);
+      Assert.Equal(IfAfLinkState.Ok, indicators.Af);
+      Assert.Equal(IfAfLinkState.Ok, indicators.VirtualMic);
+    }
+
+    [Fact]
+    public void NewlyClippedSamplesWarnThenRecoverAfterNoNewClips()
+    {
+      var now = DateTime.UtcNow;
+      var before = ActiveStatus(now) with {
+        InputSamples = 24000, OutputSamples = 24000, ClippedSamples = 15
+      };
+      var during = ActiveStatus(now) with {
+        InputSamples = 48000, OutputSamples = 48000, ClippedSamples = 55
+      };
+      var warning = IfAfLinkBar.Evaluate(true,
+        IfAfAudioRoute.AutoSignedCable, during, before, now);
+      Assert.Equal(IfAfLinkState.Warning, warning.Af);
+      Assert.Equal(IfAfLinkState.Warning, warning.VirtualMic);
+      var held = IfAfLinkBar.Evaluate(true,
+        IfAfAudioRoute.AutoSignedCable,
+        during with { InputSamples = 72000, OutputSamples = 72000 },
+        during, now.AddSeconds(1), holdRecentClipWarning: true);
+      Assert.Equal(IfAfLinkState.Warning, held.Af);
+      var recovered = IfAfLinkBar.Evaluate(true,
+        IfAfAudioRoute.AutoSignedCable,
+        during with { InputSamples = 96000, OutputSamples = 96000,
+          LastInputUtc = now.AddSeconds(4) },
+        during with { InputSamples = 72000, OutputSamples = 72000,
+          LastInputUtc = now.AddSeconds(1) },
+        now.AddSeconds(4));
+      Assert.Equal(IfAfLinkState.Ok, recovered.Af);
+      Assert.Equal(IfAfLinkState.Ok, recovered.VirtualMic);
+    }
+
+    [Fact]
+    public void FirstStatusSnapshotDoesNotTreatPreexistingClipsAsRecent()
+    {
+      var now = DateTime.UtcNow;
+      var s = ActiveStatus(now) with {
+        InputSamples = 200000, OutputSamples = 200000, ClippedSamples = 5698815
+      };
+      var x = IfAfLinkBar.Evaluate(true,
+        IfAfAudioRoute.AutoSignedCable, s, null, now);
+      Assert.Equal(IfAfLinkState.Ok, x.Af);
+    }
+
+    [Fact]
+    public void ManualVacDoesNotClaimPairedRecordingMicrophone()
+    {
+      var now = DateTime.UtcNow;
+      var live = ActiveStatus(now);
+      var result = IfAfLinkBar.Evaluate(true,
+        IfAfAudioRoute.ExistingVirtualCable, live, null, now);
+      Assert.Equal(IfAfLinkState.Ok, result.Af);
+      Assert.Equal(IfAfLinkState.Warning, result.VirtualMic);
+    }
+
+    [Theory]
+    [InlineData(-1, 0, true)]
+    [InlineData(480, 480, true)]
+    [InlineData(480, 960, false)]
+    [InlineData(480, 0, false)]
+    public void PCMFrameSequenceDetectsSingleDroppedChunk(
+      long expectedStart, long actualStart, bool contiguous) =>
+      Assert.Equal(contiguous, IfAfService.FramesContinuous(expectedStart, actualStart));
+
+    [Fact]
+    public void AfcAndIfAfIndependentCaptureDefaultsToSameLeftChannel() =>
+      Assert.Equal(AudioChannelChoice.Left, new SkyRoof.AfcSettings().CaptureChannel);
+
+    [Fact]
+    public void OnlyCompleteDeveloperPackageIsRecognized()
+    {
+      var folder = Path.Combine(Path.GetTempPath(),
+        "if-af-audio-package-" + Guid.NewGuid().ToString("N"));
+      Directory.CreateDirectory(folder);
+      try
+      {
+        Assert.False(IfAfAudioEndpointDiscovery.IsCompleteDevelopmentPackage(folder));
+        File.WriteAllBytes(Path.Combine(folder, "IfAfAudio.sys"), new byte[] { 1 });
+        File.WriteAllText(Path.Combine(folder, "IfAfAudio.inf"), "test");
+        Assert.False(IfAfAudioEndpointDiscovery.IsCompleteDevelopmentPackage(folder));
+        File.WriteAllBytes(Path.Combine(folder, "ifafaudio.cat"), new byte[] { 1 });
+        Assert.True(IfAfAudioEndpointDiscovery.IsCompleteDevelopmentPackage(folder));
+      }
+      finally { Directory.Delete(folder, true); }
+    }
+
+    [Fact]
+    public void DefaultRoutePrefersVendorCableAndKeepsManualFallback()
+    {
+      var cfg = new IfAfSettings();
+      Assert.False(cfg.Enabled);
+      Assert.Equal(IfAfAudioRoute.AutoSignedCable, cfg.AudioRoute);
+      Assert.Equal(1, (int)IfAfAudioRoute.ExistingVirtualCable);
+      Assert.Equal(IfAfLatencyPreset.Balanced40Ms, cfg.LatencyPreset);
+      var info = TypeDescriptor.GetProperties(typeof(IfAfSettings))["DriverStatus"];
+      Assert.NotNull(info);
+      Assert.IsType<ReadOnlyAttribute>(info.Attributes[typeof(ReadOnlyAttribute)]);
+    }
+
+    [Theory]
+    [InlineData(20)]
+    [InlineData(40)]
+    [InlineData(80)]
+    [InlineData(200)]
+    public void WasapiRenderUsesRequestedBufferPeriod(int milliseconds)
+    {
+      using var sink = new OutputSoundcard<float>(
+        samplingRate: 48000, latencyMilliseconds: milliseconds);
+      Assert.Equal(milliseconds, sink.RequestedLatencyMs);
+    }
+
+    [Fact]
+    public void InvalidRenderLatencyIsRejected()
+    {
+      Assert.Throws<ArgumentOutOfRangeException>(() =>
+        new OutputSoundcard<float>(
+          samplingRate: 48000, latencyMilliseconds: 5));
+    }
+
+    [Fact]
+    public void LowLatencyIfReaderDefaultsRemainBackwardCompatible()
+    {
+      using var traditional = new InputSoundcard<float>(
+        samplingRate: 48000);
+      Assert.Equal(200, traditional.CaptureBufferMilliseconds);
+      Assert.Equal(4800, traditional.ReaderBlockSizeSamples);
+      using var fast = new InputSoundcard<float>(
+        samplingRate: 48000, captureBufferMilliseconds: 20,
+        readerBlockSizeSamples: 480, idleSleepMilliseconds: 2);
+      Assert.Equal(20, fast.CaptureBufferMilliseconds);
+      Assert.Equal(480, fast.ReaderBlockSizeSamples);
+    }
+  }
+}

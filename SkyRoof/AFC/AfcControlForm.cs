@@ -47,6 +47,8 @@ namespace SkyRoof.AFC
     private readonly Label controlHint = new();
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 250 };
     private AfcSignalMode currentMode;
+    private AfcLockState lastLoggedLockState = AfcLockState.Off;
+    private DateTime lastLoggedAfcUtc;
     private bool active;
 
     internal bool CaptureRunning => active && input.IsRunning;
@@ -180,6 +182,7 @@ namespace SkyRoof.AFC
       spectrum.ApplyPalette(palette);
       spectrum.SetReferenceLevel(ctx.Settings.Afc.SpectrumRefLevelDb);
       spectrum.TargetSelected += OnSpectrumTargetSelected;
+      spectrum.ReferenceResetRequested += OnSpectrumReferenceResetRequested;
       spectrum.SpanChanged += OnSpanChanged;
       spectrumBlock.Controls.Add(spectrumToolbar, 0, 0);
       spectrumBlock.Controls.Add(spectrum, 0, 1);
@@ -412,7 +415,7 @@ namespace SkyRoof.AFC
             snapshot.LastObservationUtc != default &&
               snapshot.Confidence > 0 && snapshot.State == AfcLockState.Locked
               ? snapshot.ObservedIfOffsetHz : null,
-            ctx.Settings.Afc.TargetOffsetHz);
+            AfcSpectrumReference.DisplayMarker(ctx.Settings.Afc, currentMode));
         }));
       }
       catch (InvalidOperationException) { }
@@ -501,11 +504,30 @@ namespace SkyRoof.AFC
 
     private void OnSpectrumTargetSelected(double offset)
     {
-      if (!active || currentMode == AfcSignalMode.FM) return;
-      ctx.Settings.Afc.TargetOffsetHz = offset;
-      input.UpdateTarget(currentMode, ctx.Settings.Afc.SsbPilotEnabled, offset);
-      owner.AfcController.Reset("Selected new IF carrier");
-      owner.AfcController.Configure(currentMode, EffectiveControl());
+      if (!active || !AfcSpectrumReference.Select(
+          ctx.Settings.Afc, currentMode, offset)) return;
+      ReacquireSpectrumReference("Operator selected IF candidate");
+    }
+
+    private void OnSpectrumReferenceResetRequested()
+    {
+      AfcSpectrumReference.Reset(ctx.Settings.Afc, currentMode);
+      ReacquireSpectrumReference("Operator reset IF reference");
+    }
+
+    private void ReacquireSpectrumReference(string reason)
+    {
+      var cfg = ctx.Settings.Afc;
+      if (active)
+      {
+        input.UpdateTarget(currentMode, cfg.SsbPilotEnabled,
+          AfcSpectrumReference.AnalysisOffset(cfg, currentMode));
+        // Mouse clicks cannot bypass the normal CAT/IF confidence gate.
+        owner.AfcController.Reset(reason);
+        owner.AfcController.Configure(currentMode, EffectiveControl());
+      }
+      spectrum.SetMeasurement(null,
+        AfcSpectrumReference.DisplayMarker(cfg, currentMode));
       settingsGrid.Refresh();
       ctx.Settings.SaveToFile();
       RefreshDisplay();
@@ -515,11 +537,33 @@ namespace SkyRoof.AFC
       object? sender, PropertyValueChangedEventArgs e)
     {
       string name = e.ChangedItem.PropertyDescriptor?.Name ?? "";
+      if (name == nameof(AfcSettings.SignalLossPolicy))
+        owner.AfcController.ConfigureSignalLoss(ctx.Settings.Afc.SignalLossPolicy);
+      if (name == nameof(AfcSettings.AcquisitionPreset))
+      {
+        input.SetAcquisitionPreset(ctx.Settings.Afc.AcquisitionPreset);
+        if (active)
+        {
+          owner.AfcController.Reset("Acquisition strategy changed");
+          owner.AfcController.Configure(currentMode, EffectiveControl());
+          if (currentMode == AfcSignalMode.SSB &&
+              ctx.Settings.Afc.SsbPilotEnabled)
+            owner.AfcController.CenterOn(ctx.Settings.Afc.DesiredOffsetHz);
+        }
+      }
       if (name == nameof(AfcSettings.RfIfSign))
+      {
         AbortPolarityCalibration();
+        // A verified user direction change clears an earlier mismatch
+        // and starts a fresh target without a stale residual servo offset.
+        owner.AfcController.Reset("RF/IF sign changed by operator");
+        if (active)
+          owner.AfcController.Configure(currentMode, EffectiveControl());
+      }
       if (active)
       {
         if (name is nameof(AfcSettings.InputDeviceId) or
+            nameof(AfcSettings.CaptureChannel) or
             nameof(AfcSettings.LoopbackDeviceId) or
             nameof(AfcSettings.InputSource) or
             nameof(AfcSettings.IfReferenceHz))
@@ -528,7 +572,7 @@ namespace SkyRoof.AFC
                  nameof(AfcSettings.SsbPilotEnabled))
         {
           input.UpdateTarget(currentMode, ctx.Settings.Afc.SsbPilotEnabled,
-            ctx.Settings.Afc.TargetOffsetHz);
+            AfcSpectrumReference.AnalysisOffset(ctx.Settings.Afc, currentMode));
           owner.AfcController.Reset("Target parameters changed");
           owner.AfcController.Configure(currentMode, EffectiveControl());
         }
@@ -576,22 +620,44 @@ namespace SkyRoof.AFC
           // receive mode without injecting a CAT probe or restore sequence.
           // The controller still checks fresh IF, PTT, and closed-loop
           // divergence; the user can override an inverted hardware path.
-          int sign = AfcDirectionResolver.Resolve(cfg.RfIfSign,
+          int nominal = AfcDirectionResolver.Resolve(0,
             owner.RadioLink.TxCust != null
               ? owner.RadioLink.DownlinkMode : Slicer.Mode.USB);
+          bool ownReadback = owner.IsAfcReadbackConfirmedAt(observation.SampleUtc);
           owner.AfcController.Observe(observation, readback,
-            sign, Math.Clamp(cfg.MaxCorrectionHz, 1, 10000),
+            cfg.RfIfSign, Math.Clamp(cfg.MaxCorrectionHz, 1, 10000),
             Math.Clamp(cfg.FmDeadbandHz, 1, 500),
             Math.Clamp(cfg.ToneDeadbandHz, .5, 100),
             owner.IsAfcTransmitting,
             catReadbackIsTimeAligned: double.IsFinite(readback),
-            confirmedOwnAfcReadback:
-              owner.IsAfcReadbackConfirmedAt(observation.SampleUtc),
-            calibrationInProgress: false);
+            confirmedOwnAfcReadback: ownReadback,
+            calibrationInProgress: false,
+            nominalSign: nominal);
+          var tracking = owner.AfcController.Snapshot;
+          if (tracking.State != lastLoggedLockState ||
+              (observation.SampleUtc - lastLoggedAfcUtc).TotalSeconds >= 1)
+          {
+            Serilog.Log.Information(
+              "AFC trace: mode={Mode} state={State} confidence={Confidence:F2} " +
+              "sigmaHz={Sigma:F1} reference={Reference} ambiguous={Ambiguous} " +
+              "measuredIfHz={MeasuredIfHz:F1} predictedIfHz={PredictedIfHz:F1} " +
+              "errorHz={ErrorHz:F1} rxCorrectionHz={CorrectionHz:F1} " +
+              "mappingSign={Sign} catReadbackHz={CatHz:F0} " +
+              "ownAfcReadback={OwnReadback} ptt={Ptt} generation={Generation} detail={Detail}",
+              currentMode, tracking.State, observation.Confidence,
+              observation.SigmaHz, observation.HasAbsoluteReference,
+              observation.Ambiguous, observation.IfOffsetHz,
+              tracking.ObservedIfOffsetHz, tracking.ErrorHz,
+              tracking.CorrectionHz, tracking.MappingSign, readback,
+              ownReadback, owner.IsAfcTransmitting,
+              observation.Generation, tracking.Detail);
+            lastLoggedLockState = tracking.State;
+            lastLoggedAfcUtc = observation.SampleUtc;
+          }
           spectrum.SetMeasurement(
             observation.HasAbsoluteReference && observation.Confidence > 0
               ? observation.IfOffsetHz : null,
-            cfg.TargetOffsetHz);
+            AfcSpectrumReference.DisplayMarker(cfg, currentMode));
           owner.ApplyAfcRxCorrection();
           RefreshDisplay();
         }));
@@ -606,9 +672,18 @@ namespace SkyRoof.AFC
         currentMode = owner.CurrentAfcMode;
         AbortPolarityCalibration();
         var cfg = ctx.Settings.Afc;
-        input.Start(cfg.InputDeviceId, cfg.IfReferenceHz, currentMode,
-          cfg.SsbPilotEnabled, cfg.TargetOffsetHz,
-          cfg.InputSource, cfg.LoopbackDeviceId);
+        input.SetAcquisitionPreset(cfg.AcquisitionPreset);
+        if (cfg.InputSource == AfcIfSource.WasapiCapture &&
+            ctx.IfAf?.IsRunning == true &&
+            string.Equals(ctx.IfAf.InputDeviceId, cfg.InputDeviceId,
+              StringComparison.Ordinal) &&
+            ctx.IfAf.CaptureChannel == cfg.CaptureChannel)
+          input.StartShared(ctx.IfAf, cfg.IfReferenceHz, currentMode,
+            cfg.SsbPilotEnabled, AfcSpectrumReference.AnalysisOffset(cfg, currentMode));
+        else
+          input.Start(cfg.InputDeviceId, cfg.IfReferenceHz, currentMode,
+            cfg.SsbPilotEnabled, AfcSpectrumReference.AnalysisOffset(cfg, currentMode),
+            cfg.InputSource, cfg.LoopbackDeviceId, cfg.CaptureChannel);
         if (!input.IsRunning)
           throw new InvalidOperationException("12 kHz IF input did not start. Check routing.");
         active = true;
@@ -620,6 +695,7 @@ namespace SkyRoof.AFC
         if (!AutoAllowed && cfg.Control == AfcControlMode.Auto)
           cfg.Control = AfcControlMode.Assist;
         owner.AfcController.Configure(currentMode, EffectiveControl());
+        owner.AfcController.ConfigureSignalLoss(cfg.SignalLossPolicy);
         owner.UpdateRxAfcCheckbox(EffectiveControl() == AfcControlMode.Auto);
         if (currentMode == AfcSignalMode.SSB && cfg.SsbPilotEnabled)
           owner.AfcController.CenterOn(cfg.DesiredOffsetHz);
@@ -691,6 +767,18 @@ namespace SkyRoof.AFC
       "Signal ambiguous, weak, or reference absent; holding" => T("信号不明确、过弱或缺少参考，暂时保持", "Signal ambiguous, weak, or reference absent; holding"),
       "Acquiring selected carrier" => T("正在捕获所选载波", "Acquiring selected carrier"),
       "AFC divergence detected; automatic CAT writes stopped" => T("检测到 AFC 发散，已停止自动 CAT 写频", "AFC divergence detected; automatic CAT writes stopped"),
+      "Short signal gap: bounded residual prediction" => T("短暂信号间隙，正在限时预测频偏", "Short signal gap: bounded residual prediction"),
+      "AFC divergent: bounded rollback and reacquiring" => T("AFC 发散：撤回部分修正并重新捕获", "AFC divergence: bounded rollback and reacquisition"),
+      "AFC divergent: verified sign reversed, backtracking" => T("AFC 发散：确认频率方向反转并回退", "AFC divergence: verified polarity reversal and rollback"),
+      "Manual RF/IF sign conflicts with AFC readback; backtracking" => T("手动 RF/IF 方向与读回矛盾，正在回退", "Manual RF/IF polarity conflicts with readback: rolling back"),
+      "Manual RF/IF sign requires review" => T("手动 RF/IF 方向需要检查", "Review manually configured RF/IF direction"),
+      "Manual RF/IF polarity conflict: releasing correction" => T("RF/IF 方向冲突：正在释放旧修正", "RF/IF polarity conflict: releasing stale correction"),
+      "Divergence recovery: verifying new IF" => T("发散恢复：验证后续 IF 观测", "Divergence recovery: checking fresh IF"),
+      "No carrier: reverted to orbital Doppler prediction" => T("载波消失，已恢复轨道多普勒预测", "Carrier lost: orbital Doppler only"),
+      "No carrier: releasing stale AFC correction toward Doppler" => T("载波消失，正在平滑释放 AFC 旧修正", "Carrier lost: releasing stale AFC offset"),
+      "Weak FM carrier: temporal consistency verified" => T("弱 FM 载波：连续短窗频偏一致，已确认", "Weak FM carrier: temporal consistency verified"),
+      "No carrier: holding last verified AFC bias; Doppler still running" => T("信号丢失：保持最后可信 AFC 修正，轨道多普勒继续", "Signal lost: holding verified AFC bias, orbital Doppler continues"),
+      "No carrier: optional gentle residual release after 30s" => T("无信号超过30秒：按用户设置缓慢释放修正", "No carrier >30 s: optional gentle release"),
       "PTT active: AFC frozen" => T("正在发射，AFC 已冻结", "PTT active: AFC frozen"),
       "Learning IF/CAT polarity from observed tuning" => T("正在根据 CAT 调谐学习 IF 频率方向", "Learning IF/CAT polarity from observed tuning"),
       "Tracking reference" => T("正在跟踪参考信号", "Tracking reference"),
@@ -703,7 +791,20 @@ namespace SkyRoof.AFC
     private void RefreshDisplay()
     {
       RefreshLanguage();
-      owner.AfcController.Tick(DateTime.UtcNow);
+      owner.AfcController.Tick(DateTime.UtcNow, owner.IsAfcTransmitting);
+      var watchdog = owner.AfcController.Snapshot;
+      if (active && watchdog.State != lastLoggedLockState)
+      {
+        Serilog.Log.Information(
+          "AFC watchdog: mode={Mode} state={State} rxCorrectionHz={Hz:F1} " +
+          "predictedIfHz={IfHz:F1} detail={Detail}",
+          currentMode, watchdog.State, watchdog.CorrectionHz,
+          watchdog.ObservedIfOffsetHz, watchdog.Detail);
+        lastLoggedLockState = watchdog.State;
+      }
+      // Apply a controlled release of stale AFC residual even if no more
+      // IF callbacks arrive after squelch. RX CAT remains single-owner.
+      owner.ApplyAfcRxCorrection();
       // Probe-free AFC: no temporary CAT calibration offsets or waiting.
       owner.SetAfcCalibrationOffsetHz(0, false);
       var cfg = ctx.Settings.Afc;
@@ -714,7 +815,8 @@ namespace SkyRoof.AFC
       if (active && mode != currentMode)
       {
         currentMode = mode;
-        input.UpdateTarget(mode, cfg.SsbPilotEnabled, cfg.TargetOffsetHz);
+        input.UpdateTarget(mode, cfg.SsbPilotEnabled,
+          AfcSpectrumReference.AnalysisOffset(cfg, mode));
         spectrum.ClearHistory();
         owner.AfcController.Reset("Radio mode changed");
         if (!AutoAllowed && cfg.Control == AfcControlMode.Auto)
@@ -754,10 +856,13 @@ namespace SkyRoof.AFC
       bool validLatestReference = pipeline.LastObservation.HasValue &&
         latest.Generation == input.Generation && latest.Mode == currentMode &&
         latest.HasAbsoluteReference && !latest.Ambiguous &&
-        latest.Confidence >= .6;
+        (latest.Confidence >= .6 ||
+          (currentMode == AfcSignalMode.FM &&
+           latest.Confidence >= .22 && latest.SigmaHz <= 45 &&
+           s.State == AfcLockState.Locked));
       bool measured = validLatestReference &&
         s.LastObservationUtc != default &&
-        (s.State is AfcLockState.Acquiring or AfcLockState.Locked or AfcLockState.Hold);
+        (s.State is AfcLockState.Acquiring or AfcLockState.Locked or AfcLockState.Coasting or AfcLockState.Hold);
       metrics[0].Text = $"{owner.PredictedDownlinkDopplerHz:+0;-0;0} Hz";
       AfcObservation candidate = pipeline.LastObservation.GetValueOrDefault();
       bool freshCandidate = pipeline.LastObservation.HasValue &&
@@ -776,17 +881,26 @@ namespace SkyRoof.AFC
       metrics[1].ForeColor = measured && s.State == AfcLockState.Locked
         ? palette.Good : palette.Warning;
       string measureZh, measureEn;
-      if (pipeline.Completed == 0)
+      bool weakVerifiedFm = measured && currentMode == AfcSignalMode.FM &&
+        latest.Confidence < .6 && s.State == AfcLockState.Locked;
+      if (weakVerifiedFm)
       {
-        measureZh = pipeline.BufferedSamples < 24000
-          ? $"等待 IF PCM {pipeline.BufferedSamples}/24000"
+        measureZh = $"弱 FM 已时序确认：{latest.IfOffsetHz:+0;-0;0} Hz · σ {latest.SigmaHz:F0} Hz · 单窗质量 {latest.Confidence:P0}";
+        measureEn = $"Weak FM temporally verified: {latest.IfOffsetHz:+0;-0;0} Hz · σ {latest.SigmaHz:F0} Hz · individual quality {latest.Confidence:P0}";
+      }
+      else if (pipeline.Completed == 0)
+      {
+        int needed = AfcTrackingProfile.For(currentMode, cfg.SsbPilotEnabled,
+          cfg.AcquisitionPreset).MinimumSamples;
+        measureZh = pipeline.BufferedSamples < needed
+          ? $"等待 IF PCM {pipeline.BufferedSamples}/{needed}"
           : pipeline.Scheduled == 0
             ? "PCM 已到达，等待测量调度"
             : pipeline.Failed > 0
               ? $"测量任务失败 {pipeline.Failed} 次，请检查日志"
               : $"频率测量处理中，已提交 {pipeline.Scheduled} 次";
-        measureEn = pipeline.BufferedSamples < 24000
-          ? $"IF PCM buffer {pipeline.BufferedSamples}/24000"
+        measureEn = pipeline.BufferedSamples < needed
+          ? $"IF PCM buffer {pipeline.BufferedSamples}/{needed}"
           : pipeline.Scheduled == 0
             ? "PCM ready, waiting for measurement"
             : pipeline.Failed > 0
@@ -813,21 +927,29 @@ namespace SkyRoof.AFC
       stateLabel.ForeColor = active &&
         s.State == AfcLockState.Locked ? palette.Good : palette.Warning;
       string calibrationZh = cfg.RfIfSign is 1 or -1
-        ? "手动 RF/IF 映射" : "RF/IF 模式推定（闭环发散保护）";
+        ? "手动 RF/IF 映射" : "RF/IF 自动验证与有界回退";
       string calibrationEn = cfg.RfIfSign is 1 or -1
-        ? "Manual RF/IF mapping" : "Nominal IF mapping (divergence guarded)";
+        ? "Manual RF/IF mapping" : "Automatic IF polarity / bounded recovery";
+      string searchZh = currentMode == AfcSignalMode.FM
+        ? cfg.FmReferenceCandidateHz is double fm && double.IsFinite(fm)
+          ? $"FM 候选 {fm:+0;-0;0} Hz" : "FM 自动搜索"
+        : $"搜索 {cfg.TargetOffsetHz:+0;-0;0} Hz";
+      string searchEn = currentMode == AfcSignalMode.FM
+        ? cfg.FmReferenceCandidateHz is double fmEn && double.IsFinite(fmEn)
+          ? $"FM candidate {fmEn:+0;-0;0} Hz" : "FM free search"
+        : $"Search {cfg.TargetOffsetHz:+0;-0;0} Hz";
       stateDetail.Text = active
         ? T(
-            $"{DetailText(s.Detail)}  ·  搜索 {cfg.TargetOffsetHz:+0;-0;0} Hz  ·  居中 {cfg.DesiredOffsetHz:+0;-0;0} Hz  ·  RF/IF 方向 {(s.MappingSign == 0 ? "待确认" : s.MappingSign.ToString("+0;-0"))}" +
+            $"{DetailText(s.Detail)}  ·  {searchZh}  ·  居中 {cfg.DesiredOffsetHz:+0;-0;0} Hz  ·  RF/IF 方向 {(s.MappingSign == 0 ? "待确认" : s.MappingSign.ToString("+0;-0"))}" +
               $"  ·  {calibrationZh}  ·  底噪 {noiseFloorDb:F0} dBFS  ·  削波 {clipFraction:P1}",
-            $"{DetailText(s.Detail)}  ·  Search {cfg.TargetOffsetHz:+0;-0;0} Hz  ·  Center {cfg.DesiredOffsetHz:+0;-0;0} Hz  ·  RF/IF sign {(s.MappingSign == 0 ? "unknown" : s.MappingSign.ToString("+0;-0"))}" +
+            $"{DetailText(s.Detail)}  ·  {searchEn}  ·  Center {cfg.DesiredOffsetHz:+0;-0;0} Hz  ·  RF/IF sign {(s.MappingSign == 0 ? "unknown" : s.MappingSign.ToString("+0;-0"))}" +
               $"  ·  {calibrationEn}  ·  Noise {noiseFloorDb:F0} dBFS  ·  Clipping {clipFraction:P1}")
         : T("请在「高级设置」配置真正的 12 kHz IF 输入，再启动 IF 采集。",
             "Select a real 12 kHz IF input under Advanced settings, then start capture.");
       startButton.Text = active ? T("停止 IF", "STOP IF") : T("启动 IF", "START IF");
       bool canLock = active && currentMode != AfcSignalMode.FM;
       lockButton.Enabled = centerButton.Enabled = canLock;
-      spectrum.SetTargetInteraction(canLock);
+      spectrum.SetTargetInteraction(active); // FM also accepts hints.
       offButton.Enabled = assistButton.Enabled = active;
       autoButton.Enabled = active && AutoAllowed;
       AfcControlMode level = active ? EffectiveControl() : AfcControlMode.Off;
@@ -861,6 +983,7 @@ namespace SkyRoof.AFC
       if (active) Stop();
       owner.AfcTargetInvalidated -= OnTargetInvalidated;
       spectrum.TargetSelected -= OnSpectrumTargetSelected;
+      spectrum.ReferenceResetRequested -= OnSpectrumReferenceResetRequested;
       input.ObservationAvailable -= OnObservation;
       input.DisplayFrameAvailable -= OnDisplayFrame;
       spectrum.SpanChanged -= OnSpanChanged;

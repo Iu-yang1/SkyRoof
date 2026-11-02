@@ -3,10 +3,10 @@
   <!-- The single source of truth for the release version. Bump it here and nowhere else:
        MSBuild applies it to every project in the solution automatically, and the CI workflow
        runs build/Set-Version.ps1 to propagate it to the installer script and the docs. -->
-  <!-- Official v1.62 in-place SSTV IF FM/SSB and probe-free fast AFC replacement build: 2026-11-01. -->
+  <!-- Official v1.63 IF-to-AF receive and AFC release: 2026-11-02. -->
   <PropertyGroup>
     <Product>SkyRoof</Product>
-    <Version>1.62</Version>
+    <Version>1.63</Version>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
 

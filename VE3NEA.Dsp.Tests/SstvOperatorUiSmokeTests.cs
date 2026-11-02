@@ -76,7 +76,7 @@ namespace VE3NEA.Dsp.Tests
             item => item is SstvTxModeProfile profile && profile.Name == "Robot 36");
           Assert.Contains(rxModes.Items.Cast<object>(),
             item => item is SstvTxModeProfile profile && profile.Name == "MC110-N");
-          Assert.Equal(3, Field<ComboBox>(panel, "rxIfDemodBox").Items.Count);
+          Assert.Equal(4, Field<ComboBox>(panel, "rxIfDemodBox").Items.Count);
           Assert.False(Field<Button>(panel, "txStopButton").Enabled);
           Assert.False(Field<Button>(panel, "txSendButton").Enabled);
           Assert.Equal(-1, Field<ComboBox>(panel, "txOutputBox").SelectedIndex);

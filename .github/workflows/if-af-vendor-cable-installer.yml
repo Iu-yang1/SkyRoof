@@ -1,0 +1,160 @@
+name: SkyRoof IF-AF Bundled VB-CABLE Installer
+
+on:
+  push:
+    branches: [IF-AF-Test]
+    paths:
+      - 'SkyRoof/IF/**'
+      - 'SkyRoof/AFC/**'
+      - 'SkyRoof/Forms/MainForm.cs'
+      - 'SkyRoof/Widgets/FrequencyWidget.cs'
+      - 'VE3NEA.Dsp.Tests/IfAfAudioLinkTests.cs'
+      - 'VE3NEA.Dsp.Tests/IfAfSimulatedHardwareTests.cs'
+      - 'SkyRoof/Settings/SettingsDialog.cs'
+      - 'install/SkyRoof.iss'
+      - '.github/workflows/if-af-vendor-cable-installer.yml'
+      - 'scripts/Manage-VbCable.ps1'
+      - 'scripts/prepare-vbcable.ps1'
+      - 'docs/VB-CABLE-NOTICE.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: true
+
+      - name: Stage original VB-Audio basic VB-CABLE and verify vendor signatures
+        shell: pwsh
+        run: ./scripts/prepare-vbcable.ps1
+
+      - name: Verify VB-CABLE manager reports actionable archive failures
+        shell: pwsh
+        run: |
+          # This intentionally OMITs -ArchivePath and -LogPath. On Windows
+          # PowerShell 5.1 the old param() default expression used an empty
+          # $PSScriptRoot and aborted before any driver verification.
+          $diagnostic = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/Manage-VbCable.ps1 -Action Verify 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 1 -or $diagnostic -notmatch 'VB-CABLE FAILED at stage \[Bundled archive and SHA256\]') {
+            throw "Vendor manager default-path regression: code=$LASTEXITCODE; log=$diagnostic"
+          }
+          $vendorZip = Join-Path $env:GITHUB_WORKSPACE 'Vendor\VB-CABLE\VBCABLE_Driver_Pack45.zip'
+          $verified = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/Manage-VbCable.ps1 -Action Verify -ArchivePath $vendorZip 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0 -or $verified -notmatch 'Original VB-CABLE package verified') {
+            throw "Vendor manager signed-package verification regression: code=$LASTEXITCODE; log=$verified"
+          }
+          Write-Host 'PASS: Windows PowerShell 5.1 default paths and verified vendor package.'
+
+      - name: Validate CW release invariants
+        shell: pwsh
+        run: ./scripts/validate-cw-release.ps1
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@fd55a6f3b34392fa83fde1454582407d8c714123 # v4.0
+
+      - name: Build pinned HamNoise display backend
+        shell: pwsh
+        run: ./scripts/build-hamnoise.ps1
+
+      - name: Download WinDivert 2.2.2 x64
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $url = "https://github.com/basil00/WinDivert/releases/download/v2.2.2/WinDivert-2.2.2-A.zip"
+          $zip = Join-Path $env:RUNNER_TEMP "WinDivert-2.2.2-A.zip"
+          $extract = Join-Path $env:RUNNER_TEMP "WinDivert-2.2.2-A"
+
+          Invoke-WebRequest -Uri $url -OutFile $zip
+
+          $expectedSha256 = "63cb41763bb4b20f600b6de04e991a9c2be73279e317d4d82f237b150c5f3f15"
+          $actualSha256 = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha256 -ne $expectedSha256) {
+            throw "WinDivert archive SHA-256 mismatch: expected $expectedSha256, got $actualSha256"
+          }
+
+          if (Test-Path $extract) { Remove-Item $extract -Recurse -Force }
+          Expand-Archive -Path $zip -DestinationPath $extract -Force
+
+          $dll = Get-ChildItem $extract -Recurse -File -Filter "WinDivert.dll" |
+            Where-Object { $_.FullName -match "[\\/]x64[\\/]" } |
+            Select-Object -First 1
+          $sys = Get-ChildItem $extract -Recurse -File -Filter "WinDivert64.sys" |
+            Select-Object -First 1
+
+          if (-not $dll) { throw "x64 WinDivert.dll not found in upstream archive" }
+          if (-not $sys) { throw "WinDivert64.sys not found in upstream archive" }
+
+          $dest = Join-Path $env:GITHUB_WORKSPACE "Vendor\WinDivert\x64"
+          New-Item -ItemType Directory -Path $dest -Force | Out-Null
+          Copy-Item $dll.FullName (Join-Path $dest "WinDivert.dll") -Force
+          Copy-Item $sys.FullName (Join-Path $dest "WinDivert64.sys") -Force
+
+          Write-Host "WinDivert DLL: $($dll.FullName)"
+          Write-Host "WinDivert driver: $($sys.FullName)"
+
+      - name: Restore pinned SkyCAT submodule project assets
+        run: dotnet restore Vendor/SkyCAT/skycatd/skycatd.csproj --locked-mode
+
+      - name: Restore NuGet packages
+        run: nuget restore SkyRoof.sln -LockedMode
+
+      - name: Build solution
+        run: msbuild SkyRoof.sln /m /p:Configuration=Release /p:Platform=x64
+
+      - name: Run tests
+        env:
+          SKYROOF_SCOPE_LAYOUT_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/scope-dpi-layout
+          SKYROOF_SSTV_UI_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/sstv-ui
+        run: dotnet test VE3NEA.Dsp.Tests/VE3NEA.Dsp.Tests.csproj -c Release -p:Platform=x64 --no-restore
+
+      - name: Upload scope DPI layout fixtures
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: scope-dpi-layout-matrix
+          path: artifacts/scope-dpi-layout/*.png
+          if-no-files-found: warn
+
+      - name: Upload SSTV operator UI review images
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sstv-operator-ui-layouts
+          path: artifacts/sstv-ui/*.png
+          if-no-files-found: warn
+
+
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco upgrade innosetup --yes --no-progress
+
+      - name: Package SkyRoof with licensed, unmodified basic VB-CABLE
+        shell: cmd
+        run: '"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DIF_AF_BUNDLE_VBCABLE "install\SkyRoof.iss"'
+
+      - name: Smoke-test installed SkyRoof application
+        shell: pwsh
+        run: ./scripts/test-installer-payload.ps1
+
+      - name: Verify actual installed official VB-CABLE package
+        shell: pwsh
+        run: ./scripts/test-vbcable-installer-payload.ps1
+
+      - name: Upload SkyRoof IF-AF vendor-cable experimental installer
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: SkyRoof-IF-AF-Test-VB-CABLE-BUNDLED-AUTO-INSTALL
+          path: install/Output/SkyRoofSetup.exe
+          if-no-files-found: error
+          retention-days: 7

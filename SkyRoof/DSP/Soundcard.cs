@@ -25,6 +25,10 @@ namespace VE3NEA
   internal sealed class RingBufferWaveProvider<T> : IWaveProvider
   {
     private float volume;
+    private readonly bool padSilenceOnUnderrun;
+    private readonly int channelCount;
+    private long underrunSamples;
+    public long UnderrunSamples => Interlocked.Read(ref underrunSamples);
 
     public RingBuffer<T> Buffer { get; }
     public WaveFormat WaveFormat { get; }
@@ -39,9 +43,10 @@ namespace VE3NEA
       }
     }
 
-    public RingBufferWaveProvider(int samplingRate)
+    public RingBufferWaveProvider(int samplingRate, bool padSilenceOnUnderrun = false)
     {
-      int channelCount = typeof(T) == typeof(Complex32) ? 2 : 1;
+      channelCount = typeof(T) == typeof(Complex32) ? 2 : 1;
+      this.padSilenceOnUnderrun = padSilenceOnUnderrun;
       WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(samplingRate, channelCount);
       Buffer = new RingBuffer<T>(2 * samplingRate);
     }
@@ -54,9 +59,20 @@ namespace VE3NEA
     public int Read(byte[] buffer, int offset, int count)
     {
       int read = Buffer.ReadBytes(buffer, offset, count);
+      int returned = read;
+      if (padSilenceOnUnderrun && read < count)
+      {
+        // Audio never restarts with old ring data. Fill underruns with
+        // exact zeros and report them; preserve the common output behavior
+        // for all non-IF-AF clients by default.
+        Array.Clear(buffer, offset + read, count - read);
+        Interlocked.Add(ref underrunSamples,
+          (count - read) / (sizeof(float) * channelCount));
+        returned = count;
+      }
       float gain = volume;
 
-      if (gain == 1f) return read;
+      if (gain == 1f) return returned;
 
       int floatByteCount = read - (read % sizeof(float));
       Span<float> samples = MemoryMarshal.Cast<byte, float>(buffer.AsSpan(offset, floatByteCount));
@@ -67,7 +83,7 @@ namespace VE3NEA
         for (int i = 0; i < samples.Length; i++)
           samples[i] *= gain;
 
-      return read;
+      return returned;
     }
   }
 
@@ -348,15 +364,23 @@ namespace VE3NEA
     private readonly RingBufferWaveProvider<T> waveProvider;
     private WasapiOut? wasapiOut;
     private float volume;
+    private readonly int requestedLatencyMs;
+    public int RequestedLatencyMs => requestedLatencyMs;
+    public long UnderrunSamples => waveProvider.UnderrunSamples;
 
     public RingBuffer<T> Buffer => waveProvider.Buffer;
     public float Volume { get => volume; set => SetVolume(value); }
 
 
-    public OutputSoundcard(string? audioDeviceId = null, int? samplingRate = null) 
+    public OutputSoundcard(string? audioDeviceId = null, int? samplingRate = null,
+      int latencyMilliseconds = 200, bool padSilenceOnUnderrun = false)
       : base(audioDeviceId, samplingRate)
     {
-      waveProvider = new RingBufferWaveProvider<T>(SamplingRate);
+      if (latencyMilliseconds is < 10 or > 1000)
+        throw new ArgumentOutOfRangeException(nameof(latencyMilliseconds));
+      requestedLatencyMs = latencyMilliseconds;
+      waveProvider = new RingBufferWaveProvider<T>(
+        SamplingRate, padSilenceOnUnderrun);
       waveProvider.Volume = volume;
     }
 
@@ -370,7 +394,11 @@ namespace VE3NEA
       waveProvider.Buffer.Clear();
       waveProvider.Volume = volume;
 
-      wasapiOut = new WasapiOut(mmDevice!, AudioClientShareMode.Shared, false, 200);
+      // Event-driven shared WASAPI for the low-period IF path. Retain
+      // legacy polling for the compatibility 200-ms stream.
+      wasapiOut = new WasapiOut(mmDevice!,
+        AudioClientShareMode.Shared, requestedLatencyMs < 200,
+        requestedLatencyMs);
       wasapiOut.Init(waveProvider);
       wasapiOut.PlaybackStopped += Soundcard_Stopped;
       wasapiOut.Play();
@@ -428,6 +456,8 @@ namespace VE3NEA
     // without altering the established 200-ms behavior for other users.
     private readonly int captureBufferMilliseconds;
     private readonly int readerBlockSizeSamples;
+    private readonly AudioChannelChoice channelChoice;
+    private readonly int idleSleepMilliseconds;
 
     public int CaptureBufferMilliseconds => captureBufferMilliseconds;
     public int ReaderBlockSizeSamples => readerBlockSizeSamples;
@@ -436,7 +466,9 @@ namespace VE3NEA
       string? audioDeviceId = null,
       int? samplingRate = null,
       int captureBufferMilliseconds = 200,
-      int readerBlockSizeSamples = 4800)
+      int readerBlockSizeSamples = 4800,
+      AudioChannelChoice channelChoice = AudioChannelChoice.Mix,
+      int idleSleepMilliseconds = 20)
       : base(audioDeviceId, samplingRate)
     {
       if (captureBufferMilliseconds is < 20 or > 1000)
@@ -445,6 +477,10 @@ namespace VE3NEA
         throw new ArgumentOutOfRangeException(nameof(readerBlockSizeSamples));
       this.captureBufferMilliseconds = captureBufferMilliseconds;
       this.readerBlockSizeSamples = readerBlockSizeSamples;
+      this.channelChoice = channelChoice;
+      if (idleSleepMilliseconds is < 1 or > 20)
+        throw new ArgumentOutOfRangeException(nameof(idleSleepMilliseconds));
+      this.idleSleepMilliseconds = idleSleepMilliseconds;
     }
 
     protected override bool IsCurrentSoundcard(object? sender)
@@ -472,7 +508,9 @@ namespace VE3NEA
 
       ISampleProvider source = captureBuffer.ToSampleProvider();
       if (typeof(T) == typeof(float) && source.WaveFormat.Channels != 1)
-        source = new MonoMixSampleProvider(source);
+        source = channelChoice == AudioChannelChoice.Mix
+          ? new MonoMixSampleProvider(source)
+          : new IfChannelSelectSampleProvider(source, channelChoice);
       if (source.WaveFormat.SampleRate != SamplingRate)
         source = new WdlResamplingSampleProvider(source, SamplingRate);
       SampleSource = source;
@@ -551,7 +589,7 @@ namespace VE3NEA
             SamplesAvailable?.Invoke(this, Args);
           }
           else
-            Thread.Sleep(20); // avoid busy spin if device starves
+            Thread.Sleep(idleSleepMilliseconds); // low-latency IF only, legacy default remains 20 ms
         }
         catch (ObjectDisposedException) {}
         catch (InvalidOperationException) {}

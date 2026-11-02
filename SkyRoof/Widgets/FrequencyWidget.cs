@@ -47,6 +47,14 @@ namespace SkyRoof
     internal double PredictedRxCatRateHzPerSecond =>
       RadioLink.IsTerrestrial ? 0 : RadioLink.DownlinkDopplerRate;
 
+    // FollowRadio uses the UI-selected terrestrial receive mode or the
+    // satellite downlink mode, never an unrelated TX mode.
+    internal Slicer.Mode CurrentIfAfRadioMode =>
+      RadioLink.IsTerrestrial || RadioLink.TxCust == null
+        ? (DownlinkModeCombobox.SelectedItem is Slicer.Mode selected
+            ? selected : Slicer.Mode.USB)
+        : RadioLink.DownlinkMode;
+
     internal AfcSignalMode CurrentAfcMode =>
       (RadioLink.IsTerrestrial || RadioLink.TxCust == null
         ? (DownlinkModeCombobox.SelectedItem is Slicer.Mode selected ? selected : Slicer.Mode.FM)

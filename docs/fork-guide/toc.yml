@@ -10,6 +10,8 @@ items:
     href: embedded-skycat.md
   - name: FM / CW / SSB AFC
     href: afc.md
+  - name: 'IF-AF-Test: 12-kHz IF to AF (experiment)'
+    href: if-af-test.md
   - name: IC-9700 spectrum
     href: spectrum.md
   - name: ONVIF camera (GPU)

@@ -1,0 +1,37 @@
+VB-CABLE — Third-party donationware and distribution notice
+=============================================================
+
+SkyRoof optionally bundles the ORIGINAL, UNMODIFIED basic VB-CABLE Windows driver
+package supplied by VB-Audio Software (Vincent Burel).
+
+Origin: https://www.vb-cable.com/ and https://vb-audio.com/Cable/
+Official licensing and redistribution conditions:
+https://vb-audio.com/Services/licensing.htm
+
+VB-CABLE IS DONATIONWARE. All participation, donations and license payments
+are welcome. If you find it useful, please support the author at the official
+VB-Audio website. VB-Audio retains copyright and all rights to this software.
+SkyRoof does not own, modify, re-sign, recompile or represent the VB-CABLE
+kernel driver as a SkyRoof-developed component.
+
+This bundling is intended for end users who can see and identify VB-CABLE
+and independently donate/pay a license. Professional/enterprise/institutional
+distribution may require purchased licenses or a separate licensing agreement.
+Only the basic single VB-CABLE is included. A+B and C+D are NOT included.
+
+With informed user opt-in in the SkyRoof GUI installer, SkyRoof can invoke
+the original VB-Audio Windows setup. UAC/admin and a Windows reboot may be
+required; installation can be rejected by the operating system. SkyRoof will
+never disable driver integrity checks, Windows security or Secure Boot.
+If another application already installed VB-CABLE, SkyRoof will leave it
+alone. Removing SkyRoof does NOT remove the shared VB-CABLE driver. The
+SkyRoof Settings removal option is available only if SkyRoof installed it
+and expressly authorized by the user; uninstalling VB-CABLE can break
+other applications using it.
+
+Recommended audio routing:
+  SkyRoof 48-kHz IF->AF -> CABLE Input (Windows playback)
+  WSJT-X -> CABLE Output (Windows recording)
+
+The base VB-CABLE package can be obtained independently from
+https://vb-audio.com/Cable/

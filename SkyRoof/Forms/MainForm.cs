@@ -5,6 +5,7 @@ using MathNet.Numerics;
 using Serilog;
 using SGPdotNET.Observation;
 using SkyRoof.CW;
+using SkyRoof.IF;
 using VE3NEA;
 using VE3NEA.Clock;
 using WeifenLuo.WinFormsUI.Docking;
@@ -20,6 +21,11 @@ namespace SkyRoof
     private MouseButtons LastRotatorStatusMouseButton;
     private ToolStripProfessionalRenderer? ThemeRenderer;
     private readonly EmbeddedSkyCatHost EmbeddedSkyCat = new();
+    private readonly ToolStripStatusLabel[] ifAfStageLeds = new ToolStripStatusLabel[4];
+    private readonly ToolStripStatusLabel[] ifAfStageLabels = new ToolStripStatusLabel[4];
+    private IfAfStatus? previousIfAfStatus;
+    private DateTime lastIfAfClipUtc;
+    private long recentIfAfClips, recentIfAfOutputSamples;
     internal void ApplyEmbeddedSkyCatSettings() =>
       EmbeddedSkyCat.Apply(ctx.Settings.Cat.Embedded);
     internal bool EmbeddedSkyCatRunning => EmbeddedSkyCat.IsRunning;
@@ -39,6 +45,7 @@ namespace SkyRoof
       ConfigureCwConsoleMenuItem();
       ConfigureSstvConsoleMenuItem();
       ConfigureOnvifCameraMenu();
+      ConfigureIfAfLinkBar();
       ConfigureGitHubThemeMenuItems();
       AddOrbitSourceMenuItems();
       AddLogArchiveMenuItem();
@@ -132,6 +139,8 @@ namespace SkyRoof
           ctx.Settings.CwConsole,
           new CwOperatorTransmitInterlock());
       ApplyOutputStreamSettings();
+      ctx.IfAf = new IfAfService();
+      ApplyIfAfSettings();
       ApplyKissServerSettings();
       ctx.CatControl.ApplySettings();
       GainWidget.ApplyRfGain();
@@ -255,6 +264,8 @@ namespace SkyRoof
       // down the shared SDR/audio devices they may be observing.
       ctx.CwAudio?.Dispose();
       ctx.CwAudio = null;
+      ctx.IfAf?.Dispose();
+      ctx.IfAf = null;
 
       // dispose sdr and dsp
       ctx.Sdr?.Dispose();
@@ -584,6 +595,43 @@ namespace SkyRoof
       ctx.CwAudio?.ApplySettings();
     }
 
+    internal void ApplyIfAfSettings()
+    {
+      if (ctx.IfAf == null) return;
+      try
+      {
+        var route = ctx.Settings.IfAf.AudioRoute;
+        string? ifAfOutputId = IfAfSettings.ResolveRenderEndpoint(route,
+          ctx.Settings.IfAf.VacRenderDeviceId,
+          route == IfAfAudioRoute.AutoSignedCable
+            ? IfAfSignedCableDiscovery.Detect().RenderId : null);
+        if (ctx.Settings.IfAf.Enabled && ctx.Settings.OutputStream.Enabled &&
+            ctx.Settings.OutputStream.Type == DataStreamType.AudioToVac &&
+            ctx.Settings.OutputStream.Vac == ifAfOutputId)
+        {
+          // ApplyOutputStreamSettings enables the legacy stream before this
+          // preflight. Tear down the IF decoder first: a warning
+          // must never leave two active writers on one physical cable.
+          ctx.IfAf.Stop();
+          UpdateIfAfLinkBar();
+          throw new InvalidOperationException(
+            "IF-AF and SDR Output Stream cannot share one VAC render endpoint.");
+        }
+        ctx.IfAf.Apply(ctx.Settings.IfAf, CurrentIfAfMode());
+        UpdateIfAfLinkBar();
+      }
+      catch (Exception ex)
+      {
+        Serilog.Log.Error(ex, "IF-AF receive route failed");
+        MessageBox.Show(this, ex.Message, "IF-AF Receiver",
+          MessageBoxButtons.OK, MessageBoxIcon.Warning);
+      }
+    }
+
+    private IfAfMode CurrentIfAfMode() =>
+      IfAfSettings.Resolve(ctx.Settings.IfAf.Mode,
+        ctx.FrequencyControl.CurrentIfAfRadioMode);
+
     internal void ApplyKissServerSettings()
     {
       var sett = ctx.Settings.Telemetry.KissServer;
@@ -599,6 +647,7 @@ namespace SkyRoof
       ctx.AudioVacSoundcard.SetDeviceId(sett.Vac);
       ctx.IqVacSoundcard.SetDeviceId(sett.Vac);
       EnableDisableVac();
+      if (ctx.IfAf != null) ApplyIfAfSettings();
     }
 
     private void EnableDisableVac()
@@ -627,7 +676,10 @@ namespace SkyRoof
       else
         SoundcardLedLabel.ForeColor = Color.Lime;
 
-      if (!ctx.Settings.OutputStream.Enabled)
+      if (ctx.Settings.IfAf.Enabled)
+        VacLedLabel.ForeColor = ctx.IfAf?.IsRunning == true
+          ? Color.Lime : Color.Red;
+      else if (!ctx.Settings.OutputStream.Enabled)
         VacLedLabel.ForeColor = SystemColors.GrayText;
       else if (ctx.Settings.OutputStream.Type == DataStreamType.AudioToVac && !ctx.AudioVacSoundcard.IsRunning)
         VacLedLabel.ForeColor = Color.Red;
@@ -638,6 +690,15 @@ namespace SkyRoof
 
       SoundcardStatusLabel.ToolTipText = ctx.SpeakerSoundcard.GetDisplayName();
       VacStatusLabel.ToolTipText = OutputStreamTooltip();
+      if (ctx.Settings.IfAf.Enabled && ctx.IfAf != null)
+      {
+        var state = ctx.IfAf.Status;
+        VacStatusLabel.ToolTipText +=
+          $"\nIF→AF {state.Mode}: {(state.Running ? "RUNNING" : "STOPPED")}" +
+          $"\nIF: {state.InputSamples}  AF: {state.OutputSamples}" +
+          $"\nDropped blocks: {state.DroppedBlocks}; underruns: {state.OutputUnderrunSamples}" +
+          $"\n{state.Detail}";
+      }
     }
 
     private string OutputStreamTooltip()
@@ -1027,6 +1088,114 @@ namespace SkyRoof
           MessageBoxButtons.OK,
           MessageBoxIcon.Error);
       }
+    }
+
+    private void ConfigureIfAfLinkBar()
+    {
+      // Match RX CAT: each IF stage is a native ToolStrip LED + text pair.
+      // Avoid the old narrow custom-painted strip and its clipped labels.
+      string[] labels = { "IF", "DDC", "AF", "V-MIC" };
+      int index = StatusStrip.Items.IndexOf(RxCatLedLabel);
+      if (index < 0) index = StatusStrip.Items.Count;
+      for (int i = 0; i < labels.Length; i++)
+      {
+        var led = new ToolStripStatusLabel("n")
+        {
+          Name = "IfAf" + labels[i].Replace("-", "") + "LedLabel",
+          Font = new Font("Webdings", 9F),
+          ForeColor = SystemColors.GrayText,
+          AutoSize = false,
+          Size = new Size(21, 30),
+          TextAlign = ContentAlignment.MiddleCenter,
+          ToolTipText = labels[i] + " receiver stage"
+        };
+        var text = new ToolStripStatusLabel(labels[i])
+        {
+          Name = "IfAf" + labels[i].Replace("-", "") + "StatusLabel",
+          Font = new Font("Segoe UI", 10F),
+          TextAlign = ContentAlignment.MiddleLeft,
+          Margin = new Padding(0, 3, 5, 2)
+        };
+        led.Click += ShowIfAfLinkDiagnostics;
+        text.Click += ShowIfAfLinkDiagnostics;
+        ifAfStageLeds[i] = led;
+        ifAfStageLabels[i] = text;
+        StatusStrip.Items.Insert(index++, led);
+        StatusStrip.Items.Insert(index++, text);
+      }
+      UpdateIfAfLinkBar();
+    }
+
+    private void ShowIfAfLinkDiagnostics(object? sender, EventArgs e)
+    {
+      if (ctx.IfAf == null) return;
+      var x = ctx.IfAf.Status;
+      MessageBox.Show(this,
+        $"Mode: {x.Mode}  Receiver: {(x.Running ? "Running" : "Stopped")}\n" +
+        $"IF / AF samples: {x.InputSamples} / {x.OutputSamples}\n" +
+        $"Input / output RMS: {x.InputRmsDbfs:F1} / {x.OutputRmsDbfs:F1} dBFS\n" +
+        $"Dropped blocks: {x.DroppedBlocks}; output underruns: {x.OutputUnderrunSamples}\n" +
+        $"AF clipped samples: {x.ClippedSamples}\n\n" +
+        x.VirtualDeviceStatus + "\n" + x.Detail,
+        "IF→AF Receiver", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    private static Color IfAfLedColor(IfAfLinkState state) => state switch
+    {
+      IfAfLinkState.Ok => Color.Lime,
+      IfAfLinkState.Warning => Color.DarkOrange,
+      IfAfLinkState.Error => Color.Red,
+      _ => SystemColors.GrayText
+    };
+
+    private void UpdateIfAfLinkBar()
+    {
+      if (ifAfStageLeds[0] == null) return;
+      bool enabled = ctx.Settings.IfAf.Enabled;
+      IfAfStatus? status = ctx.IfAf?.Status;
+      DateTime nowUtc = DateTime.UtcNow;
+      if (!enabled || (status.HasValue && previousIfAfStatus.HasValue &&
+          status.Value.InputSamples < previousIfAfStatus.Value.InputSamples))
+      {
+        previousIfAfStatus = null; // disabled or capture restarted
+        lastIfAfClipUtc = default;
+      }
+      recentIfAfClips = recentIfAfOutputSamples = 0;
+      if (status.HasValue && previousIfAfStatus.HasValue &&
+          status.Value.OutputSamples >= previousIfAfStatus.Value.OutputSamples)
+      {
+        recentIfAfClips = Math.Max(0,
+          status.Value.ClippedSamples - previousIfAfStatus.Value.ClippedSamples);
+        recentIfAfOutputSamples = Math.Max(0,
+          status.Value.OutputSamples - previousIfAfStatus.Value.OutputSamples);
+        if (recentIfAfClips > 0) lastIfAfClipUtc = nowUtc;
+      }
+      // Hold the amber indicator for 2s after a REAL recent overload, not
+      // forever after one historical clipped sample.
+      bool recentClipWarning = lastIfAfClipUtc != default &&
+        (nowUtc - lastIfAfClipUtc).TotalSeconds < 2;
+      var indicators = IfAfLinkBar.Evaluate(enabled,
+        ctx.Settings.IfAf.AudioRoute, status, previousIfAfStatus,
+        nowUtc, recentClipWarning);
+      var stages = new[] { indicators.If, indicators.Ddc,
+        indicators.Af, indicators.VirtualMic };
+      string[] stageNames = { "IF capture", "DDC / demodulator",
+        "AF output", "Virtual microphone (paired endpoints)" };
+      string detail = status.HasValue
+        ? $"Mode: {status.Value.Mode}; IF: {status.Value.InputSamples}; " +
+          $"AF: {status.Value.OutputSamples}; dropped: {status.Value.DroppedBlocks}; " +
+          $"underrun: {status.Value.OutputUnderrunSamples}; clip: {status.Value.ClippedSamples}\n" +
+          $"{status.Value.VirtualDeviceStatus}\n{status.Value.Detail}"
+        : "IF→AF receiver not started";
+
+      for (int i = 0; i < stages.Length; i++)
+      {
+        ifAfStageLeds[i].ForeColor = IfAfLedColor(stages[i]);
+        string tip = $"{stageNames[i]}: {stages[i]}\n{detail}";
+        ifAfStageLeds[i].ToolTipText = tip;
+        ifAfStageLabels[i].ToolTipText = tip;
+      }
+      previousIfAfStatus = enabled ? status : null;
     }
 
     private void AddEmbeddedSkyCatMenuItem()
@@ -1610,6 +1779,13 @@ namespace SkyRoof
 
     private void VacLabel_Click(object sender, EventArgs e)
     {
+      if (ctx.Settings.IfAf.Enabled)
+      {
+        MessageBox.Show(this,
+          "IF→AF 使用独立虚拟声卡输出；请先在设置中关闭 IF→AF，再操作 SDR 输出开关。",
+          "IF-AF Receiver", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        return;
+      }
       ctx.Settings.OutputStream.Enabled = !ctx.Settings.OutputStream.Enabled;
       EnableDisableVac();
       ShowSoundcardLabels();
@@ -1916,6 +2092,8 @@ namespace SkyRoof
 
     private void timer_Tick(object sender, EventArgs e)
     {
+      ctx.IfAf?.UpdateMode(CurrentIfAfMode());
+      if ((TickCount & 3) == 0) UpdateIfAfLinkBar();
       // 8 Hz (125 ms) ticks
       TickCount += 1;
 
@@ -1957,6 +2135,7 @@ namespace SkyRoof
       ctx.TelemetryPanel?.UpdateTxStatus();
 
       ShowCpuUsage();
+      if (ctx.Settings.IfAf.Enabled) ShowSoundcardLabels();
     }
     private async Task OneMinuteTick()
     {

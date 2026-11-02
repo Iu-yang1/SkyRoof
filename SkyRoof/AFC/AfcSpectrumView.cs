@@ -49,6 +49,7 @@ namespace SkyRoof.AFC
     private readonly float[][] historyLevels = new float[HistoryRows][];
     private AfcThemePalette palette = AfcThemePalette.Current;
     public event Action<double>? TargetSelected;
+    public event Action? ReferenceResetRequested;
     public event Action<int>? SpanChanged;
     public int SpanHz => spanHz;
     public bool ShowWaterfall => showWaterfall;
@@ -208,7 +209,9 @@ namespace SkyRoof.AFC
       base.OnMouseDown(e);
       if (e.Button == MouseButtons.Right)
       {
+        // Reset reference even if no new FFT is available yet.
         SetSpan(12000);
+        ReferenceResetRequested?.Invoke();
         return;
       }
       if (!canSelect || e.Button != MouseButtons.Left ||
@@ -342,7 +345,9 @@ namespace SkyRoof.AFC
         titleBrush, new PointF(plot.Left, 7));
       if (canSelect && plot.Width > 350)
       {
-        string hint = "左键选台 · 滚轮缩放 · 右键复位";
+        string hint = SettingsLanguage.Text(
+          "左键选候选 · 滚轮缩放 · 右键复位",
+          "Left: candidate · Wheel: zoom · Right: reset");
         SizeF size = g.MeasureString(hint, Font);
         g.DrawString(hint, Font, labelBrush,
           new PointF(plot.Right - size.Width, 7));

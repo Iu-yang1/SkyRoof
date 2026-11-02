@@ -6,6 +6,7 @@ using VE3NEA;
 namespace SkyRoof
 {
   public enum AfcIfSource { WasapiCapture, PlaybackLoopback }
+  public enum AfcSignalLossPolicy { HoldLast, GentleRelease }
 
   /// <summary>
   /// Frequency tracking is independent of the saved satellite/transponder
@@ -23,6 +24,17 @@ namespace SkyRoof
     [TypeConverter(typeof(InputSoundcardNameConverter))]
     public string? InputDeviceId { get; set; } =
       Soundcard.GetPreferredSoundcardId(DataFlow.Capture, "USB Audio CODEC", "ICOM");
+
+    [DisplayName("IF 录音声道")]
+    [Description("选择 IC-9700 USB IF 实际所在声道。默认 Left；若双声道反相或一侧为 AF，不要混合。")]
+    [DefaultValue(AudioChannelChoice.Left)]
+    public AudioChannelChoice CaptureChannel { get; set; } = AudioChannelChoice.Left;
+
+    [DisplayName("捕获策略（速度 / 灵敏度）")]
+    [Description("Adaptive=约250ms开始短窗测频，随新增采样用多分辨率FFT和重叠窗改进精度；Fast=最短处理路径；Balanced=原有平衡策略；Sensitive=较长积分提高弱信号可靠性。不会降低CAT置信度/安全限制。")]
+    [DefaultValue(AFC.AfcAcquisitionPreset.Adaptive)]
+    public AFC.AfcAcquisitionPreset AcquisitionPreset { get; set; } =
+      AFC.AfcAcquisitionPreset.Adaptive;
 
     [DisplayName("AFC 控制等级")]
     [DefaultValue(AFC.AfcControlMode.Assist)]
@@ -42,14 +54,18 @@ namespace SkyRoof
     public double IfReferenceHz { get; set; } = 12000;
 
     [DisplayName("RF/IF 频率方向 (0=自动，±1=手动)")]
-    [Description("0=根据当前接收模式立即推定 IF/RF 方向，不执行 CAT 测试调谐；闭环发散保护会停止错误方向的写频。±1=人工覆盖，具体电台与 IF 路由应实测确认。")]
+    [Description("0=根据模式推定并使用独立 AFC CAT/IF 读回修正方向；遇到发散时有界回退、重新捕获，不再锁死 Fault。±1=人工覆盖，若与读回矛盾则暂停自动积分并提示检查。")]
     [DefaultValue(0)]
     public int RfIfSign { get; set; } = 0;
 
     [DisplayName("目标搜索 IF 偏移 (Hz)")]
-    [Description("CW/导频参考信号的搜索中心；也可直接点击实时 IF 频谱选择目标。")]
+    [Description("CW/导频参考的搜索中心；FM 有独立候选参考。频谱左键选择，右键清除。")]
     [DefaultValue(0.0)]
     public double TargetOffsetHz { get; set; } = 0;
+
+    [Browsable(false)]
+    [Description("Optional FM spectrum-click acquisition hint; null allows unrestricted FM search.")]
+    public double? FmReferenceCandidateHz { get; set; }
 
     [DisplayName("希望居中的 IF 偏移 (Hz)")]
     [Description("“居中并锁定”要将所选信号移动到的位置，与目标搜索频率相互独立。")]
@@ -69,6 +85,12 @@ namespace SkyRoof
     [DisplayName("AFC 最大修正量 (Hz)")]
     [DefaultValue(2000.0)]
     public double MaxCorrectionHz { get; set; } = 2000;
+
+    [DisplayName("信号丢失后的 AFC 修正策略")]
+    [Description("HoldLast（推荐）=保留最后确认的 RX AFC 频偏，卫星轨道多普勒继续运行，不因短暂静音或 QSB 快速归零。GentleRelease=无信号 30 秒后以 10 Hz/s 缓慢回归。人工调谐、切卫星、关闭 AFC 仍会重置修正。")]
+    [DefaultValue(AfcSignalLossPolicy.HoldLast)]
+    public AfcSignalLossPolicy SignalLossPolicy { get; set; } =
+      AfcSignalLossPolicy.HoldLast;
 
     [DisplayName("FM 写频死区 (Hz)")]
     [DefaultValue(20.0)]

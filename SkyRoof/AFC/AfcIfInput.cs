@@ -3,19 +3,24 @@ using System.Threading;
 using System.Threading.Tasks;
 using Serilog;
 using VE3NEA;
+using SkyRoof.IF;
 
 namespace SkyRoof.AFC
 {
   /// <summary>True 12-kHz IF PCM input, independent of the CW AF decoder.</summary>
   public sealed class AfcIfInput : IDisposable
   {
-    private readonly InputSoundcard<float> input = new(
-      captureBufferMilliseconds: 40, readerBlockSizeSamples: 1600);
+    private InputSoundcard<float> input = new(
+      captureBufferMilliseconds: 40, readerBlockSizeSamples: 1600,
+      channelChoice: AudioChannelChoice.Left);
+    private AudioChannelChoice captureChannel = AudioChannelChoice.Left;
     private readonly LoopbackInputSoundcard loopback = new();
+    private IfAfService? sharedIf;
     private readonly object sync = new();
     private readonly object displayGate = new();
     private readonly AfcIfDisplayAnalyzer displayAnalyzer = new();
     private int displayBusy;
+    private int acquisitionPreset = (int)AfcAcquisitionPreset.Adaptive;
     private long lastDisplayMs;
     private volatile bool displayEnabled;
     public bool DisplayEnabled
@@ -24,6 +29,29 @@ namespace SkyRoof.AFC
       set => displayEnabled = value;
     }
     public event Action<AfcIfDisplayFrame>? DisplayFrameAvailable;
+
+    /// <summary>Changes the strategy without reopening USB IF. Discards
+    /// previously buffered windows so that the next estimate is fresh.</summary>
+    public void SetAcquisitionPreset(AfcAcquisitionPreset preset)
+    {
+      if (!Enum.IsDefined(typeof(AfcAcquisitionPreset), preset))
+        throw new ArgumentOutOfRangeException(nameof(preset));
+      lock (sync)
+      {
+        if (acquisitionPreset == (int)preset) return;
+        acquisitionPreset = (int)preset;
+        generation++;
+        write = used = 0;
+        lastResultUtc = default;
+        latestObservation = null;
+        lastAnalysisMs = 0;
+      }
+    }
+
+    public AfcAcquisitionPreset AcquisitionPreset
+    {
+      get { lock (sync) return (AfcAcquisitionPreset)acquisitionPreset; }
+    }
 
     public void ConfigureDisplay(bool blackmanHarris, bool haloReduction,
       double smoothingMs)
@@ -95,9 +123,12 @@ namespace SkyRoof.AFC
     private double targetOffset;
 
     public event Action<AfcObservation>? ObservationAvailable;
-    public bool IsRunning => input.IsRunning || loopback.IsRunning;
+    public bool IsRunning => input.IsRunning || loopback.IsRunning ||
+      sharedIf?.IsRunning == true;
     public long Generation { get { lock (sync) return generation; } }
-    public string DeviceName => loopback.IsRunning ? loopback.GetDisplayName() : input.GetDisplayName();
+    public string DeviceName => sharedIf?.IsRunning == true
+      ? "Shared USB 12 kHz IF" : loopback.IsRunning ? loopback.GetDisplayName()
+        : input.GetDisplayName();
 
     public AfcIfInput()
     {
@@ -109,7 +140,8 @@ namespace SkyRoof.AFC
 
     public void Start(string? device, double referenceHz,
       AfcSignalMode signalMode, bool ssbPilot, double offset,
-      AfcIfSource source = AfcIfSource.WasapiCapture, string? loopbackDevice = null)
+      AfcIfSource source = AfcIfSource.WasapiCapture, string? loopbackDevice = null,
+      AudioChannelChoice ifChannel = AudioChannelChoice.Left)
     {
       ObjectDisposedException.ThrowIf(disposed, this);
       if (source == AfcIfSource.WasapiCapture && string.IsNullOrWhiteSpace(device))
@@ -117,8 +149,21 @@ namespace SkyRoof.AFC
       if (source == AfcIfSource.PlaybackLoopback && string.IsNullOrWhiteSpace(loopbackDevice))
         throw new ArgumentException("Select the remote IF playback endpoint.");
       var newProcessor = new AfcSignalProcessing(48000, referenceHz);
+      DetachShared();
       input.Enabled = false;
       loopback.Enabled = false;
+      if (source == AfcIfSource.WasapiCapture && ifChannel != captureChannel)
+      {
+        // The channel selector is part of the WASAPI reader pipeline.
+        // Recreate it only on an explicit operator channel change.
+        input.SamplesAvailable -= OnSamples;
+        input.Dispose();
+        input = new InputSoundcard<float>(
+          captureBufferMilliseconds: 40, readerBlockSizeSamples: 1600,
+          channelChoice: ifChannel) { Retry = true };
+        input.SamplesAvailable += OnSamples;
+        captureChannel = ifChannel;
+      }
       if (source == AfcIfSource.PlaybackLoopback)
         loopback.SetDeviceId(loopbackDevice);
       else input.SetDeviceId(device);
@@ -140,11 +185,41 @@ namespace SkyRoof.AFC
       else input.Enabled = true;
     }
 
+    public void StartShared(IfAfService hub, double referenceHz,
+      AfcSignalMode signalMode, bool ssbPilot, double offset)
+    {
+      ArgumentNullException.ThrowIfNull(hub);
+      if (!hub.IsRunning) throw new InvalidOperationException("Shared IF input stopped");
+      Stop();
+      lock (sync)
+      {
+        generation++;
+        processor = new AfcSignalProcessing(48000, referenceHz);
+        mode = signalMode;
+        pilot = ssbPilot;
+        targetOffset = offset;
+      }
+      sharedIf = hub;
+      hub.RawIfAvailable += OnSamples;
+    }
+
+    private void DetachShared()
+    {
+      var hub = sharedIf;
+      sharedIf = null;
+      if (hub != null) hub.RawIfAvailable -= OnSamples;
+    }
+
     public void UpdateTarget(AfcSignalMode signalMode, bool ssbPilot, double offset)
     {
       lock (sync)
       {
-        if (mode != signalMode || pilot != ssbPilot || Math.Abs(offset - targetOffset) > .5)
+        // NaN is the unrestricted-FM sentinel. Its transitions must
+        // invalidate the old measurement generation.
+        bool targetChanged = double.IsNaN(offset)
+          ? !double.IsNaN(targetOffset)
+          : double.IsNaN(targetOffset) || Math.Abs(offset - targetOffset) > .5;
+        if (mode != signalMode || pilot != ssbPilot || targetChanged)
         {
           generation++;
           write = used = 0;
@@ -176,6 +251,7 @@ namespace SkyRoof.AFC
 
     public void Stop()
     {
+      DetachShared();
       input.Enabled = false;
       loopback.Enabled = false;
       lock (sync)
@@ -198,6 +274,7 @@ namespace SkyRoof.AFC
         long gen = 0;
         DateTime packetUtc;
         AfcSignalMode selected = default;
+        AfcAcquisitionPreset preset = AfcAcquisitionPreset.Adaptive;
         bool refPresent = false;
         double expected = 0;
         AfcSignalProcessing analyzer;
@@ -240,18 +317,24 @@ namespace SkyRoof.AFC
             for (int i = 0; i < n; i++)
               displayPcm[i] = buffer[(start + i) % buffer.Length];
           }
-          // Measure at 250 ms cadence once 500 ms of IF PCM is buffered.
-          // UI FFT is deliberately independent of the ~250ms AFC loop.
-          if (used >= 24000 && tick - lastAnalysisMs >= 250 &&
+          // Mode-specific short bursts. Never analyze 2 seconds of stale
+          // FM when a 400-ms SO-50 voice transmission is all we have.
+          // CW and piloted SSB have dedicated (slightly longer) windows.
+          var profile = AfcTrackingProfile.For(mode, pilot,
+            (AfcAcquisitionPreset)acquisitionPreset);
+          if (used >= profile.MinimumSamples &&
+              tick - lastAnalysisMs >= profile.CadenceMilliseconds &&
               Interlocked.CompareExchange(ref busy, 1, 0) == 0)
           {
             lastAnalysisMs = tick;
             scheduledAnalyses++;
-            pcm = new float[used];
-            int start = (write - used + buffer.Length) % buffer.Length;
-            for (int i = 0; i < used; i++)
+            int n = Math.Min(used, profile.WindowSamples);
+            pcm = new float[n];
+            int start = (write - n + buffer.Length) % buffer.Length;
+            for (int i = 0; i < n; i++)
               pcm[i] = buffer[(start + i) % buffer.Length];
             selected = mode;
+            preset = (AfcAcquisitionPreset)acquisitionPreset;
             refPresent = pilot;
             expected = targetOffset;
           }
@@ -285,12 +368,12 @@ namespace SkyRoof.AFC
         {
           try
           {
-            double centerLagSeconds = selected == AfcSignalMode.FM
-              ? Math.Min(data.Length / 48000.0, 2.0) / 2.0
-              : 8192.0 / 24000 / 2.0;
+            // Timestamp the physical center of this actual short window.
+            // Different modes do NOT share a fictitious 2-second lag.
+            double centerLagSeconds = data.Length / 48000.0 / 2.0;
             DateTime analysisUtc = packetUtc.AddSeconds(-centerLagSeconds);
             AfcObservation obs = analyzer.Analyze(data, selected, analysisUtc,
-              version, expected, refPresent);
+              version, expected, refPresent, preset);
             lock (sync)
             {
               if (disposed || version != generation) return;
