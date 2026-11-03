@@ -196,20 +196,21 @@ jobs:
           fail_on_unmatched_files: true
           target_commitish: ${{ github.sha }}
           body: |
-            SkyRoof Fork v.${{ steps.get_version.outputs.version }} — Settings layout hotfix.
+            SkyRoof Plus v.${{ steps.get_version.outputs.version }} — November 2026 verified maintenance release.
 
             ### English
-            - Restore Orbit / Ephemeris Sources, User, Audio and OutputStream sections previously obscured by top toolbars.
-            - Keep the VB-CABLE and language toolbars in their own layout rows, without covering settings.
-            - Preserve all settings, English/Chinese labels, IF→AF DSP, AFC and PTT behavior.
-            - Original verified basic VB-CABLE optional installer remains. Application installer may be unsigned.
+            - Include verified embedded SkyCAT and TX-5DR safe coexistence documentation, with a read-only proxy identity/frequency/mode diagnostic.
+            - Preserve the corrected Settings PropertyGrid layout, the 12 kHz IF-to-AF DSP chain, CAT/PTT lease isolation, satellite Doppler and CW Console.
+            - Follow the documented SkyCAT 4532/4534 protocol and PTT ownership restrictions. TX-5DR must not use the WSJT-X 4534 proxy for independent frequency or mode writes.
+            - Windows installer from the verified CI build; signing depends on the available SignPath configuration.
 
             ### 中文
-            - 修复 VB-CABLE 与语言栏覆盖 PropertyGrid，恢复“轨道与星历来源、用户信息、音频、音频输出流”。
-            - 设置界面采用独立三行布局，避免顶部控件遮挡设置项。
-            - 保留原配置、中英语言、IF→AF、AFC 和电台控制功能。
+            - 收录 TX-5DR 与 SkyRoof 内嵌 SkyCAT 的安全共存文档、只读端口身份/频率/模式诊断脚本。
+            - 保留已有设置页面修复、12 kHz IF→AF DSP、CAT/PTT 租约隔离、多普勒控制及 CW Console。
+            - SkyCAT 4534 为 WSJT-X 受限代理，不能用作 TX-5DR 自主调频端口。
+            - 安装包由 CI 生成，是否签名以发布产物验证结果为准。
 
-            Changelog / 更新记录: https://github.com/Iu-yang1/SkyRoof/blob/master/FORK-CHANGELOG.md
+            Fork changelog: https://github.com/Iu-yang1/SkyRoof-Plus/blob/master/FORK-CHANGELOG.md
 
           files:  install/SkyRoofSetup-v.${{ steps.get_version.outputs.version }}.exe
         env:
