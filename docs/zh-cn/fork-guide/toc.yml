@@ -8,6 +8,8 @@ items:
     href: radio-and-ft4.md
   - name: 内嵌 SkyCAT 串口、频谱和 CW 服务
     href: embedded-skycat.md
+  - name: TX-5DR / SkyCAT 兼容与控制权
+    href: tx5dr-skycat.md
   - name: FM / CW / SSB 自动频率追踪
     href: afc.md
   - name: 'IF-AF-Test 实验：12 kHz IF 解调到 WSJT-X'

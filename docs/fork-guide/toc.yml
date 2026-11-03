@@ -8,6 +8,8 @@ items:
     href: radio-and-ft4.md
   - name: Embedded SkyCAT CAT server
     href: embedded-skycat.md
+  - name: TX-5DR and SkyCAT interoperability
+    href: tx5dr-skycat.md
   - name: FM / CW / SSB AFC
     href: afc.md
   - name: 'IF-AF-Test: 12-kHz IF to AF (experiment)'
