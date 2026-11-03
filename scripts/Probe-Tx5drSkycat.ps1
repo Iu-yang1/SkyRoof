@@ -16,7 +16,6 @@ try {
   $reader=[System.IO.StreamReader]::new($stream,[System.Text.Encoding]::ASCII,$false,1024,$true)
   $writer=[System.IO.StreamWriter]::new($stream,[System.Text.Encoding]::ASCII,1024,$true)
   $writer.AutoFlush=$true
-  $writer.NewLine="\n"
   $writer.WriteLine('\get_info')
   $info=$reader.ReadLine()
   if($info -ne 'SkyCAT WSJT-X compatibility proxy'){
