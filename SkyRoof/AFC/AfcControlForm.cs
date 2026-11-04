@@ -633,15 +633,17 @@ namespace SkyRoof.AFC
             owner.RadioLink.TxCust != null
               ? owner.RadioLink.DownlinkMode : Slicer.Mode.USB);
           bool ownReadback = owner.IsAfcReadbackConfirmedAt(observation.SampleUtc);
-          owner.AfcController.Observe(observation, readback,
-            cfg.RfIfSign, Math.Clamp(cfg.MaxCorrectionHz, 1, 10000),
-            Math.Clamp(cfg.FmDeadbandHz, 1, 500),
-            Math.Clamp(cfg.ToneDeadbandHz, .5, 100),
-            owner.IsAfcTransmitting,
-            catReadbackIsTimeAligned: double.IsFinite(readback),
-            confirmedOwnAfcReadback: ownReadback,
-            calibrationInProgress: false,
-            nominalSign: nominal);
+          owner.AfcController.Observe(observation,
+            new AfcObservationContext(
+              readback, cfg.RfIfSign,
+              Math.Clamp(cfg.MaxCorrectionHz, 1, 10000),
+              Math.Clamp(cfg.FmDeadbandHz, 1, 500),
+              Math.Clamp(cfg.ToneDeadbandHz, .5, 100),
+              owner.IsAfcTransmitting,
+              CatReadbackIsTimeAligned: double.IsFinite(readback),
+              ConfirmedOwnAfcReadback: ownReadback,
+              CalibrationInProgress: false,
+              NominalSign: nominal));
           var tracking = owner.AfcController.Snapshot;
           if (tracking.State != lastLoggedLockState ||
               (observation.SampleUtc - lastLoggedAfcUtc).TotalSeconds >= 1)

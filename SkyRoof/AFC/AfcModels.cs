@@ -137,6 +137,22 @@ namespace SkyRoof.AFC
     double SpectrumMinHz = -6000,
     double SpectrumStepHz = 12000.0 / 511);
 
+  /// <summary>
+  /// Immutable time-aligned CAT/control context for one AFC observation.
+  /// Defaults match the legacy Observe overload and do not change servo math.
+  /// </summary>
+  public readonly record struct AfcObservationContext(
+    double CatReadbackHz,
+    int ConfiguredSign,
+    double MaxCorrectionHz,
+    double FmDeadbandHz,
+    double ToneDeadbandHz,
+    bool Transmitting,
+    bool CatReadbackIsTimeAligned = true,
+    bool ConfirmedOwnAfcReadback = false,
+    bool CalibrationInProgress = false,
+    int NominalSign = 0);
+
   public readonly record struct AfcSnapshot(
     AfcLockState State,
     AfcSignalMode Mode,

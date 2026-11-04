@@ -208,6 +208,8 @@ namespace SkyRoof.AFC
       }
     }
 
+    // Compatibility adapter for code using the pre-refactor scalar API.
+    // The main implementation accepts one immutable context snapshot.
     public void Observe(AfcObservation obs, double catReadbackHz,
       int configuredSign, double maxCorrectionHz,
       double fmDeadbandHz, double toneDeadbandHz, bool transmitting,
@@ -216,6 +218,19 @@ namespace SkyRoof.AFC
       bool calibrationInProgress = false,
       int nominalSign = 0)
     {
+      Observe(obs, new AfcObservationContext(
+        catReadbackHz, configuredSign, maxCorrectionHz,
+        fmDeadbandHz, toneDeadbandHz, transmitting,
+        catReadbackIsTimeAligned, confirmedOwnAfcReadback,
+        calibrationInProgress, nominalSign));
+    }
+
+    public void Observe(AfcObservation obs, AfcObservationContext context)
+    {
+      var (catReadbackHz, configuredSign, maxCorrectionHz,
+        fmDeadbandHz, toneDeadbandHz, transmitting,
+        catReadbackIsTimeAligned, confirmedOwnAfcReadback,
+        calibrationInProgress, nominalSign) = context;
       lock (sync)
       {
         // Divergence is recoverable. Never latch Fault while leaving an
