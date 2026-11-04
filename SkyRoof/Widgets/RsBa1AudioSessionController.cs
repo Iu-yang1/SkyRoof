@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Serilog;
 using NAudio.CoreAudioApi;
 
 namespace SkyRoof
@@ -70,21 +71,42 @@ namespace SkyRoof
               string title = process.MainWindowTitle ?? "";
               string company = "";
               try { company = process.MainModule?.FileVersionInfo.CompanyName ?? ""; }
-              catch (System.ComponentModel.Win32Exception) { }
-              catch (InvalidOperationException) { }
-              catch (System.UnauthorizedAccessException) { }
+              catch (System.ComponentModel.Win32Exception)
+              {
+                Log.Debug("RS-BA1 audio session process module temporarily inaccessible");
+              }
+              catch (InvalidOperationException)
+              {
+                Log.Debug("RS-BA1 audio session process exited during enumeration");
+              }
+              catch (System.UnauthorizedAccessException)
+              {
+                Log.Debug("RS-BA1 audio session process metadata access denied");
+              }
 
               found.Add(new AudioSessionInfo(
                 process.Id, name, title, device.ID, device.FriendlyName,
                 session.SimpleAudioVolume.Volume,
                 IsLikelyRemoteUtility(name, title, company)));
             }
-            catch (ArgumentException) { } // session process exited
-            catch (InvalidOperationException) { } // session disconnected
-            catch (System.Runtime.InteropServices.COMException) { }
+            catch (ArgumentException)
+            {
+              Log.Debug("RS-BA1 audio session process exited during enumeration");
+            }
+            catch (InvalidOperationException)
+            {
+              Log.Debug("RS-BA1 audio session disappeared during enumeration");
+            }
+            catch (System.Runtime.InteropServices.COMException)
+            {
+              Log.Debug("RS-BA1 audio session disconnected during enumeration");
+            }
           }
         }
-        catch (System.Runtime.InteropServices.COMException) { }
+        catch (System.Runtime.InteropServices.COMException)
+        {
+          Log.Debug("RS-BA1 Windows audio device was removed during enumeration");
+        }
         finally { device.Dispose(); }
       }
       return found;
@@ -125,7 +147,11 @@ namespace SkyRoof
       // temporary MMDevice COM references alive for other output devices.
       MMDevice device;
       try { device = enumerator.GetDevice(target.DeviceId); }
-      catch (System.Runtime.InteropServices.COMException) { return false; }
+      catch (System.Runtime.InteropServices.COMException)
+      {
+        Log.Debug("RS-BA1 volume device is no longer available");
+        return false;
+      }
 
       try
       {
@@ -145,10 +171,17 @@ namespace SkyRoof
             session.SimpleAudioVolume.Volume = Math.Clamp(scalar, 0f, 1f);
             return true;
           }
-          catch (ArgumentException) { return false; }
+          catch (ArgumentException)
+          {
+            Log.Debug("RS-BA1 volume target process exited");
+            return false;
+          }
         }
       }
-      catch (System.Runtime.InteropServices.COMException) { }
+      catch (System.Runtime.InteropServices.COMException)
+      {
+        Log.Warning("RS-BA1 session volume write failed: audio device disconnected");
+      }
       finally { device.Dispose(); }
       return false;
     }

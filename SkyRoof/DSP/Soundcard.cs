@@ -406,7 +406,11 @@ namespace VE3NEA
 
     protected override void DoStop()
     {
-      try { wasapiOut?.Stop(); } catch { }
+      try { wasapiOut?.Stop(); }
+      catch (Exception ex)
+      {
+        Log.Debug(ex, "WASAPI output already unavailable during stop");
+      }
     }
 
     protected override void Cleanup()
@@ -529,7 +533,11 @@ namespace VE3NEA
 
     protected override void DoStop()
     {
-      try { soundIn?.StopRecording(); } catch { }
+      try { soundIn?.StopRecording(); }
+      catch (Exception ex)
+      {
+        Log.Debug(ex, "WASAPI input already unavailable during stop");
+      }
     }
 
     protected override void Cleanup()
@@ -591,9 +599,18 @@ namespace VE3NEA
           else
             Thread.Sleep(idleSleepMilliseconds); // low-latency IF only, legacy default remains 20 ms
         }
-        catch (ObjectDisposedException) {}
-        catch (InvalidOperationException) {}
-        catch (COMException) {}
+        catch (ObjectDisposedException)
+        {
+          Log.Debug("WASAPI input disposed while polling PCM");
+        }
+        catch (InvalidOperationException)
+        {
+          Log.Debug("WASAPI input stopped while polling PCM");
+        }
+        catch (COMException ex)
+        {
+          Log.Warning(ex, "WASAPI input COM endpoint failed while polling PCM");
+        }
     }
   }
 }
