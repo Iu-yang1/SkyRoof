@@ -7,7 +7,7 @@ namespace SkyRoof.AFC
   /// is ever used; it never owns CAT TX, RIT, or saved transponder offsets.
   /// Tune commands are applied by FrequencyWidget's single CAT writer.
   /// </summary>
-  public sealed class AfcController
+  public sealed partial class AfcController
   {
     private readonly object sync = new();
     private AfcSnapshot state = new(
@@ -227,101 +227,28 @@ namespace SkyRoof.AFC
 
     public void Observe(AfcObservation obs, AfcObservationContext context)
     {
-      var (catReadbackHz, configuredSign, maxCorrectionHz,
-        fmDeadbandHz, toneDeadbandHz, transmitting,
-        catReadbackIsTimeAligned, confirmedOwnAfcReadback,
-        calibrationInProgress, nominalSign) = context;
+      double catReadbackHz = context.CatReadbackHz;
+      int configuredSign = context.ConfiguredSign;
+      bool transmitting = context.Transmitting;
+      bool catReadbackIsTimeAligned = context.CatReadbackIsTimeAligned;
+      bool confirmedOwnAfcReadback = context.ConfirmedOwnAfcReadback;
+      int nominalSign = context.NominalSign;
       lock (sync)
       {
         // Divergence is recoverable. Never latch Fault while leaving an
         // old nonzero AFC correction attached to the Doppler model.
-        if (state.Control == AfcControlMode.Off)
-        {
-          state = state with { State = AfcLockState.Off, CorrectionHz = 0,
-            Detail = "AFC disabled" };
-          return;
-        }
-        if (obs.Mode != state.Mode || obs.SampleUtc <= lastProcess)
-          return;
-        if (generation != obs.Generation)
-        {
-          generation = obs.Generation;
-          anchored = false;
-          confirmations = 0;
-          havePolaritySample = false;
-          inferredSign = 0;
-          polarityCandidate = polarityVotes = 0;
-          acceptedCorrection = 0;
-          previousConfirmedError = previousConfirmedCatHz = double.NaN;
-          divergenceVotes = 0;
-          previousConfirmedIfHz = double.NaN;
-          predictor.Reset();
-          weakFmGate.Reset();
-          recoveryUntilUtc = default;
-          waitForManualSign = false;
-          state = state with { CorrectionHz = 0, State = AfcLockState.Acquiring };
-        }
-        lastProcess = obs.SampleUtc;
+        if (!BeginObservation(obs)) return;
         double deltaTime = state.LastObservationUtc == default ? 1 :
           Math.Clamp((obs.SampleUtc - state.LastObservationUtc).TotalSeconds, 0.01, 5);
         // Weak FM may be recognized from successive consistent narrow-
         // sigma observations, without globally weakening the CW/SSB gate.
         // Each new epoch must contain new PCM (>=80 ms); overlapping
         // windows are NOT claimed to be independent measurements.
-        bool corroboratedFm = weakFmGate.Observe(obs);
-        double verifiedQuality = corroboratedFm
-          ? Math.Max(.62, obs.Confidence) : obs.Confidence;
-        bool reliable = obs.HasAbsoluteReference && !obs.Ambiguous &&
-          (obs.Confidence >= .6 || corroboratedFm) &&
-          double.IsFinite(obs.IfOffsetHz) && double.IsFinite(obs.SigmaHz) &&
-          obs.SigmaHz <= (obs.Mode == AfcSignalMode.FM ? 150 : 20);
-        if (!reliable || !predictor.Update(obs.IfOffsetHz,
-            obs.SigmaHz, verifiedQuality, obs.SampleUtc))
-        {
-          bool coasting = predictor.TryPredict(obs.SampleUtc, out double forecast);
-          state = state with
-          {
-            State = coasting ? AfcLockState.Coasting : AfcLockState.Hold,
-            ObservedIfOffsetHz = coasting ? forecast : obs.IfOffsetHz,
-            ErrorHz = coasting && anchored ? forecast - anchorIfHz : state.ErrorHz,
-            Confidence = obs.Confidence,
-            LastObservationUtc = obs.SampleUtc,
-            Detail = coasting ? "Short signal gap: bounded residual prediction" :
-              !obs.HasAbsoluteReference && obs.Mode == AfcSignalMode.SSB
-                ? "SSB relative drift assistance only; no absolute carrier" :
-                "Signal ambiguous, weak, or reference absent; holding"
-          };
-          // No new CAT correction is based only on a predicted signal or
-          // on an uncorroborated 500-Hz jump. Satellite Doppler still runs.
-          return;
-        }
-
+        if (!TryAcceptMeasurement(obs, out bool corroboratedFm)) return;
         // Learn sign from an actual CAT move and a persistent IF target. The
         // radio documentation specifies 12-kHz IF but not every mode's
         // frequency-axis sign. Never guess a CAT direction.
-        if (havePolaritySample && configuredSign == 0 && inferredSign == 0 &&
-            catReadbackIsTimeAligned && double.IsFinite(catReadbackHz))
-        {
-          double catDelta = catReadbackHz - lastCatHz;
-          double ifDelta = obs.IfOffsetHz - lastIfHz;
-          if (Math.Abs(catDelta) >= 30 &&
-              Math.Abs(ifDelta) >= 15 &&
-              Math.Abs(Math.Abs(catDelta) - Math.Abs(ifDelta)) <
-                Math.Max(25, Math.Abs(catDelta) * 0.4))
-          {
-            int candidate = -Math.Sign(ifDelta * catDelta);
-            if (candidate != polarityCandidate)
-            {
-              polarityCandidate = candidate;
-              polarityVotes = 1;
-            }
-            else if (++polarityVotes >= 3)
-              inferredSign = candidate;
-          }
-        }
-        lastIfHz = obs.IfOffsetHz;
-        lastCatHz = catReadbackHz;
-        havePolaritySample = catReadbackIsTimeAligned && double.IsFinite(catReadbackHz);
+        UpdatePolarityEvidence(obs, configuredSign, catReadbackIsTimeAligned, catReadbackHz);
 
         if (!anchored)
         {
@@ -343,83 +270,9 @@ namespace SkyRoof.AFC
         double error = predictor.OffsetHz - anchorIfHz;
         // Compare only verified AFC-authored CAT readbacks with independent
         // IF samples. Satellite-model-only movement is NOT a polarity test.
-        if (confirmedOwnAfcReadback && catReadbackIsTimeAligned &&
-            double.IsFinite(catReadbackHz) &&
-            (!double.IsFinite(previousConfirmedCatHz) ||
-             Math.Abs(catReadbackHz - previousConfirmedCatHz) >= 8))
-        {
-          double absError = Math.Abs(error);
-          if (double.IsFinite(previousConfirmedError))
-          {
-            bool worsening = absError > previousConfirmedError +
-              Math.Max(10, previousConfirmedError * .2);
-            divergenceVotes = worsening ? divergenceVotes + 1 :
-              Math.Max(0, divergenceVotes - 1);
-          }
-          if (configuredSign == 0 &&
-              double.IsFinite(previousConfirmedCatHz) &&
-              double.IsFinite(previousConfirmedIfHz))
-          {
-            double catDelta = catReadbackHz - previousConfirmedCatHz;
-            double ifDelta = obs.IfOffsetHz - previousConfirmedIfHz;
-            if (Math.Abs(catDelta) >= 20 && Math.Abs(ifDelta) >= 12 &&
-                Math.Abs(Math.Abs(catDelta) - Math.Abs(ifDelta)) <
-                  Math.Max(30, Math.Abs(catDelta) * .6))
-            {
-              int observedSign = -Math.Sign(catDelta * ifDelta);
-              if (observedSign == polarityCandidate) polarityVotes++;
-              else { polarityCandidate = observedSign; polarityVotes = 1; }
-              if (polarityVotes >= 2) inferredSign = observedSign;
-            }
-          }
-          previousConfirmedCatHz = catReadbackHz;
-          previousConfirmedIfHz = obs.IfOffsetHz;
-          previousConfirmedError = absError;
-          if (divergenceVotes >= 3)
-          {
-            acceptedCorrection *= .5;
-            divergenceVotes = 0;
-            previousConfirmedError = previousConfirmedCatHz =
-              previousConfirmedIfHz = double.NaN;
-            recoveryUntilUtc = obs.SampleUtc.AddMilliseconds(450);
-            waitForManualSign = configuredSign is 1 or -1;
-            state = state with
-            {
-              State = AfcLockState.Coasting,
-              MappingSign = sign,
-              CorrectionHz = acceptedCorrection,
-              ObservedIfOffsetHz = obs.IfOffsetHz,
-              ErrorHz = error,
-              Confidence = obs.Confidence,
-              LastObservationUtc = obs.SampleUtc,
-              Detail = waitForManualSign
-                ? "Manual RF/IF sign conflicts with AFC readback; backtracking"
-                : inferredSign != 0 && inferredSign != sign
-                  ? "AFC divergent: verified sign reversed, backtracking"
-                  : "AFC divergent: bounded rollback and reacquiring"
-            };
-            return;
-          }
-        }
-        bool mayWrite = state.Control == AfcControlMode.Auto &&
-          confirmations >= 2 && sign != 0 && !transmitting &&
-          !calibrationInProgress && !waitForManualSign &&
-          obs.SampleUtc >= recoveryUntilUtc;
-        if (obs.Mode == AfcSignalMode.SSB && !obs.HasAbsoluteReference)
-          mayWrite = false;
-        if (mayWrite)
-        {
-          double deadband = obs.Mode == AfcSignalMode.FM
-            ? fmDeadbandHz : toneDeadbandHz;
-          if (Math.Abs(error) >= deadband)
-          {
-            double step = Math.Clamp(sign * error * 0.55,
-              -Math.Min(120, 250 * deltaTime),
-              Math.Min(120, 250 * deltaTime));
-            acceptedCorrection = Math.Clamp(acceptedCorrection + step,
-              -maxCorrectionHz, maxCorrectionHz);
-          }
-        }
+        if (TryHandleDivergence(obs, configuredSign, catReadbackHz,
+          catReadbackIsTimeAligned, confirmedOwnAfcReadback, sign, error)) return;
+        StepServo(obs, context, deltaTime, sign, error);
         state = state with
         {
           State = transmitting ? AfcLockState.Hold :
