@@ -754,10 +754,7 @@ namespace SkyRoof
           }
           catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
             or ArgumentException)
-          {
-            Serilog.Log.Debug("SSTV thumbnail unavailable ({Type}); skipping broken entry",
-              ex.GetType().Name);
-          }
+          { Serilog.Log.Debug("SSTV thumbnail unavailable ({Type})", ex.GetType().Name); }
         }
         foreach (string stale in archivedThumbnailCache.Keys
           .Where(key => !visibleFiles.Contains(key)).ToArray())
