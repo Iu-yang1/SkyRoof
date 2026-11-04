@@ -270,8 +270,7 @@ namespace SkyRoof.AFC
         double error = predictor.OffsetHz - anchorIfHz;
         // Compare only verified AFC-authored CAT readbacks with independent
         // IF samples. Satellite-model-only movement is NOT a polarity test.
-        if (TryHandleDivergence(obs, configuredSign, catReadbackHz,
-          catReadbackIsTimeAligned, confirmedOwnAfcReadback, sign, error)) return;
+        if (TryHandleDivergence(obs, context, sign, error)) return;
         StepServo(obs, context, deltaTime, sign, error);
         state = state with
         {
