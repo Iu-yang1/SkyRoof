@@ -1127,7 +1127,8 @@ namespace SkyRoof
       }
       catch (ArgumentException)
       {
-        // A capture source/timeline can reset during background processing.
+        // Source generation can change while its old display frame is queued.
+        Serilog.Log.Debug("CW display frame discarded after source timeline reset");
       }
       catch (Exception ex)
       {
@@ -1332,6 +1333,7 @@ namespace SkyRoof
       }
       catch (OperationCanceledException)
       {
+        Serilog.Log.Debug("DeepCW model installation cancelled by operator");
       }
       catch (Exception ex)
       {

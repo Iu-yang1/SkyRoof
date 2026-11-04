@@ -349,6 +349,8 @@ namespace SkyRoof.CW
       }
       catch (ObjectDisposedException)
       {
+        // A racing Stop/Dispose may invalidate an already cancelled source.
+        Serilog.Log.Debug("CW receive stop token was already disposed");
       }
 
       if (tracker != null)
@@ -357,8 +359,9 @@ namespace SkyRoof.CW
         {
           await tracker.ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when(tokenSource?.IsCancellationRequested == true)
         {
+          Serilog.Log.Debug("CW tracker cancelled during receiver shutdown");
         }
       }
 
@@ -368,8 +371,9 @@ namespace SkyRoof.CW
         {
           await inference.ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when(tokenSource?.IsCancellationRequested == true)
         {
+          Serilog.Log.Debug("CW inference cancelled during receiver shutdown");
         }
       }
 

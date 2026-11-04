@@ -254,7 +254,12 @@ namespace SkyRoof
       }
       finally
       {
-        try { Soundcard.Buffer.Clear(); } catch { }
+        try { Soundcard.Buffer.Clear(); }
+        catch (Exception ex)
+        {
+          // Cleanup failure must never skip the following PTT release.
+          Log.Warning(ex, "FT4 PCM cleanup failed; forcing transmit release");
+        }
         EndTransmitNoThrow(ref pttActive);
       }
     }

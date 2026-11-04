@@ -171,7 +171,14 @@ namespace SkyRoof.CW
 
     private static void TryDelete(string path)
     {
-      try { if (File.Exists(path)) File.Delete(path); } catch { }
+      try { if (File.Exists(path)) File.Delete(path); }
+      catch (Exception ex)
+      {
+        // Model installation cleanup is best-effort and may not mask
+        // the original install failure. Never log the local file path.
+        Serilog.Log.Debug("DeepCW temporary model cleanup failed ({Type})",
+          ex.GetType().Name);
+      }
     }
   }
 }
