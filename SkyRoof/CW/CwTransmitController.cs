@@ -540,9 +540,11 @@ namespace SkyRoof.CW
       }
       catch (OperationCanceledException)
       {
+        Serilog.Log.Debug("CW watchdog cancelled during shutdown");
       }
       catch (ObjectDisposedException)
       {
+        Serilog.Log.Warning("CW watchdog session disposed before STOP status could be confirmed");
       }
       catch (Exception ex)
       {
@@ -571,9 +573,11 @@ namespace SkyRoof.CW
       }
       catch (OperationCanceledException)
       {
+        Serilog.Log.Debug("CW interlock monitor cancelled during shutdown");
       }
       catch (ObjectDisposedException)
       {
+        Serilog.Log.Warning("CW interlock monitor endpoint disposed unexpectedly");
       }
       catch (Exception safetyError)
       {

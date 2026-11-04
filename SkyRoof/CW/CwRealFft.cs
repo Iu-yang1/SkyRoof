@@ -19,6 +19,16 @@ namespace SkyRoof.CW
     private const string FftwLibrary = "libfftw3f-3.dll";
     private const uint FftwEstimate = 1u << 6;
     private const int MaxPooledPerSize = 4;
+    // A missing optional FFTW3f runtime must be reported once, not on every
+    // CW window/plan construction. Math.NET remains a supported fallback.
+    private static int nativeFallbackReported;
+
+    private static void ReportNativeFallback(Exception ex)
+    {
+      if (System.Threading.Interlocked.Exchange(ref nativeFallbackReported, 1) == 0)
+        Serilog.Log.Information("CW FFTW3f unavailable ({Type}); using managed FFT fallback",
+          ex.GetType().Name);
+    }
 
     private static readonly object plannerSync = new();
     private static readonly ConcurrentDictionary<int, ConcurrentBag<CwRealFft>>
@@ -104,9 +114,9 @@ namespace SkyRoof.CW
             nativeEnabled = nativePlan != IntPtr.Zero;
           }
         }
-        catch (DllNotFoundException) { }
-        catch (EntryPointNotFoundException) { }
-        catch (BadImageFormatException) { }
+        catch (DllNotFoundException ex) { ReportNativeFallback(ex); }
+        catch (EntryPointNotFoundException ex) { ReportNativeFallback(ex); }
+        catch (BadImageFormatException ex) { ReportNativeFallback(ex); }
 
         if (!nativeEnabled)
           FreeNativeResources();

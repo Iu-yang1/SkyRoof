@@ -328,7 +328,10 @@ namespace SkyRoof.IF
           }
         }
       }
-      catch (OperationCanceledException) { }
+      catch (OperationCanceledException) when(stop.IsCancellationRequested)
+      {
+        Log.Debug("IF-AF worker stopped by cancellation");
+      }
       catch (Exception ex)
       {
         detail = "IF-AF worker failed: " + ex.Message;
