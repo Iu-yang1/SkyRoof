@@ -99,7 +99,15 @@ namespace SkyRoof
 
       while (!stopping)
       {
-        if (Connect() && Setup())
+        // Capability/setup failures must not kill the CAT worker thread.
+        // Disconnect/retry with the existing backoff instead.
+        bool ready = false;
+        try { ready = Connect() && Setup(); }
+        catch (Exception ex)
+        {
+          Log.Error(ex, "CAT initialization failed; reconnecting after delay");
+        }
+        if (ready)
         {
           IsRunning = true;
           ErrorLogged = false;
