@@ -1,0 +1,8 @@
+# Existing diagnostics are a tracked remediation backlog, not a waiver.
+# Regenerate only in the dedicated bootstrap workflow; thereafter baseline
+# entries are pruned as fixes land and new findings fail CI.
+ci:
+  baseline: .aislop/ci-baseline.json
+  failBelow: 0
+  failOnMissingTools: true
+  format: json

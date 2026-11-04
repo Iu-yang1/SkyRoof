@@ -1,0 +1,57 @@
+name: aislop Quality Gate (pinned 0.18.1)
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24'
+      - name: Install native/static tooling
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cppcheck
+          python3 -m venv "$RUNNER_TEMP/aislop-python"
+          "$RUNNER_TEMP/aislop-python/bin/python" -m pip install --disable-pip-version-check --quiet ruff==0.14.2
+          echo "$RUNNER_TEMP/aislop-python/bin" >> "$GITHUB_PATH"
+      - name: Full-source report (always for observability)
+        shell: bash
+        run: |
+          mkdir -p artifacts/quality
+          # Scan can return nonzero when diagnostics exist. Report them
+          # independently; the following CI step enforces the baseline gate.
+          scan_status=0
+          npm exec --yes --package=aislop@0.18.1 -- aislop scan . --json > artifacts/quality/aislop-full.json || scan_status=$?
+          echo "Full scan exit code: $scan_status (gate runs separately)"
+          test -s artifacts/quality/aislop-full.json
+          node scripts/aislop-report-summary.mjs artifacts/quality/aislop-full.json artifacts/quality/summary.md
+          cat artifacts/quality/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Gate new PR findings against master
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          git fetch --no-tags origin "${{ github.base_ref }}"
+          npm exec --yes --package=aislop@0.18.1 -- aislop ci . --changes --base FETCH_HEAD > artifacts/quality/aislop-gate.json
+      - name: Gate new findings on master
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          npm exec --yes --package=aislop@0.18.1 -- aislop ci . > artifacts/quality/aislop-gate.json
+      - name: Upload full JSON and gate diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: aislop-quality-report
+          path: artifacts/quality/*
+          if-no-files-found: warn
