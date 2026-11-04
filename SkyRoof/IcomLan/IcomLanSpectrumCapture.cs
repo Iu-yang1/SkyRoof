@@ -191,7 +191,7 @@ namespace SkyRoof
         try { worker.Wait(2500); }
         catch (AggregateException ex)
         {
-          if (!cancellation?.IsCancellationRequested == true)
+          if (cancellation?.IsCancellationRequested != true)
             Log.Warning(ex, "Icom LAN capture worker faulted during shutdown");
         }
       }
