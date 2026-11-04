@@ -43,6 +43,10 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
   private IRotatorTransport? transport;
   private Bearing? requested,lastRead,lastWritten;
   private DateTime lastReadUtc = DateTime.MinValue;
+  // Only C2 replies to queries initiated AFTER a management verification
+  // checkpoint may confirm post-management feedback. A pre-checkpoint reply
+  // can arrive after the checkpoint and must not authorize motion.
+  private DateTime lastSuccessfulQueryStartedUtc = DateTime.MinValue;
   private DateTime lastTargetWriteUtc = DateTime.MinValue;
   private DateTime lastStopWriteUtc = DateTime.MinValue;
   private bool parkDiagnosticsActive;
@@ -277,6 +281,7 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
         if(stopping || !managementHeld || safetyLatched ||
            managementReviewRequired)return false;
         if(HasFreshPositionLocked() && lastReadUtc>checkpoint &&
+           lastSuccessfulQueryStartedUtc>checkpoint &&
            !requiresStopAfterReconnect && !stopRequested)
           return true;
       }
@@ -457,7 +462,7 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
     }
     return position;
   }
-  private void PublishPosition(RotatorPosition p)
+  private void PublishPosition(RotatorPosition p, DateTime queryStartedUtc)
   {
     if(!NativeRotatorCodec.Valid(p))throw new InvalidDataException("Out-of-range rotor position");
     Bearing current=new(p.Azimuth*Math.PI/180,p.Elevation*Math.PI/180);
@@ -479,6 +484,7 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
         error="Position feedback jump: STOP sent or pending";
       }
       lastRead=current;lastReadUtc=DateTime.UtcNow;
+      lastSuccessfulQueryStartedUtc=queryStartedUtc;
       if(settings.NativeProtocol==RotatorProtocolKind.Rc3040sLan)
       {
         if(rateEstimator.Observe(p,lastReadUtc,out var observation))
@@ -582,6 +588,7 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
           lastTargetWriteUtc=lastStopWriteUtc=DateTime.MinValue;
           lastRead = null;
           lastReadUtc = DateTime.MinValue;
+          lastSuccessfulQueryStartedUtc=DateTime.MinValue;
           lastSuccessfulSessionFeedbackUtc=DateTime.MinValue;
           rateEstimator.Reset();latestRate=null;
         }
@@ -801,7 +808,10 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
             nextQuery=now+Math.Clamp(settings.NativePollMs,200,30000);
             try
             {
-              PublishPosition(Query());
+              // Query initiation, not receive completion, defines whether
+              // this measurement is NEW relative to a management checkpoint.
+              DateTime queryStartedUtc=DateTime.UtcNow;
+              PublishPosition(Query(),queryStartedUtc);
               int previousMisses=Interlocked.Exchange(ref consecutiveFeedbackMisses,0);
               if(previousMisses>0)
                 Log.Information("Native rotator: position feedback recovered after {Misses} missed replies without replacing connection; {Transport} {Host}:{Port}",

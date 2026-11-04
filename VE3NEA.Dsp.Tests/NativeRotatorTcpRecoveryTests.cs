@@ -159,10 +159,19 @@ public sealed class NativeRotatorTcpRecoveryTests
     await UntilAsync(()=>driver.IsReady);
     driver.RotateTo(new SkyRoof.Bearing(100*Math.PI/180,40*Math.PI/180));
     await UntilAsync(()=>bridge.Motions>0);
+    Assert.Equal("W100 040",bridge.LastMotionCommand);
     // Total query count also includes pre-command polls. Wait until the
     // actual controller has processed two >=200 ms spaced readbacks of
     // THIS target, otherwise dropping TCP races the safety interlock.
-    await UntilAsync(()=>driver.TargetSettledForReconnect,7500);
+    await UntilAsync(()=>driver.TargetSettledForReconnect,7500,
+      ()=> $"target W={bridge.LastMotionCommand ?? "<none>"} " +
+        $"reached={Volatile.Read(ref reached)}, C2 polls={bridge.Queries}, " +
+        $"connections={bridge.Connections}, STOPs={bridge.Stops}, " +
+        $"requested={driver.RequestedBearing?.AzDeg:F1}/{driver.RequestedBearing?.ElDeg:F1}, " +
+        $"last-wire={driver.LastWrittenBearing?.AzDeg:F1}/{driver.LastWrittenBearing?.ElDeg:F1}, " +
+        $"readback={driver.LastReadBearing?.AzDeg:F1}/{driver.LastReadBearing?.ElDeg:F1}, " +
+        $"ready={driver.IsReady}, safety-latched={driver.PositionFaulted}, " +
+        $"status={driver.GetStatusString()}");
     Assert.True(driver.TargetSettledForReconnect,
       "Do not simulate a settled-target disconnect before the safety gate clears.");
     bridge.DropCurrentClient();
@@ -200,12 +209,14 @@ public sealed class NativeRotatorTcpRecoveryTests
     PositionJumpLimitDegrees=30
   };
 
-  private static async Task UntilAsync(Func<bool> predicate,int timeoutMs=6000)
+  private static async Task UntilAsync(Func<bool> predicate,int timeoutMs=6000,
+    Func<string>? diagnostics=null)
   {
     var timer=Stopwatch.StartNew();
     while(!predicate() && timer.ElapsedMilliseconds<timeoutMs)
       await Task.Delay(25);
-    Assert.True(predicate(),"Timed out waiting for simulated TCP rotator state");
+    Assert.True(predicate(),"Timed out waiting for simulated TCP rotator state" +
+      (diagnostics==null ? string.Empty : ": " + diagnostics()));
   }
 
   private sealed class Bridge : IAsyncDisposable
@@ -217,6 +228,8 @@ public sealed class NativeRotatorTcpRecoveryTests
     private readonly Task worker;
     private TcpClient? active;
     private int connections,queries,motions,stops;
+    private string? lastMotionCommand;
+    public string? LastMotionCommand=>Volatile.Read(ref lastMotionCommand);
     public int Port {get;}
     public int Connections=>Volatile.Read(ref connections);
     public int Queries=>Volatile.Read(ref queries);
@@ -267,6 +280,8 @@ public sealed class NativeRotatorTcpRecoveryTests
               if(c!='\r' && c!='\n'){command.Append(c);continue;}
               if(command.Length==0)continue;
               string cmd=command.ToString();command.Clear();
+              if(cmd.StartsWith("W",StringComparison.Ordinal))
+                Volatile.Write(ref lastMotionCommand,cmd);
               commandObserver?.Invoke(cmd);
               if(cmd=="C2")
               {
