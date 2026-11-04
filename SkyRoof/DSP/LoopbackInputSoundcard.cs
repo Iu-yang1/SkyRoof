@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
+using Serilog;
 
 namespace VE3NEA
 {
@@ -164,8 +165,12 @@ namespace VE3NEA
       {
         soundIn?.StopRecording();
       }
-      catch
+      catch (Exception ex) when (ex is ObjectDisposedException or
+        InvalidOperationException or COMException)
       {
+        // A device can disappear or finish capture while the UI closes it.
+        // Stop cleanup still owns the reader/device lifecycle.
+        Log.Debug("WASAPI loopback stop unavailable ({Type})", ex.GetType().Name);
       }
     }
 
@@ -240,14 +245,15 @@ namespace VE3NEA
             Thread.Sleep(20);
           }
         }
-        catch (ObjectDisposedException)
+        catch (Exception ex) when (ex is ObjectDisposedException or
+          InvalidOperationException or COMException)
         {
-        }
-        catch (InvalidOperationException)
-        {
-        }
-        catch (COMException)
-        {
+          if (!stopping)
+            Log.Warning("WASAPI loopback reader stopped after endpoint failure ({Type})",
+              ex.GetType().Name);
+          // A disposed/invalid WASAPI endpoint cannot produce further
+          // samples; continuing would spin and hide the actual fault.
+          break;
         }
       }
     }
