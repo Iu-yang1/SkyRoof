@@ -325,8 +325,21 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
         else if(m.Type=="fault")ApplyFault(m);
       }
       cancel.Cancel();SignalWriter();
-      try{await writerTask.ConfigureAwait(false);}catch{}
-      try{await heartbeatWatch.ConfigureAwait(false);}catch(OperationCanceledException){}
+      try { await writerTask.ConfigureAwait(false); }
+      catch (OperationCanceledException) when(cancel.IsCancellationRequested)
+      {
+        Log.Debug("Rotator IPC writer cancelled on channel shutdown");
+      }
+      catch (Exception ex)
+      {
+        Log.Warning("Rotator IPC writer faulted during shutdown ({Type})",
+          ex.GetType().Name);
+      }
+      try { await heartbeatWatch.ConfigureAwait(false); }
+      catch (OperationCanceledException) when(cancel.IsCancellationRequested)
+      {
+        Log.Debug("Rotator IPC watchdog stopped");
+      }
     }
     catch(Exception ex) when(ex is not StackOverflowException)
     {
@@ -351,7 +364,12 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
       foreach(var result in pending.Values)result.TrySetResult(false);
       pending.Clear();
       NotifyStatus();
-      try{pipe.Dispose();}catch{}
+      try { pipe.Dispose(); }
+      catch (Exception ex)
+      {
+        Log.Warning("Rotator IPC pipe disposal failed ({Type}); child shutdown remains unconfirmed",
+          ex.GetType().Name);
+      }
       // Wait for the old process to release the endpoint lock BEFORE a new
       // generation is allowed to open the hardware. Never block WinForms:
       // callers await ShutdownAsync, and this supervisor owns the reap task.
@@ -516,7 +534,12 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
         cancel.Cancel();
         pipe.Dispose(); // EOF triggers emergency STOP in worker
       }
-      catch(Exception){}
+      catch (Exception ex)
+      {
+        // STOP already requested; shutdown of IPC must still be reported.
+        Log.Warning("Rotator control child pipe teardown failed ({Type}); STOP unverified",
+          ex.GetType().Name);
+      }
     });
   }
 
@@ -767,8 +790,18 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
         // Initiate STOP before awaiting any unfinished management operation.
         // The motion worker handles the STOP request independently.
         ImmediateStop();
-        try{await managementTail.WaitAsync(TimeSpan.FromSeconds(2));}catch(Exception){}
-        try{await states.WaitAsync(TimeSpan.FromSeconds(1));}catch(Exception){}
+        try { await managementTail.WaitAsync(TimeSpan.FromSeconds(2)); }
+        catch (Exception ex)
+        {
+          Log.Warning("Rotator management operation did not settle after STOP ({Type})",
+            ex.GetType().Name);
+        }
+        try { await states.WaitAsync(TimeSpan.FromSeconds(1)); }
+        catch (Exception ex)
+        {
+          Log.Warning("Rotator state publisher did not settle after STOP ({Type})",
+            ex.GetType().Name);
+        }
       }
     }
     catch(IOException ex) when(ex.Message.Contains("Pipe is broken",StringComparison.OrdinalIgnoreCase) ||
@@ -784,9 +817,24 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
     {
       // SkyRoof vanished or requested shutdown. Never continue moving after
       // control pipe EOF. STOP attempt is issued before child process exit.
-      try{native?.StopRotation();}catch{}
-      try{lease?.Dispose();}catch{}
-      try{native?.Dispose();}catch{}
+      try { native?.StopRotation(); }
+      catch (Exception ex)
+      {
+        Log.Error("Rotator worker exit STOP failed ({Type}); physical STOP unverified",
+          ex.GetType().Name);
+      }
+      try { lease?.Dispose(); }
+      catch (Exception ex)
+      {
+        Log.Warning("Rotator worker device-lease disposal failed ({Type})",
+          ex.GetType().Name);
+      }
+      try { native?.Dispose(); }
+      catch (Exception ex)
+      {
+        Log.Warning("Rotator worker native transport disposal failed ({Type})",
+          ex.GetType().Name);
+      }
       Log.Information("Rotator worker PID {Pid} exiting; STOP delivery is not a hardware ACK",Environment.ProcessId);
       Log.CloseAndFlush();
       InChildEngine=false;
