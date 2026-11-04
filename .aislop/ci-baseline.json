@@ -1,0 +1,5304 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "rule": "python-formatting",
+      "engine": "format",
+      "file": "drivers/IF-AF-Audio/scripts/overlay.py",
+      "fingerprint": "message:eb8329b770c7842a",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/cpp-define-constant",
+      "engine": "ai-slop",
+      "file": "native/HamNoiseBridge/hamnoise_bridge.cpp",
+      "fingerprint": "1126e1f298e247b2",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/cpp-define-constant",
+      "engine": "ai-slop",
+      "file": "native/HamNoiseBridge/hamnoise_bridge.cpp",
+      "fingerprint": "f2d93dd85ce31351",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/AFC/AfcControlForm.cs",
+      "fingerprint": "f0bf9c25fa08f0b3",
+      "count": 2
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/AFC/AfcControlForm.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/AFC/AfcControlForm.cs",
+      "fingerprint": "2c36455152ae9d3b",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/AFC/AfcControlForm.cs",
+      "fingerprint": "66780dc5c069c9d7",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/AFC/AfcController.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/AFC/AfcController.cs",
+      "fingerprint": "8c98880ef4f9d24b",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/AFC/AfcController.cs",
+      "fingerprint": "8c98880ef4f9d24b",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/AFC/AfcIfDisplayAnalyzer.cs",
+      "fingerprint": "ff40fb47809b4591",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/AFC/AfcIfDisplayAnalyzer.cs",
+      "fingerprint": "b074c3a75c9f5e7c",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/AFC/AfcIfInput.cs",
+      "fingerprint": "6d4e9b6fbbe10985",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/AFC/AfcIfInput.cs",
+      "fingerprint": "3efafb4de327bc78",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/AFC/AfcPolarityCalibrator.cs",
+      "fingerprint": "be62db9325ede0e9",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/AFC/AfcPolarityCalibrator.cs",
+      "fingerprint": "be62db9325ede0e9",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/AFC/AfcSignalProcessing.cs",
+      "fingerprint": "cf3d100821ebc286",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/AFC/AfcSignalProcessing.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/AFC/AfcSignalProcessing.cs",
+      "fingerprint": "e9ab7f9560ce2e24",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/AFC/AfcSpectrumView.cs",
+      "fingerprint": "b1ce9fa3172106ca",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/AFC/AfcSpectrumView.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/AFC/AfcSpectrumView.cs",
+      "fingerprint": "4e4880dedfe209c9",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/AutoSelection/AutoSelector.cs",
+      "fingerprint": "4b9e92a4a84263d0",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/AutoSelection/AutoSelector.cs",
+      "fingerprint": "4c4b84288572bb73",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/AutoSelection/AutoSelector.cs",
+      "fingerprint": "944ce5442a4fc8d5",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/AutoSelection/AutoSelector.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 6
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/AutoSelection/AutoSelector.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/CAT/CatControl.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "0878d8d5c91ce4d5",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "08d9d5bc01806f2a",
+      "count": 4
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "0c8ef0d6b371e570",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "0ea081810dada636",
+      "count": 3
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "110523ad15db9982",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "156f7de3a709fad2",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "1989fe5f1e3257dc",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "1fee33aa0584d8d9",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "21f481556fb77a58",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "25b19509d516e936",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "2831a141e1a758e1",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "327e43f07e2be95b",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "3b68a6e5b1b2f4c0",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "4e85903e42e5038a",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "54906fdc4dea39b5",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "5aba820ff86dde49",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "5b87db7c57806f56",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "7545ec0116775d79",
+      "count": 3
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "81094a9ec7f55c7e",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "ba4c3b05c3940e89",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "bb3b348983d22e1a",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "e49fdf41a88296ba",
+      "count": 3
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "e8661d913fab21ab",
+      "count": 4
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "f6f8ac1fb3f11bb0",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 11
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "264b0d1e0c9fdf14",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/CAT/CatControlEngine.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/ControlEngine.cs",
+      "fingerprint": "8b67e7e952935ac9",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/ControlEngine.cs",
+      "fingerprint": "9487a5a3eb410153",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/ControlEngine.cs",
+      "fingerprint": "9ae5609cda825054",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/ControlEngine.cs",
+      "fingerprint": "9fedea346855f0c5",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/ControlEngine.cs",
+      "fingerprint": "ea02f02a2e728c4b",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/ControlEngine.cs",
+      "fingerprint": "f76e8c6dea0a2b7b",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-sync-over-async",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/ControlEngine.cs",
+      "fingerprint": "8529aa02f1bea33c",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/ControlEngine.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 5
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/ControlEngine.cs",
+      "fingerprint": "9812c3811cf6e088",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/CtcssTones.cs",
+      "fingerprint": "e68f92e93b3b1093",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/EmbeddedSkyCatHost.cs",
+      "fingerprint": "0a485d5c7912d431",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/EmbeddedSkyCatHost.cs",
+      "fingerprint": "0a485d5c7912d431",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/EmbeddedSkyCatHost.cs",
+      "fingerprint": "dddd47329ab3601f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-broad-catch",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/RadioCapabilities.cs",
+      "fingerprint": "7594e68c30b43ba5",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/RadioCapabilities.cs",
+      "fingerprint": "84bb5fc861247fa3",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/RadioCapabilities.cs",
+      "fingerprint": "85f3ee99e27ec762",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/RadioCapabilities.cs",
+      "fingerprint": "0aac0bf59fdfb8bc",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/trivial-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/RigCtldCommands.cs",
+      "fingerprint": "908986ca857c685f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/trivial-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/RigCtldCommands.cs",
+      "fingerprint": "e5ebbf500df81403",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CAT/SkyCatSubprocess.cs",
+      "fingerprint": "e5758c0178ecbf8f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/ControlsEx/ListBoxEx.cs",
+      "fingerprint": "5083246c7991c319",
+      "count": 3
+    },
+    {
+      "rule": "ai-slop/csharp-sync-over-async",
+      "engine": "ai-slop",
+      "file": "SkyRoof/ControlsEx/ListViewEx.cs",
+      "fingerprint": "06cc43c363c797ac",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-sync-over-async",
+      "engine": "ai-slop",
+      "file": "SkyRoof/ControlsEx/ListViewEx.cs",
+      "fingerprint": "cf11f110d3bb61f6",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/ControlsEx/ListViewEx.cs",
+      "fingerprint": "5083246c7991c319",
+      "count": 6
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/ControlsEx/PropertyGridEx.cs",
+      "fingerprint": "5083246c7991c319",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/ControlsEx/SpeechApiReflectionHelper.cs",
+      "fingerprint": "4f9cb733e359fd50",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/ControlsEx/SpeechApiReflectionHelper.cs",
+      "fingerprint": "51338a63be35a9d7",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/ControlsEx/SpeechApiReflectionHelper.cs",
+      "fingerprint": "8cc7a6d8aab86d3f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/ControlsEx/SpeechApiReflectionHelper.cs",
+      "fingerprint": "9b62d88fa3e368b9",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/ControlsEx/SpeechApiReflectionHelper.cs",
+      "fingerprint": "f2771c41f4f51c01",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/unreachable-code",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwAudioSourceController.cs",
+      "fingerprint": "584b9a7beed2ff4f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwCandidateDetector.cs",
+      "fingerprint": "3ff101e93b38f3b0",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-sync-over-async",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwCandidateDetector.cs",
+      "fingerprint": "e53ec7389d097543",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwCandidateDetector.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwCandidateDetector.cs",
+      "fingerprint": "605c0d79945ab805",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwCandidateDetector.cs",
+      "fingerprint": "ae74c9f7017bf565",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwConsolePresentation.cs",
+      "fingerprint": "d33c5b1d5e57a61e",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/unreachable-code",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwContinuousDecoder.cs",
+      "fingerprint": "4eec5f98608cfd1b",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-sync-over-async",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwDisplayFrameProcessor.cs",
+      "fingerprint": "08ed185862eae1ea",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/unreachable-code",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwDisplayFrameProcessor.cs",
+      "fingerprint": "34d63d5ab3b122eb",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/unreachable-code",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwDisplayFrameProcessor.cs",
+      "fingerprint": "b35edf9ca9c92722",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwFixedLagAssociator.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwFixedLagAssociator.cs",
+      "fingerprint": "ecaa369570b28727",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwFrameRidgeScanner.cs",
+      "fingerprint": "085124e9d531ee42",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwFrameRidgeScanner.cs",
+      "fingerprint": "0ea9030a773aad45",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwFrameRidgeScanner.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwFrameRidgeScanner.cs",
+      "fingerprint": "46a6f4f917eac97f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwFrameRidgeScanner.cs",
+      "fingerprint": "baae7cecd2826abe",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwFrameRidgeScanner.cs",
+      "fingerprint": "c9cb5dda2a942ee4",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwFrameRidgeScanner.cs",
+      "fingerprint": "c75d98e74a70f452",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwHsmmDecoder.cs",
+      "fingerprint": "e6d49f3bc63d1661",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwIncrementalTranscript.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwIncrementalTranscript.cs",
+      "fingerprint": "35a57790c1292134",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwIncrementalTranscript.cs",
+      "fingerprint": "723df4ef20d48d63",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwKeyerClient.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwKeyerClient.cs",
+      "fingerprint": "5a4479fb8c0aa74e",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwKeyerClient.cs",
+      "fingerprint": "cf17a3cab4e6c964",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwKeyingGate.cs",
+      "fingerprint": "437433162b7a925a",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwKeyingGate.cs",
+      "fingerprint": "b93e751c9af4d062",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwLaneExtractor.cs",
+      "fingerprint": "e0eb48e76c2ef8d7",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwLaneExtractor.cs",
+      "fingerprint": "f1ebf6cba388c4d1",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwLaneExtractor.cs",
+      "fingerprint": "f63d3f7beb00f28a",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwMacroBank.cs",
+      "fingerprint": "ebf764b690ec5570",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwNarrowbandCarrierEvidence.cs",
+      "fingerprint": "eb8608858fc3557f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwPileupTrackManager.cs",
+      "fingerprint": "3af2074ff9f655a1",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwPileupTrackManager.cs",
+      "fingerprint": "d0e9a144bb1db364",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwPileupTrackManager.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwPileupTrackManager.cs",
+      "fingerprint": "3b1e8a916a79da2f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwPileupTrackManager.cs",
+      "fingerprint": "abb50ab385835d04",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwPileupTrackManager.cs",
+      "fingerprint": "893298ffaaceb5ed",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwRealFft.cs",
+      "fingerprint": "f2efd10fd647e6a0",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwRealFft.cs",
+      "fingerprint": "375705015c340a5e",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwRealFft.cs",
+      "fingerprint": "b479e4f7cfc1b684",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwRealFft.cs",
+      "fingerprint": "bd980e56d3b09e5d",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwReceiveWorker.cs",
+      "fingerprint": "6cc42532a5307d51",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwReceiveWorker.cs",
+      "fingerprint": "77e1b3011bfea30e",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/unreachable-code",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwReceiveWorker.cs",
+      "fingerprint": "db6356425d482605",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwReceiveWorker.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwTrackIdentityResolver.cs",
+      "fingerprint": "1100d43e7e252dac",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwTrackIdentityResolver.cs",
+      "fingerprint": "f3738bd0dfcfd1d1",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwTransmitController.cs",
+      "fingerprint": "6cc42532a5307d51",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/CwTransmitController.cs",
+      "fingerprint": "77e1b3011bfea30e",
+      "count": 2
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwTransmitController.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwTransmitController.cs",
+      "fingerprint": "f42e9aa500ad425e",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/CwTransmitInterlock.cs",
+      "fingerprint": "c3a96dffeaf0dc26",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/DeepCwDecoder.cs",
+      "fingerprint": "201805c27f304bc9",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/DeepCwDecoder.cs",
+      "fingerprint": "864a5bc4f5bf8230",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/unreachable-code",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/DeepCwDecoder.cs",
+      "fingerprint": "0736e7feda94885c",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/unreachable-code",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/DeepCwDecoder.cs",
+      "fingerprint": "261c99195ef75a92",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/DeepCwDecoder.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/DeepCwDecoder.cs",
+      "fingerprint": "3ff03adda2ee7316",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/DeepCwDecoder.cs",
+      "fingerprint": "944e634ca5d795ac",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/DeepCwFeatures.cs",
+      "fingerprint": "1403f44f0d096896",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/DeepCwFeatures.cs",
+      "fingerprint": "60d15bfa8a133c5d",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/DeepCwFeatures.cs",
+      "fingerprint": "1403f44f0d096896",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/DeepCwModel.cs",
+      "fingerprint": "4732cf75824076b5",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/unreachable-code",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/DeepCwModel.cs",
+      "fingerprint": "9376dad27bbda610",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/CW/DeepCwWidebandFeatures.cs",
+      "fingerprint": "d9bea290e68be71b",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/DeepCwWidebandFeatures.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/DeepCwWidebandFeatures.cs",
+      "fingerprint": "3661326602e0a716",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/DeepCwWidebandFeatures.cs",
+      "fingerprint": "5748d5fd0cc4bb4c",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/DeepCwWidebandFeatures.cs",
+      "fingerprint": "f2ef913ed2712026",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/DeepCwWidebandFeatures.cs",
+      "fingerprint": "89925dd53a4d15a0",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/CW/DeepCwWidebandFeatures.cs",
+      "fingerprint": "f2ef913ed2712026",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/Announcer.cs",
+      "fingerprint": "34df717857394644",
+      "count": 3
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/Announcer.cs",
+      "fingerprint": "9e9737db52a0c25a",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/Announcer.cs",
+      "fingerprint": "b7d80efde44f959c",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/Announcer.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 4
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/Announcer.cs",
+      "fingerprint": "61a32e1e0918e4c6",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/KissServer.cs",
+      "fingerprint": "322554b0ab76264f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/KissServer.cs",
+      "fingerprint": "36124026a49c3b6f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/KissServer.cs",
+      "fingerprint": "6b873b2c83c63440",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/LoopbackInputSoundcard.cs",
+      "fingerprint": "a5c0f083f5691908",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/LoopbackInputSoundcard.cs",
+      "fingerprint": "5577860b0e6cef92",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/LoopbackInputSoundcard.cs",
+      "fingerprint": "77e1b3011bfea30e",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/LoopbackInputSoundcard.cs",
+      "fingerprint": "9f925cdc4feedda4",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/LoopbackInputSoundcard.cs",
+      "fingerprint": "e70320638b5c88ce",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/unreachable-code",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/LoopbackInputSoundcard.cs",
+      "fingerprint": "8e5e51e4df0a0b70",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-if-ladder",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/RecordingEvents.cs",
+      "fingerprint": "f7c01ea27a18fb0b",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/RecordingEvents.cs",
+      "fingerprint": "40eb96c586e7c866",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/RecordingEvents.cs",
+      "fingerprint": "5b670e8d38e54f8a",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/RecordingEvents.cs",
+      "fingerprint": "76d38b3dd38403fb",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/DSP/RecordingEvents.cs",
+      "fingerprint": "1c1de1a74b141b7f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/DSP/RecordingManager.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-sync-over-async",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/SatnogsUploader.cs",
+      "fingerprint": "ac3f355fbcbd4d37",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/SatnogsUploader.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/SatnogsUploader.cs",
+      "fingerprint": "5b43c0c093467974",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/SatnogsUploader.cs",
+      "fingerprint": "f0bf9c25fa08f0b3",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/Slicer.cs",
+      "fingerprint": "cee7919c32009b73",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/meta-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/Slicer.cs",
+      "fingerprint": "26e2e93ec2c49e91",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/Slicer.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 3
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/SoftSquelch.cs",
+      "fingerprint": "d76f432eaecbe1bd",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/trivial-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/SoftSquelch.cs",
+      "fingerprint": "25068829c865bf10",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/trivial-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/SoftSquelch.cs",
+      "fingerprint": "344e989c36915a99",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/Soundcard.cs",
+      "fingerprint": "22711e715dcc6790",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/Soundcard.cs",
+      "fingerprint": "7d9d03cd140e3947",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/Soundcard.cs",
+      "fingerprint": "8ab201477cd68c16",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/Soundcard.cs",
+      "fingerprint": "aaf441e9aece28bc",
+      "count": 8
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/Soundcard.cs",
+      "fingerprint": "70f5083dbe04b278",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/Soundcard.cs",
+      "fingerprint": "782ddc0db910de21",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/Soundcard.cs",
+      "fingerprint": "8379447e483682c1",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/Soundcard.cs",
+      "fingerprint": "9cfef92fa69a71cc",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/Soundcard.cs",
+      "fingerprint": "a3e8db35f9b937a6",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/todo-stub",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/Soundcard.cs",
+      "fingerprint": "c5608949256c0c09",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/DSP/Soundcard.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/DSP/Spectrum.cs",
+      "fingerprint": "199ab1d7ab81a301",
+      "count": 3
+    },
+    {
+      "rule": "ai-slop/csharp-console-leftover",
+      "engine": "ai-slop",
+      "file": "SkyRoof/ExceptionLogger.cs",
+      "fingerprint": "df94c904beec98a4",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/ExceptionLogger.cs",
+      "fingerprint": "188fc899b5faf551",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/ExceptionLogger.cs",
+      "fingerprint": "0aac0bf59fdfb8bc",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/trivial-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/ExceptionLogger.cs",
+      "fingerprint": "197d7840375672ba",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/trivial-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/ExceptionLogger.cs",
+      "fingerprint": "6d00054a6cfa7c31",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/trivial-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/ExceptionLogger.cs",
+      "fingerprint": "cbd98595a7a7e265",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/trivial-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/ExceptionLogger.cs",
+      "fingerprint": "f8af9cad0bff140f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/AmsatReportDialog.cs",
+      "fingerprint": "12816ee3f9854de2",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Forms/AmsatReportDialog.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/AutoSelectionConfigForm.cs",
+      "fingerprint": "fdeee7ac75a13dc8",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/AutoSelectionConfigForm.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 7
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Forms/AutoSelectionConfigForm.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Forms/AzElEntryDialog.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Forms/CustomTransmitterDialog.cs",
+      "fingerprint": "de4e393efa3b487e",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/DownloadDialog.cs",
+      "fingerprint": "a2b7b3f56fb779a0",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-redundant-doc-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/FrequencyEntryForm.cs",
+      "fingerprint": "e22e288151275058",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/LoqFt4QsoDialog.cs",
+      "fingerprint": "053e85c80a20c1a2",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/LoqFt4QsoDialog.cs",
+      "fingerprint": "4c075bdb740feedf",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/LoqFt4QsoDialog.cs",
+      "fingerprint": "6a8a9439a4ebe79a",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/LoqFt4QsoDialog.cs",
+      "fingerprint": "ca7f879f6796bdfd",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/LoqFt4QsoDialog.cs",
+      "fingerprint": "e86621098b5dc3d7",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Forms/LoqFt4QsoDialog.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/MainForm.cs",
+      "fingerprint": "5ee5b3dbca37d851",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/MainForm.cs",
+      "fingerprint": "cbd9a6ecd52fa620",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/MainForm.cs",
+      "fingerprint": "5999c7fc85f4ee42",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/MainForm.cs",
+      "fingerprint": "7369417bce5f26c4",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/MainForm.cs",
+      "fingerprint": "836a02b74d18f28e",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/MainForm.cs",
+      "fingerprint": "a023db48c70216e0",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/MainForm.cs",
+      "fingerprint": "d2e4b04964174ef3",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/MainForm.cs",
+      "fingerprint": "f501f1238822daa2",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/MainForm.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 11
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/MainForm.cs",
+      "fingerprint": "c8c4e1d75b822cd0",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Forms/MainForm.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Forms/MainForm.cs",
+      "fingerprint": "6452b19d996e4fa3",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Forms/MainForm.cs",
+      "fingerprint": "cd40247e13ef1a71",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Forms/MainForm.Designer.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Forms/MainForm.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-broad-catch",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/OnvifCameraSettingsForm.cs",
+      "fingerprint": "9ac4bc3b4453cede",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Forms/OnvifCameraSettingsForm.cs",
+      "fingerprint": "f5de55caf74d3dde",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/PathOptimizerForm.cs",
+      "fingerprint": "c2d3a5188cf137d2",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/QsoScheduleForm.cs",
+      "fingerprint": "05a1a41bdf6ba4b8",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/QsoScheduleForm.cs",
+      "fingerprint": "69b020a853d2edd2",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/QsoScheduleForm.cs",
+      "fingerprint": "cc56b799e9b120b1",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/QsoScheduleForm.cs",
+      "fingerprint": "fc60069eb7c9bec2",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/QsoScheduleForm.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/csharp-linq-count",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/SatelliteGroupsForm.cs",
+      "fingerprint": "aa0e82ba1fcc4d89",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/SatelliteGroupsForm.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 8
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Forms/SatelliteGroupsForm.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Forms/SatelliteGroupsForm.Designer.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Forms/SatelliteGroupsForm.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/SdrDevicesDialog.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 2
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Forms/SdrDevicesDialog.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/SignalParamsDialog.cs",
+      "fingerprint": "0d8e8fe7b9ee50bb",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/SignalParamsDialog.cs",
+      "fingerprint": "78de5899cff5a92c",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/SignalParamsDialog.cs",
+      "fingerprint": "84db12167fdbb69c",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/SignalParamsDialog.cs",
+      "fingerprint": "965ecd5a551fbe91",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/SignalParamsDialog.cs",
+      "fingerprint": "a07761fe4e65d2da",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/SignalParamsDialog.cs",
+      "fingerprint": "cebc6ba82d4f154e",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/SignalParamsDialog.cs",
+      "fingerprint": "fa1a954b96da3f11",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/SignalParamsDialog.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 4
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/SignalParamsDialog.cs",
+      "fingerprint": "7809da1587d6b2ef",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/SignalParamsDialog.cs",
+      "fingerprint": "af415c4664f141c0",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/SignalParamsDialog.cs",
+      "fingerprint": "c7948ca8b5d59c87",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Forms/SignalParamsDialog.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/Forms/SignalParamsDialog.cs",
+      "fingerprint": "82128c6ab52430b7",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Forms/SignalParamsDialog.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/SstvDenoiseDialog.cs",
+      "fingerprint": "1bc666b6586e3eb1",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/SstvDenoiseDialog.cs",
+      "fingerprint": "7fc02c600206a95b",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/SstvDenoiseDialog.cs",
+      "fingerprint": "c0156310c167cadf",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Forms/SstvDenoiseDialog.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 4
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Forms/SstvDenoiseDialog.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/FT4/Ft4Decoder.cs",
+      "fingerprint": "22711e715dcc6790",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/FT4/Ft4Decoder.cs",
+      "fingerprint": "8ac7589a4a320090",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/FT4/Ft4QsoSequencer.cs",
+      "fingerprint": "44c7648807293b15",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/FT4/Ft4QsoSequencer.cs",
+      "fingerprint": "939260f3aff1b3d2",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/FT4/Ft4QsoSequencer.cs",
+      "fingerprint": "5083246c7991c319",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/FT4/Ft4Sender.cs",
+      "fingerprint": "759f7fe4454447de",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/FT4/Ft4Sender.cs",
+      "fingerprint": "2654bc8d74b2b63f",
+      "count": 2
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/FT4/Ft4Sender.cs",
+      "fingerprint": "d4306ea765c4a143",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/FT4/WsjtxUdpSender.cs",
+      "fingerprint": "61d61938287d9023",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/FT4/WsjtxUdpSender.cs",
+      "fingerprint": "a405c91f95bb1431",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/GitHubDockTheme.cs",
+      "fingerprint": "ef29be52247c7ab3",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IcomLan/IcomLanDirectSession.cs",
+      "fingerprint": "11ac88e7f206f5c0",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IcomLan/IcomLanDirectSession.cs",
+      "fingerprint": "421c39f4447f35ac",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IcomLan/IcomLanDirectSession.cs",
+      "fingerprint": "92f5c814309fcbd2",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IcomLan/IcomLanDirectSession.cs",
+      "fingerprint": "d1929053bf6e8f1b",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IcomLan/IcomLanDirectSession.cs",
+      "fingerprint": "0aac0bf59fdfb8bc",
+      "count": 3
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IcomLan/IcomLanDirectSession.cs",
+      "fingerprint": "4f8ab77c6193a80e",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IcomLan/IcomLanDirectSession.cs",
+      "fingerprint": "c63e4905eaef983e",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IcomLan/IcomLanDirectSession.cs",
+      "fingerprint": "fe672fe9ea999c12",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomLanDirectSession.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomLanDirectSession.cs",
+      "fingerprint": "67bbd8a7f340d0ba",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomLanDirectSession.cs",
+      "fingerprint": "67962b135b777c8d",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumCapture.cs",
+      "fingerprint": "e1e663eb95d6dd8c",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumCapture.cs",
+      "fingerprint": "2eacf33010162a02",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumCapture.cs",
+      "fingerprint": "32f7dfbec2ff4a72",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumCapture.cs",
+      "fingerprint": "8616bab9f36d9227",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumCapture.cs",
+      "fingerprint": "9672699106d39d8a",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumCapture.cs",
+      "fingerprint": "9a86673b11c948c3",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumCapture.cs",
+      "fingerprint": "b0c86cfb49fde070",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumCapture.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumCapture.cs",
+      "fingerprint": "e7e6e7cbdc4f5406",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumCapture.cs",
+      "fingerprint": "eb6263bb51177939",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumView.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumView.cs",
+      "fingerprint": "38b27083f9acdec8",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumView.cs",
+      "fingerprint": "46112ade3e53f222",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumView.cs",
+      "fingerprint": "4e4880dedfe209c9",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumView.cs",
+      "fingerprint": "63963d60b82b170d",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumView.cs",
+      "fingerprint": "71d4f600e0a39993",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumView.cs",
+      "fingerprint": "84c73b6da2c8086d",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumView.cs",
+      "fingerprint": "a408fcb710c4c449",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumView.cs",
+      "fingerprint": "cc535ee20f482a48",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumView.cs",
+      "fingerprint": "f12a82a03899d935",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumView.cs",
+      "fingerprint": "f92a31db0bee8e5b",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumView.cs",
+      "fingerprint": "faac44a980547a4c",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumView.cs",
+      "fingerprint": "114cb0789526bb7d",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumView.cs",
+      "fingerprint": "71d4f600e0a39993",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumView.cs",
+      "fingerprint": "bace92aab3a5809a",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumView.cs",
+      "fingerprint": "f743f84d53e46c4d",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomLanSpectrumView.cs",
+      "fingerprint": "f92a31db0bee8e5b",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomScopeAssembler.cs",
+      "fingerprint": "53cb8cf0c6821b86",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomScopeAssembler.cs",
+      "fingerprint": "7c3f59a85a565088",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomScopeGeometry.cs",
+      "fingerprint": "c2e5cb03e8e191e0",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IcomLan/IcomScopePendingControls.cs",
+      "fingerprint": "c11dfad08a7fc8f5",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomScopeReadbackState.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/IcomLan/IcomScopeReadbackState.cs",
+      "fingerprint": "1ef6c76576d76507",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IcomLan/IcomScopeUiFrameMailbox.cs",
+      "fingerprint": "3d1a2e6aa4796d17",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IF/IfAfAudioLeveler.cs",
+      "fingerprint": "629f33c566a5873c",
+      "count": 2
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/IF/IfAfAudioLeveler.cs",
+      "fingerprint": "3b71f83e4a2eaba3",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IF/IfAfDemodulator.cs",
+      "fingerprint": "feba757095ae9587",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/IF/IfAfDemodulator.cs",
+      "fingerprint": "62272446d30764e9",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IF/IfAfLinkBar.cs",
+      "fingerprint": "51381a5457ad1ea1",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IF/IfAfLinkBar.cs",
+      "fingerprint": "5303ae32ddeb1911",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IF/IfAfLinkBar.cs",
+      "fingerprint": "9af7b0b3eca5cee1",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IF/IfAfService.cs",
+      "fingerprint": "8c7c313e0578b984",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IF/IfAfService.cs",
+      "fingerprint": "a5b770cf0a1bf63a",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/IF/IfAfService.cs",
+      "fingerprint": "6e4c0c4ea85a2774",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/IF/IfAfService.cs",
+      "fingerprint": "ba66589857ebedc7",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/IF/IfAfVoiceEnhancements.cs",
+      "fingerprint": "3afaf97acbc3a313",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-broad-catch",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Onvif/OnvifGpuPlayer.cs",
+      "fingerprint": "9ac4bc3b4453cede",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Onvif/OnvifGpuPlayer.cs",
+      "fingerprint": "d085977040b4bc55",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Onvif/OnvifGpuPlayer.cs",
+      "fingerprint": "f0bf9c25fa08f0b3",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Onvif/OnvifProtocolClient.cs",
+      "fingerprint": "06b10dd999e2e6c8",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Onvif/OnvifProtocolClient.cs",
+      "fingerprint": "b3a69957eafd6ebd",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Onvif/OnvifProtocolClient.cs",
+      "fingerprint": "b3f7ba7cd7d65b47",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Onvif/OnvifProtocolClient.cs",
+      "fingerprint": "f660216fbab3feda",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Onvif/OnvifProtocolClient.cs",
+      "fingerprint": "2eec7ed6c8ded32b",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/OpenGL/WaterfallControl.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 2
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/OpenGL/WaterfallControl.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/AutoSelectionPanel.cs",
+      "fingerprint": "ee53ffd996e97a03",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/AutoSelectionPanel.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 3
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/AutoSelectionPanel.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/CwConsolePanel.cs",
+      "fingerprint": "6cc42532a5307d51",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/CwConsolePanel.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/CwConsolePanel.cs",
+      "fingerprint": "0c2bf26297ce536c",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/CwConsolePanel.cs",
+      "fingerprint": "221faee59dc3ab5e",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/CwConsolePanel.cs",
+      "fingerprint": "6fdf15c0b4ec0019",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/CwConsolePanel.cs",
+      "fingerprint": "bbd64f345d4bef90",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/CwConsolePanel.cs",
+      "fingerprint": "c0b443c8a6722d01",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/CwConsolePanel.cs",
+      "fingerprint": "ce8b7c3dd38a972f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/CwConsolePanel.cs",
+      "fingerprint": "d956cbf3eaa084bb",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/EarthViewPanel.cs",
+      "fingerprint": "63a90987eb320794",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/EarthViewPanel.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 3
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/EarthViewPanel.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/EarthViewPanel.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/FrequencyControlPanel.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/FrequencyControlPanel.cs",
+      "fingerprint": "43f45c1612bef637",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/FrequencyControlPanel.cs",
+      "fingerprint": "a0178be0d99ea9b5",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/FrequencyControlPanel.cs",
+      "fingerprint": "b928a831d9c18170",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/Ft4ConsolePanel.cs",
+      "fingerprint": "4a30ad63efef3b73",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/Ft4ConsolePanel.cs",
+      "fingerprint": "c2cbdb51559009b8",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/Ft4ConsolePanel.cs",
+      "fingerprint": "d084dcfe0ec5ca53",
+      "count": 4
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/Ft4ConsolePanel.cs",
+      "fingerprint": "5083246c7991c319",
+      "count": 8
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/Ft4ConsolePanel.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/Ft4ConsolePanel.Designer.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/Ft4ConsolePanel.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/GroupViewPanel.cs",
+      "fingerprint": "1356f6486494013d",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/GroupViewPanel.cs",
+      "fingerprint": "2ea6fa7f1770dc85",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/GroupViewPanel.cs",
+      "fingerprint": "35c7ec7aaefc74f0",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/GroupViewPanel.cs",
+      "fingerprint": "5ae006e842459667",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/GroupViewPanel.cs",
+      "fingerprint": "7271d7a78a00ffd2",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/GroupViewPanel.cs",
+      "fingerprint": "8841a41e29360eee",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/GroupViewPanel.cs",
+      "fingerprint": "dd6bb51c2f0201e8",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/GroupViewPanel.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/GroupViewPanel.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/IcomLanSpectrumPanel.cs",
+      "fingerprint": "5b9372f6d8b0a211",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/IcomLanSpectrumPanel.cs",
+      "fingerprint": "6bb4e7f3663f7b1f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/IcomLanSpectrumPanel.cs",
+      "fingerprint": "9c216e93f206d18f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/IcomLanSpectrumPanel.cs",
+      "fingerprint": "e28957971fcfb041",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/IcomLanSpectrumPanel.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/IcomLanSpectrumPanel.cs",
+      "fingerprint": "3dca63a735b169f9",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/IcomLanSpectrumPanel.cs",
+      "fingerprint": "4aa1be548ecbf3b7",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/IcomLanSpectrumPanel.cs",
+      "fingerprint": "540892f385e1e74b",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/IcomLanSpectrumPanel.cs",
+      "fingerprint": "5ab852caec1123ea",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/IcomLanSpectrumPanel.cs",
+      "fingerprint": "70adf83268f7170a",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/IcomLanSpectrumPanel.cs",
+      "fingerprint": "7e962688d094be09",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/IcomLanSpectrumPanel.cs",
+      "fingerprint": "c32bd99c81b067a9",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/IcomLanSpectrumPanel.cs",
+      "fingerprint": "cd2588ce13975672",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/IcomLanSpectrumPanel.cs",
+      "fingerprint": "d956cbf3eaa084bb",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/IcomLanSpectrumPanel.cs",
+      "fingerprint": "e123fa90ec8a8950",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/IcomScopeFixedEdgeDialog.cs",
+      "fingerprint": "65f789aa2f9a468d",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-broad-catch",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/OnvifCameraPanel.cs",
+      "fingerprint": "9ac4bc3b4453cede",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/csharp-sync-over-async",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/OnvifCameraPanel.cs",
+      "fingerprint": "efb7cb066167320d",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/OnvifCameraPanel.cs",
+      "fingerprint": "a5b770cf0a1bf63a",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/OnvifCameraPanel.cs",
+      "fingerprint": "f0bf9c25fa08f0b3",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/OnvifCameraPanel.cs",
+      "fingerprint": "9566e31f3c7ed7aa",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/PassesPanel.cs",
+      "fingerprint": "5a44e8ce7c52adb3",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/PassesPanel.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 3
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/PassesPanel.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/QsoEntryPanel.cs",
+      "fingerprint": "db7aa947d11569bc",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/QsoEntryPanel.Designer.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/QsoEntryPanel.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/QsoSchedulerPanel.cs",
+      "fingerprint": "5e16ef1bf2566b96",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/QsoSchedulerPanel.cs",
+      "fingerprint": "d10d7eb444165418",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/QsoSchedulerPanel.cs",
+      "fingerprint": "ee53ffd996e97a03",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/QsoSchedulerPanel.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/QsoSchedulerPanel.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-async-void",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/RecorderPanel.cs",
+      "fingerprint": "05e4be51908aafe6",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/RecorderPanel.cs",
+      "fingerprint": "e36249f6dbfcb6fa",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/RecorderPanel.cs",
+      "fingerprint": "ee53ffd996e97a03",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/RecorderPanel.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 7
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/RecorderPanel.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/RecorderPanel.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/SatelliteDetailsPanel.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/ScopeUiColors.cs",
+      "fingerprint": "0b9e13dadadeafd1",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/ScopeUiColors.cs",
+      "fingerprint": "de18fa47c6e1a919",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/SkyViewPanel.cs",
+      "fingerprint": "6a0e0c3331e81866",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/SkyViewPanel.cs",
+      "fingerprint": "1182b7a6d74e76c9",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/SkyViewPanel.cs",
+      "fingerprint": "81d21dcd14dd5341",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/SkyViewPanel.cs",
+      "fingerprint": "c01733c69e638073",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/SkyViewPanel.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 5
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/SkyViewPanel.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/SkyViewPanel.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-async-void",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/SstvConsolePanel.cs",
+      "fingerprint": "21ee0c77d137dba7",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/SstvConsolePanel.cs",
+      "fingerprint": "26b06b358a37368b",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/SstvConsolePanel.cs",
+      "fingerprint": "5551eb3fe02adb68",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/SstvConsolePanel.cs",
+      "fingerprint": "0ebb211f52acc75c",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/SstvConsolePanel.cs",
+      "fingerprint": "1d5981b7ec94fcde",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/SstvConsolePanel.cs",
+      "fingerprint": "2e40bef9b55ed5c7",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/SstvConsolePanel.cs",
+      "fingerprint": "f0bf9c25fa08f0b3",
+      "count": 4
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/SstvConsolePanel.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/SstvConsolePanel.cs",
+      "fingerprint": "3b2e5849c6f1cf03",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/SstvConsolePanel.cs",
+      "fingerprint": "6f0c48a35a72bdb9",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/SstvConsolePanel.cs",
+      "fingerprint": "7f6168ff036869c3",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "1c26e8c959db81e7",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "2122df261c51a86e",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "34182a16f88787a0",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "546546e0d2a63de0",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "57f6014c04005ade",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "669fdafef25e771e",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "7962d85e2ea50d2f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "798e2742a1d334f5",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "82cf5c5ee52087b7",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "8776bb97aa313919",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "8f69eab4a2928de7",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "99aa8b69a59efaa0",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "9fc3e669ec61cb90",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "a41b2a4b26d91e7f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "a87f4dfb57833f84",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "c7d2ba3f9e74ea99",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "f14bdb3359e48966",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "fe91348cd378d17a",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-sync-over-async",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "a4d8898f74f9c3a2",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 11
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "38dc42c13443f7d8",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "6e2f79c585669cb1",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "78505e501ac2f990",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "26e6c3d8a2952fd3",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/TelemetryPanel.cs",
+      "fingerprint": "6c8babf62dc8ed4c",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/TelemetryPanel.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TimelinePanel.cs",
+      "fingerprint": "6aedaf0ba7d2bf0e",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/TimelinePanel.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 5
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/WaterfallPanel.cs",
+      "fingerprint": "30ce7431bc866427",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/WaterfallPanel.cs",
+      "fingerprint": "9d709d28f55d1f26",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/WaterfallPanel.cs",
+      "fingerprint": "d909c08847c04fa9",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Panels/WaterfallPanel.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 3
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/WaterfallPanel.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Panels/WaterfallPanel.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/PinkBlueLightDockTheme.cs",
+      "fingerprint": "585f735a9eae66c9",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Qso/AdifFile.cs",
+      "fingerprint": "fc039189fdc41c4d",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Qso/AdifFile.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Qso/AdifLogger.cs",
+      "fingerprint": "b14b35f03264d6f3",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Qso/AdifLogger.cs",
+      "fingerprint": "5083246c7991c319",
+      "count": 3
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Qso/LoggerInterface.cs",
+      "fingerprint": "05b47bf0fd498e27",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Qso/LoggerInterface.cs",
+      "fingerprint": "0eb33b95e9013614",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Qso/LoggerInterface.cs",
+      "fingerprint": "a65e6eb65b959387",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Qso/LoggerInterface.cs",
+      "fingerprint": "d21c622b34d54b4c",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "0fb2835f29b8f6e3",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "18de52af4d83d67e",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "1c41f334e946906d",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "25b7329b35c78f69",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "30a826ba26c11b91",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "3e4cfb56dffff2f6",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "47cad9df97da162e",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "572f6d072ae92105",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "6308c9804c7c0f2c",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "696142b954ad7bd3",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "704952413d89b7a8",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "73df5679d1246a39",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "88fc6cf1feef83e6",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "8bccca151c65650a",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "9452eb464e089b05",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "945af91808ce238c",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "9f024e9bdad795e7",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "a8cbc8929e627fc6",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "ad5213756b97388b",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "b13198c831e1ca9e",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "b758c4fffd72455c",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "bbbeecc13b95abe0",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "bdb62e82605d1323",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "be4e82cfe7dfea60",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "caa42096d356d414",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "d0bfca62e6554df5",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "dc9ed0e887fc5a77",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "e06d58705a1a468a",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/RadioLink.cs",
+      "fingerprint": "be745d23e3a7f92e",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/trivial-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/DpTable.cs",
+      "fingerprint": "26d3d3b86849ac9f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/trivial-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/DpTable.cs",
+      "fingerprint": "5df8059b2679edfa",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/trivial-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/DpTable.cs",
+      "fingerprint": "af361f3bfa411efa",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/trivial-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/DpTable.cs",
+      "fingerprint": "d8f05536a5a7dd8f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/trivial-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/DpTable.cs",
+      "fingerprint": "e839118b8eb37ed0",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/IsolatedRotatorTransport.cs",
+      "fingerprint": "05c4966e31b78dde",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/IsolatedRotatorTransport.cs",
+      "fingerprint": "0897a20605bedf91",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/IsolatedRotatorTransport.cs",
+      "fingerprint": "86d9e1ec11e921a9",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/IsolatedRotatorTransport.cs",
+      "fingerprint": "b6349f079840effc",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/IsolatedRotatorTransport.cs",
+      "fingerprint": "c90b8c72835252ca",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/IsolatedRotatorTransport.cs",
+      "fingerprint": "dc1f0a1401e152da",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-sync-over-async",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/IsolatedRotatorTransport.cs",
+      "fingerprint": "6dcf17a5e155da5d",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-sync-over-async",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/IsolatedRotatorTransport.cs",
+      "fingerprint": "b4b8e7477b8999bf",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/IsolatedRotatorTransport.cs",
+      "fingerprint": "09bc9b6435cd9590",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/IsolatedRotatorTransport.cs",
+      "fingerprint": "7d5d53545fe71ad9",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/IsolatedRotatorTransport.cs",
+      "fingerprint": "8bf2602d39ba759a",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/IsolatedRotatorTransport.cs",
+      "fingerprint": "c41d9237feb957ef",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/unreachable-code",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/IsolatedRotatorTransport.cs",
+      "fingerprint": "5af2559ade318982",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/unreachable-code",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/IsolatedRotatorTransport.cs",
+      "fingerprint": "77cef77eaa9a9228",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/NativeRotatorControlEngine.cs",
+      "fingerprint": "17ff284d7829a0f2",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/NativeRotatorControlEngine.cs",
+      "fingerprint": "2614da46941cd83b",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/NativeRotatorControlEngine.cs",
+      "fingerprint": "413451b569641d7a",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/NativeRotatorControlEngine.cs",
+      "fingerprint": "414daaafb3f15463",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/NativeRotatorControlEngine.cs",
+      "fingerprint": "dea2cc598df12f4c",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/meta-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/NativeRotatorControlEngine.cs",
+      "fingerprint": "cd874af57b180e1e",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/NativeRotatorControlEngine.cs",
+      "fingerprint": "aca1c6e2068d16d5",
+      "count": 2
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Rotator/Native/NativeRotatorControlEngine.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Rotator/Native/NativeRotatorControlEngine.cs",
+      "fingerprint": "bfa1f74b511dab90",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-sync-over-async",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/NativeRotatorTransport.cs",
+      "fingerprint": "cfd417e3825f7235",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/NativeRotatorTransport.cs",
+      "fingerprint": "5b24348321747479",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/Rotator/Native/Rc3040sManagementService.cs",
+      "fingerprint": "b489839f92106950",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/Rotator/Native/Rc3040sMotionPlanner.cs",
+      "fingerprint": "0a5255c5decd91f5",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/Rotator/Native/Rc3040sMotionPlanner.cs",
+      "fingerprint": "c0d1364469040e27",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-sync-over-async",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/RotatorEngineSubprocess.cs",
+      "fingerprint": "aac41cbe96cda1a4",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/RotatorEngineSubprocess.cs",
+      "fingerprint": "1cc2aaef4f1cc4e1",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/RotatorEngineSubprocess.cs",
+      "fingerprint": "251157e2055cdfc5",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/RotatorEngineSubprocess.cs",
+      "fingerprint": "34f01e40a148431e",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/RotatorEngineSubprocess.cs",
+      "fingerprint": "595cae9941216626",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/RotatorEngineSubprocess.cs",
+      "fingerprint": "6d5f5de6db84fc69",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/RotatorEngineSubprocess.cs",
+      "fingerprint": "7828e3090921828e",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/RotatorEngineSubprocess.cs",
+      "fingerprint": "7d5d53545fe71ad9",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/RotatorEngineSubprocess.cs",
+      "fingerprint": "83872e225ffc34b3",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/RotatorEngineSubprocess.cs",
+      "fingerprint": "8e67d22e8471a638",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/RotatorEngineSubprocess.cs",
+      "fingerprint": "af35ef5ac35f8b59",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/RotatorEngineSubprocess.cs",
+      "fingerprint": "ba0bcba5f5534ebc",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/Native/RotatorEngineSubprocess.cs",
+      "fingerprint": "c3105aba0f0084e9",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Rotator/Native/RotatorEngineSubprocess.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Rotator/Native/RotatorEngineSubprocess.cs",
+      "fingerprint": "0f7d9ea91a7e7cc2",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Rotator/Native/RotatorEngineSubprocess.cs",
+      "fingerprint": "c41924cf2a5f96c3",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/OptimizedRotationPath.cs",
+      "fingerprint": "385fbdbdaa7789f8",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Rotator/OptimizedRotationPath.cs",
+      "fingerprint": "4f54f717f938a56e",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/Rotator/RotatorParkSequence.cs",
+      "fingerprint": "c0507d2eca8a4e5e",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/AmsatStatusDownloader.cs",
+      "fingerprint": "9e9a6afabd9c802c",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-sync-over-async",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/AmsatStatusDownloader.cs",
+      "fingerprint": "d0036e524eafbe20",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/CoChannel.cs",
+      "fingerprint": "42ed64093eb48768",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Satellites/JplSpkKernel.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Satellites/JplSpkKernel.cs",
+      "fingerprint": "134944ea56ebb3e2",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Satellites/JplSpkKernel.cs",
+      "fingerprint": "3b390a1cc77f43a8",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Satellites/JplSpkKernel.cs",
+      "fingerprint": "bcc98003427984e7",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Satellites/JplSpkKernel.cs",
+      "fingerprint": "f3c4799aaf7b44f2",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatelliteNames.cs",
+      "fingerprint": "da6afe5d14021b3d",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatellitePass.cs",
+      "fingerprint": "2d656665bccf1284",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatellitePass.cs",
+      "fingerprint": "bb96b1fdaa678bbe",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatellitePass.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatellitePasses.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 4
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatelliteTracker.cs",
+      "fingerprint": "195de9281a5e21bb",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatelliteTracker.cs",
+      "fingerprint": "3f410b6c6cf6da21",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatelliteTracker.cs",
+      "fingerprint": "62f9f6517c5fffbe",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatelliteTracker.cs",
+      "fingerprint": "8fd957e0039ee827",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatelliteTracker.cs",
+      "fingerprint": "9166722a1b13358b",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatelliteTracker.cs",
+      "fingerprint": "be963d25f40e8c21",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatelliteTracker.cs",
+      "fingerprint": "e388c0ff1eabbc98",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatelliteTracker.cs",
+      "fingerprint": "ff2b5ef506e7ab89",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Satellites/SatelliteTracker.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Satellites/SatelliteTracker.cs",
+      "fingerprint": "d4cd248d3e79b407",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-empty-catch-rethrow",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatnogsDb.cs",
+      "fingerprint": "67f86d05193fc175",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatnogsDb.cs",
+      "fingerprint": "50a51bfe9df85ea4",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatnogsDb.cs",
+      "fingerprint": "78c0d90c52aaede1",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatnogsDb.cs",
+      "fingerprint": "a3f2b871ca0ce233",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatnogsDb.cs",
+      "fingerprint": "d4b4e7dc7983c1fb",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-string-concat-in-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatnogsDb.cs",
+      "fingerprint": "5ef4f986de07e5b2",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatnogsDb.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatnogsDb.cs",
+      "fingerprint": "c32415b68e2deca6",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatnogsDb.cs",
+      "fingerprint": "0aac0bf59fdfb8bc",
+      "count": 2
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Satellites/SatnogsDb.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Satellites/SatnogsDb.cs",
+      "fingerprint": "089503739c01d65a",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Satellites/SatnogsDb.cs",
+      "fingerprint": "4f715db641ae2816",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Satellites/SatnogsDb.cs",
+      "fingerprint": "6d7dbc66bf387cc2",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatnogsDbSatellite.cs",
+      "fingerprint": "4b83c20d779cce3b",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatnogsDbSatellite.cs",
+      "fingerprint": "0aac0bf59fdfb8bc",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Satellites/SatnogsDbSatellite.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Satellites/SatyamlDb.cs",
+      "fingerprint": "da885ab56df8598d",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Satellites/SatyamlDb.cs",
+      "fingerprint": "6397c76d0019a7a7",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-not-implemented",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SDR/SdrProperties.cs",
+      "fingerprint": "8b3c56503571f90f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SDR/SdrProperties.cs",
+      "fingerprint": "14c79635c33eef02",
+      "count": 4
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SDR/SoapySdr.cs",
+      "fingerprint": "8d9f0da3cdbbe4d3",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SDR/SoapySdrArgs.cs",
+      "fingerprint": "3d7b415fb87ab5f1",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SDR/SoapySdrDevice.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 4
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SDR/SoapySdrDeviceInfo.cs",
+      "fingerprint": "15e56c442aab2b1f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SDR/SoapySdrDeviceInfo.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Settings/EnumDescriptionConverter.cs",
+      "fingerprint": "544d7f8d3a1d8757",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Settings/EnumDescriptionConverter.cs",
+      "fingerprint": "a45f824a29324e68",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Settings/IcomLanSpectrumSettingsPropertyConverter.cs",
+      "fingerprint": "e47ebce32e255666",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Settings/RotatorSettingsPropertyConverter.cs",
+      "fingerprint": "e47ebce32e255666",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Settings/SatelliteSettings.cs",
+      "fingerprint": "5ece85d571d0daa4",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Settings/SettingsDialog.cs",
+      "fingerprint": "35c9a91256de26ec",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Settings/SettingsDialog.cs",
+      "fingerprint": "6633e1171d55395d",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Settings/SettingsDialog.cs",
+      "fingerprint": "dc70e17de05ca895",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Settings/SettingsDialog.cs",
+      "fingerprint": "e5712b8524ee1584",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Settings/SettingsDialog.cs",
+      "fingerprint": "ef344b104d6512ee",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/meta-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Settings/SettingsDialog.cs",
+      "fingerprint": "37d993fdc0e044ae",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Settings/SettingsDialog.cs",
+      "fingerprint": "5083246c7991c319",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Settings/SettingsDialog.cs",
+      "fingerprint": "1d5981b7ec94fcde",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Settings/SettingsDialog.cs",
+      "fingerprint": "2e40bef9b55ed5c7",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/unreachable-code",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Settings/SettingsDialog.cs",
+      "fingerprint": "f88f4e78531981cc",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Settings/SettingsDialog.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Settings/SettingsDialog.cs",
+      "fingerprint": "373b15861d951997",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Settings/SettingsDialog.cs",
+      "fingerprint": "6382be48931a4efb",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Settings/SettingsDialog.cs",
+      "fingerprint": "dc749a198f573e10",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Settings/SettingsDialog.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Settings/TransverterSettings.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 3
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Settings/UserDetailsDialog.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Settings/VoiceNameConverter.cs",
+      "fingerprint": "e3f1fe244fe2a387",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Settings/VoiceNameConverter.cs",
+      "fingerprint": "f2f30b4bd75721be",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvAudioReceiveSession.cs",
+      "fingerprint": "22711e715dcc6790",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvAudioReceiveSession.cs",
+      "fingerprint": "ba0ae0f6560044b0",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/meta-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvAudioReceiveSession.cs",
+      "fingerprint": "dc1ad31bcbf87dc1",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/SSTV/SstvAudioReceiveSession.cs",
+      "fingerprint": "29e32226aa3af26d",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/SSTV/SstvExtraModeCatalog.cs",
+      "fingerprint": "ec586fdb1b854926",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvExtraWaveExporter.cs",
+      "fingerprint": "a6d529843ae630a5",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvExtraWaveExporter.cs",
+      "fingerprint": "1a3515fb715382d3",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/SSTV/SstvExtraWaveExporter.cs",
+      "fingerprint": "65396847daea3fa0",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvLiveFskIdDetector.cs",
+      "fingerprint": "629f33c566a5873c",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvLiveRasterReceiver.cs",
+      "fingerprint": "122534e7148aa510",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvLiveRasterReceiver.cs",
+      "fingerprint": "ba0ae0f6560044b0",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvLiveRasterReceiver.cs",
+      "fingerprint": "3806f54a754b606a",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvLiveRasterReceiver.cs",
+      "fingerprint": "5b799e6e3202c6f5",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvLiveRasterReceiver.cs",
+      "fingerprint": "bd7aa8e3553c116d",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvLiveRasterReceiver.cs",
+      "fingerprint": "c0db7a522ef3028d",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvLiveRasterReceiver.cs",
+      "fingerprint": "d9306c491172049a",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvNativeLineSyncAfc.cs",
+      "fingerprint": "e9083dfc665ca264",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvOfflineRasterDecoder.cs",
+      "fingerprint": "112d27e31461b90d",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/SSTV/SstvOfflineRasterDecoder.cs",
+      "fingerprint": "6ce849a637d00157",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvQsoLogStore.cs",
+      "fingerprint": "fa596f62c7a47e52",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvQsoLogStore.cs",
+      "fingerprint": "8ada390007490be2",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/SSTV/SstvQsoLogStore.cs",
+      "fingerprint": "2f2d59971dd98afa",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvRgbWaveExporter.cs",
+      "fingerprint": "bfe5a591ab8e61e4",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvTemplateStore.cs",
+      "fingerprint": "991e2b3440c405e8",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/SSTV/SstvTextMacros.cs",
+      "fingerprint": "f4fc1f30cbd7a7a0",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvToneSpectrum.cs",
+      "fingerprint": "4341337cf2bfee30",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvTransmitSession.cs",
+      "fingerprint": "c01596febc73837a",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/SSTV/SstvTransmitSession.cs",
+      "fingerprint": "84574b55dba2790e",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/SSTV/SstvTxModeCatalog.cs",
+      "fingerprint": "6857c61392de71aa",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/SSTV/SstvTxPolicy.cs",
+      "fingerprint": "c0dea421fdd37760",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/SSTV/SstvTxPolicy.cs",
+      "fingerprint": "cd2d60f5cf9110b8",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvVisAfcDetector.cs",
+      "fingerprint": "629f33c566a5873c",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/SSTV/SstvVisAfcDetector.cs",
+      "fingerprint": "af41a0a0a7c08d7c",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvWaveExporter.cs",
+      "fingerprint": "4e10ab99f5511dbd",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvWaveExporter.cs",
+      "fingerprint": "87da7125f6e7fbd8",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/SSTV/SstvWavNormalizer.cs",
+      "fingerprint": "1b9065c9a5d3efc8",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Theme.cs",
+      "fingerprint": "481e749feb70176a",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Theme.cs",
+      "fingerprint": "7a7c45c2d9caa4d4",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Theme.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Utils.cs",
+      "fingerprint": "d0580a5fa9a86f90",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Utils.cs",
+      "fingerprint": "e7abb9265441a7d2",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/VersionChecker.cs",
+      "fingerprint": "7fe1c562557a110c",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/trivial-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/VersionChecker.cs",
+      "fingerprint": "1f1a2397fd03fd22",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/trivial-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/VersionChecker.cs",
+      "fingerprint": "76e83e24789e6dea",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/AudioWaterfallWidget.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 2
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Widgets/AudioWaterfallWidget.cs",
+      "fingerprint": "4e4880dedfe209c9",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/ClockWidget.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/CwAudioWaterfallView.cs",
+      "fingerprint": "b094f498cb6209e7",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Widgets/CwAudioWaterfallView.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/FrequencyScale.cs",
+      "fingerprint": "30ce7431bc866427",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/FrequencyScale.cs",
+      "fingerprint": "55b0404fcdbbad01",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/FrequencyScale.cs",
+      "fingerprint": "9ab1183337520379",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/FrequencyScale.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/FrequencyWidget.cs",
+      "fingerprint": "0999b108619665e8",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/FrequencyWidget.cs",
+      "fingerprint": "12372016a52f1a05",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/FrequencyWidget.cs",
+      "fingerprint": "2728143a738ec8be",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/FrequencyWidget.cs",
+      "fingerprint": "2aaed4ec4c02914d",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/FrequencyWidget.cs",
+      "fingerprint": "48ba2aaf3e7584be",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/FrequencyWidget.cs",
+      "fingerprint": "59900e542cb9745b",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/FrequencyWidget.cs",
+      "fingerprint": "61a59030659d638e",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/FrequencyWidget.cs",
+      "fingerprint": "66efcc2759df17fd",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/FrequencyWidget.cs",
+      "fingerprint": "7a06f419745951e1",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/FrequencyWidget.cs",
+      "fingerprint": "7bfe17e69a18cf0f",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/FrequencyWidget.cs",
+      "fingerprint": "7d2c6c0168d2b45c",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/FrequencyWidget.cs",
+      "fingerprint": "824c29e31897c8fe",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/FrequencyWidget.cs",
+      "fingerprint": "839ba0d2e89872e9",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/FrequencyWidget.cs",
+      "fingerprint": "bd77f3cf5b60531a",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/FrequencyWidget.cs",
+      "fingerprint": "d199c14f5404c907",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/FrequencyWidget.cs",
+      "fingerprint": "f32aa2fbe0c1b646",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/FrequencyWidget.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 6
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Widgets/FrequencyWidget.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Widgets/FrequencyWidget.cs",
+      "fingerprint": "9ff5e3d3a095317e",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Widgets/FrequencyWidget.cs",
+      "fingerprint": "fb4ece38efb3e929",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Widgets/FrequencyWidget.Designer.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Widgets/FrequencyWidget.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/Ft4AmplitudeBar.cs",
+      "fingerprint": "95d6d95664d52663",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/Ft4MessageListWidget.cs",
+      "fingerprint": "5083246c7991c319",
+      "count": 5
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Widgets/Ft4MessageListWidget.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Widgets/Ft4MessageListWidget.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/GainWidget.cs",
+      "fingerprint": "dd3911d26fc08bce",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Widgets/GainWidget.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/Widgets/Rc3040sMotionSettingsDialog.cs",
+      "fingerprint": "6210712f9bcb25a3",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/Rc3040sQuickControls.cs",
+      "fingerprint": "102aeecec555cd89",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/Rc3040sQuickControls.cs",
+      "fingerprint": "a0cf4e304f7619e3",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Widgets/RotatorControlCard.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Widgets/RotatorControlCard.cs",
+      "fingerprint": "4e4880dedfe209c9",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Widgets/RotatorControlCard.cs",
+      "fingerprint": "57b60137c4bcdab7",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Widgets/RotatorControlCard.cs",
+      "fingerprint": "d2e0c436a71cb719",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-if-ladder",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/RotatorWidget.cs",
+      "fingerprint": "d552857a659da25e",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/RotatorWidget.cs",
+      "fingerprint": "a3a6bcf23def2647",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/RotatorWidget.cs",
+      "fingerprint": "fc66152beeb58cf9",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/RotatorWidget.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 3
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/RotatorWidget.cs",
+      "fingerprint": "8e319e8b44b4a346",
+      "count": 1
+    },
+    {
+      "rule": "complexity/file-too-large",
+      "engine": "code-quality",
+      "file": "SkyRoof/Widgets/RotatorWidget.cs",
+      "fingerprint": "message:96b0128c3491727f",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Widgets/RotatorWidget.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/RsBa1AudioSessionController.cs",
+      "fingerprint": "4aa84d2dca9bf359",
+      "count": 2
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/RsBa1AudioSessionController.cs",
+      "fingerprint": "26e6ebaf1c58a369",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/RsBa1AudioSessionController.cs",
+      "fingerprint": "9dd806011a08810d",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/RsBa1AudioSessionController.cs",
+      "fingerprint": "d085977040b4bc55",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/RsBa1AudioSessionController.cs",
+      "fingerprint": "e79e5e1c28175193",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/RsBa1AudioSessionController.cs",
+      "fingerprint": "f0bf9c25fa08f0b3",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/swallowed-exception",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/RsBa1AudioSessionController.cs",
+      "fingerprint": "f9ab5614ee7db8bb",
+      "count": 3
+    },
+    {
+      "rule": "complexity/too-many-params",
+      "engine": "code-quality",
+      "file": "SkyRoof/Widgets/RsBa1AudioSessionController.cs",
+      "fingerprint": "61444a57db119a56",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Widgets/SatelliteDetailsWidget.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/SatellitePhotoWidget.cs",
+      "fingerprint": "95351588238c89c6",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/SatelliteSelectorWidget.cs",
+      "fingerprint": "356061895e2b454c",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/SatelliteSelectorWidget.cs",
+      "fingerprint": "40adcdd87b554f20",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/SatelliteSelectorWidget.cs",
+      "fingerprint": "5ef9f92bfd678513",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/SatelliteSelectorWidget.cs",
+      "fingerprint": "b3a12470e6b3595c",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-null-forgiving",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/SatelliteSelectorWidget.cs",
+      "fingerprint": "dbf0aae7edee73ac",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/narrative-comment",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/SatelliteSelectorWidget.cs",
+      "fingerprint": "15f88a10b2a192bb",
+      "count": 5
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Widgets/SatelliteSelectorWidget.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "complexity/function-too-long",
+      "engine": "code-quality",
+      "file": "SkyRoof/Widgets/WaterfallSildersDlg.Designer.cs",
+      "fingerprint": "794f121fab935f55",
+      "count": 1
+    },
+    {
+      "rule": "ai-slop/csharp-index-loop",
+      "engine": "ai-slop",
+      "file": "SkyRoof/Widgets/WaveformWidget.cs",
+      "fingerprint": "1961dec89622083c",
+      "count": 1
+    }
+  ]
+}
