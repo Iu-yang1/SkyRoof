@@ -366,7 +366,11 @@ public sealed class NativeRotatorWorkerTests
   {
     await using var server=new FakeGs232Bridge();
     using var engine=new NativeRotatorControlEngine(CreateSettings(server.Port));
-    await UntilAsync(()=>engine.LastReadBearing!=null);
+    // The first C2 reply is not yet permission to command motor motion.
+    // NativeRotatorControlEngine only accepts JOG after the ready flag and
+    // fresh position feedback agree.  Wait for that real precondition rather
+    // than treating a rejected early JOG as a worker timeout.
+    await UntilAsync(()=>engine.HasLiveConnection && engine.LastReadBearing!=null);
     engine.StartContinuousMove(RotatorContinuousDirection.Right);
     await UntilAsync(()=>server.Count("R")>0);
     engine.StopRotation();
