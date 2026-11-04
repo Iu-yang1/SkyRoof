@@ -490,27 +490,32 @@ namespace SkyRoof
         if (rx && !tx)
         {
             CatMode = OperatingMode.RxOnly;
-            Caps = RadioCapabilities.simplex!;
+            Caps = RadioCapabilities.simplex ??
+              throw new InvalidDataException("CAT capabilities missing required simplex mode");
         }
         else if (!rx && tx)
         {
             CatMode = OperatingMode.TxOnly;
-            Caps = RadioCapabilities.simplex!;
+            Caps = RadioCapabilities.simplex ??
+              throw new InvalidDataException("CAT capabilities missing required simplex mode");
         }
         else if (crossband && RadioCapabilities.duplex != null)
         {
             CatMode = OperatingMode.Duplex;
-            Caps = RadioCapabilities.duplex!;
+            Caps = RadioCapabilities.duplex ??
+                throw new InvalidDataException("CAT capabilities missing duplex mode");
         }
         else if (RadioCapabilities.CanSplitTune(crossband))
         {
             CatMode = OperatingMode.Split;
-            Caps = RadioCapabilities.split!;
+            Caps = RadioCapabilities.split ??
+                throw new InvalidDataException("CAT capabilities missing split mode");
         }
         else if (RadioCapabilities.simplex != null)
         {
             CatMode = OperatingMode.Simplex;
-            Caps = RadioCapabilities.simplex!;
+            Caps = RadioCapabilities.simplex ??
+              throw new InvalidDataException("CAT capabilities missing required simplex mode");
         }
         else
             throw new Exception("Radio does not support any operating modes");
@@ -652,7 +657,11 @@ namespace SkyRoof
     //----------------------------------------------------------------------------------------------
     private void TryWriteRxMode(Slicer.Mode? mode = null)
     {
-      Slicer.Mode newMode = (mode ?? RequestedRxMode!).Value;
+      if ((mode ?? RequestedRxMode) is not Slicer.Mode newMode)
+      {
+        Log.Warning("CAT RX mode write skipped: no requested mode");
+        return;
+      }
 
       string command = GetWriteRxModeCommand(newMode);
       if (command == string.Empty) return;
@@ -672,7 +681,11 @@ namespace SkyRoof
 
     private void TryWriteTxMode()
     {
-      Slicer.Mode mode = RequestedTxMode!.Value;
+      if (RequestedTxMode is not Slicer.Mode mode)
+      {
+        Log.Warning("CAT TX mode write skipped: no requested mode");
+        return;
+      }
 
       string command = GetWriteTxModeCommand(mode);
       if (command == string.Empty) return;
@@ -687,7 +700,7 @@ namespace SkyRoof
           return;
       }
 
-      LastWrittenTxMode = RequestedTxMode!;
+      LastWrittenTxMode = mode;
     }
 
 
@@ -928,7 +941,7 @@ namespace SkyRoof
 
     private void TrySendArmingTone()
     {
-      double toneHz = RequestedArmingTone!.Value;
+      if (RequestedArmingTone is not double toneHz) return;
       RequestedArmingTone = null;
 
       if (!CanSendArmingTone()) return;
@@ -1211,17 +1224,17 @@ namespace SkyRoof
           return string.Empty;
 
         case OperatingMode.RxOnly:
-          if (Ptt == false && Caps.Can(CatAction.read_rx_frequency, Ptt)) return commands.read_rx_frequency!;
-          if (Ptt == true && Caps.Can(CatAction.read_tx_frequency, Ptt)) return commands.read_tx_frequency!;
+          if (Ptt == false && Caps.Can(CatAction.read_rx_frequency, Ptt)) return commands.read_rx_frequency ?? string.Empty;
+          if (Ptt == true && Caps.Can(CatAction.read_tx_frequency, Ptt)) return commands.read_tx_frequency ?? string.Empty;
           break;
 
         case OperatingMode.Simplex:
-          if (Ptt == false && Caps.Can(CatAction.read_rx_frequency, Ptt)) return commands.read_rx_frequency!;
+          if (Ptt == false && Caps.Can(CatAction.read_rx_frequency, Ptt)) return commands.read_rx_frequency ?? string.Empty;
           break;
 
         // split or duplex
         default:
-          if (Caps.Can(CatAction.read_rx_frequency, Ptt)) return commands.read_rx_frequency!;
+          if (Caps.Can(CatAction.read_rx_frequency, Ptt)) return commands.read_rx_frequency ?? string.Empty;
           break;
       }
 
@@ -1236,17 +1249,17 @@ namespace SkyRoof
           return string.Empty;
 
         case OperatingMode.TxOnly:
-          if (Ptt == false && Caps.Can(CatAction.read_rx_frequency, Ptt)) return commands.read_rx_frequency!;
-          if (Ptt == true && Caps.Can(CatAction.read_tx_frequency, Ptt)) return commands.read_tx_frequency!;
+          if (Ptt == false && Caps.Can(CatAction.read_rx_frequency, Ptt)) return commands.read_rx_frequency ?? string.Empty;
+          if (Ptt == true && Caps.Can(CatAction.read_tx_frequency, Ptt)) return commands.read_tx_frequency ?? string.Empty;
           break;
 
         case OperatingMode.Simplex:
-          if (Ptt == true && Caps.Can(CatAction.read_tx_frequency, Ptt)) return commands.read_tx_frequency!;
+          if (Ptt == true && Caps.Can(CatAction.read_tx_frequency, Ptt)) return commands.read_tx_frequency ?? string.Empty;
           break;
 
         // split or duplex
         default:
-          if (Caps.Can(CatAction.read_tx_frequency, Ptt)) return commands.read_tx_frequency!;
+          if (Caps.Can(CatAction.read_tx_frequency, Ptt)) return commands.read_tx_frequency ?? string.Empty;
           break;
       }
 
@@ -1261,16 +1274,16 @@ namespace SkyRoof
           return string.Empty;
 
         case OperatingMode.RxOnly:
-          if (Ptt == false && Caps.Can(CatAction.write_rx_frequency, Ptt)) return commands.write_rx_frequency.Replace("{frequency}", $"{frequency}");
-          else if (Ptt == true && Caps.Can(CatAction.write_tx_frequency, Ptt)) return commands.write_tx_frequency.Replace("{frequency}", $"{frequency}");
+          if (Ptt == false && Caps.Can(CatAction.write_rx_frequency, Ptt)) return commands.write_rx_frequency?.Replace("{frequency}", $"{frequency}" ?? string.Empty;
+          else if (Ptt == true && Caps.Can(CatAction.write_tx_frequency, Ptt)) return commands.write_tx_frequency?.Replace("{frequency}", $"{frequency}" ?? string.Empty;
           break;
 
         case OperatingMode.Simplex:
-          if (Ptt == false && Caps.Can(CatAction.write_rx_frequency, Ptt)) return commands.write_rx_frequency.Replace("{frequency}", $"{frequency}");
+          if (Ptt == false && Caps.Can(CatAction.write_rx_frequency, Ptt)) return commands.write_rx_frequency?.Replace("{frequency}", $"{frequency}" ?? string.Empty;
           break;
 
         default:
-          if (Caps.Can(CatAction.write_rx_frequency, Ptt)) return commands.write_rx_frequency.Replace("{frequency}", $"{frequency}");
+          if (Caps.Can(CatAction.write_rx_frequency, Ptt)) return commands.write_rx_frequency?.Replace("{frequency}", $"{frequency}" ?? string.Empty;
           break;
       }
 
@@ -1285,16 +1298,16 @@ namespace SkyRoof
           return string.Empty;
 
         case OperatingMode.TxOnly:
-          if (Ptt == false && Caps.Can(CatAction.write_rx_frequency, Ptt)) return commands.write_rx_frequency!.Replace("{frequency}", $"{frequency}");
-          if (Ptt == true && Caps.Can(CatAction.write_tx_frequency, Ptt)) return commands.write_tx_frequency!.Replace("{frequency}", $"{frequency}");
+          if (Ptt == false && Caps.Can(CatAction.write_rx_frequency, Ptt)) return commands.write_rx_frequency?.Replace("{frequency}", $"{frequency}" ?? string.Empty;
+          if (Ptt == true && Caps.Can(CatAction.write_tx_frequency, Ptt)) return commands.write_tx_frequency?.Replace("{frequency}", $"{frequency}" ?? string.Empty;
           break;
 
         case OperatingMode.Simplex:
-          if (Ptt == true && Caps.Can(CatAction.write_tx_frequency, Ptt)) return commands.write_tx_frequency!.Replace("{frequency}", $"{frequency}");
+          if (Ptt == true && Caps.Can(CatAction.write_tx_frequency, Ptt)) return commands.write_tx_frequency?.Replace("{frequency}", $"{frequency}" ?? string.Empty;
           break;
 
         default:
-          if (Caps.Can(CatAction.write_tx_frequency, Ptt)) return commands.write_tx_frequency!.Replace("{frequency}", $"{frequency}");
+          if (Caps.Can(CatAction.write_tx_frequency, Ptt)) return commands.write_tx_frequency?.Replace("{frequency}", $"{frequency}" ?? string.Empty;
           break;
       }
 
@@ -1309,17 +1322,17 @@ namespace SkyRoof
           return string.Empty;
 
         case OperatingMode.RxOnly:
-          if (Ptt == false && Caps.CanSetup(CatAction.write_rx_mode)) return commands.write_rx_mode!.Replace("{mode}", $"{mode}");
-          if (Ptt == true && Caps.Can(CatAction.write_tx_mode, Ptt)) return commands.write_tx_mode!.Replace("{mode}", $"{mode}");
+          if (Ptt == false && Caps.CanSetup(CatAction.write_rx_mode)) return commands.write_rx_mode?.Replace("{mode}", $"{mode}" ?? string.Empty;
+          if (Ptt == true && Caps.Can(CatAction.write_tx_mode, Ptt)) return commands.write_tx_mode?.Replace("{mode}", $"{mode}" ?? string.Empty;
           break;
 
         case OperatingMode.Simplex:
-          if (Ptt == false && Caps.CanSetup(CatAction.write_rx_mode)) return commands.write_rx_mode!.Replace("{mode}", $"{mode}");
+          if (Ptt == false && Caps.CanSetup(CatAction.write_rx_mode)) return commands.write_rx_mode?.Replace("{mode}", $"{mode}" ?? string.Empty;
           break;
 
         default:
-          if (Ptt == false && Caps.CanSetup(CatAction.write_rx_mode)) return commands.write_rx_mode!.Replace("{mode}", $"{mode}");
-          if (Ptt == true && Caps.Can(CatAction.write_rx_mode, Ptt)) return commands.write_rx_mode!.Replace("{mode}", $"{mode}");
+          if (Ptt == false && Caps.CanSetup(CatAction.write_rx_mode)) return commands.write_rx_mode?.Replace("{mode}", $"{mode}" ?? string.Empty;
+          if (Ptt == true && Caps.Can(CatAction.write_rx_mode, Ptt)) return commands.write_rx_mode?.Replace("{mode}", $"{mode}" ?? string.Empty;
           break;
       }
 
@@ -1334,18 +1347,18 @@ namespace SkyRoof
           return string.Empty;
 
         case OperatingMode.TxOnly:
-          if (Ptt == false && Caps.CanSetup(CatAction.write_rx_mode)) return commands.write_rx_mode!.Replace("{mode}", $"{mode}");
-          if (Ptt == true && Caps.Can(CatAction.write_tx_mode, Ptt)) return commands.write_tx_mode!.Replace("{mode}", $"{mode}");
+          if (Ptt == false && Caps.CanSetup(CatAction.write_rx_mode)) return commands.write_rx_mode?.Replace("{mode}", $"{mode}" ?? string.Empty;
+          if (Ptt == true && Caps.Can(CatAction.write_tx_mode, Ptt)) return commands.write_tx_mode?.Replace("{mode}", $"{mode}" ?? string.Empty;
           break;
 
         case OperatingMode.Simplex:
-          if (Ptt == false && Caps.CanSetup(CatAction.write_tx_mode)) return commands.write_tx_mode!.Replace("{mode}", $"{mode}");
-          if (Ptt == true && Caps.Can(CatAction.write_tx_mode, Ptt)) return commands.write_tx_mode!.Replace("{mode}", $"{mode}");
+          if (Ptt == false && Caps.CanSetup(CatAction.write_tx_mode)) return commands.write_tx_mode?.Replace("{mode}", $"{mode}" ?? string.Empty;
+          if (Ptt == true && Caps.Can(CatAction.write_tx_mode, Ptt)) return commands.write_tx_mode?.Replace("{mode}", $"{mode}" ?? string.Empty;
           break;
 
         default:
-          if (Ptt == false && Caps.CanSetup(CatAction.write_tx_mode)) return commands.write_tx_mode!.Replace("{mode}", $"{mode}");
-          if (Ptt == true && Caps.Can(CatAction.write_tx_mode, Ptt)) return commands.write_tx_mode!.Replace("{mode}", $"{mode}");
+          if (Ptt == false && Caps.CanSetup(CatAction.write_tx_mode)) return commands.write_tx_mode?.Replace("{mode}", $"{mode}" ?? string.Empty;
+          if (Ptt == true && Caps.Can(CatAction.write_tx_mode, Ptt)) return commands.write_tx_mode?.Replace("{mode}", $"{mode}" ?? string.Empty;
           break;
       }
 
