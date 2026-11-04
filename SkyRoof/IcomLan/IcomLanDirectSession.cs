@@ -407,7 +407,7 @@ namespace SkyRoof
         }
         catch (Exception ex)
         {
-          Log.Debug("Icom Direct LAN close handshake failed ({Type})", ex.GetType().Name);
+          Log.Debug("Icom Direct LAN signout failed ({Type})", ex.GetType().Name);
         }
 
         try
