@@ -98,10 +98,13 @@ namespace SkyRoof.AFC
       havePolaritySample = catReadbackIsTimeAligned && double.IsFinite(catReadbackHz);
     }
 
-    private bool TryHandleDivergence(AfcObservation obs, int configuredSign,
-      double catReadbackHz, bool catReadbackIsTimeAligned,
-      bool confirmedOwnAfcReadback, int sign, double error)
+    private bool TryHandleDivergence(AfcObservation obs,
+      AfcObservationContext context, int sign, double error)
     {
+      double catReadbackHz = context.CatReadbackHz;
+      int configuredSign = context.ConfiguredSign;
+      bool catReadbackIsTimeAligned = context.CatReadbackIsTimeAligned;
+      bool confirmedOwnAfcReadback = context.ConfirmedOwnAfcReadback;
       if (confirmedOwnAfcReadback && catReadbackIsTimeAligned &&
           double.IsFinite(catReadbackHz) &&
           (!double.IsFinite(previousConfirmedCatHz) ||
