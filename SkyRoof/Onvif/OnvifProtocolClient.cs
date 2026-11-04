@@ -180,15 +180,23 @@ namespace SkyRoof
             devices.AddRange(ParseProbeMatches(
               Encoding.UTF8.GetString(datagram.Buffer)));
           }
-          catch (System.Xml.XmlException) { }
+          catch (System.Xml.XmlException)
+          {
+            // Malformed discovery datagrams cannot terminate other probes.
+            Serilog.Log.Debug("Ignoring malformed ONVIF discovery XML");
+          }
         }
       }
       catch (SocketException) when (!cancellationToken.IsCancellationRequested)
       {
         // A VPN/virtual adapter may reject multicast. Other interfaces still
         // perform discovery, and the UI reports attempted interface count.
+        Serilog.Log.Debug("ONVIF WS-Discovery socket rejected multicast");
       }
-      catch (ObjectDisposedException) when (cancellationToken.IsCancellationRequested) { }
+      catch (ObjectDisposedException) when (cancellationToken.IsCancellationRequested)
+      {
+        Serilog.Log.Debug("ONVIF discovery cancelled while socket was disposing");
+      }
       return new InterfaceResult(sent, packets, devices);
     }
   }

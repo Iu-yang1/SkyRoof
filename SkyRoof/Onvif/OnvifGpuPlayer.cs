@@ -140,8 +140,11 @@ namespace SkyRoof
           }
         }
         catch (OperationCanceledException) { return; }
-        catch (Exception)
+        catch (Exception ex)
         {
+          // Camera URLs may contain credentials; emit type only.
+          Serilog.Log.Warning("ONVIF GPU playback monitor failed ({Type})",
+            ex.GetType().Name);
           Stop();
           PlaybackFailed?.Invoke("Camera playback health check failed; GPU-only playback stopped.");
           return;
@@ -203,8 +206,14 @@ namespace SkyRoof
         if (process != null && !process.HasExited)
           process.Kill(entireProcessTree: true);
       }
-      catch (InvalidOperationException) { }
-      catch (System.ComponentModel.Win32Exception) { }
+      catch (InvalidOperationException)
+      {
+        Serilog.Log.Debug("ONVIF GPU playback process already exited");
+      }
+      catch (System.ComponentModel.Win32Exception)
+      {
+        Serilog.Log.Warning("ONVIF GPU playback process termination was denied");
+      }
       process?.Dispose();
       process = null;
     }

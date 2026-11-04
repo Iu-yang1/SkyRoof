@@ -148,7 +148,10 @@ namespace SkyRoof
               retryTimer.Start();
           }));
         }
-        catch (InvalidOperationException) { }
+        catch (InvalidOperationException)
+        {
+          Serilog.Log.Debug("ONVIF player callback arrived after panel close");
+        }
       };
       Shown += async (_, _) =>
       {
@@ -188,8 +191,11 @@ namespace SkyRoof
       OnvifCameraSettings before = ctx.Settings.OnvifCamera;
       ctx.Settings.OnvifCamera = dialog.Result;
       try { ctx.Settings.SaveToFile(); }
-      catch (Exception)
+      catch (Exception ex)
       {
+        // Persistent preferences failure must not display private paths.
+        Serilog.Log.Warning("ONVIF camera settings persistence failed ({Type})",
+          ex.GetType().Name);
         ctx.Settings.OnvifCamera = before;
         MessageBox.Show(this,
           "Camera preferences could not be saved. Check write access to the SkyRoof data folder.",
@@ -247,7 +253,10 @@ namespace SkyRoof
         placeholder.Visible = false;
         SetStatus("Live · D3D11VA hardware decoding");
       }
-      catch (OperationCanceledException) { }
+      catch (OperationCanceledException)
+      {
+        Serilog.Log.Debug("ONVIF stream start cancelled");
+      }
       catch (System.ComponentModel.Win32Exception)
       {
         SetStatus("mpv.exe was not found. Select the player in Settings.");
@@ -256,10 +265,12 @@ namespace SkyRoof
       {
         SetStatus("D3D11VA unavailable for this stream. Choose another profile.");
       }
-      catch (Exception)
+      catch (Exception ex)
       {
-        // SOAP faults and RTSP errors may include authenticated URIs; never
-        // print raw exception messages into the camera status or logs.
+        // SOAP faults and RTSP errors may contain authenticated URIs.
+        // Never include ex.Message, ToString, URLs or stack traces.
+        Serilog.Log.Warning("ONVIF stream setup failed ({Type})",
+          ex.GetType().Name);
         SetStatus("Unable to connect. Check ONVIF address, credentials and stream.");
       }
       finally
