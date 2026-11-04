@@ -29,7 +29,12 @@ jobs:
         shell: bash
         run: |
           mkdir -p artifacts/quality
-          npm exec --yes --package=aislop@0.18.1 -- aislop scan . --json > artifacts/quality/aislop-full.json
+          # Scan can return nonzero when diagnostics exist. Report them
+          # independently; the following CI step enforces the baseline gate.
+          scan_status=0
+          npm exec --yes --package=aislop@0.18.1 -- aislop scan . --json > artifacts/quality/aislop-full.json || scan_status=$?
+          echo "Full scan exit code: $scan_status (gate runs separately)"
+          test -s artifacts/quality/aislop-full.json
           node scripts/aislop-report-summary.mjs artifacts/quality/aislop-full.json artifacts/quality/summary.md
           cat artifacts/quality/summary.md >> "$GITHUB_STEP_SUMMARY"
       - name: Gate new PR findings against master
