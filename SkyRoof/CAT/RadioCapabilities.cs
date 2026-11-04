@@ -2,6 +2,7 @@
 using Newtonsoft.Json.Converters;
 using SkyRoof.Properties;
 using System.IO;
+using Serilog;
 using VE3NEA;
 
 namespace SkyRoof
@@ -28,7 +29,7 @@ namespace SkyRoof
   public class RadioCapabilities
   {
     public int version { get; set; } = 0;
-    public string model { get; set; }
+    public string model { get; set; } = string.Empty;
     public bool cross_band_split { get; set; }
     public AvailableCommands? simplex { get; set; }
     public AvailableCommands? split { get; set; }
@@ -52,7 +53,12 @@ namespace SkyRoof
         string json = File.ReadAllText(path);
         return LoadFromJson(json);
       }
-      catch (Exception) { return null; }             
+      catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+        or JsonException)
+      {
+        Log.Warning(ex, "CAT capabilities override unavailable; using embedded defaults");
+        return null;
+      }
     }
 
     public static RadioCapabilities? LoadFromJson(string json)
@@ -66,23 +72,22 @@ namespace SkyRoof
         
         // Get embedded resource version by directly deserializing
         string resourceJson = System.Text.Encoding.UTF8.GetString(Resources.cat_info);
-        RadioCapabilities embeddedCaps = LoadFromJson(resourceJson)!;
+        RadioCapabilities embeddedCaps = LoadFromJson(resourceJson)
+            ?? throw new InvalidDataException("Embedded CAT capabilities are invalid");
         
-        // Try to load from file
-        RadioCapabilities? caps = null;
-        try 
-        { 
-            caps = LoadFromFile(path);
-        } 
-        catch { }
+        RadioCapabilities? caps = LoadFromFile(path);
 
         // If file doesn't exist, is corrupt, or has older/equal version than resource
         if (caps == null || caps.version <= embeddedCaps.version)
         {
-            // Write resource to file
-            File.WriteAllBytes(path, Resources.cat_info);
-            
-            // Use the already deserialized embedded caps
+            // Restore the bundled baseline when writable. A read-only user
+            // profile must not prevent CAT from using the embedded defaults.
+            try { File.WriteAllBytes(path, Resources.cat_info); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+              Log.Warning(ex, "Cannot refresh CAT capabilities cache; using embedded defaults");
+            }
+
             return embeddedCaps;
         }
 

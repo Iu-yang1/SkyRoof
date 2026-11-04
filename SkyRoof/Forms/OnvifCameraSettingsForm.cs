@@ -165,10 +165,12 @@ namespace SkyRoof
         button.Enabled = false;
         try { await action(); }
         catch (OperationCanceledException) { feedback.Text = "Operation cancelled."; }
-        catch (Exception)
+        catch (Exception ex)
         {
-          // Do not expose arbitrary SOAP/RTSP exception contents: they can
-          // contain an authenticated URI or a camera-specific credential.
+          // Do not log exception messages: SOAP/RTSP errors can include
+          // authenticated URLs and embedded camera credentials.
+          Serilog.Log.Warning("ONVIF operation failed ({ExceptionType})",
+            ex.GetType().Name);
           feedback.Text = "Connection failed. Check camera address, permissions and credentials.";
         }
         finally { if (!IsDisposed) button.Enabled = true; }

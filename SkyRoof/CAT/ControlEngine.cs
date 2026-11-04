@@ -75,7 +75,16 @@ namespace SkyRoof
       // Connect/Receive are synchronous socket calls. Closing the current client
       // from the stopping thread interrupts either operation so UI shutdown does
       // not have to wait for an OS/TCP timeout before Join can complete.
-      try { TcpClient?.Close(); } catch { }
+      try { TcpClient?.Close(); }
+      catch (ObjectDisposedException)
+      {
+        Log.Debug("CAT TCP socket already closed during shutdown");
+      }
+      catch (Exception ex)
+      {
+        // Even if close fails, continue cancelling and joining the worker.
+        Log.Warning(ex, "CAT TCP close failed while stopping {Engine}", GetType().Name);
+      }
 
       processingThread?.Join();
       processingThread = null;
@@ -243,7 +252,8 @@ namespace SkyRoof
     {
       bool ok = true;
 
-      foreach (string cmd in commands!)
+      if (commands == null || commands.Length == 0) return true;
+      foreach (string cmd in commands)
       {
         // Do not short-circuit the sequence after one rejected command. Later
         // setup/cleanup commands can still leave the rig in the intended state.
@@ -282,7 +292,9 @@ namespace SkyRoof
       {
         if (log) Log.Information($"Sending command to {GetType().Name} ctld: {command}");
         byte[] commandBytes = Encoding.ASCII.GetBytes(command + "\n");
-        TcpClient!.Client.Send(commandBytes);
+        Socket socket = TcpClient?.Client ??
+          throw new InvalidOperationException("CAT TCP client is not connected");
+        socket.Send(commandBytes);
       }
       catch (Exception ex)
       {
@@ -328,7 +340,9 @@ namespace SkyRoof
           return oversized;
         }
 
-        int bytesRead = TcpClient!.Client.Receive(
+        Socket socket = TcpClient?.Client ??
+          throw new InvalidOperationException("CAT TCP client is not connected");
+        int bytesRead = socket.Receive(
           receiveBuffer,
           0,
           receiveBuffer.Length,

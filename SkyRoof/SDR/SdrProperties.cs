@@ -162,7 +162,10 @@ namespace VE3NEA
 
     public override void ResetValue(object component)
     {
-      throw new NotImplementedException();
+      // Dynamic SoapySDR properties do not provide a factory-default value.
+      // CanResetValue() returns false; callers that insist on reset get a
+      // defined unsupported-operation result, not an unfinished stub.
+      throw new NotSupportedException("This SDR property has no reset value");
     }
 
     public override void SetValue(object? component, object? value)

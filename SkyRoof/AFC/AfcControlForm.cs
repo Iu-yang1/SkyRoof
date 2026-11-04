@@ -418,7 +418,16 @@ namespace SkyRoof.AFC
             AfcSpectrumReference.DisplayMarker(ctx.Settings.Afc, currentMode));
         }));
       }
-      catch (InvalidOperationException) { }
+      catch (InvalidOperationException ex) when (
+        IsDisposed || Disposing || !IsHandleCreated)
+      {
+        // Benign race: a queued IF callback arrived as the WinForms handle closed.
+        Serilog.Log.Debug("Ignoring AFC UI callback after form teardown");
+      }
+      catch (InvalidOperationException ex)
+      {
+        Serilog.Log.Warning(ex, "AFC UI callback could not be marshalled");
+      }
     }
 
     private void StyleButton(Button button)
@@ -662,7 +671,16 @@ namespace SkyRoof.AFC
           RefreshDisplay();
         }));
       }
-      catch (InvalidOperationException) { }
+      catch (InvalidOperationException ex) when (
+        IsDisposed || Disposing || !IsHandleCreated)
+      {
+        // Benign race: a queued IF callback arrived as the WinForms handle closed.
+        Serilog.Log.Debug("Ignoring AFC UI callback after form teardown");
+      }
+      catch (InvalidOperationException ex)
+      {
+        Serilog.Log.Warning(ex, "AFC UI callback could not be marshalled");
+      }
     }
 
     private bool Start()
