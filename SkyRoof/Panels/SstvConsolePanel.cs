@@ -753,7 +753,8 @@ namespace SkyRoof
             });
           }
           catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
-            or ArgumentException) { }
+            or ArgumentException)
+          { Serilog.Log.Debug("SSTV thumbnail unavailable ({Type})", ex.GetType().Name); }
         }
         foreach (string stale in archivedThumbnailCache.Keys
           .Where(key => !visibleFiles.Contains(key)).ToArray())
@@ -866,7 +867,11 @@ namespace SkyRoof
                   rxStatus.Text = $"正在解析 SSTV 录音 · {progress:P0}";
               }));
             }
-            catch (InvalidOperationException) { }
+            catch (InvalidOperationException)
+            {
+              // Background waveform progress can arrive after window close.
+              Serilog.Log.Debug("SSTV progress callback arrived after UI teardown");
+            }
           }, stop.Token);
         if (!closed)
         {
@@ -891,8 +896,14 @@ namespace SkyRoof
         if (!string.IsNullOrEmpty(normalizedTemporaryFile))
         {
           try { File.Delete(normalizedTemporaryFile); }
-          catch (IOException) { }
-          catch (UnauthorizedAccessException) { }
+          catch (IOException)
+          {
+            Serilog.Log.Debug("SSTV temporary audio file is busy during cleanup");
+          }
+          catch (UnauthorizedAccessException)
+          {
+            Serilog.Log.Warning("SSTV temporary audio cleanup was denied");
+          }
         }
       }
     }
@@ -1266,7 +1277,10 @@ namespace SkyRoof
           rxStatus.Text = $"收到 FSK 台站标识：{callsign}（需核对）";
         }));
       }
-      catch (InvalidOperationException) { }
+      catch (InvalidOperationException)
+      {
+        Serilog.Log.Debug("SSTV receive callback arrived after UI teardown");
+      }
     }
 
     private void OnSpectrumAvailable(float[] levels)
@@ -1280,7 +1294,10 @@ namespace SkyRoof
             rxToneReference.SetLevels(levels);
         }));
       }
-      catch (InvalidOperationException) { }
+      catch (InvalidOperationException)
+      {
+        Serilog.Log.Debug("SSTV receive callback arrived after UI teardown");
+      }
     }
 
     private void OnVisSynchronized(SstvVisAfcLock header)
@@ -1302,7 +1319,10 @@ namespace SkyRoof
           rxStatus.Text = status;
         }));
       }
-      catch (InvalidOperationException) { }
+      catch (InvalidOperationException)
+      {
+        Serilog.Log.Debug("SSTV receive callback arrived after UI teardown");
+      }
     }
 
     private void OnRasterReceived(Bitmap picture,
@@ -1350,7 +1370,11 @@ namespace SkyRoof
           }
         }));
       }
-      catch (InvalidOperationException) { picture.Dispose(); }
+      catch (InvalidOperationException)
+      {
+        picture.Dispose();
+        Serilog.Log.Debug("SSTV bitmap update discarded after UI teardown");
+      }
     }
 
     private void OnAudioReceived(SstvImageEvent evt)
@@ -1359,7 +1383,12 @@ namespace SkyRoof
           (!evt.Final && evt.ValidRows % 12 != 0)) return;
       Bitmap picture;
       try { picture = evt.Image.ToBitmap(); }
-      catch { return; }
+      catch (Exception ex)
+      {
+        Serilog.Log.Warning("SSTV audio image conversion failed ({Type})",
+          ex.GetType().Name);
+        return;
+      }
       string? savedFile = null;
       if (evt.Final && evt.ValidRows > 0)
       {
@@ -1400,7 +1429,11 @@ namespace SkyRoof
           }
         }));
       }
-      catch (InvalidOperationException) { picture.Dispose(); }
+      catch (InvalidOperationException)
+      {
+        picture.Dispose();
+        Serilog.Log.Debug("SSTV bitmap update discarded after UI teardown");
+      }
     }
 
     private void LoadImage()
