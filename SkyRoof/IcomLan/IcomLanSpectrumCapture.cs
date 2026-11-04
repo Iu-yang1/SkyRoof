@@ -153,7 +153,11 @@ namespace SkyRoof
 
       if (cancellation == null && worker == null) return;
 
-      try { cancellation?.Cancel(); } catch { }
+      try { cancellation?.Cancel(); }
+      catch (ObjectDisposedException)
+      {
+        Log.Debug("Icom LAN capture cancellation already disposed");
+      }
 
       lock (HandleSync)
       {
@@ -163,21 +167,33 @@ namespace SkyRoof
 
       lock (SkyCatClientSync)
       {
-        try { SkyCatClient?.Close(); } catch { }
+        try { SkyCatClient?.Close(); }
+        catch (Exception ex)
+        {
+          Log.Debug("Icom LAN SkyCAT capture close failed ({Type})", ex.GetType().Name);
+        }
       }
 
       // Dispose the authenticated session before waiting so any blocked socket
       // operation is interrupted rather than relying on the timeout alone.
       lock (DirectSessionSync)
       {
-        try { DirectSession?.Dispose(); } catch { }
+        try { DirectSession?.Dispose(); }
+        catch (Exception ex)
+        {
+          Log.Warning("Icom LAN direct capture disposal failed ({Type})", ex.GetType().Name);
+        }
         DirectSession = null;
       }
 
       if (worker != null && !worker.IsCompleted)
       {
         try { worker.Wait(2500); }
-        catch (AggregateException) { }
+        catch (AggregateException ex)
+        {
+          if (cancellation?.IsCancellationRequested != true)
+            Log.Warning(ex, "Icom LAN capture worker faulted during shutdown");
+        }
       }
 
       if (worker != null && !worker.IsCompleted)
@@ -261,7 +277,11 @@ namespace SkyRoof
               DirectSession = null;
           }
 
-          try { session.Dispose(); } catch { }
+          try { session.Dispose(); }
+          catch (Exception ex)
+          {
+            Log.Debug("Icom LAN session disposal failed ({Type})", ex.GetType().Name);
+          }
         }
 
         if (token.IsCancellationRequested)
@@ -386,7 +406,11 @@ namespace SkyRoof
               SkyCatClient = null;
           }
 
-          try { client?.Close(); } catch { }
+          try { client?.Close(); }
+          catch (Exception ex)
+          {
+            Log.Debug("Icom LAN passive client close failed ({Type})", ex.GetType().Name);
+          }
         }
 
         if (!token.IsCancellationRequested)

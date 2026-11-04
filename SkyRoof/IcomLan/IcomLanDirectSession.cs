@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
+using Serilog;
 
 namespace SkyRoof
 {
@@ -369,9 +370,12 @@ namespace SkyRoof
           audio.Connect(RadioAddress, RemoteAudioPort);
           audioDrain = DrainAudioAsync(audio, token);
         }
-        catch
+        catch (Exception ex)
         {
-          // CI-V ownership is authoritative for this spectrum-only client.
+          // The dedicated optional audio socket may fail while CI-V is usable.
+          // Log only the exception type: endpoint details can carry secrets.
+          Log.Debug("Icom Direct LAN auxiliary audio unavailable ({Type})",
+            ex.GetType().Name);
         }
       }
 
@@ -392,19 +396,28 @@ namespace SkyRoof
         {
           await SendOpenCloseAsync(civ, close: true, CancellationToken.None);
         }
-        catch { }
+        catch (Exception ex)
+        {
+          Log.Debug("Icom Direct LAN close handshake failed ({Type})", ex.GetType().Name);
+        }
 
         try
         {
           _ = await SendAuthAsync(control, 0x01, CancellationToken.None);
         }
-        catch { }
+        catch (Exception ex)
+        {
+          Log.Debug("Icom Direct LAN signout failed ({Type})", ex.GetType().Name);
+        }
 
         try
         {
           await Task.WhenAny(audioDrain, Task.Delay(150));
         }
-        catch { }
+        catch (Exception ex)
+        {
+          Log.Debug("Icom Direct LAN audio drain did not settle ({Type})", ex.GetType().Name);
+        }
       }
     }
 
@@ -1768,9 +1781,12 @@ namespace SkyRoof
       if (Disposed) return;
       Disposed = true;
 
-      try { Control?.Close(); } catch { }
-      try { Civ?.Close(); } catch { }
-      try { AudioSink?.Close(); } catch { }
+      try { Control?.Close(); }
+      catch (Exception ex) { Log.Debug("Icom Direct LAN control socket disposal failed ({Type})", ex.GetType().Name); }
+      try { Civ?.Close(); }
+      catch (Exception ex) { Log.Debug("Icom Direct LAN CI-V socket disposal failed ({Type})", ex.GetType().Name); }
+      try { AudioSink?.Close(); }
+      catch (Exception ex) { Log.Debug("Icom Direct LAN audio socket disposal failed ({Type})", ex.GetType().Name); }
 
       Control = null;
       Civ = null;
