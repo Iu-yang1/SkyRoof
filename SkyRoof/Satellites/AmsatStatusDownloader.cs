@@ -157,7 +157,8 @@ namespace SkyRoof
         }
     }
 
-    public async Task<string?> SendAmsatStatusAsync(string satName, string report)
+    public async Task<string?> SendAmsatStatusAsync(string satName, string report,
+      CancellationToken cancellationToken = default)
     {
       try
       {
@@ -166,9 +167,9 @@ namespace SkyRoof
 
         using HttpClient client = new();
         using HttpResponseMessage response =
-          await client.GetAsync(urlString).ConfigureAwait(false);
+          await client.GetAsync(urlString, cancellationToken).ConfigureAwait(false);
 
-        string content = await response.Content.ReadAsStringAsync()
+        string content = await response.Content.ReadAsStringAsync(cancellationToken)
           .ConfigureAwait(false);
         content = Utils.HtmlToText(content).Replace("\n", " ");
         content = Regex.Replace(content, @"\s+", " ");
@@ -179,6 +180,10 @@ namespace SkyRoof
           throw new HttpRequestException($"HTTP error {response.StatusCode}");
 
         return null;
+      }
+      catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+      {
+        throw;
       }
       catch (Exception ex)
       {
