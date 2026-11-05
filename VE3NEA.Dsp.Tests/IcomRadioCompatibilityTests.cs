@@ -10,16 +10,16 @@ namespace VE3NEA.Dsp.Tests
     [InlineData("IC-705", 0xA4, 1)]
     [InlineData("IC-905", 0xAC, 1)]
     public void KnownModelsHaveDistinctDefaultAddresses(
-      string model, byte address, int receivers)
+      string model, int address, int receivers)
     {
       Assert.True(IcomRadioProfiles.TryGetByModel(model,
         out IcomRadioProfile? profile));
       Assert.NotNull(profile);
-      Assert.Equal(address, profile.DefaultCivAddress);
+      Assert.Equal((byte)address, profile.DefaultCivAddress);
       Assert.Equal(receivers, profile.ReceiverCount);
       Assert.Equal(receivers > 1, profile.MayUseMainSubScope);
       Assert.True(IcomRadioProfiles.TryGetCandidateByDefaultAddress(
-        address, out IcomRadioProfile? candidate));
+        (byte)address, out IcomRadioProfile? candidate));
       Assert.Same(profile, candidate);
     }
 
