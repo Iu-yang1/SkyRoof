@@ -100,9 +100,9 @@ namespace SkyRoof
       catch(Exception ex)
       {
         created?.Dispose();
-        if(ProcessAlive(process))
+        if(process is { } launchedChild && ProcessAlive(launchedChild))
         {
-          try { process!.Kill(); }
+          try { launchedChild.Kill(); }
           catch (InvalidOperationException)
           {
             Log.Debug("SkyCAT child exited before startup rollback could terminate it");
