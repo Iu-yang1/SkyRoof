@@ -39,7 +39,11 @@ namespace SkyRoof
     public void Dispose()
     {
       Queue.CompleteAdding();
-      try { Worker.Wait(TimeSpan.FromSeconds(2)); } catch { }
+      try { Worker.Wait(TimeSpan.FromSeconds(2)); }
+      catch (Exception ex)
+      {
+        Log.Warning("SatNOGS uploader worker shutdown failed ({Type})", ex.GetType().Name);
+      }
       Queue.Dispose();
     }
 
@@ -82,7 +86,10 @@ namespace SkyRoof
 
       if (!Queue.IsAddingCompleted)
         try { Queue.Add(new Submission(sett.ApiToken.Trim(), body, timestamp)); }
-        catch (InvalidOperationException) { }
+        catch (InvalidOperationException)
+        {
+          Log.Debug("SatNOGS frame discarded because upload queue was closed during shutdown");
+        }
     }
 
 
