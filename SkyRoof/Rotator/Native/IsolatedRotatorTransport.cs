@@ -87,7 +87,19 @@ internal sealed class IsolatedRotatorTransport : IRotatorTransport
     catch
     {
       endpoint?.Dispose();
-      if(spawned is { HasExited:false })try{spawned.Kill(entireProcessTree:true);}catch{}
+      if(spawned is { HasExited:false })
+      {
+        try { spawned.Kill(entireProcessTree:true); }
+        catch (InvalidOperationException)
+        {
+          Log.Debug("Rotator worker exited before startup rollback termination");
+        }
+        catch (Exception stopEx)
+        {
+          Log.Error("Rotator worker startup rollback could not terminate child ({Type}); physical STOP unverified",
+            stopEx.GetType().Name);
+        }
+      }
       spawned?.Dispose();
       throw;
     }
@@ -175,7 +187,12 @@ internal sealed class IsolatedRotatorTransport : IRotatorTransport
     // blocked inside Read/Write holding it while WinForms requests shutdown.
     NamedPipeServerStream? endpoint=Interlocked.Exchange(ref pipe,null);
     Process? process=Interlocked.Exchange(ref child,null);
-    try{endpoint?.Dispose();}catch{}
+    try { endpoint?.Dispose(); }
+    catch (Exception ex)
+    {
+      Log.Warning("Rotator IPC pipe abort disposal failed ({Type}); child termination remains pending",
+        ex.GetType().Name);
+    }
     // Never synchronously wait for a native serial driver in the UI process.
     if(process!=null)
       _=Task.Run(async ()=>
@@ -257,7 +274,11 @@ internal sealed class IsolatedRotatorTransport : IRotatorTransport
         }
       }
     }
-    catch(Exception){}
+    catch (Exception ex)
+    {
+      Log.Error("Isolated rotator worker IPC failed ({Type}); attempting fail-safe STOP",
+        ex.GetType().Name);
+    }
     finally
     {
       // If SkyRoof disappears, a surviving motor may keep moving; attempt
@@ -274,8 +295,20 @@ internal sealed class IsolatedRotatorTransport : IRotatorTransport
             if(stop!=null && driver.Connected)driver.Write(stop);
           }
         }
-        catch(Exception){}
-        try{driver.Dispose();}catch(Exception){}
+        catch (Exception ex)
+        {
+          Log.Error("Isolated rotator worker exit STOP failed ({Type}); physical STOP unverified",
+            ex.GetType().Name);
+        }
+        finally
+        {
+          try { driver.Dispose(); }
+          catch (Exception ex)
+          {
+            Log.Warning("Isolated rotator worker driver disposal failed ({Type})",
+              ex.GetType().Name);
+          }
+        }
       }
     }
   }
