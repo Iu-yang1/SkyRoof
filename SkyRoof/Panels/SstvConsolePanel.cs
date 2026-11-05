@@ -1151,7 +1151,7 @@ namespace SkyRoof
       finally
       {
         if (ReferenceEquals(txOperationStop, operation)) txOperationStop = null;
-        try { File.Delete(temporaryWave); } catch (IOException) { }
+        TryDeleteTemporaryWave(temporaryWave);
         if (!closed)
         {
           txStopButton.Enabled = false;
@@ -1168,6 +1168,16 @@ namespace SkyRoof
                 MessageBoxIcon.Error);
           }
         }
+      }
+    }
+
+    private static void TryDeleteTemporaryWave(string temporaryWave)
+    {
+      try { File.Delete(temporaryWave); }
+      catch (IOException ex)
+      {
+        Log.Warning("SSTV TX temporary wave deletion failed ({Type}); preserving final PTT status check",
+          ex.GetType().Name);
       }
     }
 
