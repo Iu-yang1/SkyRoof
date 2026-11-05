@@ -1,100 +1,62 @@
 namespace SkyRoof
 {
   /// <summary>
-  /// CI-V little-endian packed-BCD operating frequencies in integral Hz.
-  /// IC-905 uses six bytes in the 10 GHz band; five bytes are insufficient.
-  /// The 10 GHz scope's negative lower-edge sign is a special case and is
-  /// deliberately opt-in, never accepted for normal operating frequencies.
+  /// Strict CI-V little-endian packed-BCD frequency codec, in integral Hz.
+  /// Standard IC-705/IC-9700 commands use 5 bytes. IC-905 also uses 6
+  /// bytes for 10 GHz operation. This codec only handles unsigned
+  /// operating frequencies; specialized signed offsets are separate formats.
   /// </summary>
   internal static class IcomCivFrequencyCodec
   {
     internal const int StandardByteCount = 5;
     internal const int ExtendedByteCount = 6;
-    private const long MaximumSignedEdgeMagnitudeHz = 99_999_999_999L;
 
     internal static bool TryDecode(
-      ReadOnlySpan<byte> data,
-      out long frequencyHz,
-      bool allowNegativeScopeEdge = false)
+      ReadOnlySpan<byte> data, out long frequencyHz)
     {
       frequencyHz = 0;
-
-      if (data.Length != StandardByteCount &&
-          data.Length != ExtendedByteCount)
+      if (data.Length is not (StandardByteCount or ExtendedByteCount))
         return false;
 
       long multiplier = 1;
       long decoded = 0;
-      bool negative = false;
 
-      for (int i = 0; i < data.Length; i++)
+      foreach (byte item in data)
       {
-        int low = data[i] & 0x0F;
-        int high = (data[i] >> 4) & 0x0F;
-
-        if (low > 9)
-          return false;
-
-        // Official IC-905 10 GHz scope: the 100 GHz digit is F when
-        // a lower edge is negative; all other digits encode its magnitude.
-        if (i == ExtendedByteCount - 1 &&
-            data.Length == ExtendedByteCount &&
-            high == 0x0F &&
-            allowNegativeScopeEdge)
-        {
-          negative = true;
-          high = 0;
-        }
-
-        if (high > 9)
+        int low = item & 0x0F;
+        int high = (item >> 4) & 0x0F;
+        if (low > 9 || high > 9)
           return false;
 
         decoded += (low + high * 10L) * multiplier;
         multiplier *= 100;
       }
 
-      if (negative &&
-          (decoded == 0 || decoded > MaximumSignedEdgeMagnitudeHz))
-        return false;
-
-      frequencyHz = negative ? -decoded : decoded;
+      frequencyHz = decoded;
       return true;
     }
 
     internal static bool TryEncode(
-      long frequencyHz,
-      int byteCount,
-      out byte[] encoded,
-      bool allowNegativeScopeEdge = false)
+      long frequencyHz, int byteCount, out byte[] encoded)
     {
       encoded = Array.Empty<byte>();
-
-      if (byteCount != StandardByteCount &&
-          byteCount != ExtendedByteCount)
+      if (frequencyHz < 0 ||
+          byteCount is not (StandardByteCount or ExtendedByteCount))
         return false;
 
-      bool negative = frequencyHz < 0;
-      if (negative && (!allowNegativeScopeEdge ||
-          byteCount != ExtendedByteCount ||
-          frequencyHz < -MaximumSignedEdgeMagnitudeHz))
-        return false;
-
-      long remaining = negative ? -frequencyHz : frequencyHz;
+      long remaining = frequencyHz;
       byte[] buffer = new byte[byteCount];
 
       for (int i = 0; i < buffer.Length; i++)
       {
-        long digits = remaining % 100;
+        long pair = remaining % 100;
         remaining /= 100;
-        buffer[i] = (byte)(((digits / 10) << 4) | (digits % 10));
+        buffer[i] = (byte)(((pair / 10) << 4) | (pair % 10));
       }
 
-      // Reject overflow instead of silently truncating the upper digits.
+      // A 5-byte codec must reject 10 GHz instead of truncating it.
       if (remaining != 0)
         return false;
-
-      if (negative)
-        buffer[^1] = (byte)((buffer[^1] & 0x0F) | 0xF0);
 
       encoded = buffer;
       return true;
@@ -102,8 +64,8 @@ namespace SkyRoof
   }
 
   /// <summary>
-  /// Passive CI-V response address inspection. This never sends commands
-  /// and never attempts to infer a unique radio model from an address.
+  /// Examines an already-received CI-V response. This passive probe neither
+  /// sends commands nor proves a radio model: CI-V addresses are editable.
   /// </summary>
   internal static class IcomCivReadOnlyProbe
   {
@@ -113,14 +75,14 @@ namespace SkyRoof
       out byte responderAddress)
     {
       responderAddress = 0;
-
-      if (frame.Length < 6 ||
+      if (frame.Length < 7 ||
           frame[0] != 0xFE ||
           frame[1] != 0xFE ||
           frame[^1] != 0xFD ||
           frame[2] != controllerAddress ||
           frame[3] == controllerAddress ||
-          frame[3] is 0x00 or 0xFF)
+          frame[3] is 0x00 or 0xFF ||
+          frame[4] is 0xFA or 0xFB)
         return false;
 
       responderAddress = frame[3];
