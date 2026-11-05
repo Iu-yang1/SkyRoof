@@ -294,7 +294,7 @@ jobs:
             ### English
             - Recover diagnostic evidence from the isolated Rotator child/IPC, SkyCAT lifecycle, WASAPI/ONVIF, SSTV/FT4 cleanup, SatNOGS uploader and telemetry download fallbacks.
             - Keep existing CW/DSP mathematics, CAT/PTT protocol and control ownership, physical STOP-first behavior, and persisted settings unchanged.
-            - Windows x64 Release build, full xUnit, CW R2C FFT microbenchmark and pinned aislop v0.18.1 quality checks are maintained as separate gates.
+            - Build and Release itself waits for pinned aislop v0.18.1, then requires Windows x64 Release, full xUnit, six CW R2C FFT microbenchmarks and verified installer payload before publishing.
             - P1: AMSAT status submission no longer blocks WinForms and is cancelled on dialog teardown; RadioLink tuning now fails explicitly on missing customization (PR #164/#165).
             - P2: AFC observation/polarity/servo separation retains independent numerical/regression checks; CW/DSP/CAT/rotator safety rules were not rewritten to inflate a scanner score.
             - Risk-scoped P0–P3 release review: pinned aislop 64/100, 781 historical findings (1 reviewed native-callback error, 779 warnings, 1 info). This release does not claim zero technical debt.
@@ -305,7 +305,7 @@ jobs:
             ### 中文
             - 完善旋转器独立进程与 IPC、SkyCAT、WASAPI/ONVIF、SSTV/FT4、SatNOGS 与遥测下载清理的异常诊断。
             - 保留既有 CW/DSP 数学、CAT/PTT 协议与控制权、旋转器 STOP 优先级及持久化设置。
-            - Windows x64、全量 xUnit、CW R2C FFT 性能基准与固定版本 aislop 均保持独立质量门禁。
+            - Build and Release 发布前先通过固定版本 aislop v0.18.1，再通过 Windows x64、全量 xUnit、六组 CW R2C FFT 基准及安装包依赖检查。
             - P1：AMSAT 上报不再阻塞 WinForms，关闭窗口时取消请求；RadioLink 对缺失的调谐配置对象明确拒绝访问（#164、#165）。
             - P2：AFC 观测、极性与伺服职责已分离，独立数学与控制回归测试保留；不为静态评分重写 CW/DSP/CAT/旋转器安全逻辑。
             - P0–P3 采用风险边界明确的维护版发布验收：固定版本 aislop 64/100，仍有 781 项历史发现（1 项已审查原生回调 error、779 warnings、1 info），并非技术债清零。
