@@ -66,7 +66,10 @@ namespace SkyRoof
             }
           }));
         }
-        catch(InvalidOperationException){}
+        catch(InvalidOperationException)
+        {
+          Log.Debug("SkyCAT readiness UI update skipped after form handle shutdown");
+        }
       };
 
       Text = Utils.GetVersionString();
