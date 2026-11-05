@@ -84,7 +84,7 @@ namespace SkyRoof
     {
       foreach (IcomRadioProfile candidate in Known)
       {
-        if (string.Equals(candidate.Model, model,
+        if (string.Equals(candidate.Model, model?.Trim(),
               StringComparison.OrdinalIgnoreCase))
         {
           profile = candidate;
@@ -95,6 +95,12 @@ namespace SkyRoof
       profile = null;
       return false;
     }
+
+    // The existing Direct LAN scope writer is IC-9700-specific. New models
+    // may be identified read-only but must not reach this legacy writer.
+    internal static bool SupportsExistingDirectLanScope(string? model) =>
+      TryGetByModel(model, out IcomRadioProfile? profile) &&
+      ReferenceEquals(profile, Ic9700);
 
     // Returns only a candidate based on an observed *default* address.
     // Callers must not use this as proof of identity or enable TX/Split.
