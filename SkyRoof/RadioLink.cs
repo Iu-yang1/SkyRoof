@@ -9,6 +9,17 @@ namespace SkyRoof
     public SatelliteCustomization? SatCust;
     public TransmitterCustomization? TxCust;
 
+    // A satellite selection must install both customization objects before its
+    // persistent controls are read or written. Fail explicitly rather than
+    // dereferencing missing state and leaving the tune cycle half-applied.
+    private TransmitterCustomization RequiredTransmitterCustomization =>
+      TxCust ?? throw new InvalidOperationException(
+        "Transmitter customization is not initialized for this radio link");
+
+    private SatelliteCustomization RequiredSatelliteCustomization =>
+      SatCust ?? throw new InvalidOperationException(
+        "Satellite customization is not initialized for this radio link");
+
     // non-persistent
     public bool IsTerrestrial = true;
     public bool RitEnabled;
@@ -18,28 +29,28 @@ namespace SkyRoof
     // persistent
     public Slicer.Mode DownlinkMode 
     { 
-      get => TxCust!.DownlinkMode; 
-      set => TxCust!.DownlinkMode = value; 
+      get => RequiredTransmitterCustomization.DownlinkMode; 
+      set => RequiredTransmitterCustomization.DownlinkMode = value; 
     }
     public Slicer.Mode UplinkMode 
     { 
-      get => TxCust!.UplinkMode; 
-      set => TxCust!.UplinkMode = value; 
+      get => RequiredTransmitterCustomization.UplinkMode; 
+      set => RequiredTransmitterCustomization.UplinkMode = value; 
     }
     public double TransponderOffset
     {
-      get => TxCust!.TransponderOffset;
-      set => TxCust!.TransponderOffset = value;
+      get => RequiredTransmitterCustomization.TransponderOffset;
+      set => RequiredTransmitterCustomization.TransponderOffset = value;
     }
     public long DownlinkBaseOffset
     {
-      get => TxCust!.DownlinkBaseOffset;
-      set => TxCust!.DownlinkBaseOffset = value;
+      get => RequiredTransmitterCustomization.DownlinkBaseOffset;
+      set => RequiredTransmitterCustomization.DownlinkBaseOffset = value;
     }
     public long UplinkBaseOffset
     {
-      get => TxCust!.UplinkBaseOffset;
-      set => TxCust!.UplinkBaseOffset = value;
+      get => RequiredTransmitterCustomization.UplinkBaseOffset;
+      set => RequiredTransmitterCustomization.UplinkBaseOffset = value;
     }
     public double DatabaseDownlinkBaseFrequency => Tx?.downlink_low ?? 0;
     public double DatabaseUplinkBaseFrequency =>
@@ -51,44 +62,44 @@ namespace SkyRoof
 
     public double CtcssTone
     {
-      get => TxCust!.CtcssTone;
-      set => TxCust!.CtcssTone = value;
+      get => RequiredTransmitterCustomization.CtcssTone;
+      set => RequiredTransmitterCustomization.CtcssTone = value;
     }
     public bool CtcssEnabled
     {
-      get => TxCust!.CtcssEnabled;
-      set => TxCust!.CtcssEnabled = value;
+      get => RequiredTransmitterCustomization.CtcssEnabled;
+      set => RequiredTransmitterCustomization.CtcssEnabled = value;
     }
     public double DownlinkManualCorrection
     {
-      get => SatCust!.DownlinkManualCorrection;
-      set => SatCust!.DownlinkManualCorrection = (int)value;
+      get => RequiredSatelliteCustomization.DownlinkManualCorrection;
+      set => RequiredSatelliteCustomization.DownlinkManualCorrection = (int)value;
     }
     public double UplinkManualCorrection
     {
-      get => SatCust!.UplinkManualCorrection;
-      set => SatCust!.UplinkManualCorrection = (int)value;
+      get => RequiredSatelliteCustomization.UplinkManualCorrection;
+      set => RequiredSatelliteCustomization.UplinkManualCorrection = (int)value;
     }
 
     public bool DownlinkDopplerCorrectionEnabled 
     { 
-      get => SatCust!.DownlinkDopplerCorrectionEnabled; 
-      set => SatCust!.DownlinkDopplerCorrectionEnabled = value; 
+      get => RequiredSatelliteCustomization.DownlinkDopplerCorrectionEnabled; 
+      set => RequiredSatelliteCustomization.DownlinkDopplerCorrectionEnabled = value; 
     }
     public bool UplinkDopplerCorrectionEnabled
     {
-      get => SatCust!.UplinkDopplerCorrectionEnabled;
-      set => SatCust!.UplinkDopplerCorrectionEnabled = value;
+      get => RequiredSatelliteCustomization.UplinkDopplerCorrectionEnabled;
+      set => RequiredSatelliteCustomization.UplinkDopplerCorrectionEnabled = value;
     }
     public bool DownlinkManualCorrectionEnabled
     {
-      get => SatCust!.DownlinkManualCorrectionEnabled;
-      set => SatCust!.DownlinkManualCorrectionEnabled = value;
+      get => RequiredSatelliteCustomization.DownlinkManualCorrectionEnabled;
+      set => RequiredSatelliteCustomization.DownlinkManualCorrectionEnabled = value;
     }
     public bool UplinkManualCorrectionEnabled
     {
-      get => SatCust!.UplinkManualCorrectionEnabled;
-      set => SatCust!.UplinkManualCorrectionEnabled = value;
+      get => RequiredSatelliteCustomization.UplinkManualCorrectionEnabled;
+      set => RequiredSatelliteCustomization.UplinkManualCorrectionEnabled = value;
     }
 
     // computed
