@@ -49,11 +49,18 @@ public sealed class RotatorControlTests
                     : "RPRT 0\n";
             return "90.0\n30.0\n";
         });
-        using var engine = StartEngine(server.Port);
+        // Require an acknowledged initial position before dispatching a move.
+        // A loaded Windows runner can otherwise time out the first TCP read,
+        // reconnect and re-send an accepted target, adding a third P frame.
+        // Preserve the actual engine retry and reconnect behavior unchanged.
+        using var engine = StartEngine(server.Port, timeoutMs: 3000);
+        await WaitUntilAsync(() => engine.LastReadBearing != null);
+        Assert.Equal(1, server.ConnectionCount);
         engine.RotateTo(new SkyRoof.Bearing(Math.PI / 2, Math.PI / 6));
 
         await WaitUntilAsync(() => Volatile.Read(ref moves) >= 2 &&
             engine.LastWrittenBearing != null);
+        Assert.Equal(1, server.ConnectionCount);
         Assert.Equal(2, Volatile.Read(ref moves));
         Assert.Contains(server.Commands,
             command => command.StartsWith("P 90.0 30.0", StringComparison.Ordinal));
