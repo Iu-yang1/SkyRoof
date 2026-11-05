@@ -100,7 +100,19 @@ namespace SkyRoof
       catch(Exception ex)
       {
         created?.Dispose();
-        if(ProcessAlive(process))try{process!.Kill();}catch{}
+        if(ProcessAlive(process))
+        {
+          try { process!.Kill(); }
+          catch (InvalidOperationException)
+          {
+            Log.Debug("SkyCAT child exited before startup rollback could terminate it");
+          }
+          catch (Exception stopEx)
+          {
+            Log.Warning("SkyCAT startup rollback could not terminate child ({Type}); CI-V ownership remains unverified",
+              stopEx.GetType().Name);
+          }
+        }
         Log.Error(ex,"SkyCAT process launch failed");
       }
     }
@@ -147,7 +159,16 @@ namespace SkyRoof
         }
         if(!process.HasExited)
         {
-          try{process.Kill(entireProcessTree:true);}catch{}
+          try { process.Kill(entireProcessTree:true); }
+          catch (InvalidOperationException)
+          {
+            Log.Debug("SkyCAT child already exited before lifecycle cleanup");
+          }
+          catch (Exception stopEx)
+          {
+            Log.Warning("SkyCAT child cleanup could not terminate process ({Type}); CAT/PTT ownership remains unverified",
+              stopEx.GetType().Name);
+          }
         }
         connection.Dispose();
         process.Dispose();
