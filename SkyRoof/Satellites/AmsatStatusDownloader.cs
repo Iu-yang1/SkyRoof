@@ -157,48 +157,61 @@ namespace SkyRoof
         }
     }
 
-    public string? SendAmsatStatus(string satName, string report)
+    public async Task<string?> SendAmsatStatusAsync(string satName, string report,
+      CancellationToken cancellationToken = default)
     {
       try
       {
-        // build message
-        var queryParams = HttpUtility.ParseQueryString("");
-        var now = DateTime.UtcNow - TimeSpan.FromMinutes(1); // margin for time error on the server
+        string urlString = BuildAmsatReportUrl(satName, report,
+          ctx.Settings.User.Call, ctx.Settings.User.Square, DateTime.UtcNow);
 
-        queryParams["SatSubmit"] = "yes";
-        queryParams["Confirm"] = "yes";
-        queryParams["SatName"] = satName;
-        queryParams["SatYear"] = $"{now.Year}";
-        queryParams["SatMonth"] = $"{now.Month:D2}";
-        queryParams["SatDay"] = $"{now.Day:D2}";
-        queryParams["SatHour"] = $"{now.Hour:D2}";
-        queryParams["SatPeriod"] = $"{now.Minute / 15}";
-        queryParams["SatCall"] = $"{ctx.Settings.User.Call.ToUpper()}";
-        queryParams["SatReport"] = report;
-        queryParams["SatGridSquare"] = $"{ctx.Settings.User.Square.ToUpper()}";
-        queryParams["App"] = "SkyRoof";
+        using HttpClient client = new();
+        using HttpResponseMessage response =
+          await client.GetAsync(urlString, cancellationToken).ConfigureAwait(false);
 
-        // send
-        string urlString = $"https://www.amsat.org/status/submit.php?{queryParams}";
-        HttpClient client = new();
-        var response = client.GetAsync(urlString).Result;
-
-        // log
-        var content = response.Content.ReadAsStringAsync().Result;
+        string content = await response.Content.ReadAsStringAsync(cancellationToken)
+          .ConfigureAwait(false);
         content = Utils.HtmlToText(content).Replace("\n", " ");
         content = Regex.Replace(content, @"\s+", " ");
-        Log.Information($"AMSAT request: {urlString}");
-        Log.Information($"AMSAT reply: {content}");
+        Log.Information("AMSAT request: {Url}", urlString);
+        Log.Information("AMSAT reply: {Reply}", content);
 
-        if (!response.IsSuccessStatusCode) throw new Exception($"HTTP error {response.StatusCode}");
+        if (!response.IsSuccessStatusCode)
+          throw new HttpRequestException($"HTTP error {response.StatusCode}");
 
-        return null; // no error
+        return null;
+      }
+      catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+      {
+        throw;
       }
       catch (Exception ex)
       {
         Log.Error(ex, "Failed to send AMSAT status");
         return ex.Message;
       }
+    }
+
+    public static string BuildAmsatReportUrl(string satName, string report,
+      string callsign, string gridSquare, DateTime timestampUtc)
+    {
+      var queryParams = HttpUtility.ParseQueryString("");
+      var now = timestampUtc - TimeSpan.FromMinutes(1);
+
+      queryParams["SatSubmit"] = "yes";
+      queryParams["Confirm"] = "yes";
+      queryParams["SatName"] = satName;
+      queryParams["SatYear"] = $"{now.Year}";
+      queryParams["SatMonth"] = $"{now.Month:D2}";
+      queryParams["SatDay"] = $"{now.Day:D2}";
+      queryParams["SatHour"] = $"{now.Hour:D2}";
+      queryParams["SatPeriod"] = $"{now.Minute / 15}";
+      queryParams["SatCall"] = callsign.ToUpper();
+      queryParams["SatReport"] = report;
+      queryParams["SatGridSquare"] = gridSquare.ToUpper();
+      queryParams["App"] = "SkyRoof";
+
+      return $"https://www.amsat.org/status/submit.php?{queryParams}";
     }
   }
 }
