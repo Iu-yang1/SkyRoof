@@ -11,7 +11,12 @@ on:
 
 permissions:
   contents: write
-  
+
+# Never allow two releases to race on the same tag.
+concurrency:
+  group: skyroof-build-and-release
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: windows-latest
@@ -45,6 +50,19 @@ jobs:
           if ($version -notmatch '^\d+\.\d+$') { throw "version '$version' is not MAJOR.MINOR" }
           Write-Host "version: $version"
           "version=$version" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Refuse an existing release tag
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = "v.${{ steps.get_version.outputs.version }}"
+          $existing = git ls-remote --tags origin "refs/tags/$tag"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not verify whether release tag $tag already exists"
+          }
+          if (-not [string]::IsNullOrWhiteSpace(($existing | Out-String).Trim())) {
+            throw "Release tag $tag already exists; increment Directory.Build.props instead of overwriting it"
+          }
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
@@ -186,13 +204,30 @@ jobs:
           Get-ChildItem -Path install\*.* -recurse
         shell: pwsh
 
+      - name: Verify installer Authenticode state
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = "install\\SkyRoofSetup-v.${{ steps.get_version.outputs.version }}.exe"
+          if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
+            throw "Release installer missing: $installer"
+          }
+          $signature = Get-AuthenticodeSignature -FilePath $installer
+          Write-Host "Installer signature status: $($signature.Status)"
+          if ($env:SIGNPATH_AVAILABLE -eq 'true' -and $signature.Status -ne 'Valid') {
+            throw "SignPath is configured but installer signature is not valid: $($signature.Status)"
+          }
+          if ($env:SIGNPATH_AVAILABLE -ne 'true') {
+            Write-Host "::warning::No SignPath signing capability: publishing an unsigned prerelease"
+          }
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           name: SkyRoof Fork v.${{ steps.get_version.outputs.version }}
-          prerelease: false
+          prerelease: ${{ env.SIGNPATH_AVAILABLE != 'true' }}
           tag_name: v.${{ steps.get_version.outputs.version }}
-          overwrite_files: true
+          overwrite_files: false
           fail_on_unmatched_files: true
           target_commitish: ${{ github.sha }}
           body: |
