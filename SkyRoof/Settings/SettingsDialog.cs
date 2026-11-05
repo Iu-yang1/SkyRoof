@@ -5,6 +5,7 @@ using SkyRoof.IF;
 using System.Text.RegularExpressions;
 using Accessibility;
 using VE3NEA;
+using Serilog;
 
 namespace SkyRoof
 
@@ -221,8 +222,14 @@ namespace SkyRoof
               evidence = log.Length > 1800 ? log.Substring(log.Length - 1800) : log;
             }
           }
-          catch (IOException) { }
-          catch (UnauthorizedAccessException) { }
+          catch (IOException ex)
+          {
+            Log.Warning("VB-CABLE installer diagnostic log unreadable ({Type})", ex.GetType().Name);
+          }
+          catch (UnauthorizedAccessException ex)
+          {
+            Log.Warning("VB-CABLE installer diagnostic log access denied ({Type})", ex.GetType().Name);
+          }
           throw new InvalidOperationException(
             SettingsLanguage.Text(
               $"VB-CABLE 安装失败（退出码 {process.ExitCode}）。\n诊断日志：{managerLog}\n\n{evidence}",
