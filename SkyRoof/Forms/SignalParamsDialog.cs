@@ -2,6 +2,7 @@
 using System.Drawing.Drawing2D;
 using System.Globalization;
 using SkyRoof.Satellites;
+using Serilog;
 using VE3NEA.SkyTlm.Core;
 
 namespace SkyRoof
@@ -775,8 +776,14 @@ namespace SkyRoof
       if (DiscoverStatusLabel.IsHandleCreated && DiscoverStatusLabel.InvokeRequired)
       {
         try { DiscoverStatusLabel.BeginInvoke(() => SetStatus(text, color)); }
-        catch (ObjectDisposedException) { }
-        catch (InvalidOperationException) { }   // handle destroyed between the check and the call
+        catch (ObjectDisposedException)
+        {
+          Log.Debug("Telemetry discovery status update skipped after label disposal");
+        }
+        catch (InvalidOperationException)
+        {
+          Log.Debug("Telemetry discovery status update skipped after handle destruction");
+        }
         return;
       }
       DiscoverStatusLabel.ForeColor = color;

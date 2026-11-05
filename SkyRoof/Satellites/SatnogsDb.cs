@@ -312,7 +312,11 @@ namespace SkyRoof
             if (File.Exists(temporary))
               File.Delete(temporary);
           }
-          catch { }
+          catch (Exception cleanupEx)
+          {
+            Log.Warning("JPL {Kernel} cancelled download temporary cleanup failed ({Type})",
+              kernel, cleanupEx.GetType().Name);
+          }
 
           throw;
         }
@@ -328,7 +332,11 @@ namespace SkyRoof
             if (File.Exists(temporary))
               File.Delete(temporary);
           }
-          catch { }
+          catch (Exception cleanupEx)
+          {
+            Log.Warning("JPL {Kernel} failed download temporary cleanup failed ({Type})",
+              kernel, cleanupEx.GetType().Name);
+          }
         }
       }
 

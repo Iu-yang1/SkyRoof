@@ -261,7 +261,11 @@ namespace SkyRoof
       if (WaveOut != null)
       {
         WaveOut.PlaybackStopped -= WaveOut_Stopped;
-        try { WaveOut.Dispose(); } catch { }
+        try { WaveOut.Dispose(); }
+        catch (Exception ex)
+        {
+          Log.Warning("Voice playback device cleanup failed ({Type})", ex.GetType().Name);
+        }
         WaveOut = null;
       }
 
