@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Threading;
 using SkyRoof.SSTV;
+using Serilog;
 using VE3NEA;
 using NAudio.CoreAudioApi;
 using VE3NEA.SkySSTV;
@@ -2212,8 +2213,14 @@ namespace SkyRoof
           .OrderByDescending(File.GetLastWriteTimeUtc).Take(64))
           archiveList.Items.Add(new HistoryImage(path));
       }
-      catch (IOException) { }
-      catch (UnauthorizedAccessException) { }
+      catch (IOException ex)
+      {
+        Log.Warning("SSTV archive refresh could not read image files ({Type})", ex.GetType().Name);
+      }
+      catch (UnauthorizedAccessException ex)
+      {
+        Log.Warning("SSTV archive refresh lacks file permissions ({Type})", ex.GetType().Name);
+      }
       finally { archiveList.EndUpdate(); }
     }
 

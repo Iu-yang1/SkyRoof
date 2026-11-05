@@ -442,7 +442,10 @@ namespace SkyRoof
         Footprint = (int)(2 * prediction.GetFootprint()); // diameter in km
         Altitude = (int)prediction.Altitude;
       }
-      catch { }
+      catch (Exception ex)
+      {
+        Log.Debug("Satellite pass footprint prediction unavailable ({Type})", ex.GetType().Name);
+      }
     }
   }
 
