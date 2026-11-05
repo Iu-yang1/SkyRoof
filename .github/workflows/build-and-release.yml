@@ -330,7 +330,8 @@ jobs:
           $name = "SkyRoofSetup-$tag.exe"
           $local = Join-Path 'install' $name
 
-          git fetch origin "refs/tags/$tag:refs/tags/$tag"
+          $tagRef = "refs/tags/$tag"
+          git fetch origin ("{0}:{0}" -f $tagRef)
           if ($LASTEXITCODE -ne 0) { throw "Cannot fetch newly published tag $tag" }
           $actualCommit = (git rev-list -n 1 "refs/tags/$tag" | Out-String).Trim()
           if ($actualCommit -ne $expectedCommit) {
