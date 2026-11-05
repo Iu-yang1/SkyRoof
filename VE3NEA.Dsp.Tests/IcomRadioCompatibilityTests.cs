@@ -24,6 +24,17 @@ namespace VE3NEA.Dsp.Tests
     }
 
     [Fact]
+    public void LegacyDirectLanScopeOnlyAcceptsNamedIc9700()
+    {
+      Assert.True(IcomRadioProfiles.SupportsExistingDirectLanScope("IC-9700"));
+      Assert.True(IcomRadioProfiles.SupportsExistingDirectLanScope(" ic-9700 "));
+      Assert.False(IcomRadioProfiles.SupportsExistingDirectLanScope("IC-705"));
+      Assert.False(IcomRadioProfiles.SupportsExistingDirectLanScope("IC-905"));
+      Assert.False(IcomRadioProfiles.SupportsExistingDirectLanScope(null));
+      Assert.False(IcomRadioProfiles.SupportsExistingDirectLanScope(""));
+    }
+
+    [Fact]
     public void UnknownModelOrAddressIsNotAssumedToBeAnIcom9700()
     {
       Assert.False(IcomRadioProfiles.TryGetByModel(
