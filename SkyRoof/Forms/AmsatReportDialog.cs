@@ -13,6 +13,7 @@
     // when set, the AMSAT entry whose name contains this token is preselected instead of the first one
     private string? PreferredEntryToken;
     private System.Windows.Forms.Timer? AutoCloseTimer;
+    private CancellationTokenSource? SubmitCancellation;
 
     public AmsatReportDialog()
     {
@@ -53,19 +54,26 @@
     {
       CancelAutoClose();
       okBtn.Enabled = false;
-      _ = SendReportAndCloseAsync(comboBox1.Text, comboBox2.Text);
+      SubmitCancellation = new CancellationTokenSource();
+      _ = SendReportAndCloseAsync(comboBox1.Text, comboBox2.Text,
+        SubmitCancellation.Token);
     }
 
-    private async Task SendReportAndCloseAsync(string entry, string report)
+    private async Task SendReportAndCloseAsync(string entry, string report,
+      CancellationToken cancellationToken)
     {
       try
       {
-        string? errorMessage = await ctx.AmsatStatusLoader.SendAmsatStatusAsync(entry, report);
+        string? errorMessage = await ctx.AmsatStatusLoader.SendAmsatStatusAsync(entry, report, cancellationToken);
         if (IsDisposed || Disposing) return;
         if (errorMessage != null)
           MessageBox.Show(this, errorMessage, "Error",
             MessageBoxButtons.OK, MessageBoxIcon.Error);
         Close();
+      }
+      catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+      {
+        return;
       }
       catch (Exception ex)
       {
@@ -122,6 +130,9 @@
 
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
+      SubmitCancellation?.Cancel();
+      SubmitCancellation?.Dispose();
+      SubmitCancellation = null;
       CancelAutoClose();
       base.OnFormClosed(e);
     }
