@@ -237,6 +237,10 @@ jobs:
             - Recover diagnostic evidence from the isolated Rotator child/IPC, SkyCAT lifecycle, WASAPI/ONVIF, SSTV/FT4 cleanup, SatNOGS uploader and telemetry download fallbacks.
             - Keep existing CW/DSP mathematics, CAT/PTT protocol and control ownership, physical STOP-first behavior, and persisted settings unchanged.
             - Windows x64 Release build, full xUnit, CW R2C FFT microbenchmark and pinned aislop v0.18.1 quality checks are maintained as separate gates.
+            - P1: AMSAT status submission no longer blocks WinForms and is cancelled on dialog teardown; RadioLink tuning now fails explicitly on missing customization (PR #164/#165).
+            - P2: AFC observation/polarity/servo separation retains independent numerical/regression checks; CW/DSP/CAT/rotator safety rules were not rewritten to inflate a scanner score.
+            - Risk-scoped P0–P3 release review: pinned aislop 64/100, 781 historical findings (1 reviewed native-callback error, 779 warnings, 1 info). This release does not claim zero technical debt.
+            - See docs/quality/p0-p3-release-acceptance-20261105.md for master CI evidence and unverified field tests.
             - One intentional SoapySDR native callback catch is explicitly reviewed; see docs/quality/aislop-native-callback-exception-20261105.md.
             - Physical rotator STOP/C2 feedback, IC-9700 CAT/PTT, WASAPI hot-unplug and ONVIF devices still require field validation. Signing status must be verified from the shipped installer.
 
@@ -244,6 +248,10 @@ jobs:
             - 完善旋转器独立进程与 IPC、SkyCAT、WASAPI/ONVIF、SSTV/FT4、SatNOGS 与遥测下载清理的异常诊断。
             - 保留既有 CW/DSP 数学、CAT/PTT 协议与控制权、旋转器 STOP 优先级及持久化设置。
             - Windows x64、全量 xUnit、CW R2C FFT 性能基准与固定版本 aislop 均保持独立质量门禁。
+            - P1：AMSAT 上报不再阻塞 WinForms，关闭窗口时取消请求；RadioLink 对缺失的调谐配置对象明确拒绝访问（#164、#165）。
+            - P2：AFC 观测、极性与伺服职责已分离，独立数学与控制回归测试保留；不为静态评分重写 CW/DSP/CAT/旋转器安全逻辑。
+            - P0–P3 采用风险边界明确的维护版发布验收：固定版本 aislop 64/100，仍有 781 项历史发现（1 项已审查原生回调 error、779 warnings、1 info），并非技术债清零。
+            - 参见 docs/quality/p0-p3-release-acceptance-20261105.md 的主分支验证证据与实机待验项目。
             - SoapySDR 原生回调保留一项已审查的非传播异常边界，详见仓库对应质量说明。
             - 旋转器物理 STOP/C2、IC-9700 CAT/PTT、WASAPI 热拔插及 ONVIF 设备尚需实机验收；安装包签名以发布产物为准。
 
