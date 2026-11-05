@@ -43,7 +43,22 @@ jobs:
           $zip = Join-Path $env:RUNNER_TEMP "WinDivert-2.2.2-A.zip"
           $extract = Join-Path $env:RUNNER_TEMP "WinDivert-2.2.2-A"
 
-          Invoke-WebRequest -Uri $url -OutFile $zip
+          # Upstream GitHub release assets occasionally return 5xx on hosted
+          # runners. Retry transport failures, never skip the pinned hash check.
+          $downloaded = $false
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            try {
+              Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+              $downloaded = $true
+              break
+            }
+            catch {
+              if ($attempt -eq 3) { throw }
+              Write-Warning "WinDivert download failed on attempt $attempt; retrying"
+              Start-Sleep -Seconds (3 * $attempt)
+            }
+          }
+          if (-not $downloaded) { throw "WinDivert download unavailable" }
 
           $expectedSha256 = "63cb41763bb4b20f600b6de04e991a9c2be73279e317d4d82f237b150c5f3f15"
           $actualSha256 = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
