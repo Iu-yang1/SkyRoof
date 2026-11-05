@@ -24,7 +24,10 @@ namespace VE3NEA
     private static NativeSoapySdr.SoapySDRLogHandlerDelegate LogHandlerDelegate = new(SoapySdrLogHandler);
     private static int MainThreadId;
     private static long SoapySdrCallbackFailureCount;
-    private static long SoapySdrDiagnosticSinkFailureCount;
+    private static Exception? LastSoapySdrCallbackException;
+
+    internal static long SoapySdrCallbackFailures => Interlocked.Read(ref SoapySdrCallbackFailureCount);
+    internal static Exception? LastSoapySdrCallbackFailure => Volatile.Read(ref LastSoapySdrCallbackException);
 
     // SoapySDR streaming status indicators (O, U, S, T) are counted and summarized periodically
     private static readonly TimeSpan SsiSummaryInterval = TimeSpan.FromSeconds(60);
@@ -185,20 +188,10 @@ namespace VE3NEA
       }
       catch (Exception ex)
       {
-        // This delegate is called from native SoapySDR code. Never let a managed
-        // exception escape across the unmanaged callback boundary, including when
-        // the configured Serilog sink itself has failed.
+        // A native callback cannot propagate managed exceptions. Retain the
+        // original exception for diagnostics without calling a failing log sink.
         Interlocked.Increment(ref SoapySdrCallbackFailureCount);
-        try
-        {
-          Debug.WriteLine($"SoapySDR native log callback failed: {ex}");
-        }
-        catch (Exception)
-        {
-          // Debug listeners are optional and can fail during shutdown. Preserve
-          // the failure counter without attempting another potentially failing sink.
-          Interlocked.Increment(ref SoapySdrDiagnosticSinkFailureCount);
-        }
+        Volatile.Write(ref LastSoapySdrCallbackException, ex);
       }
     }
 
