@@ -18,17 +18,17 @@ namespace SkyRoof
     Verified = 2
   }
 
-  internal sealed record IcomRadioProfile(
-    string Model,
-    byte DefaultCivAddress,
-    int ReceiverCount,
-    IcomRadioTransport Transports,
-    IcomCapabilityStatus Split,
-    IcomCapabilityStatus CrossBandSplit,
-    IcomCapabilityStatus FullDuplex,
-    IcomCapabilityStatus Scope,
-    IcomCapabilityStatus UsbIfOutput)
+  internal sealed record IcomRadioProfile
   {
+    internal required string Model { get; init; }
+    internal required byte DefaultCivAddress { get; init; }
+    internal required int ReceiverCount { get; init; }
+    internal required IcomRadioTransport Transports { get; init; }
+    internal required IcomCapabilityStatus Split { get; init; }
+    internal required IcomCapabilityStatus CrossBandSplit { get; init; }
+    internal required IcomCapabilityStatus FullDuplex { get; init; }
+    internal required IcomCapabilityStatus Scope { get; init; }
+    internal required IcomCapabilityStatus UsbIfOutput { get; init; }
     internal int GetFrequencyByteCount(long frequencyHz) =>
       Model == "IC-905" && frequencyHz >= 10_000_000_000L
         ? IcomCivFrequencyCodec.ExtendedByteCount
@@ -47,32 +47,44 @@ namespace SkyRoof
   /// </summary>
   internal static class IcomRadioProfiles
   {
-    internal static readonly IcomRadioProfile Ic9700 = new(
-      "IC-9700", 0xA2, 2,
-      IcomRadioTransport.Usb | IcomRadioTransport.Ethernet,
-      IcomCapabilityStatus.Verified,
-      IcomCapabilityStatus.Verified,
-      IcomCapabilityStatus.Verified,
-      IcomCapabilityStatus.Verified,
-      IcomCapabilityStatus.Candidate);
+    internal static readonly IcomRadioProfile Ic9700 = new()
+    {
+      Model = "IC-9700",
+      DefaultCivAddress = 0xA2,
+      ReceiverCount = 2,
+      Transports = IcomRadioTransport.Usb | IcomRadioTransport.Ethernet,
+      Split = IcomCapabilityStatus.Verified,
+      CrossBandSplit = IcomCapabilityStatus.Verified,
+      FullDuplex = IcomCapabilityStatus.Verified,
+      Scope = IcomCapabilityStatus.Verified,
+      UsbIfOutput = IcomCapabilityStatus.Candidate
+    };
 
-    internal static readonly IcomRadioProfile Ic705 = new(
-      "IC-705", 0xA4, 1,
-      IcomRadioTransport.Usb | IcomRadioTransport.Wlan,
-      IcomCapabilityStatus.Candidate,
-      IcomCapabilityStatus.Unavailable,
-      IcomCapabilityStatus.Unavailable,
-      IcomCapabilityStatus.Candidate,
-      IcomCapabilityStatus.Candidate);
+    internal static readonly IcomRadioProfile Ic705 = new()
+    {
+      Model = "IC-705",
+      DefaultCivAddress = 0xA4,
+      ReceiverCount = 1,
+      Transports = IcomRadioTransport.Usb | IcomRadioTransport.Wlan,
+      Split = IcomCapabilityStatus.Candidate,
+      CrossBandSplit = IcomCapabilityStatus.Unavailable,
+      FullDuplex = IcomCapabilityStatus.Unavailable,
+      Scope = IcomCapabilityStatus.Candidate,
+      UsbIfOutput = IcomCapabilityStatus.Candidate
+    };
 
-    internal static readonly IcomRadioProfile Ic905 = new(
-      "IC-905", 0xAC, 1,
-      IcomRadioTransport.Usb | IcomRadioTransport.Ethernet,
-      IcomCapabilityStatus.Candidate,
-      IcomCapabilityStatus.Unavailable,
-      IcomCapabilityStatus.Unavailable,
-      IcomCapabilityStatus.Candidate,
-      IcomCapabilityStatus.Candidate);
+    internal static readonly IcomRadioProfile Ic905 = new()
+    {
+      Model = "IC-905",
+      DefaultCivAddress = 0xAC,
+      ReceiverCount = 1,
+      Transports = IcomRadioTransport.Usb | IcomRadioTransport.Ethernet,
+      Split = IcomCapabilityStatus.Candidate,
+      CrossBandSplit = IcomCapabilityStatus.Unavailable,
+      FullDuplex = IcomCapabilityStatus.Unavailable,
+      Scope = IcomCapabilityStatus.Candidate,
+      UsbIfOutput = IcomCapabilityStatus.Candidate
+    };
 
     private static readonly IReadOnlyList<IcomRadioProfile> Known =
       Array.AsReadOnly(new[] { Ic9700, Ic705, Ic905 });
