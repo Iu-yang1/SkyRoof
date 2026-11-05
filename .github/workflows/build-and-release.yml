@@ -196,19 +196,21 @@ jobs:
           fail_on_unmatched_files: true
           target_commitish: ${{ github.sha }}
           body: |
-            SkyRoof Plus v.${{ steps.get_version.outputs.version }} — November 2026 verified maintenance release.
+            SkyRoof Plus v.${{ steps.get_version.outputs.version }} — November 2026 tested P0 quality maintenance release.
 
             ### English
-            - Include verified embedded SkyCAT and TX-5DR safe coexistence documentation, with a read-only proxy identity/frequency/mode diagnostic.
-            - Preserve the corrected Settings PropertyGrid layout, the 12 kHz IF-to-AF DSP chain, CAT/PTT lease isolation, satellite Doppler and CW Console.
-            - Follow the documented SkyCAT 4532/4534 protocol and PTT ownership restrictions. TX-5DR must not use the WSJT-X 4534 proxy for independent frequency or mode writes.
-            - Windows installer from the verified CI build; signing depends on the available SignPath configuration.
+            - Recover diagnostic evidence from the isolated Rotator child/IPC, SkyCAT lifecycle, WASAPI/ONVIF, SSTV/FT4 cleanup, SatNOGS uploader and telemetry download fallbacks.
+            - Keep existing CW/DSP mathematics, CAT/PTT protocol and control ownership, physical STOP-first behavior, and persisted settings unchanged.
+            - Windows x64 Release build, full xUnit, CW R2C FFT microbenchmark and pinned aislop v0.18.1 quality checks are maintained as separate gates.
+            - One intentional SoapySDR native callback catch is explicitly reviewed; see docs/quality/aislop-native-callback-exception-20261105.md.
+            - Physical rotator STOP/C2 feedback, IC-9700 CAT/PTT, WASAPI hot-unplug and ONVIF devices still require field validation. Signing status must be verified from the shipped installer.
 
             ### 中文
-            - 收录 TX-5DR 与 SkyRoof 内嵌 SkyCAT 的安全共存文档、只读端口身份/频率/模式诊断脚本。
-            - 保留已有设置页面修复、12 kHz IF→AF DSP、CAT/PTT 租约隔离、多普勒控制及 CW Console。
-            - SkyCAT 4534 为 WSJT-X 受限代理，不能用作 TX-5DR 自主调频端口。
-            - 安装包由 CI 生成，是否签名以发布产物验证结果为准。
+            - 完善旋转器独立进程与 IPC、SkyCAT、WASAPI/ONVIF、SSTV/FT4、SatNOGS 与遥测下载清理的异常诊断。
+            - 保留既有 CW/DSP 数学、CAT/PTT 协议与控制权、旋转器 STOP 优先级及持久化设置。
+            - Windows x64、全量 xUnit、CW R2C FFT 性能基准与固定版本 aislop 均保持独立质量门禁。
+            - SoapySDR 原生回调保留一项已审查的非传播异常边界，详见仓库对应质量说明。
+            - 旋转器物理 STOP/C2、IC-9700 CAT/PTT、WASAPI 热拔插及 ONVIF 设备尚需实机验收；安装包签名以发布产物为准。
 
             Fork changelog: https://github.com/Iu-yang1/SkyRoof-Plus/blob/master/FORK-CHANGELOG.md
 
