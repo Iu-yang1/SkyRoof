@@ -10,7 +10,7 @@ Release date / 发布日期: 2026-11-05. P0–P3 risk-assessed code-quality and 
 - Run the CW R2C FFT benchmark on every master push, with Windows x64 build, full xUnit and pinned aislop v0.18.1; independent CI, not a cross-CPU throughput claim.
 - P1: make AMSAT status submissions cancellable and non-blocking on the WinForms UI thread (#164); reject incomplete satellite/transmitter customization state explicitly before tuning (#165), while retaining the existing stored values and frequency formulas.
 - P2: refactor AFC observation/polarity/servo responsibilities (#154) with regression coverage for independent FIR/DSP references, AFC CAT-timeline/polarity and CW R2C/complex FFT phase and amplitude.
-- P3: reject an existing release tag, serialize release workflows, verify Authenticode before publishing, and mark a build without SignPath as a prerelease. Never claim signing from workflow configuration alone.
+- P3: require pinned aislop and six-size CW R2C FFT microbenchmark inside Build and Release itself, refuse an existing release tag, serialize releases, verify Authenticode before publishing, and mark a build without SignPath as a prerelease. Never claim signing from workflow configuration alone.
 - Full-source pinned aislop after #165: 64/100, 781 findings (1 intentional native callback exception error, 779 warnings and 1 info). Historical debt is documented, not declared fixed or silently rebaselined.
 - The SoapySDR native log callback retains one deliberately reviewed non-propagating catch to avoid exceptions crossing the unmanaged callback boundary; see `docs/quality/aislop-native-callback-exception-20261105.md`.
 - **Hardware acceptance remains separate:** physical rotator STOP/C2 feedback, IC-9700 CAT/PTT, WASAPI unplug and ONVIF devices require field verification; Windows CI does not certify them.
@@ -23,7 +23,7 @@ Release date / 发布日期: 2026-11-05. P0–P3 risk-assessed code-quality and 
 - master 每次推送都运行 CW R2C FFT 基准，并保留 Windows x64、全量 xUnit 与 aislop v0.18.1 门禁；基准仅作为同环境回归检查。
 - P1：AMSAT 上报改为可取消的异步操作，避免阻塞界面（#164）；RadioLink 在读取或修改调谐配置前明确验证配置对象已初始化（#165），不改变已有频率公式和持久化值。
 - P2：按 #154 拆分 AFC 观测、极性和伺服职责；由独立 FIR/DSP、AFC CAT 回读时序及 CW R2C/复数 FFT 相位幅度回归测试覆盖核心数学约束。
-- P3：拒绝已存在的 Release Tag、串行化发布、上传前核查 Authenticode；没有 SignPath 时作为预发布，签名情况以实际安装包验证为准。
+- P3：Build and Release 自身强制通过固定版本 aislop 与六组 CW R2C FFT 性能基准，拒绝已存在的 Release Tag、串行化发布、上传前核查 Authenticode；没有 SignPath 时作为预发布，签名情况以实际安装包验证为准。
 - #165 之后固定版本 aislop 报告：64/100，781 项发现（1 项原生回调例外 error、779 warnings、1 info）。历史技术债持续保留，不声称全部清零或自动重新生成基线。
 - SoapySDR 原生回调保留一项有依据的安全例外，避免异常跨越非托管边界；详见 `docs/quality/aislop-native-callback-exception-20261105.md`。
 - **实机验收仍独立进行：** 旋转器物理 STOP/C2、IC-9700 CAT/PTT、WASAPI 热拔插及 ONVIF 设备均不能以 CI 成功替代。
