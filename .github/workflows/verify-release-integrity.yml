@@ -1,0 +1,122 @@
+name: Verify Release Integrity
+
+on:
+  # Verify the existing v.1.66 after this workflow is first merged, without
+  # invoking Build and Release or touching any existing release tag.
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/verify-release-integrity.yml'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to inspect; leave blank for the latest release'
+        required: false
+        type: string
+      expected_commit:
+        description: 'Optional expected 40-character commit SHA'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - name: Verify tag SHA, release asset SHA-256 and Authenticode
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = $env:INPUT_TAG
+          $expected = $env:INPUT_EXPECTED_COMMIT
+
+          if ([string]::IsNullOrWhiteSpace($tag)) {
+            if ($env:EVENT_NAME -eq 'push') {
+              $tag = 'v.1.66'
+              $expected = '50525f8c238c4948579665667df766a44870d499'
+            } else {
+              $tag = gh release view --repo ${{ github.repository }} --json tagName --jq '.tagName'
+              if ($LASTEXITCODE -ne 0) { throw 'Could not identify latest release' }
+            }
+          }
+          if ($tag -notmatch '^v[.][0-9]+[.][0-9]+$') { throw "Unexpected release tag $tag" }
+
+          $release = gh api "repos/${{ github.repository }}/releases/tags/$tag" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $null -eq $release) {
+            throw "Failed to retrieve release metadata for $tag"
+          }
+          $ref = gh api "repos/${{ github.repository }}/git/ref/tags/$tag" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $null -eq $ref) { throw "Tag $tag not found" }
+
+          $commit = $ref.object.sha
+          if ($ref.object.type -eq 'tag') {
+            $annotated = gh api "repos/${{ github.repository }}/git/tags/$commit" | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0 -or $null -eq $annotated) {
+              throw "Could not resolve annotated tag $tag"
+            }
+            $commit = $annotated.object.sha
+          }
+          if ($ref.object.type -ne 'commit' -and $ref.object.type -ne 'tag') {
+            throw "Unexpected Git tag target type: $($ref.object.type)"
+          }
+          if ($release.target_commitish -ne $commit) {
+            throw "Release target $($release.target_commitish) differs from tag commit $commit"
+          }
+          if (-not [string]::IsNullOrWhiteSpace($expected) -and $expected -ne $commit) {
+            throw "Expected commit $expected but actual tag points to $commit"
+          }
+
+          $asset = @($release.assets | Where-Object { $_.name -like 'SkyRoofSetup-v.*.exe' })
+          if ($asset.Count -ne 1) { throw "Expected exactly one installer EXE for $tag" }
+          $name = $asset[0].name
+          if ($name -ne "SkyRoofSetup-$tag.exe") {
+            throw "Installer filename does not match tag: $name"
+          }
+          if ($asset[0].size -le 0) { throw 'Published installer is empty' }
+          if ($asset[0].digest -notmatch '^sha256:[0-9a-f]{64}$') {
+            throw 'Release asset is missing GitHub SHA-256 digest'
+          }
+
+          $directory = Join-Path $env:RUNNER_TEMP 'verify-skyroof-release'
+          New-Item -ItemType Directory -Path $directory -Force | Out-Null
+          gh release download $tag --repo ${{ github.repository }} --pattern $name --dir $directory
+          if ($LASTEXITCODE -ne 0) { throw "Failed downloading published release asset $name" }
+          $file = Join-Path $directory $name
+          if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+            throw "Downloaded installer file is missing: $file"
+          }
+          $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($asset[0].digest -ne "sha256:$hash") {
+            throw "Downloaded installer hash $hash differs from release digest $($asset[0].digest)"
+          }
+          if ((Get-Item -LiteralPath $file).Length -ne $asset[0].size) {
+            throw 'Downloaded installer size does not match the release asset'
+          }
+
+          $signature = Get-AuthenticodeSignature -FilePath $file
+          if (-not $release.prerelease -and $signature.Status -ne 'Valid') {
+            throw "Stable release installer lacks valid Authenticode signature: $($signature.Status)"
+          }
+          if ($release.prerelease -and $signature.Status -ne 'Valid') {
+            Write-Host "::warning::Unsigned prerelease; Authenticode status: $($signature.Status)"
+          }
+
+          @(
+            "### Verified release $tag",
+            "- Commit SHA: $commit",
+            "- Installer: $($asset[0].browser_download_url)",
+            "- Size: $($asset[0].size) bytes",
+            "- SHA-256: $hash",
+            "- Authenticode status: $($signature.Status)",
+            "- Prerelease: $($release.prerelease)"
+          ) | ForEach-Object {
+            Write-Host $_
+            $_ | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }

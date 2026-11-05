@@ -54,13 +54,21 @@ public sealed class NativeRotatorTcpRecoveryTests
   public async Task ShutdownInterruptsReconnectBackoffImmediately()
   {
     using var stopped=new ManualResetEvent(false);
-    var timer=Stopwatch.StartNew();
+    var started=new TaskCompletionSource(
+      TaskCreationOptions.RunContinuationsAsynchronously);
     Task<bool> wait=Task.Run(()=>
-      NativeRotatorReconnectPolicy.WaitForRetryOrShutdown(stopped,5000));
+    {
+      started.TrySetResult();
+      return NativeRotatorReconnectPolicy.WaitForRetryOrShutdown(stopped,5000);
+    });
+    // Measure the STOP-to-exit latency, not Task.Run startup scheduling
+    // delay under a loaded CI runner. A 5s backoff must remain interruptible.
+    await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
     await Task.Delay(80);
+    var shutdownTimer=Stopwatch.StartNew();
     stopped.Set();
     Assert.True(await wait.WaitAsync(TimeSpan.FromSeconds(1)));
-    Assert.InRange(timer.ElapsedMilliseconds,0,1000);
+    Assert.InRange(shutdownTimer.ElapsedMilliseconds,0,1000);
   }
 
   [Fact]

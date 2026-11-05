@@ -41,3 +41,11 @@ Latest independently scanned `master` is `ca9c6d24661c53dff87c07c300c886deee747b
 Not demonstrated by GitHub Actions: actual motor/shaft STOP and C2 feedback provenance, unplug/reconnect of the rotator controller, IC-9700 CAT/PTT lease correctness under RF transmission, WASAPI/USB audio hot-unplug, real ONVIF camera teardown, SoapySDR callback fault injection, complete over-the-air CW/FT4/SSTV sensitivity and AFC error bounds.
 
 **Release publish acceptance:** after PR merge, verify `Directory.Build.props` has 1.66, release workflow success on that exact master commit, tag `v.1.66` points to its SHA, `SkyRoofSetup-v.1.66.exe` downloads, SHA-256 is recorded, and signing/unsigned prerelease status matches actual Authenticode inspection. On any failure, do not claim a completed release. Keep the governance automation enabled while historical/physical items remain unresolved.
+
+## Publication and post-verification follow-up
+
+- `v.1.66` was created on `50525f8c238c4948579665667df766a44870d499` with `SkyRoofSetup-v.1.66.exe` (33,536,572 bytes), public [release page](https://github.com/Iu-yang1/SkyRoof-Plus/releases/tag/v.1.66).
+- GitHub's recorded installer digest is `sha256:424b6a59924503f1230c5a5d0e50a8dde6188ddcfc24a4770eca2a6332a30f82`. SignPath was unavailable and the Windows release build reported `NotSigned`; the release is therefore **prerelease=true**, not a signed stable release.
+- [Build and Release #41997741066](https://github.com/Iu-yang1/SkyRoof-Plus/actions/runs/41997741066) passed pinned quality, Windows compile, **1193 xUnit**, six FFT measurements, packaging, VB-CABLE and installer checks, and published its asset. Its final verification step **failed** because PowerShell parsed `$tag:refs` as a scoped variable in a Git refspec. This is a verification-script defect, **not evidence of a broken installer**; nevertheless, the workflow as a whole must be reported **failed**.
+- Subsequent changes fix the refspec for future releases and independently re-download/hash-check the already-published v1.66 via `.github/workflows/verify-release-integrity.yml`. This verification is required before describing v1.66 as post-publish integrity-verified. Do not rewrite or reuse the existing tag or asset.
+
