@@ -43,6 +43,29 @@ namespace VE3NEA.Dsp.Tests
       finally { try { File.Delete(file); } catch (IOException) { } }
     }
 
+    [Fact]
+    public void CorruptJsonlRowsAreSkippedWithoutDiscardingValidQso()
+    {
+      string file = Path.Combine(Path.GetTempPath(),
+        "SkyRoofSstvQso-" + Guid.NewGuid().ToString("N") + ".jsonl");
+      try
+      {
+        var valid = new SstvQsoRecord(
+          new DateTime(2026, 11, 5, 3, 4, 5, DateTimeKind.Utc),
+          "BG5JSU", "BG5JSU", "Robot 36", "RS-44", 145965000, 435625000,
+          "picture.png", "test");
+        SstvQsoLogStore.Append(file, valid);
+        File.AppendAllText(file, "{bad json}\n");
+        SstvQsoLogStore.Append(file, valid with { Call = "BG7QBL" });
+
+        var recovered = SstvQsoLogStore.Read(file);
+        Assert.Equal(2, recovered.Count);
+        Assert.Contains(recovered, q => q.Call == "BG5JSU");
+        Assert.Contains(recovered, q => q.Call == "BG7QBL");
+      }
+      finally { try { File.Delete(file); } catch (IOException) { } }
+    }
+
     [Theory]
     [InlineData("BAD CALL")]
     [InlineData("X")]

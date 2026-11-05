@@ -354,8 +354,15 @@ namespace SkyRoof
       finally
       {
         SenderPhase = SendingStage.Idle;
-        try { Soundcard.Buffer.Clear(); } catch { }
-        EndTransmitNoThrow(ref pttActive);
+        try { Soundcard.Buffer.Clear(); }
+        catch (Exception ex)
+        {
+          Log.Warning("FT4 TX buffer cleanup failed ({Type}); PTT release still required", ex.GetType().Name);
+        }
+        finally
+        {
+          EndTransmitNoThrow(ref pttActive);
+        }
       }
     }
 

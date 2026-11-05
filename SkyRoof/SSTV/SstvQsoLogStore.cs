@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Serilog;
 
 namespace SkyRoof.SSTV
 {
@@ -52,6 +53,7 @@ namespace SkyRoof.SSTV
     {
       if (!File.Exists(path)) return Array.Empty<SstvQsoRecord>();
       var rows = new List<SstvQsoRecord>();
+      int malformedRows = 0;
       lock (Gate)
       {
         foreach (string line in File.ReadLines(path))
@@ -62,11 +64,13 @@ namespace SkyRoof.SSTV
             SstvQsoRecord? record = JsonSerializer.Deserialize<SstvQsoRecord>(line);
             if (record != null) rows.Add(record);
           }
-          catch (JsonException) { }
+          catch (JsonException) { malformedRows++; }
           if (rows.Count > 100000)
             throw new InvalidDataException("SSTV log exceeds safe size limit.");
         }
       }
+      if (malformedRows != 0)
+        Log.Warning("SSTV QSO log skipped {Count} malformed JSONL rows; valid QSOs retained", malformedRows);
       return rows.OrderByDescending(x => x.Utc).Take(Math.Clamp(maxRows, 1, 100000))
         .ToArray();
     }

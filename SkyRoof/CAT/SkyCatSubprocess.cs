@@ -49,7 +49,15 @@ namespace SkyRoof
         try{runner.Wait(TimeSpan.FromSeconds(4));}
         catch(AggregateException ex){Log.Warning(ex,"SkyCAT shutdown exception");}
       }
-      catch(Exception ex){try{Log.Error(ex,"SkyCAT subprocess failed");}catch{}}
+      catch(Exception ex)
+      {
+        try { Log.Error(ex,"SkyCAT subprocess failed"); }
+        catch(Exception logEx)
+        {
+          // Logger initialization can fail before the child handshake. Do not hide that failure.
+          System.Diagnostics.Trace.TraceError("SkyCAT child logging failed ({0})", logEx.GetType().Name);
+        }
+      }
       finally {Log.CloseAndFlush();}
     }
   }
