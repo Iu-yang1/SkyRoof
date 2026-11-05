@@ -279,36 +279,35 @@ internal sealed class IsolatedRotatorTransport : IRotatorTransport
       Log.Error("Isolated rotator worker IPC failed ({Type}); attempting fail-safe STOP",
         ex.GetType().Name);
     }
+    finally { StopAndDisposeChildDriver(driver, args); }
+  }
+
+  private static void StopAndDisposeChildDriver(IRotatorTransport? driver, string[] args)
+  {
+    if (driver == null) return;
+    // The native child must issue protocol STOP before releasing the hardware.
+    try
+    {
+      var s=JsonSerializer.Deserialize<RotatorSettings>(
+        Convert.FromBase64String(args[2]));
+      if(s!=null)
+      {
+        byte[]? stop=NativeRotatorCodec.Stop(s.NativeProtocol,s.NativeStopTemplate);
+        if(stop!=null && driver.Connected)driver.Write(stop);
+      }
+    }
+    catch (Exception ex)
+    {
+      Log.Error("Isolated rotator worker exit STOP failed ({Type}); physical STOP unverified",
+        ex.GetType().Name);
+    }
     finally
     {
-      // If SkyRoof disappears, a surviving motor may keep moving; attempt
-      // protocol STOP from the child before releasing its hardware handle.
-      if(driver!=null)
+      try { driver.Dispose(); }
+      catch (Exception ex)
       {
-        try
-        {
-          var s=JsonSerializer.Deserialize<RotatorSettings>(
-            Convert.FromBase64String(args[2]));
-          if(s!=null)
-          {
-            byte[]? stop=NativeRotatorCodec.Stop(s.NativeProtocol,s.NativeStopTemplate);
-            if(stop!=null && driver.Connected)driver.Write(stop);
-          }
-        }
-        catch (Exception ex)
-        {
-          Log.Error("Isolated rotator worker exit STOP failed ({Type}); physical STOP unverified",
-            ex.GetType().Name);
-        }
-        finally
-        {
-          try { driver.Dispose(); }
-          catch (Exception ex)
-          {
-            Log.Warning("Isolated rotator worker driver disposal failed ({Type})",
-              ex.GetType().Name);
-          }
-        }
+        Log.Warning("Isolated rotator worker driver disposal failed ({Type})",
+          ex.GetType().Name);
       }
     }
   }
