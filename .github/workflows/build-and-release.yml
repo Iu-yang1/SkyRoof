@@ -319,6 +319,62 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Verify published tag, asset hash and Authenticode
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = "v.${{ steps.get_version.outputs.version }}"
+          $expectedCommit = "${{ github.sha }}"
+          $name = "SkyRoofSetup-$tag.exe"
+          $local = Join-Path 'install' $name
+
+          git fetch origin "refs/tags/$tag:refs/tags/$tag"
+          if ($LASTEXITCODE -ne 0) { throw "Cannot fetch newly published tag $tag" }
+          $actualCommit = (git rev-list -n 1 "refs/tags/$tag" | Out-String).Trim()
+          if ($actualCommit -ne $expectedCommit) {
+            throw "Release tag $tag points to $actualCommit, expected $expectedCommit"
+          }
+
+          $release = gh release view $tag --repo ${{ github.repository }} --json tagName,assets,isPrerelease,url | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $release.tagName -ne $tag) {
+            throw "Release $tag cannot be independently read back"
+          }
+          $asset = @($release.assets | Where-Object { $_.name -eq $name })
+          if ($asset.Count -ne 1) { throw "Release asset $name missing or duplicated" }
+          $expectedPrerelease = $env:SIGNPATH_AVAILABLE -ne 'true'
+          if ($release.isPrerelease -ne $expectedPrerelease) {
+            throw "Release prerelease setting does not match signing capability"
+          }
+
+          $directory = Join-Path $env:RUNNER_TEMP 'release-asset-verification'
+          New-Item -ItemType Directory -Path $directory -Force | Out-Null
+          gh release download $tag --repo ${{ github.repository }} --pattern $name --dir $directory
+          if ($LASTEXITCODE -ne 0) { throw "Cannot download published asset $name" }
+          $downloaded = Join-Path $directory $name
+          if (-not (Test-Path -LiteralPath $downloaded -PathType Leaf)) {
+            throw "Published asset missing after download"
+          }
+          $localHash = (Get-FileHash -LiteralPath $local -Algorithm SHA256).Hash.ToLowerInvariant()
+          $downloadedHash = (Get-FileHash -LiteralPath $downloaded -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($localHash -ne $downloadedHash) {
+            throw "Downloaded release asset SHA-256 differs from the verified installer"
+          }
+          $signature = Get-AuthenticodeSignature -FilePath $downloaded
+          if ($env:SIGNPATH_AVAILABLE -eq 'true' -and $signature.Status -ne 'Valid') {
+            throw "Downloaded signed installer is not Authenticode valid: $($signature.Status)"
+          }
+          $url = "https://github.com/${{ github.repository }}/releases/download/$tag/$name"
+          @(
+            "### Verified $tag",
+            "- Commit: $actualCommit",
+            "- Installer: $url",
+            "- SHA-256: $downloadedHash",
+            "- Authenticode: $($signature.Status)",
+            "- Prerelease: $($release.isPrerelease)"
+          ) | ForEach-Object { Write-Host $_; $_ | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+
       # An explicitly requested in-place v1.62 replacement: only retarget
       # the existing tag AFTER its new installer has uploaded successfully.
       - name: Retarget v1.62 to the verified replacement source
