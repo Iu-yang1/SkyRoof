@@ -3,10 +3,10 @@
   <!-- The single source of truth for the release version. Bump it here and nowhere else:
        MSBuild applies it to every project in the solution automatically, and the CI workflow
        runs build/Set-Version.ps1 to propagate it to the installer script and the docs. -->
-  <!-- Official v1.65 verified SkyCAT coexistence documentation and release update: 2026-11-03. -->
+  <!-- SkyRoof Plus v1.66 audited maintenance release: 2026-11-05. -->
   <PropertyGroup>
     <Product>SkyRoof</Product>
-    <Version>1.65</Version>
+    <Version>1.66</Version>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
 
