@@ -11,9 +11,38 @@ on:
 
 permissions:
   contents: write
-  
+
+# Never allow two releases to race on the same tag.
+concurrency:
+  group: skyroof-build-and-release
+  cancel-in-progress: false
+
 jobs:
+  pinned_quality:
+    name: Pinned aislop release gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Setup Node 24
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24'
+      - name: Install pinned quality engine prerequisites
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cppcheck
+          python3 -m venv "$RUNNER_TEMP/aislop-python"
+          "$RUNNER_TEMP/aislop-python/bin/python" -m pip install --disable-pip-version-check --quiet ruff==0.14.2
+          echo "$RUNNER_TEMP/aislop-python/bin" >> "$GITHUB_PATH"
+      - name: Gate pinned aislop v0.18.1 on release source
+        shell: bash
+        run: npm exec --yes --package=aislop@0.18.1 -- aislop ci .
+
   build:
+    needs: pinned_quality
     runs-on: windows-latest
 
     steps:
@@ -45,6 +74,19 @@ jobs:
           if ($version -notmatch '^\d+\.\d+$') { throw "version '$version' is not MAJOR.MINOR" }
           Write-Host "version: $version"
           "version=$version" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Refuse an existing release tag
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = "v.${{ steps.get_version.outputs.version }}"
+          $existing = git ls-remote --tags origin "refs/tags/$tag"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not verify whether release tag $tag already exists"
+          }
+          if (-not [string]::IsNullOrWhiteSpace(($existing | Out-String).Trim())) {
+            throw "Release tag $tag already exists; increment Directory.Build.props instead of overwriting it"
+          }
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
@@ -107,6 +149,40 @@ jobs:
 
       - name: Run release tests
         run: dotnet test VE3NEA.Dsp.Tests/VE3NEA.Dsp.Tests.csproj -c Release -p:Platform=x64 --no-restore
+
+      - name: Benchmark CW R2C against legacy complex FFT
+        env:
+          SKYROOF_RUN_FFT_BENCHMARK: '1'
+          SKYROOF_FFT_BENCHMARK_OUTPUT: ${{ github.workspace }}/artifacts/cw-fft-benchmark.jsonl
+        run: >
+          dotnet test VE3NEA.Dsp.Tests/VE3NEA.Dsp.Tests.csproj
+          -c Release -p:Platform=x64 --no-restore --no-build
+          --filter FullyQualifiedName~OptionalBenchmark_RealR2cVersusComplexFft
+          --logger "console;verbosity=normal"
+
+      - name: Validate and display FFT benchmark evidence
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $path = 'artifacts/cw-fft-benchmark.jsonl'
+          if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+            throw "CW FFT benchmark did not produce metrics"
+          }
+          $rows = @(Get-Content -LiteralPath $path | ForEach-Object { $_ | ConvertFrom-Json })
+          if ($rows.Count -lt 6) { throw "CW FFT benchmark had fewer than six size measurements" }
+          foreach ($row in $rows) {
+            if ($row.real_median_us -le 0 -or $row.complex_median_us -le 0 -or $row.speedup -le 0) {
+              throw "CW FFT benchmark contains nonpositive measurements"
+            }
+          }
+          Get-Content -LiteralPath $path
+
+      - name: Upload release FFT benchmark evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-cw-fft-r2c-benchmark
+          path: artifacts/cw-fft-benchmark.jsonl
+          if-no-files-found: error
 
       # Verify the publisher-signed unmodified basic VB-CABLE Donationware.
       - name: Stage original VB-CABLE
@@ -186,35 +262,118 @@ jobs:
           Get-ChildItem -Path install\*.* -recurse
         shell: pwsh
 
+      - name: Verify installer Authenticode state
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = "install\\SkyRoofSetup-v.${{ steps.get_version.outputs.version }}.exe"
+          if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
+            throw "Release installer missing: $installer"
+          }
+          $signature = Get-AuthenticodeSignature -FilePath $installer
+          Write-Host "Installer signature status: $($signature.Status)"
+          if ($env:SIGNPATH_AVAILABLE -eq 'true' -and $signature.Status -ne 'Valid') {
+            throw "SignPath is configured but installer signature is not valid: $($signature.Status)"
+          }
+          if ($env:SIGNPATH_AVAILABLE -ne 'true') {
+            Write-Host "::warning::No SignPath signing capability: publishing an unsigned prerelease"
+          }
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           name: SkyRoof Fork v.${{ steps.get_version.outputs.version }}
-          prerelease: false
+          prerelease: ${{ env.SIGNPATH_AVAILABLE != 'true' }}
           tag_name: v.${{ steps.get_version.outputs.version }}
-          overwrite_files: true
+          overwrite_files: false
           fail_on_unmatched_files: true
           target_commitish: ${{ github.sha }}
           body: |
-            SkyRoof Plus v.${{ steps.get_version.outputs.version }} — November 2026 verified maintenance release.
+            SkyRoof Plus v.${{ steps.get_version.outputs.version }} — November 2026 tested P0 quality maintenance release.
 
             ### English
-            - Include verified embedded SkyCAT and TX-5DR safe coexistence documentation, with a read-only proxy identity/frequency/mode diagnostic.
-            - Preserve the corrected Settings PropertyGrid layout, the 12 kHz IF-to-AF DSP chain, CAT/PTT lease isolation, satellite Doppler and CW Console.
-            - Follow the documented SkyCAT 4532/4534 protocol and PTT ownership restrictions. TX-5DR must not use the WSJT-X 4534 proxy for independent frequency or mode writes.
-            - Windows installer from the verified CI build; signing depends on the available SignPath configuration.
+            - Recover diagnostic evidence from the isolated Rotator child/IPC, SkyCAT lifecycle, WASAPI/ONVIF, SSTV/FT4 cleanup, SatNOGS uploader and telemetry download fallbacks.
+            - Keep existing CW/DSP mathematics, CAT/PTT protocol and control ownership, physical STOP-first behavior, and persisted settings unchanged.
+            - Build and Release itself waits for pinned aislop v0.18.1, then requires Windows x64 Release, full xUnit, six CW R2C FFT microbenchmarks and verified installer payload before publishing.
+            - P1: AMSAT status submission no longer blocks WinForms and is cancelled on dialog teardown; RadioLink tuning now fails explicitly on missing customization (PR #164/#165).
+            - P2: AFC observation/polarity/servo separation retains independent numerical/regression checks; CW/DSP/CAT/rotator safety rules were not rewritten to inflate a scanner score.
+            - Risk-scoped P0–P3 release review: pinned aislop 64/100, 781 historical findings (1 reviewed native-callback error, 779 warnings, 1 info). This release does not claim zero technical debt.
+            - See docs/quality/p0-p3-release-acceptance-20261105.md for master CI evidence and unverified field tests.
+            - One intentional SoapySDR native callback catch is explicitly reviewed; see docs/quality/aislop-native-callback-exception-20261105.md.
+            - Physical rotator STOP/C2 feedback, IC-9700 CAT/PTT, WASAPI hot-unplug and ONVIF devices still require field validation. Signing status must be verified from the shipped installer.
 
             ### 中文
-            - 收录 TX-5DR 与 SkyRoof 内嵌 SkyCAT 的安全共存文档、只读端口身份/频率/模式诊断脚本。
-            - 保留已有设置页面修复、12 kHz IF→AF DSP、CAT/PTT 租约隔离、多普勒控制及 CW Console。
-            - SkyCAT 4534 为 WSJT-X 受限代理，不能用作 TX-5DR 自主调频端口。
-            - 安装包由 CI 生成，是否签名以发布产物验证结果为准。
+            - 完善旋转器独立进程与 IPC、SkyCAT、WASAPI/ONVIF、SSTV/FT4、SatNOGS 与遥测下载清理的异常诊断。
+            - 保留既有 CW/DSP 数学、CAT/PTT 协议与控制权、旋转器 STOP 优先级及持久化设置。
+            - Build and Release 发布前先通过固定版本 aislop v0.18.1，再通过 Windows x64、全量 xUnit、六组 CW R2C FFT 基准及安装包依赖检查。
+            - P1：AMSAT 上报不再阻塞 WinForms，关闭窗口时取消请求；RadioLink 对缺失的调谐配置对象明确拒绝访问（#164、#165）。
+            - P2：AFC 观测、极性与伺服职责已分离，独立数学与控制回归测试保留；不为静态评分重写 CW/DSP/CAT/旋转器安全逻辑。
+            - P0–P3 采用风险边界明确的维护版发布验收：固定版本 aislop 64/100，仍有 781 项历史发现（1 项已审查原生回调 error、779 warnings、1 info），并非技术债清零。
+            - 参见 docs/quality/p0-p3-release-acceptance-20261105.md 的主分支验证证据与实机待验项目。
+            - SoapySDR 原生回调保留一项已审查的非传播异常边界，详见仓库对应质量说明。
+            - 旋转器物理 STOP/C2、IC-9700 CAT/PTT、WASAPI 热拔插及 ONVIF 设备尚需实机验收；安装包签名以发布产物为准。
 
             Fork changelog: https://github.com/Iu-yang1/SkyRoof-Plus/blob/master/FORK-CHANGELOG.md
 
           files:  install/SkyRoofSetup-v.${{ steps.get_version.outputs.version }}.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify published tag, asset hash and Authenticode
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = "v.${{ steps.get_version.outputs.version }}"
+          $expectedCommit = "${{ github.sha }}"
+          $name = "SkyRoofSetup-$tag.exe"
+          $local = Join-Path 'install' $name
+
+          git fetch origin "refs/tags/$tag:refs/tags/$tag"
+          if ($LASTEXITCODE -ne 0) { throw "Cannot fetch newly published tag $tag" }
+          $actualCommit = (git rev-list -n 1 "refs/tags/$tag" | Out-String).Trim()
+          if ($actualCommit -ne $expectedCommit) {
+            throw "Release tag $tag points to $actualCommit, expected $expectedCommit"
+          }
+
+          $release = gh release view $tag --repo ${{ github.repository }} --json tagName,assets,isPrerelease,url | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $release.tagName -ne $tag) {
+            throw "Release $tag cannot be independently read back"
+          }
+          $asset = @($release.assets | Where-Object { $_.name -eq $name })
+          if ($asset.Count -ne 1) { throw "Release asset $name missing or duplicated" }
+          $expectedPrerelease = $env:SIGNPATH_AVAILABLE -ne 'true'
+          if ($release.isPrerelease -ne $expectedPrerelease) {
+            throw "Release prerelease setting does not match signing capability"
+          }
+
+          $directory = Join-Path $env:RUNNER_TEMP 'release-asset-verification'
+          New-Item -ItemType Directory -Path $directory -Force | Out-Null
+          gh release download $tag --repo ${{ github.repository }} --pattern $name --dir $directory
+          if ($LASTEXITCODE -ne 0) { throw "Cannot download published asset $name" }
+          $downloaded = Join-Path $directory $name
+          if (-not (Test-Path -LiteralPath $downloaded -PathType Leaf)) {
+            throw "Published asset missing after download"
+          }
+          $localHash = (Get-FileHash -LiteralPath $local -Algorithm SHA256).Hash.ToLowerInvariant()
+          $downloadedHash = (Get-FileHash -LiteralPath $downloaded -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($localHash -ne $downloadedHash) {
+            throw "Downloaded release asset SHA-256 differs from the verified installer"
+          }
+          $signature = Get-AuthenticodeSignature -FilePath $downloaded
+          if ($env:SIGNPATH_AVAILABLE -eq 'true' -and $signature.Status -ne 'Valid') {
+            throw "Downloaded signed installer is not Authenticode valid: $($signature.Status)"
+          }
+          $url = "https://github.com/${{ github.repository }}/releases/download/$tag/$name"
+          @(
+            "### Verified $tag",
+            "- Commit: $actualCommit",
+            "- Installer: $url",
+            "- SHA-256: $downloadedHash",
+            "- Authenticode: $($signature.Status)",
+            "- Prerelease: $($release.isPrerelease)"
+          ) | ForEach-Object { Write-Host $_; $_ | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
 
       # An explicitly requested in-place v1.62 replacement: only retarget
       # the existing tag AFTER its new installer has uploaded successfully.
