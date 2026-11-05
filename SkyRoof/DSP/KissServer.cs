@@ -196,7 +196,7 @@ namespace SkyRoof
         while (await stream.ReadAsync(buffer, stop).ConfigureAwait(false) > 0) { }
       }
       catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
-      catch (ObjectDisposedException) { } // socket closed during shutdown
+      catch (ObjectDisposedException) { Log.Debug("KISS client input closed during shutdown"); }
       catch (IOException ex) { Log.Debug(ex, "KISS client input disconnected"); }
       catch (SocketException ex) { Log.Debug(ex, "KISS client input socket closed"); }
       catch (Exception ex) { Log.Warning(ex, "KISS client reader failed"); }
@@ -212,8 +212,8 @@ namespace SkyRoof
           await stream.WriteAsync(frame, stop).ConfigureAwait(false);
       }
       catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
-      catch (ChannelClosedException) { }
-      catch (ObjectDisposedException) { } // peer or server closed the socket
+      catch (ChannelClosedException) { Log.Debug("KISS output channel closed during shutdown"); }
+      catch (ObjectDisposedException) { Log.Debug("KISS output socket closed during shutdown"); }
       catch (IOException ex) { Log.Debug(ex, "KISS client output disconnected"); }
       catch (SocketException ex) { Log.Debug(ex, "KISS client output socket closed"); }
       catch (Exception ex) { Log.Warning(ex, "KISS client writer failed"); }
