@@ -73,8 +73,8 @@ namespace SkyRoof
     private ushort RadioTxSampleCapabilities;
     private uint RadioBaudRate;
     private string RadioAudioName = string.Empty;
-    private byte RadioCivAddress = 0xA2;
-    private string RadioName = "IC-9700";
+    private byte RadioCivAddress;
+    private string RadioName = string.Empty;
     private int RemoteCivPort = DefaultCivPort;
     private int RemoteAudioPort = DefaultAudioPort;
 
@@ -269,6 +269,16 @@ namespace SkyRoof
       if (!gotAuthOk)
         throw new TimeoutException(
           "IC-9700 did not return a correlated authentication-token response.");
+
+      // P0 identification is deliberately read-only for IC-705 and IC-905.
+      // The legacy network stream configures an IC-9700-specific scope;
+      // never send those writes to a different or unidentified radio.
+      if (!IcomRadioProfiles.SupportsExistingDirectLanScope(RadioName))
+        throw new NotSupportedException(
+          $"Direct LAN spectrum setup currently supports IC-9700 only; " +
+          $"radio capabilities identify '{RadioName}' " +
+          $"(CI-V 0x{RadioCivAddress:X2}). " +
+          "IC-705/IC-905 network scope support requires the P1/P2 adapter.");
 
       byte[] streamAuthId = AuthId.ToArray();
       ushort streamSequence = await SendStreamRequestAsync(
