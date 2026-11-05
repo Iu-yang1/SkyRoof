@@ -104,9 +104,14 @@ public sealed class RotatorControlTests
             command == "p"
                 ? "90.0\n30.0\n"
                 : "RPRT 0\n");
-        using var engine = StartEngine(server.Port);
+        // A queued p request is not an acknowledged position observation.
+        // The higher receive timeout protects a loaded Windows CI runner
+        // without weakening the real engine's STOP-before-direction gate.
+        using var engine = StartEngine(server.Port, timeoutMs: 3000);
 
-        await WaitUntilAsync(() => server.Count("p") >= 1);
+        await WaitUntilAsync(() =>
+            server.Count("p") >= 1 && engine.LastReadBearing != null);
+        Assert.Equal(1, server.ConnectionCount);
         engine.StartContinuousMove(
             RotatorContinuousDirection.Right);
         await WaitUntilAsync(() =>
@@ -123,6 +128,7 @@ public sealed class RotatorControlTests
         int stop = Array.IndexOf(commands, "S");
         int up = Array.IndexOf(commands, "M 2 -1");
         Assert.True(stop >= 0 && up > stop);
+        Assert.Equal(1, server.ConnectionCount);
     }
 
     [Fact]
