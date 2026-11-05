@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Ports;
 using System.Net.Sockets;
 using System.Net;
+using Serilog;
 
 namespace SkyRoof.NativeRotator;
 
@@ -69,7 +70,18 @@ internal sealed class SerialTransport : IRotatorTransport
     var p=serial??throw new IOException("Serial port closed");
     try{return p.Read(buffer,0,buffer.Length);}catch(TimeoutException){return 0;}
   }
-  public void Abort(){var p=Interlocked.Exchange(ref serial,null);if(p!=null){try{p.Close();}catch{}p.Dispose();}}
+  public void Abort()
+  {
+    var p=Interlocked.Exchange(ref serial,null);
+    if(p==null)return;
+    try { p.Close(); }
+    catch (Exception ex)
+    {
+      Log.Warning("Native serial rotator close failed ({Type}); continuing port disposal",
+        ex.GetType().Name);
+    }
+    finally { p.Dispose(); }
+  }
   public void Dispose()=>Abort();
 }
 internal sealed class TcpTransport : IRotatorTransport
