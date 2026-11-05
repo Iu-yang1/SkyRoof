@@ -47,7 +47,7 @@ namespace SkyRoof
       long remaining = frequencyHz;
       byte[] buffer = new byte[byteCount];
 
-      for (int i = 0; i < buffer.Length; i++)
+      for (int i = 0; i < byteCount; i++)
       {
         long pair = remaining % 100;
         remaining /= 100;
