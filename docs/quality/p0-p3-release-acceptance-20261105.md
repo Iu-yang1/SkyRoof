@@ -33,7 +33,7 @@ Latest independently scanned `master` is `ca9c6d24661c53dff87c07c300c886deee747b
 ## P3: repeatable CI, code review and release
 
 - [#159](https://github.com/Iu-yang1/SkyRoof-Plus/pull/159) runs CW R2C FFT benchmark on master pushes; Windows compile/xUnit/installer and pinned `aislop@0.18.1` remain independent checks.
-- v1.66 release workflow additionally refuses pre-existing tags, serializes releases, validates installer Authenticode when SignPath is configured, and marks unsigned builds prerelease. Never overwrite `v.1.66` or reuse an earlier tag.
+- v1.66 release workflow **requires a pinned aislop v0.18.1 Ubuntu quality job before starting the Windows release build**, independently runs the six-size CW R2C FFT benchmark and uploads its JSONL evidence before publishing; it additionally refuses pre-existing tags, serializes releases, validates installer Authenticode when SignPath is configured, and marks unsigned builds prerelease. Never overwrite `v.1.66` or reuse an earlier tag.
 - Remaining style/code-review warnings include 206 narrative comments, 46 index loops, 38 too-many-parameters and 15 trivial comments; comments that preserve safety or DSP invariants must not be deleted for the scanner score alone.
 
 ## Physical and post-publish exclusions
