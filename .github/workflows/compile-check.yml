@@ -102,10 +102,11 @@ jobs:
           path: artifacts/sstv-ui/*.png
           if-no-files-found: warn
 
+      # Always measure on master after merges; PR and manual runs also measure.
       # Intra-host comparison, matching the real/complex, warmed median
       # discipline of kfrlib/fft-benchmark. Not a cross-CPU speed claim.
       - name: Benchmark CW R2C against legacy complex FFT
-        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+        if: github.event_name != 'push' || github.ref == 'refs/heads/master'
         env:
           SKYROOF_RUN_FFT_BENCHMARK: '1'
           SKYROOF_FFT_BENCHMARK_OUTPUT: ${{ github.workspace }}/artifacts/cw-fft-benchmark.jsonl
@@ -116,12 +117,12 @@ jobs:
           --logger "console;verbosity=normal"
 
       - name: Print FFT microbenchmark metrics
-        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+        if: github.event_name != 'push' || github.ref == 'refs/heads/master'
         shell: pwsh
         run: Get-Content artifacts/cw-fft-benchmark.jsonl
 
       - name: Upload FFT microbenchmark metrics
-        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+        if: github.event_name != 'push' || github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cw-fft-r2c-benchmark
