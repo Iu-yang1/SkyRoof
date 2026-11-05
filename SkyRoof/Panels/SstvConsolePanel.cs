@@ -1151,7 +1151,12 @@ namespace SkyRoof
       finally
       {
         if (ReferenceEquals(txOperationStop, operation)) txOperationStop = null;
-        try { File.Delete(temporaryWave); } catch (IOException) { }
+        try { File.Delete(temporaryWave); }
+        catch (IOException ex)
+        {
+          Log.Warning("SSTV TX temporary wave deletion failed ({Type}); preserving final PTT status check",
+            ex.GetType().Name);
+        }
         if (!closed)
         {
           txStopButton.Enabled = false;
