@@ -1,3 +1,27 @@
+# SkyRoof Fork v.1.66 / SkyRoof Fork 1.66 版本说明
+
+Release date / 发布日期: 2026-11-05. P0 code-quality and lifecycle diagnostics maintenance release.
+
+## English
+- Isolated rotator child: preserve IPC, startup rollback, transport teardown and **physical STOP unverified** failure evidence without changing motion commands, STOP priority, feedback interlock or hardware retry timing.
+- SkyCAT/CAT lifecycle: distinguish expected process exit from an unconfirmed child termination; preserve CAT/PTT ownership and serial protocol behavior.
+- FT4/SSTV: keep mandatory PTT release when audio-buffer cleanup fails; report temporary-WAV deletion and malformed QSO log rows while retaining valid records.
+- Improve WASAPI device-loss handling, ONVIF camera lifecycle diagnostics, voice playback disposal, SatNOGS upload shutdown, ephemeris cache cleanup, and installer log fallbacks.
+- Run the CW R2C FFT benchmark on every master push, with Windows x64 build, full xUnit and pinned aislop v0.18.1; independent CI, not a cross-CPU throughput claim.
+- The SoapySDR native log callback retains one deliberately reviewed non-propagating catch to avoid exceptions crossing the unmanaged callback boundary; see `docs/quality/aislop-native-callback-exception-20261105.md`.
+- **Hardware acceptance remains separate:** physical rotator STOP/C2 feedback, IC-9700 CAT/PTT, WASAPI unplug and ONVIF devices require field verification; Windows CI does not certify them.
+
+## 中文
+- 旋转器独立子进程：保留 IPC、启动失败回滚、传输关闭和**物理 STOP 未确认**的诊断证据，不改变运动命令、STOP 优先级、反馈互锁或重试时间。
+- SkyCAT/CAT 生命周期：区分正常退出与子进程终止未确认，保留 CAT/PTT 控制权和串口协议。
+- FT4/SSTV：音频缓冲清理失败仍保证既有 PTT 释放；记录临时 WAV 删除和损坏 QSO 日志行，保留有效记录。
+- 修复与加强 WASAPI 断开、ONVIF 生命周期、语音播放资源清理、SatNOGS 后台任务、星历缓存和安装程序日志的诊断。
+- master 每次推送都运行 CW R2C FFT 基准，并保留 Windows x64、全量 xUnit 与 aislop v0.18.1 门禁；基准仅作为同环境回归检查。
+- SoapySDR 原生回调保留一项有依据的安全例外，避免异常跨越非托管边界；详见 `docs/quality/aislop-native-callback-exception-20261105.md`。
+- **实机验收仍独立进行：** 旋转器物理 STOP/C2、IC-9700 CAT/PTT、WASAPI 热拔插及 ONVIF 设备均不能以 CI 成功替代。
+
+---
+
 # SkyRoof Fork v.1.64 / SkyRoof Fork 1.64 版本说明
 
 Release date / 发布日期: 2026-11-02. Settings dialog layout correction.
