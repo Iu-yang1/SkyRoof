@@ -445,7 +445,10 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
         return;
       }
     }
-    catch(OperationCanceledException){}
+    catch (OperationCanceledException ex)
+    {
+      Log.Debug("Rotator heartbeat observer cancelled ({Type})", ex.GetType().Name);
+    }
   }
 
   private async Task WriteCommandsAsync(StreamWriter writer)
@@ -698,7 +701,10 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
             await Task.Delay(250,clock.Token);
           }
         }
-        catch(OperationCanceledException){}
+        catch (OperationCanceledException ex)
+        {
+          Log.Debug("Rotator state publisher cancelled ({Type})", ex.GetType().Name);
+        }
       });
       try
       {
@@ -807,11 +813,19 @@ internal sealed class RotatorEngineSubprocess : INativeRotatorEngine
     catch(IOException ex) when(ex.Message.Contains("Pipe is broken",StringComparison.OrdinalIgnoreCase) ||
       ex.Message.Contains("pipe has been ended",StringComparison.OrdinalIgnoreCase))
     {
-      try{Log.Warning("Rotator worker PID {Pid}: control pipe closed; requesting fail-safe STOP. Cause may be parent shutdown or IPC failure.",Environment.ProcessId);}catch{}
+      try { Log.Warning("Rotator worker PID {Pid}: control pipe closed; requesting fail-safe STOP. Cause may be parent shutdown or IPC failure.",Environment.ProcessId); }
+      catch (Exception logEx)
+      {
+        System.Diagnostics.Trace.TraceError("Rotator pipe shutdown warning failed ({0})", logEx.GetType().Name);
+      }
     }
     catch(Exception ex)
     {
-      try{Log.Warning(ex,"Rotator engine child failure, PID {Pid}",Environment.ProcessId);}catch{}
+      try { Log.Warning(ex,"Rotator engine child failure, PID {Pid}",Environment.ProcessId); }
+      catch (Exception logEx)
+      {
+        System.Diagnostics.Trace.TraceError("Rotator child fault warning failed ({0})", logEx.GetType().Name);
+      }
     }
     finally
     {
