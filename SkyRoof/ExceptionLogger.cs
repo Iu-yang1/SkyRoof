@@ -23,6 +23,11 @@ namespace VE3NEA
   {
     private static NativeSoapySdr.SoapySDRLogHandlerDelegate LogHandlerDelegate = new(SoapySdrLogHandler);
     private static int MainThreadId;
+    private static long SoapySdrCallbackFailureCount;
+    private static Exception? LastSoapySdrCallbackException;
+
+    internal static long SoapySdrCallbackFailures => Interlocked.Read(ref SoapySdrCallbackFailureCount);
+    internal static Exception? LastSoapySdrCallbackFailure => Volatile.Read(ref LastSoapySdrCallbackException);
 
     // SoapySDR streaming status indicators (O, U, S, T) are counted and summarized periodically
     private static readonly TimeSpan SsiSummaryInterval = TimeSpan.FromSeconds(60);
@@ -181,7 +186,13 @@ namespace VE3NEA
         else
           Log.Information($"[{logLevel}]: {message}");
       }
-      catch { }
+      catch (Exception ex)
+      {
+        // A native callback cannot propagate managed exceptions. Retain the
+        // original exception for diagnostics without calling a failing log sink.
+        Interlocked.Increment(ref SoapySdrCallbackFailureCount);
+        Volatile.Write(ref LastSoapySdrCallbackException, ex);
+      }
     }
 
     // the handler is invoked only when a message arrives, so the summary of the last
