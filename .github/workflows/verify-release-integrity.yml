@@ -46,7 +46,7 @@ jobs:
               if ($LASTEXITCODE -ne 0) { throw 'Could not identify latest release' }
             }
           }
-          if ($tag -notmatch '^v\\.\\d+\\.\\d+$') { throw "Unexpected release tag $tag" }
+          if ($tag -notmatch '^v[.][0-9]+[.][0-9]+$') { throw "Unexpected release tag $tag" }
 
           $release = gh api "repos/${{ github.repository }}/releases/tags/$tag" | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0 -or $null -eq $release) {
