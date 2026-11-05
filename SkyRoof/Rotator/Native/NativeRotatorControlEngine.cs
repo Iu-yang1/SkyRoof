@@ -922,8 +922,13 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
       {
 
         SetConnected(false);
-        try{transport?.Abort();}catch{}
-        transport=null;
+        try { transport?.Abort(); }
+        catch (Exception ex)
+        {
+          Log.Warning("Native rotator transport abort failed on reconnect ({Type}); STOP unverified",
+            ex.GetType().Name);
+        }
+        finally { transport=null; }
       }
       if(!stopping)
       {
@@ -956,7 +961,12 @@ internal sealed class NativeRotatorControlEngine : INativeRotatorEngine
     if(IsRunning && !onUi)
       stopCompleted.Wait(Math.Clamp(settings.NativeReadTimeout+100,200,1000));
     stopping=true;stop.Set();
-    try{transport?.Abort();}catch{}
+    try { transport?.Abort(); }
+    catch (Exception ex)
+    {
+      Log.Warning("Native rotator transport abort failed during shutdown ({Type}); STOP unverified",
+        ex.GetType().Name);
+    }
     wake.Set();
     // Never block the WinForms message pump on a hung vendor device or
     // worker thread. Its I/O child can be terminated independently.
