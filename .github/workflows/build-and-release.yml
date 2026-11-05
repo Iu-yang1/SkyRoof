@@ -18,7 +18,31 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  pinned_quality:
+    name: Pinned aislop release gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Setup Node 24
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24'
+      - name: Install pinned quality engine prerequisites
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cppcheck
+          python3 -m venv "$RUNNER_TEMP/aislop-python"
+          "$RUNNER_TEMP/aislop-python/bin/python" -m pip install --disable-pip-version-check --quiet ruff==0.14.2
+          echo "$RUNNER_TEMP/aislop-python/bin" >> "$GITHUB_PATH"
+      - name: Gate pinned aislop v0.18.1 on release source
+        shell: bash
+        run: npm exec --yes --package=aislop@0.18.1 -- aislop ci .
+
   build:
+    needs: pinned_quality
     runs-on: windows-latest
 
     steps:
@@ -125,6 +149,40 @@ jobs:
 
       - name: Run release tests
         run: dotnet test VE3NEA.Dsp.Tests/VE3NEA.Dsp.Tests.csproj -c Release -p:Platform=x64 --no-restore
+
+      - name: Benchmark CW R2C against legacy complex FFT
+        env:
+          SKYROOF_RUN_FFT_BENCHMARK: '1'
+          SKYROOF_FFT_BENCHMARK_OUTPUT: ${{ github.workspace }}/artifacts/cw-fft-benchmark.jsonl
+        run: >
+          dotnet test VE3NEA.Dsp.Tests/VE3NEA.Dsp.Tests.csproj
+          -c Release -p:Platform=x64 --no-restore --no-build
+          --filter FullyQualifiedName~OptionalBenchmark_RealR2cVersusComplexFft
+          --logger "console;verbosity=normal"
+
+      - name: Validate and display FFT benchmark evidence
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $path = 'artifacts/cw-fft-benchmark.jsonl'
+          if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+            throw "CW FFT benchmark did not produce metrics"
+          }
+          $rows = @(Get-Content -LiteralPath $path | ForEach-Object { $_ | ConvertFrom-Json })
+          if ($rows.Count -lt 6) { throw "CW FFT benchmark had fewer than six size measurements" }
+          foreach ($row in $rows) {
+            if ($row.real_median_us -le 0 -or $row.complex_median_us -le 0 -or $row.speedup -le 0) {
+              throw "CW FFT benchmark contains nonpositive measurements"
+            }
+          }
+          Get-Content -LiteralPath $path
+
+      - name: Upload release FFT benchmark evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-cw-fft-r2c-benchmark
+          path: artifacts/cw-fft-benchmark.jsonl
+          if-no-files-found: error
 
       # Verify the publisher-signed unmodified basic VB-CABLE Donationware.
       - name: Stage original VB-CABLE
