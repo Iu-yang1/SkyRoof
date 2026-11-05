@@ -51,11 +51,30 @@
 
     private void okBtn_Click(object sender, EventArgs e)
     {
-      string? errorMessage = ctx.AmsatStatusLoader.SendAmsatStatus(comboBox1.Text, comboBox2.Text);
-      if (errorMessage != null)
-        MessageBox.Show(errorMessage, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+      CancelAutoClose();
+      okBtn.Enabled = false;
+      _ = SendReportAndCloseAsync(comboBox1.Text, comboBox2.Text);
+    }
 
-      Close();
+    private async Task SendReportAndCloseAsync(string entry, string report)
+    {
+      try
+      {
+        string? errorMessage = await ctx.AmsatStatusLoader.SendAmsatStatusAsync(entry, report);
+        if (IsDisposed || Disposing) return;
+        if (errorMessage != null)
+          MessageBox.Show(this, errorMessage, "Error",
+            MessageBoxButtons.OK, MessageBoxIcon.Error);
+        Close();
+      }
+      catch (Exception ex)
+      {
+        Serilog.Log.Error(ex, "Unexpected AMSAT status submission failure");
+        if (IsDisposed || Disposing) return;
+        MessageBox.Show(this, ex.Message, "Error",
+          MessageBoxButtons.OK, MessageBoxIcon.Error);
+        Close();
+      }
     }
 
 
